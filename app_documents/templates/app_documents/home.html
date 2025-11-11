@@ -1,0 +1,75 @@
+{% extends 'app_documents/base.html' %}
+{% block content %} 
+{% load static %}
+<div class="p-5 bg-success text-white text-center">
+    <h2>CHỨNG TỪ F88</h2>
+    {% if not user.is_authenticated %}
+    <h5 class = "text-center"> Đăng nhập tại đây bạn nhé </h5>
+    <div class = "text-center"><a href = "{% url 'login' %}" class = "btn btn-primary"> Đăng nhập </a></div>
+    {% else %}
+    <h3 class = "text-center"> Xin chào! {{user.last_name}} {{ user.first_name }} </h3>
+    <div class="countdown mt-5">
+      <h5>ĐẾM NGƯỢC TỚI TẾT 2025</h5>
+      <h6 id="timer"></h6>
+    </div>
+</div>
+<div class="container mt-5">
+  <div class="row">
+    <div class="col-sm-4">
+      <h2>Profile</h2>
+      <img src="{{ user.profile.get_avatar }}" class="user-avatar large-avatar rounded-circle mx-auto mt-n7 mb-4">
+      <h3 class="mt-4"><span><h5>Bạn tên là:</h5></span>{{user.last_name}} {{ user.first_name}}</h3> 
+      <ul class="nav nav-pills flex-column">
+        <li class="nav-item">Username của bạn: <h5>{{user.username}}</h5></li>
+        <li class="nav-item">Email của bạn: <h5>{{user.email}}</h5></li>
+        {% if user.is_authenticated %}
+        <li class="nav-item">Khu vực: <h5>{{profile.region.region_name}}</h5></li>
+        <li class="nav-item">Mã nhân viên: <h5>{{profile.employee_code}}</h5></li>
+        {% endif %}
+        <li class="nav-item">          
+          <span class="navbar-text">Role: 
+            <h5>{% if is_admin %}Admin Phòng Vận Hành{% elif is_risk %}Rủi ro hoạt động{% elif is_supervisor %}Giám sát{% elif is_checker %}Cộng tác viên Vận hành{% elif is_shop_user %}Phòng giao dịch{% endif %}</h5>
+          </span>
+        </li>
+      </ul>
+    </div>
+    <div class="col-sm-4">
+      <h5>Version 1.1.4: </h5><p>Thêm tính năng chọn ngày nhận thực tế ở màn hình nhận</p>
+      <h5>Version 1.1.5: </h5><p>Cho phép checker thay đổi Region để nhận và duyệt chứng từ</p>
+      <h5>Version 1.2.1: </h5>
+        <p>Admin Portal: Chuyển thành dạng bảng dễ thao tác hơn. Xịn hơn </p>
+        <p>Nhận chứng từ: Thêm trường để biết quyển chứng từ nhận đúng hạn hay trễ hạn </p>
+        <p>Back-end: Bổ sung master data manager_id thành area_id và region_id </p>
+        <p>Back-end: Phân loại Shop mượn chứng từ QTRR,PC,QLTS</p> 
+        <p> CTV yêu cầu điều chỉnh để admin xóa chứng từ trong trường hợp nhận, duyệt sai </p>
+        <p> Cho mượn- nhận - đánh dấu chứng từ mượn bị thất lạc </p>
+    </div>
+    <div class="col-sm-4">
+      <img src = "{% static 'media/images/404/homepagehello.png' %}" width= 400px height=auto >
+    </div>
+  </div>
+</div>
+
+<script>
+  function countdownTimer() {
+      const targetDate = new Date('2025-01-29T00:00:00'); // Lunar New Year 2025
+      const now = new Date();
+      const timeDifference = targetDate - now;
+      if (timeDifference <= 0) {
+          document.getElementById('timer').innerText = "Happy Lunar New Year 2025!";
+          return;
+      }
+      const days = Math.floor(timeDifference / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((timeDifference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((timeDifference % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((timeDifference % (1000 * 60)) / 1000);
+      document.getElementById('timer').innerText =
+          `${days} Ngày ${hours} Giờ ${minutes} Phút ${seconds} Giây`;
+  }
+  countdownTimer();
+  setInterval(countdownTimer, 1000);
+</script>
+
+{% endif %}
+{% endblock %}
+        

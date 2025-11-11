@@ -1,0 +1,33 @@
+**/*.sqlite3
+**/local_settings.py
+# Django #
+*.log
+*.pot
+*.pyc
+__pycache__
+db.sqlite3
+media
+# celery 
+celerybeat-schedule.*
+documents/__pycache__/local_settings.cpython-311.pyc
+documents/__pycache__/local_settings.cpython-311.pyc
+app_documents/__pycache__/views.cpython-311.pyc
+db.sqlite3
+db.sqlite3
+app_documents/__pycache__/models.cpython-311.pyc
+documents/__pycache__/local_settings.cpython-311.pyc
+app_documents/__pycache__/views.cpython-311.pyc
+app_documents/__pycache__/admin.cpython-311.pyc
+app_documents/__pycache__/admin.cpython-311.pyc
+app_documents/__pycache__/models.cpython-311.pyc
+app_documents/__pycache__/urls.cpython-311.pyc
+app_documents/__pycache__/views.cpython-311.pyc
+documents/__pycache__/local_settings.cpython-311.pyc
+documents/__pycache__/settings.cpython-311.pyc
+
+.env
+documents/__pycache__/settings.cpython-311.pyc
+documents/__pycache__/settings.cpython-311.pyc
+documents/__pycache__/local_settings.cpython-311.pyc
+documents/__pycache__/settings.cpython-311.pyc
+documents/__pycache__/settings.cpython-311.pyc

@@ -1,0 +1,313 @@
+{% extends 'app_documents/base.html' %} 
+{% block content %}
+
+<div class="container-fluid"> 
+    <div class="row">
+        <!-- Sidebar -->
+        <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse">
+            <br/>
+            <h6 class = 'text-center'>Bộ lọc</h6>
+            <form method = 'get' action="{% url 'additional_management' %}" id ='filterForm'>
+                <div classs = align-center><h5 class = 'text-center'>Quản lý hẹn bổ sung</h5></div>
+                <br/>
+                <ul class="nav nav-pills flex-column mb-auto">
+                    <div class="row mb-2">
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="exampleDataListShop" class="form-label">Phòng giao dịch <span style="color: red;">*</span></label>
+                                    <input  class="form-control"
+                                            list="datalistOptionsShop" 
+                                            id="exampleDataListShop" 
+                                            value = "{% if request.GET.choice_shop %}{{request.GET.choice_shop}}{% endif %}""
+                                            placeholder="Tìm kiếm Phòng Giao Dịch" 
+                                            name = 'choice_shop' {% if is_checker %}required{% endif %} 
+                                            onblur="validateShop(this, 'datalistOptionsShop')">
+                                    <datalist id="datalistOptionsShop">
+                                        {% for shop in drop_list_shops %}
+                                        <option value= "{{ shop.shop_name }}">{{shop.shop_code}}</option>
+                                        {% endfor %}
+                                    </datalist>
+                                    <div class="invalid-feedback" id = 'validateShopFeedbackValid'>Phải chọn PGD từ danh sách có sẵn.</div>
+                                    <div class="valid-feedback" id = 'validateShopFeedbackInvalid' >Tên Phòng giao dịch hợp lệ!</div>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="FilterFolderType" class="form-label">Loại quyển</label>
+                                    <select class="form-select" aria-label="Default select example" name = "choice_folder_type" id= 'FilterFolderType'>
+                                        <option value="">Chọn loại quyển</option>
+                                        {% for foldertype in drop_list_folder_type %}
+                                        <option value="{{ foldertype.folder_type_id }}"
+                                            {% if request.GET.choice_folder_type|stringformat:"s" == foldertype.folder_type_id|stringformat:"s" %}selected{% endif %} >{{foldertype.folder_type_name}}</option>   
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <div class="field">
+                                        <label for="filterdocumentdate" class="form-label">Ngày chứng từ</label>
+                                        <input class="form-select" type="text" id="filterdocumentdate" name="filterdocumentdate" placeholder="Ngày chứng từ" value ="{% if request.GET.filterdocumentdate %}{{request.GET.filterdocumentdate}}{% endif %}">
+                                    </div>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <div class="field">
+                                        <label for="filteradditionaldate" class="form-label">Ngày hẹn bổ sung</label>
+                                        <input class="form-select" type="text" id="filteradditionaldate" name="filteradditionaldate" placeholder="Ngày hẹn bổ sung" value ="{% if request.GET.filteradditionaldate %}{{request.GET.filteradditionaldate}}{% endif %}">
+                                    </div>
+                                </div>
+                            </li>
+                        </div>  
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <div class="field">
+                                        <label for="filtermonthdocumentdateId" class="form-label">Tháng chứng từ</label>
+                                        <input class="form-select" type="text" id="filtermonthdocumentdateId" name="filtermonthdocumentdate" placeholder="Tháng"  value ="{% if request.GET.filtermonthdocumentdate %}{{request.GET.filtermonthdocumentdate}}{% endif %}">
+                                    </div>
+                                </div>
+                            </li>
+                        </div>  
+                    </div>
+                </ul>       
+                <!-- Lọc  -->
+                <div class = 'text-center'>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-success">Lọc</button>
+                        <button id="clearFilters" class = "btn btn-secondary" type="button">Xóa lọc</button>
+                    </div>
+                </div>
+            </form>
+        </nav>
+        <!-- Main content -->
+        <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4" id ="manage_additional">
+            <!-- Message/ paginator/ etc... -->
+            {% include  'app_documents/sys_messages.html'  %}
+            <div class="row shadow-sm p-2 mb-2 bg-body-tertiary rounded">
+                <div class="col-sm-8">
+                    <div class ="col-sm">
+                        <table class="table-light">
+                            <tr>
+                                <td>
+                                    <nav style="--bs-breadcrumb-divider: url(&#34;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath d='M2.5 0L1 1.5 3.5 4 1 6.5 2.5 8l4-4-4-4z' fill='%236c757d'/%3E%3C/svg%3E&#34;);" aria-label="breadcrumb">
+                                        <ol class="breadcrumb">
+                                            <li class="breadcrumb-item">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-funnel" viewBox="0 0 16 16">
+                                                    <path d="M1.5 1.5A.5.5 0 0 1 2 1h12a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.128.334L10 8.692V13.5a.5.5 0 0 1-.342.474l-3 1A.5.5 0 0 1 6 14.5V8.692L1.628 3.834A.5.5 0 0 1 1.5 3.5zm1 .5v1.308l4.372 4.858A.5.5 0 0 1 7 8.5v5.306l2-.666V8.5a.5.5 0 0 1 .128-.334L13.5 3.308V2z"/>
+                                                </svg>
+                                            </li>
+                                            {% if request.GET.choice_shop  %}
+                                            <li class="breadcrumb-item">{{ request.GET.choice_shop  }}</li>{% endif %}
+                                            {% if request.GET.filterdocumentdate %}
+                                            <li class="breadcrumb-item"><small>Chứng từ ngày: {{request.GET.filterdocumentdate}}<br/></small>
+                                            {% endif %}
+                                        </ol>
+                                    </nav>
+                                </td>    
+                            <tr>
+                        </table>
+                        <div class ="col-sm">
+                            {% comment %} <button type="button" class="btn btn-primary" id="export" onclick="exportTableToExcel('table-data-area', 'Chứng từ hẹn bổ sung')">Xuất Excel
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-box-arrow-down " viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M3.5 10a.5.5 0 0 1-.5-.5v-8a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 0 0 1h2A1.5 1.5 0 0 0 14 9.5v-8A1.5 1.5 0 0 0 12.5 0h-9A1.5 1.5 0 0 0 2 1.5v8A1.5 1.5 0 0 0 3.5 11h2a.5.5 0 0 0 0-1z"/>
+                                    <path fill-rule="evenodd" d="M7.646 15.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 14.293V5.5a.5.5 0 0 0-1 0v8.793l-2.146-2.147a.5.5 0 0 0-.708.708z"/>
+                                </svg>
+                            </button> {% endcomment %}
+                            <button type="button" class="btn btn-primary" id="exportBtn">Xuất Excel
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-box-arrow-down " viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M3.5 10a.5.5 0 0 1-.5-.5v-8a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 0 0 1h2A1.5 1.5 0 0 0 14 9.5v-8A1.5 1.5 0 0 0 12.5 0h-9A1.5 1.5 0 0 0 2 1.5v8A1.5 1.5 0 0 0 3.5 11h2a.5.5 0 0 0 0-1z"/>
+                                    <path fill-rule="evenodd" d="M7.646 15.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 14.293V5.5a.5.5 0 0 0-1 0v8.793l-2.146-2.147a.5.5 0 0 0-.708.708z"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-4" id ='pagination'>
+                    <!-- Pagination -->
+                    {% if checking_additional.has_other_pages %}
+                    <nav aria-label="Page navigation" >
+                        <ul class="pagination">
+                            <!-- Link to the first page -->
+                            {% if not checking_additional.has_previous %}
+                            <li class="page-item disabled"><span class="page-link">&laquo;&laquo;</span></li>
+                            {% else %}
+                            <li class="page-item"><a class="page-link" href="?page=1" aria-label="First">&laquo;&laquo;</a></li>
+                            {% endif %}
+                            <!-- Link to the previous page -->
+                            {% if checking_additional.has_previous %}
+                            <li class="page-item"><a class="page-link" href="?page={{ checking_additional.previous_page_number }}" aria-label="Previous">&laquo;</a></li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+                            {% endif %}
+                            <!-- Current page number and surrounding page numbers -->
+                            {% for num in checking_additional.paginator.page_range %}
+                                {% if checking_additional.number == num %}
+                                <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                                {% elif num > checking_additional.number|add:'-3' and num < checking_additional.number|add:'3' %}
+                                <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
+                                {% endif %}
+                            {% endfor %}
+                            <!-- Link to the next page -->
+                            {% if checking_additional.has_next %}
+                            <li class="page-item"><a class="page-link" href="?page={{ checking_additional.next_page_number }}" aria-label="Next">&raquo;</a></li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+                            {% endif %}
+                            <!-- Link to the last page -->
+                            {% if not checking_additional.has_next %}
+                            <li class="page-item disabled"><span class="page-link">&raquo;&raquo;</span></li>
+                            {% else %}
+                            <li class="page-item"><a class="page-link" href="?page={{ checking_additional.paginator.num_pages }}" aria-label="Last">&raquo;&raquo;</a></li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                    <!--End Pagination-->
+                </div>
+            </div>
+            <!-- Table -->
+            <div class="row shadow-sm p-2 mb-2 bg-body-tertiary rounded" id ='data-area'>
+                <table class="table table-hover table-light" id = 'table-data-area'>
+                    <thead>
+                        <tr>
+                            <th>STT</th>
+                            <th>Phòng giao dịch</th>
+                            <th style="white-space:nowrap">Ngày chứng từ</th>
+                            <th style="white-space:nowrap">Thông tin</th>
+                            <th>Loại chứng từ</th>                  
+                            <th>Loại quyển</th>
+                            <th style="white-space:nowrap" >Ngày đến hạn<br/>bổ sung</th>
+                            <th>Người tạo bổ sung</th>
+                            <th>Trạng thái<br/>duyệt</th>
+                            <th>Thông tin duyệt</th>
+                            <th>Note bổ sung</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if checking_additional %}
+                        <tr>
+                            {% for additional in checking_additional %}
+                            <td>{{forloop.counter|add:checking_additional.start_index|add:-1}}</td>
+                            <td  style="white-space:nowrap" >{{ additional.additional.shop_id.shop_name }}</td>
+                            <td  style="white-space:nowrap" >{{ additional.additional.documents_created_date| date:"Y-m-d"}}</td>
+                            <td  style="white-space:nowrap" >Mã HĐ: {{ additional.additional.loan_id.loan_code }}<br/>
+                                Tên KH: {{ additional.additional.loan_id.customer_name|capfirst  }} <br/></td> 
+                            <td>{{ additional.additional.document_type_id.document_type_name }}</td>
+                            <td>{{ additional.additional.folder_id.folder_type_id.folder_type_name }}</td>
+                            <td>
+                                <span class="badge fs-6 text-bg-{% if additional.date_addition|date:'Y-m-d' > now|date:'Y-m-d' %}success{% else %}danger{% endif %}">{{ additional.date_addition|date:"Y-m-d"|default_if_none:"" }}</span>
+                            </td>
+                            <td>{{ additional.additional_created_by }}</td>
+                            <td>{{ additional.additional.status_id.checking_status_name|default_if_none:"Chưa duyệt" }}</td>
+                            <td style="white-space:nowrap" >{{ additional.additional.lastest_checked_date| date:"Y-m-d H:i"}}<br/>
+                                {{ additional.additional.lastest_checked_by|default_if_none:"" }}
+                            </td>
+                            <td>{{ additional.additional_note|default_if_none:""}}</td> 
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="10">Không có chứng từ được lọc.</td></tr>
+                        {% endfor %}
+                    {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+</div>
+<script>
+// flatpickr date picker
+// Ngày hẹn bổ sung
+document.addEventListener("DOMContentLoaded", function () {
+    flatpickr("#filteradditionaldate", {
+        mode: "range",
+        dateFormat: "Y-m-d",
+        altInput: true,
+        altFormat: "d-m-Y",
+    });
+});
+// Ngày chứng từ
+document.addEventListener("DOMContentLoaded", function () {
+    flatpickr("#filterdocumentdate", {
+        mode: "range",
+        dateFormat: "Y-m-d",
+        altInput: true,
+        altFormat: "d-m-Y",
+    });
+});
+// Month picker
+document.addEventListener("DOMContentLoaded", function () {
+    flatpickr("#filtermonthdocumentdateId", {
+        plugins: [
+            new monthSelectPlugin({
+            shorthand: true, //defaults to false
+            dateFormat: "m.Y", //defaults to "F Y"
+            altFormat: "F Y", //defaults to "F Y"
+            theme: "light" // defaults to "light"
+            })
+        ]
+    });
+});
+</script>
+<script>
+    // Clear filters button
+    document.getElementById('clearFilters').addEventListener('click', function() {
+        // Reset the form fields to their default values
+        document.getElementById('exampleDataListShop').value = '';
+        document.getElementById('FilterFolderType').value = '';
+        // Clear the flatpickr date field
+        var datepickercheckdate = flatpickr("#filteradditionaldate");
+        datepickercheckdate.clear(); 
+        var datepickerdocumentdate = flatpickr("#filterdocumentdate");
+        datepickerdocumentdate.clear();
+        // Optionally, you can also submit the form to refresh the filtered results
+        // this.closest('form').submit();
+    });
+</script>
+<script> 
+    // Validate shop input
+    function validateShop(input, listId) {
+        const datalist = document.getElementById(listId);
+        const inputVal = input.value.trim();
+        let isValid = false;
+    
+        for (const option of datalist.options) {
+            if (option.value === inputVal) {
+                isValid = true;
+                break;
+            }
+        }
+        if (!isValid) {
+            input.classList.add('is-invalid');
+            input.classList.remove('is-valid');
+            input.setCustomValidity('Phải chọn từ danh sách có sẵn.');
+            input.reportValidity();  // Hiển thị thông báo lỗi ngay lập tức
+        } else {
+            input.classList.remove('is-invalid');
+            input.classList.add('is-valid');
+            input.setCustomValidity('');  // Xóa tất cả các thông báo lỗi trước đây
+        }
+    }
+</script>
+<script> 
+document.getElementById('exportBtn').addEventListener('click', function() {
+    const form = document.getElementById('filterForm');
+    const exportInput = document.createElement('input');
+    exportInput.type = 'hidden';
+    exportInput.name = 'export';
+    exportInput.value = '1';
+    form.appendChild(exportInput);
+    form.submit();
+    // Remove the input after the form is submitted
+    exportInput.remove();
+});
+</script>
+{% endblock %}

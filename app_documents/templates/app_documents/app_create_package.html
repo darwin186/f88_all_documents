@@ -1,0 +1,255 @@
+
+{% extends 'app_documents/base.html'  %}
+{% block content %}
+{% if messages %}
+<div class="container">
+    {% for message in messages %}
+    <div class="alert {% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}alert-danger{% endif %}
+         {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}alert-success{% endif %}
+         {% if message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}alert-warning{% endif %}
+         {% if message.level == DEFAULT_MESSAGE_LEVELS.INFO %}alert-info{% endif %}" role="alert">
+        {% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %} <strong>Error:</strong> {% endif %}
+        {% if message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %} <strong>Success:</strong> {% endif %}
+        {% if message.level == DEFAULT_MESSAGE_LEVELS.WARNING %} <strong>Warning:</strong> {% endif %}
+        {% if message.level == DEFAULT_MESSAGE_LEVELS.INFO %} <strong>Info:</strong> {% endif %}
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+<div class="container-sm">
+    <form method="post" action="{% url 'create_package' user.id %}" id="package-form">
+        {% csrf_token %}
+        <div class="row justify-content-center">
+            <div class="col-md-6 mx-auto">
+                <div class='mb-3 text-center'>
+                    <label for="formGroupCreatepackageType" class="form-label">Loại thùng <span style="color:red;">&#40;* Bắt buộc &#41;</span> </label>
+                    <select class="form-select" name='package_type_choice' aria-label="Default select example" id='packageType' required>
+                        <option selected>Chọn loại thùng</option>
+                        {% for package_type in package_types %}
+                        <option value="{{ package_type.package_type }}">Thùng {{package_type.folder_type_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3 text-center">
+                    <label for="packageCreatedDate" class="form-label">Ngày tạo thùng</label> 
+                    <input class="form-select" type="text" id="packageCreatedDate" name="package_created_date" placeholder="Ngày tạo thùng" required>
+                </div>
+                <div class='mb-3 text-center'>
+                    <label for="package_code_submit" class="form-label">Mã thùng F88 <span style="color:red;">&#40;* Bắt buộc &#41;</span> </label>
+                    <input type="text" name='package_code_submit' class="form-control" id="package_code_submit" placeholder="Nhập mã thùng F88" required>
+                </div>
+                <div class='mb-3 text-center'>
+                    <label for="regionChoice" class="form-label">Chọn khu vực thùng</label>
+                    <div id="regionChoice">
+                        {% for region in regions %}
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="region_choice" id="region_{{ region.region_code }}" value="{{ region.region_code }}"
+                                {% if not is_admin and region.region_code != region_code %}disabled{% endif %}
+                                {% if region.region_code == region_code %}checked{% endif %}>
+                            <label class="form-check-label" for="region_{{ region.region_code }}">
+                                {{ region.region_name }}
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class='mb-3 text-center'>
+                    <label for="partnerchoice">Đối tác lưu trữ</label>
+                    <select class="form-select" name='partner_name_choice' aria-label="Default select example" id='partnerchoice'>
+                        <option selected>Chọn đối tác lưu trữ</option>
+                        <option value="CRN">Crown</option>
+                    </select>
+                </div>
+                <div class='mb-3 text-center'>
+                    <label for="formGroupExampleInput" class="form-label">Mã thùng đối tác &#40;nếu có &#41;</label>
+                    <input type="text" name='partner_package_code_choice' class="form-control" id="partner_package_code" placeholder="Nhập mã thùng đối tác">
+                </div>
+                <div class='mb-3 text-center'>
+                    <button type="submit" class="btn btn-success" onclick="copyToClipboard()">Tạo thùng mới</button>
+                </div>
+            </div>
+        </div> 
+    </form>
+</div>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        flatpickr("#packageCreatedDate", {
+            mode: "single",
+            dateFormat: "Y-m-d",
+            altInput: true,
+            altFormat: "Y-m-d",
+        });
+    });
+</script>
+<script>
+    // Tự gen mã thùng ra khi chọn loại thùng và ngày tạo thùng 
+    document.addEventListener('DOMContentLoaded', function() {
+        const packageType = document.getElementById('packageType');
+        const packageCreatedDate = document.getElementById('packageCreatedDate');
+        const userRegion = "{{ region_code|safe }}";
+        //const userCTVCode = "{{ employee_code|safe }}"; Phần này chưa sử dụng
+        const packageCodeInput = document.getElementById('package_code_submit');
+        // Hàm cập nhật mã thùng liên tục vào input
+        function updatePackageCode() {
+            const selectedPackageType = packageType.value;
+            const createdDate = packageCreatedDate.value;
+            if (!selectedPackageType || !createdDate) {
+                return; // Exit if not all fields are filled
+            }
+            const date = new Date(createdDate);
+            const yy = date.getFullYear().toString().slice(-2);
+            const mm = (date.getMonth() + 1).toString().padStart(2, '0');
+            const dd = date.getDate().toString().padStart(2, '0');
+            const datePart = `${yy}${mm}${dd}`;
+    
+            const baseCode = `${selectedPackageType}-${datePart}-${userRegion}`;
+            const baseUrl = "{% url 'get-next-package-sequence' %}";
+            fetch(`${baseUrl}?baseCode=${encodeURIComponent(baseCode)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        packageCodeInput.value = `${baseCode}${data.nextSequence}`;
+                    } else {
+                        alert(data.message || 'Không thể Gen mã thùng mới do sai cú pháp hoặc lỗi hệ thống!');
+                    }
+                })
+                .catch(error => {
+                    console.error('Lỗi tìm kiếm lũy kế thùng:', error);
+                    alert(data.message);
+                });
+        }
+        packageType.addEventListener('change', updatePackageCode);
+        packageCreatedDate.addEventListener('change', updatePackageCode);
+    });
+</script>
+{% comment %} Check Thùng {% endcomment %}
+<script> 
+    document.getElementById('package-form').addEventListener('submit', function(event) {
+        event.preventDefault();
+        const form = this;
+        const formData = new FormData(form);
+    
+        // Kiểm tra dữ liệu form trước khi gửi
+        for (let [key, value] of formData.entries()) {
+            console.log(key, value);
+        }
+        fetch(form.action, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.message || 'Unknown error');
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                window.opener.postMessage(data, '*');
+                window.close();
+            } else {
+                if (data.errors) {
+                    const errors = Object.values(data.errors).map(error => error.join(' ')).join('\n');
+                    alert('Errors: ' + errors);
+                } else {
+                    alert(data.message);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Request failed', error);
+            alert('Lỗi hệ thống, liên hệ Admin để được hỗ trợ! ');
+        });
+    });
+</script> 
+{% comment %} Check thùng F88 {% endcomment %}
+<script>
+    // Check tồn tại cho thùng F88
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[id^="package_code"]').forEach(input => {
+            input.addEventListener('blur', function() {
+                const packageCode = this.value.trim();
+                if (packageCode !== '') {
+                    fetch(`/package/checkexists/?user_entering_package_code=${encodeURIComponent(packageCode)}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.is_valid_package) {
+                                // If package does not exist and format is correct
+                                this.classList.remove('is-invalid');
+                                this.classList.add('is-valid');
+                            } else {
+                                // If package exists or format is incorrect
+                                this.classList.add('is-invalid');
+                                this.classList.remove('is-valid');
+                                alert(data.error_message); // Show the error message from the server
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Yêu cầu thất bại! Thử lại sau', error);
+                            alert('Lỗi xảy ra khi đang kiểm tra mã thùng! Thử lại sau.');
+                        });
+                } else {
+                    this.classList.remove('is-invalid');
+                    this.classList.remove('is-valid');
+                }
+            });
+        });
+    });
+</script>
+{% comment %} Check thùng đối tác {% endcomment %}
+<script>
+    // Check tồn tại cho thùng đối tác
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[id^="partner_package_code"]').forEach(input => {
+            input.addEventListener('blur', function() {
+                const partnerPackageCode = this.value.trim();
+                if (partnerPackageCode !== '') {
+                    fetch(`/partnerpackage/checkexists/?user_entering_partner_package_code=${encodeURIComponent(partnerPackageCode)}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (!data.package_partner_exists) {
+                                // If partner package code does not exist, it's a valid new entry
+                                this.classList.remove('is-invalid');
+                                this.classList.add('is-valid');
+                            } else {
+                                // If partner package code exists, it's an invalid entry for creation
+                                this.classList.add('is-invalid');
+                                this.classList.remove('is-valid');
+                                alert(data.error_message); // Show the error message from the server
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Request failed', error);
+                            alert('Lỗi xảy ra khi đang kiểm tra mã thùng đối tác! Thử lại sau.');
+                        });
+                } else {
+                    this.classList.remove('is-invalid');
+                    this.classList.remove('is-valid');
+                }
+            });
+        });
+    });
+</script>
+{% comment %} Copy mã thùng đã gen {% endcomment %}
+<script>
+    function copyToClipboard() {
+        // Lấy nội dung từ text field
+        var copyText = document.getElementById("package_code_submit");
+        // Chọn văn bản
+        copyText.select();
+        copyText.setSelectionRange(0, 99999); // Cho di động
+        // Sao chép văn bản vào clipboard
+        document.execCommand("copy");
+        // Thông báo cho người dùng
+        alert("Đã copied mã thùng: " + copyText.value);
+    }
+</script>
+{% endblock %}

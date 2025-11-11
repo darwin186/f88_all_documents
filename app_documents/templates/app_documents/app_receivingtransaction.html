@@ -1,0 +1,1031 @@
+{% extends 'app_documents/base.html'  %} 
+{% block content %}
+
+<div class="container-fluid"> 
+    <div class="row">
+        <!-- Sidebar -->
+        <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse">
+            <br/> 
+            <form method = 'get' action="{% url 'receiving_transaction' %}">
+                <div classs = align-center><h5 class = 'text-center'>Nhận quyển chứng từ</h5></div>
+                <br/>
+                <h6 class = 'text-center'>Bộ lọc<h6>
+                <ul class="nav nav-pills flex-column mb-auto">
+                    <div class="row mb-2">
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="exampleDataListShop" class="form-label">Phòng giao dịch <span style="color: red;">*</span></label>
+                                    <input  class="form-control"
+                                            list="datalistOptionsShop" 
+                                            id="exampleDataListShop" 
+                                            value = "{% if request.GET.choice_shop %}{{request.GET.choice_shop}}{% endif %}"
+                                            placeholder="Tìm kiếm Phòng Giao Dịch" 
+                                            name = 'choice_shop' 
+                                            onblur="validateShop(this, 'datalistOptionsShop')">
+                                    <datalist id="datalistOptionsShop">
+                                        {% for shop in drop_list_shops %}
+                                        <option value= "{{ shop.shop_name }}">{{shop.shop_code}}</option>
+                                        {% endfor %}
+                                    </datalist>
+                                    <div class="invalid-feedback" id = 'validateShopFeedbackValid'>Phải chọn PGD từ danh sách có sẵn.</div>
+                                    <div class="valid-feedback" id = 'validateShopFeedbackInvalid' >Tên Phòng giao dịch hợp lệ!</div>
+                                </div>
+                            </li>
+                        </div> 
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="exampleDataListUserNhan" class="form-label">Người nhận</label>
+                                    <input class="form-control" list="datalistOptionsUserNhan" id="exampleDataListUserNhan" placeholder="Tìm kiếm user nhận" name = 'choice_user_nhan' value ="{% if request.GET.choice_user_nhan %}{{request.GET.choice_user_nhan}}{% endif %}">
+                                    <datalist id="datalistOptionsUserNhan">
+                                        {% for usernhan in drop_list_users %}
+                                        <option value= "{{usernhan.username}}">{{usernhan.username}}</option>
+                                        {% endfor %}
+                                    </datalist>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <div class="field">
+                                        <label for="filterreceivedate" class="form-label">Ngày nhận</label>
+                                        <input class="form-select" type="text" id="filterreceivedate" name="filter_receive_date" placeholder="Ngày nhận" value ="{% if request.GET.filter_receive_date %}{{request.GET.filter_receive_date}}{% endif %}">
+                                    </div>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <div class="field">
+                                        <label for="filterfolderdate" class="form-label">Ngày phát sinh</label> 
+                                        <input class="form-select" type="text" id="filterfolderdate" name="filter_folder_date" placeholder="Ngày phát sinh" value ="{% if request.GET.filter_folder_date %}{{request.GET.filter_folder_date}}{% endif %}">
+                                    </div>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="FilterFolderStatus" class="form-label">Trạng thái quyển</label>
+                                    <select class="form-select" aria-label="Default select example" name = "choice_folder_status" id= 'FilterFolderStatus' value ={{folderstatus.folder_status_id}}>
+                                        <option value="">Chọn trạng thái quyển</option>
+                                        {% for folderstatus in drop_list_folder_status %}
+                                        <option value= "{{folderstatus.folder_status_id}}" 
+                                            {% if request.GET.choice_folder_status|stringformat:"s" == folderstatus.folder_status_id|stringformat:"s" %}selected{% endif %}>
+                                            {{folderstatus.folder_status_name}}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </li>
+                        </div>  
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="FilterFolderType" class="form-label">Loại quyển</label>
+                                    <select class="form-select" aria-label="Default select example" name = "choice_folder_type" id= 'FilterFolderType'>
+                                        <option value="">Chọn loại quyển</option>
+                                        {% for foldertype in drop_list_folder_type %}
+                                        <option value="{{ foldertype.folder_type_id }}"
+                                            {% if request.GET.choice_folder_type|stringformat:"s" == foldertype.folder_type_id|stringformat:"s" %}selected{% endif %}>
+                                            {{foldertype.folder_type_name}}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12"><hr>
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="inputfilterFoldercode" class="form-label">Mã quyển</label>
+                                    <input  type="text" class="form-control"
+                                        id="inputfilterFoldercode" placeholder="Tìm kiếm Mã quyển" 
+                                        name = 'choice_folder_code' value ="{% if request.GET.choice_folder_code %}{{request.GET.choice_folder_code}}{% endif %}">
+                                </div>
+                            </li>
+                        </div>  
+                        <div class="col-12"><hr>
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <div class="field">
+                                        <label for="filterpackage" class="form-label">Mã thùng</label> 
+                                        <input class="form-select" type="text" id="filterpackage" name="filter_package" placeholder="Mã thùng" value ="{% if request.GET.filter_package %}{{request.GET.filter_package}}{% endif %}">
+                                    </div>
+                                </div>
+                            </li>
+                        </div>
+                    </div>
+                </ul>                  
+                <!-- Lọc  -->
+                <div class = 'text-center'>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-success">Lọc</button>
+                        <button id="clearFilters" class = "btn btn-secondary" type="button">Xóa lọc</button> 
+                    </div>
+                </div>
+            </form>
+        </nav>
+        <!-- Main content -->
+        <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4" id = "document_receiving_transaction">
+            <!-- Message/ paginator/ etc... -->
+            <div class="row shadow-sm p-2 mb-2 bg-body-tertiary rounded">
+                <div class="col-sm-8">
+                    <div class ="col-sm">
+                        <table class="table-light">
+                            <nav style="--bs-breadcrumb-divider: url(&#34;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath d='M2.5 0L1 1.5 3.5 4 1 6.5 2.5 8l4-4-4-4z' fill='%236c757d'/%3E%3C/svg%3E&#34;);" aria-label="breadcrumb">
+                                <ol class="breadcrumb">
+                                    <li class="breadcrumb-item">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-funnel" viewBox="0 0 16 16">
+                                            <path d="M1.5 1.5A.5.5 0 0 1 2 1h12a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.128.334L10 8.692V13.5a.5.5 0 0 1-.342.474l-3 1A.5.5 0 0 1 6 14.5V8.692L1.628 3.834A.5.5 0 0 1 1.5 3.5zm1 .5v1.308l4.372 4.858A.5.5 0 0 1 7 8.5v5.306l2-.666V8.5a.5.5 0 0 1 .128-.334L13.5 3.308V2z"/>
+                                        </svg>
+                                    </li>
+                                    {% if request.GET.choice_shop  %}
+                                    <li class="breadcrumb-item">{{ request.GET.choice_shop  }}</li>{% endif %}
+                                    {% if request.GET.filter_folder_date %}
+                                    <li class="breadcrumb-item"><small>Quyển ngày {{request.GET.filter_folder_date}}<br/></small>
+                                    {% endif %}
+                                </ol>
+                            </nav>
+                        </table>
+                    </div> 
+                    <div class ="col-sm">
+                        {% if is_admin %}
+                        <button type="button" class="btn btn-primary" id="exportBtnReceivingFail">Xuất Excel
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-box-arrow-down " viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M3.5 10a.5.5 0 0 1-.5-.5v-8a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 0 0 1h2A1.5 1.5 0 0 0 14 9.5v-8A1.5 1.5 0 0 0 12.5 0h-9A1.5 1.5 0 0 0 2 1.5v8A1.5 1.5 0 0 0 3.5 11h2a.5.5 0 0 0 0-1z"/>
+                                <path fill-rule="evenodd" d="M7.646 15.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 14.293V5.5a.5.5 0 0 0-1 0v8.793l-2.146-2.147a.5.5 0 0 0-.708.708z"/>
+                            </svg>
+                        </button>
+                        {% endif %}
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#dataInputModal" id="bulkActionButton" style="display: none;">
+                            Nhận số lượng nhiều   <span class="badge text-bg-danger">0</span>             
+                        </button>
+                    </div>
+                </div>
+                <div class="col-sm-4" id ='pagination'>
+                    <!-- Pagination -->
+                    {% if folder_detail.has_other_pages %}
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination">
+                            <!-- Link to the first page -->
+                            {% if not folder_detail.has_previous %}
+                            <li class="page-item disabled"><span class="page-link">&laquo;&laquo;</span></li>
+                            {% else %}
+                            <li class="page-item"><a class="page-link" href="?page=1&{{ query_string }}" aria-label="First">&laquo;&laquo;</a></li>
+                            {% endif %}
+
+                            <!-- Link to the previous page -->
+                            {% if folder_detail.has_previous %}
+                            <li class="page-item"><a class="page-link" href="?page={{ folder_detail.previous_page_number }}&{{ query_string }}" aria-label="Previous">&laquo;</a></li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+                            {% endif %}
+
+                            <!-- Current page number and surrounding page numbers -->
+                            {% for num in folder_detail.paginator.page_range %}
+                                {% if num >= folder_detail.number|add:'-3' and num <= folder_detail.number|add:'3' %}
+                                    <li class="page-item {% if folder_detail.number == num %}active{% endif %}">
+                                        <a class="page-link" href="?page={{ num }}&{{ query_string }}">{{ num }}</a>
+                                    </li>
+                                {% endif %}
+                            {% endfor %}
+                            <!-- Link to the next page -->
+                            {% if folder_detail.has_next %}
+                            <li class="page-item"><a class="page-link" href="?page={{ folder_detail.next_page_number }}&{{ query_string }}" aria-label="Next">&raquo;</a></li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+                            {% endif %}
+
+                            <!-- Link to the last page -->
+                            {% if folder_detail.has_next %}
+                            <li class="page-item"><a class="page-link" href="?page={{ folder_detail.paginator.num_pages }}&{{ query_string }}" aria-label="Last">&raquo;&raquo;</a></li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link">&raquo;&raquo;</span></li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                    <!--End Pagination-->
+                </div>
+            </div>
+            <!-- Table Area-->
+            <div class="row shadow-sm p-2 mb-2 bg-body-tertiary rounded" id ='data-area'>
+                <table class="table table-hover table-light" id = 'table-data-area'>
+                    <thead>
+                        <tr>
+                            <th class = 'text-center'><div class="select-all-container"><input type="checkbox" id="select-all" style="visibility: hidden;"></div></th>
+                            <th class = 'text-center'>STT</th>
+                            <th class = 'text-center'>Phòng giao dịch</th>
+                            <th class = 'text-center'>Mã quyển</th>
+                            <th class = 'text-center'>Quyển ngày</th>
+                            <th class = 'text-center'>Loại quyển</th>                 
+                            <th class = 'text-center'>Trạng thái quyển</th>
+                            <th class = 'text-center'>Ngày nhận</th>
+                            <th class = 'text-center'>Người nhận</th>
+                            <th class = 'text-center'>Ghi chú</th>
+                            <th class = 'text-center'>Mã thùng</th> 
+                            <th class = 'text-center'>Phiên bản | PSCT</th>
+                            <th class = 'text-center'>Thời hạn nhận</th>
+                            <th class = 'text-center'></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% if folder_detail %}
+                    {% for folder_dtl in folder_detail %}
+                        <tr data-checkbox-id="flexCheckDefault{{ document_dtl.document_id}}">
+                            <td>
+                                <div class="form-check">
+                                    <input class="form-check-input" 
+                                    type="checkbox" 
+                                    value="checkingitem{{ folder_dtl.folder_id}}" 
+                                    id="flexCheckDefault{{ folder_dtl.folder_id}}"
+                                    data-folder-code="{{ folder_dtl.folder_code }}"
+                                    data-folder-created-date="{{ folder_dtl.folder_created_date|date:'Y-m-d' }}"
+                                    {% if folder_dtl.folder_status_id.is_received %}disabled{% endif %}>
+                                    <label class="form-check-label" for="flexCheckDefault{{ folder_dtl.folder_id}}"></label>
+                                </div>
+                            </td>
+                            <td> {{ forloop.counter|add:folder_detail.start_index|add:-1}} </td>
+                            <td style="white-space:nowrap">{{ folder_dtl.shop_id.shop_name }}</td>
+                            <td>{{ folder_dtl.folder_code }}</td>
+                            <td  style="white-space:nowrap">{{ folder_dtl.folder_created_date| date:"Y-m-d"}}</td>   
+                            <td>{{ folder_dtl.folder_type_id.folder_type_name }}</td>
+                            <td class ='text-center'><span class="badge text-bg-{{ folder_dtl.folder_status_id.badge_color }}">{{ folder_dtl.folder_status_id.folder_status_name }}</td>
+                            <td>{{ folder_dtl.lastest_received_date| date:"Y-m-d H:i"}}</td>
+                            <td>{{ folder_dtl.lastest_received_by|default_if_none:"" }}</td>
+                            <td>{{ folder_dtl.note|default_if_none:"" }}</td>
+                            <td>
+                                {% if folder_dtl.package_id %}
+                                F88:{{ folder_dtl.package_id.package_code }}
+                                {% endif %}
+                                <br/>
+                                {% if folder_dtl.package_id.partnerpackage %}
+                                    <span class="text-{{ folder_dtl.package_id.partnerpackage.status_id.badge_color }}">{{folder_dtl.package_id.partnerpackage.partner_name}}:{{ folder_dtl.package_id.partnerpackage.partner_package_code }}</span> 
+                                {% endif %}
+                            </td>
+                            <td>{% if folder_dtl.is_original %}Gốc{% else %}Bổ sung{% endif %} | {% if folder_dtl.is_issue %}Có{% else %}Không{% endif %}</td>      
+                            <td>
+                                {% if folder_dtl.is_late %}
+                                    <span class="badge text-bg-danger">Trễ hạn</span>
+                                {% elif folder_dtl.is_on_time %}
+                                    <span class="badge text-bg-success">Đúng hạn</span>
+                                {% else %}
+                                {% endif %}
+                            </td>
+                            <td style="white-space:nowrap" >
+                                <button class="btn btn-primary btn-sm" 
+                                    type="button" 
+                                    data-bs-toggle="offcanvas" 
+                                    data-bs-target="#offcanvasRight{{ folder_dtl.folder_id }}" 
+                                    aria-controls="offcanvasRight">Nhận
+                                </button>
+                                <button type="button" class="btn btn-secondary btn-sm dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <span class="visually-hidden">Khác</span>
+                                </button>
+                                <ul class="dropdown-menu">
+                                    {% if folder_dtl.folder_status_id.is_received %}
+                                        {% if folder_dtl.is_original %}
+                                            <li>
+                                                <a class="dropdown-item" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasRight{{ folder_dtl.folder_id }}_bs" aria-controls="offcanvasRight">
+                                                    Nhận bổ sung
+                                                </a>
+                                            </li>
+                                        {% endif %}
+                                        <li>
+                                            {% if folder_dtl.folder_id in change_request %}
+                                                <!-- Nếu yêu cầu thay đổi đã tồn tại thì disable -->
+                                                <a class="dropdown-item disabled" type="button" aria-disabled="true" data-folder-id="{{ folder_dtl.folder_id }}">
+                                                    Yêu cầu điều chỉnh (Đã yêu cầu)
+                                                </a>
+                                            {% else %}
+                                                <!-- Nếu chưa có yêu cầu thay đổi thì cho phép click -->
+                                                <a class="dropdown-item" type="button" onclick="requestChange('{{ folder_dtl.folder_id }}')" data-folder-id="{{ folder_dtl.folder_id }}">
+                                                    Yêu cầu điều chỉnh
+                                                </a>
+                                            {% endif %}
+                                        </li>
+                                    {% endif %}
+                                </ul>
+                            </td>
+                            <!-- Offcanvas Nhận chứng từ gốc-->
+                            <div class="offcanvas offcanvas-end" 
+                                tabindex="-1" id="offcanvasRight{{ folder_dtl.folder_id }}" 
+                                aria-labelledby="offcanvasRightLabel{{ folder_dtl.folder_id }}">
+                                <div class="offcanvas-header">
+                                    <h5 class="offcanvas-title" id="offcanvasRightLabel{{ folder_dtl.folder_id }}">Thông tin quyển</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+                                </div>
+                                <div class="offcanvas-body">
+                                    <!---Inside Canvas-->
+                                    <form method="post" action="{% url 'receiving_transaction' %}" id ='formreceive' >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="folder_id_submit" value="{{ folder_dtl.folder_id }}">           
+                                        <input type="hidden" name="folder_status_previous" value="{{ folder_dtl.folder_status_id.folder_status_id }}">
+                                        <div class="row">
+                                            <div class="col-12">
+                                                <div class="mb-3"></div>
+                                                <!-- Trạng thái Nhận-->
+                                                <div class="mb-3">
+                                                    <label for="statusSelect{{ folder_dtl.folder_id }}">Chọn trạng thái nhận</label>
+                                                    <select class="form-select form-select-sm" 
+                                                            aria-label="Small select example" 
+                                                            name="folder_status_submit"  
+                                                            id="statusSelect{{ folder_dtl.folder_id }}"  {% if folder_dtl.folder_status_id.is_not_received_yet %}required{% endif %}>
+                                                        <option value = "">{{folder_dtl.folder_status_id.folder_status_name }}</option>
+                                                        {% for folder_status in drop_list_folder_status %}
+                                                        {% if folder_status.folder_status_id != folder_dtl.folder_status_id.folder_status_id %}
+                                                        <option value={{folder_status.folder_status_id}}>{{folder_status.folder_status_name}}</option>
+                                                        {% endif %}
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <!--- Ngày nhận thùng thực tế-->
+                                                <div class="mb-3">
+                                                    <div class="field">
+                                                        <label for="filterTrueLastestReceiveDate" class="form-label">Ngày nhận thực tế</label> 
+                                                        <input class="form-select" type="text" id="filterTrueLastestReceiveDate" name="filter_True_Lastest_Receive_Date" placeholder="Ngày nhận thực tế" value ="">
+                                                    </div>
+                                                </div>
+                                                <!-- Mã thùng --> 
+                                                <div class="mb-3">
+                                                    <label for="package_code">Mã thùng</label>
+                                                    <input  type="text" class="form-control " id="package_code{{folder_dtl.folder_id}}" 
+                                                            name="package_code_submit" placeholder="{{ folder_dtl.package_id.package_code }}" 
+                                                            {% if folder_dtl.package_id.package_code == None %}required{% endif %}
+                                                            {% if folder_dtl.package_id %}disabled{% endif %}>
+                                                </div>
+                                                <!--Button clear thùng-->
+                                                <div class="mb-3">       
+                                                    <button type="button" class="btn btn-danger" id='clearpackage-{{ folder_dtl.folder_id }}'
+                                                            {% if folder_dtl.package_id.partnerpackage.status_id.is_released %}disabled{% endif %}
+                                                            data-folder-id="{{ folder_dtl.folder_id }}" 
+                                                            data-package-id="{{ folder_dtl.package_id }}" 
+                                                            data-csrf-token="{{ csrf_token }}"
+                                                            data-url="{% url 'clear_package' folder_dtl.folder_id %}" {% if not folder_dtl.package_id %}disabled{% endif %}>
+                                                        Gỡ mã thùng
+                                                    </button>
+                                                    <p><strong>Lưu ý:</strong><p> 
+                                                    <ul>
+                                                        <li><p>Khi gỡ mã thùng hiện tại của quyển thì sẽ đồng thời gỡ mã thùng của các chứng từ trong quyển (<i> bao gồm đã duyệt và chưa duyệt</i> ).</p></li>
+                                                        <li><p>Chỉ được gỡ thùng trong ngày nhận.</p></li>
+                                                    </ul>
+                                                </div>
+                                                <!-- Button tạo mới mã thùng--> 
+                                                <div class= "mb-3">
+                                                    <button type="button" class="btn btn-warning add-package-btn" data-folder-id="{{ folder_dtl.folder_id }}">Chưa có mã thùng? Tạo ngay!</button>
+                                                </div>
+                                                <!-- note-->
+                                                <div class="mb-3">
+                                                    <label for="folder_note">Ghi chú</label>
+                                                    <textarea class="form-control" id="folder_note" name="folder_note_submit" rows="3" placeholder="{{folder_dtl.note}}"></textarea>
+                                                </div>
+                                            </div> 
+                                        </div> 
+                                        <input type="hidden" name="filter_choice_shop" value="{{ request.GET.choice_shop }}">
+                                        <input type="hidden" name="filter_choice_folder_code" value="{{ request.GET.choice_folder_code }}">
+                                        <input type="hidden" name="filter_choice_user_nhan" value="{{ request.GET.choice_user_nhan }}">
+                                        <input type="hidden" name="filter_choice_receive_date" value="{{ request.GET.filter_receive_date }}">
+                                        <input type="hidden" name="filter_choice_folder_date" value="{{ request.GET.filter_folder_date }}">
+                                        <input type="hidden" name="filter_choice_folder_status" value="{{ request.GET.choice_folder_status }}">
+                                        <input type="hidden" name="filter_choice_folder_type" value="{{ request.GET.choice_folder_type }}">
+                                        <input type="hidden" name="filter_page" value="{{ folder_detail.number }}">
+                                        <div class="row">
+                                            <div class = 'text-center'>
+                                                <div class="col-12">
+                                                    <button type="submit" class="btn btn-success" {% if folder_dtl.package_id.partnerpackage.status_id.is_released %}disabled{% endif %}>Lưu</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </form> 
+                                    <br/>
+                                    <div class="row">
+                                        <div class = 'text-center'>
+                                            <div class="col-12">
+                                                <p class="d-inline-flex gap-1">
+                                                    <button 
+                                                        class="history-button-rei btn btn-info" 
+                                                        data-url="{% url 'fetch_history_receiving' 0 %}" 
+                                                        data-folder-id="{{ folder_dtl.folder_id }}"
+                                                        aria-controls="collapseExample-{{ folder_dtl.folder_id }}">
+                                                            Lịch sử nhận chứng từ
+                                                    </button>
+                                                </p>
+                                                <div class="collapse" id="collapseExample-{{ folder_dtl.folder_id }}">
+                                                    <div class="card card-body">
+                                                        <div id="history-container-x{{ folder_dtl.folder_id }}">
+                                                            <!-- The fetched history data will be displayed here -->
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!---End Inside Canvas-->  
+                                </div>
+                            </div>
+                            <!-- End Offcanvas Nhận chứng từ gốc-->
+                            <!-- Offcanvas Nhận chứng từ bổ sung-->
+                            <!-- Offcanvas Nhận bổ sung-->
+                            <div class="offcanvas offcanvas-end" 
+                                tabindex="-1" id="offcanvasRight{{ folder_dtl.folder_id }}_bs" 
+                                aria-labelledby="offcanvasRightLabel{{ folder_dtl.folder_id }}_bs">
+                                <div class="offcanvas-header">
+                                    <h5 class="offcanvas-title" id="offcanvasRightLabel{{ folder_dtl.folder_id }}">Nhận quyển bổ sung</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+                                </div>
+                                <div class="offcanvas-body">
+                                    <!---Inside Canvas-->
+                                    <form method="post" action="{% url 'receiving_additional_view' folder_dtl.folder_id %}" id= 'form-additional-folder'>
+                                        {% csrf_token %}
+                                        <div class="row">
+                                            <div class="col-12">
+                                                <!-- Thông tin quyển gốc -> -->
+                                                <div class="mb-3">
+                                                    <label>Mã quyển gốc: {{ folder_dtl.folder_code}}</label>
+                                                    <label>Ngày phát sinh: {{ folder_dtl.folder_created_date| date:"Y-m-d"}}</label>
+                                                    <label>Loại quyển: {{ folder_dtl.folder_type_id.folder_type_name }}</label>
+                                                    <label>Phòng giao dịch: {{ folder_dtl.shop_id.shop_name }}</label>
+                                                </div>
+                                                <!-- Trạng thái nhận quyển bổ sung -->
+                                                <div class="mb-3">
+                                                    <label for="statusSelect{{ folder_dtl.folder_id }}_bs">Chọn trạng thái nhận bổ sung</label>
+                                                    <select class="form-select form-select-sm" 
+                                                            name="additional_folder_status_submit"  
+                                                            id="statusSelect{{ folder_dtl.folder_id }}_bs">
+                                                        <option value = "">Chọn trạng thái</option>
+                                                        {% for folder_status in drop_list_folder_status %}
+                                                            <option value={{folder_status.folder_status_id}}>{{folder_status.folder_status_name}}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <!--- Ngày nhận thùng thực tế-->
+                                                <div class="mb-3">
+                                                    <div class="field">
+                                                        <label for="filterTrueLastestReceiveDate" class="form-label">Ngày nhận thực tế</label> 
+                                                        <input class="form-select" type="text" id="filterTrueLastestReceiveDate" name="filter_True_Lastest_Receive_Date" placeholder="Ngày nhận thực tế" value ="">
+                                                    </div>
+                                                </div>
+                                                <!-- Mã thùng (giống như nhận chính) --> 
+                                                <div class="mb-3">
+                                                    <label for="package_code{{folder_dtl.folder_id}}_bs">Mã thùng</label>
+                                                    <input type="text" class="form-control" id="package_code{{folder_dtl.folder_id}}_bs" name="additional_package_code_submit" placeholder="Nhập mã thùng mới">
+                                                </div>
+                                                <div class= "mb-3">
+                                                    <button type="button" 
+                                                    class="add-package-btn" 
+                                                    data-folder-id="{{ folder_dtl.folder_id }}"
+                                                    data-user-id="{{ user.id }}">Chưa có mã thùng? Tạo ngay!</button>
+                                                </div>
+                                                <!-- note-->
+                                                <div class="mb-3">
+                                                    <label for="folder_note{{ folder_dtl.package_id }}_bs">Ghi chú</label>
+                                                    <textarea class="form-control" id="folder_note{{ folder_dtl.package_id }}_bs" name="additional_folder_note_submit" rows="3" placeholder="Thêm ghi chú bổ sung nếu có"></textarea>  
+                                                </div>
+                                            </div> 
+                                        </div> 
+                                        <input type="hidden" name="filter_choice_shop" value="{{ request.GET.choice_shop }}">
+                                        <input type="hidden" name="filter_choice_folder_code" value="{{ folder_dtl.folder_code }}">
+                                        <div class="row">
+                                            <div class = 'text-center'>
+                                                <div class="col-12">
+                                                    <button type="submit" class="btn btn-success">Tạo quyển bổ sung</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </form> 
+                                </div>
+                            </div>    
+                        </tr>
+                        {% endfor %}
+                        {% else %}
+                        <tr><td colspan="10">Không có chứng từ được lọc.</td></tr>
+                    {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+</div>
+<!-- Modal Bulk Receiving -->
+<div class="modal fade" id="dataInputModal" tabindex="-1" aria-labelledby="modalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalLabel">Nhận nhiều quyển chứng từ</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="bulkDataForm">
+                    <!-- Display selected folder IDs -->
+                    <div class="mb-3">
+                        <label for="selectedFolders">Các quyển đã chọn:</label>
+                        <ul id="selectedFolders"></ul>
+                    </div>  
+                    <div class="mb-3">
+                        <label for="statusSelectBulk">Chọn trạng thái nhận</label>
+                        <select class="form-select form-select-sm" 
+                                aria-label="Small select example" 
+                                name="folder_status_choice"  
+                                id="statusSelectBulk" required
+                                oninvalid="this.setCustomValidity('Phải chọn trạng thái nhận')" oninput="this.setCustomValidity('')">
+                            <option value="">Chọn trạng thái nhận</option>
+                            {% for folder_status in drop_list_folder_status %}
+                            <option value="{{folder_status.folder_status_id}}">{{folder_status.folder_status_name}}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <!--- Ngày nhận thùng thực tế-->
+                    <div class="mb-3">
+                        <div class="field">
+                            <label for="filterTrueLastestReceiveDate1" class="form-label">Ngày nhận thực tế</label> 
+                            <input class="form-select" type="text" id="filterTrueLastestReceiveDate1" name="filter_True_Lastest_Receive_Date" placeholder="Ngày nhận thực tế" value ="">
+                        </div>
+                    </div>
+                    <!-- Mã thùng --> 
+                    <div class="mb-3">
+                        <label for="package_code">Mã thùng</label>
+                        <input type="text" class="form-control" id="package_code" name="package_choice" placeholder="Nhập mã thùng F88" required oninvalid="this.setCustomValidity('Phải nhập mã thùng F88')" oninput="this.setCustomValidity('')">
+                    </div>
+                    <!-- note-->
+                    <div class="mb-3">
+                        <label for="folder_note">Ghi chú</label>
+                        <textarea class="form-control" id="folderNoteBulk" name="folder_note_choice" rows="3" placeholder="Thêm ghi chú nếu có"></textarea>
+                    </div>
+                    <button type="button" class= "btn btn-warning add-package-btn" id="created-package">Tạo thùng</button>
+                    <button type="button" class="btn btn-primary" onclick="submitData()">Nhận quyển</button>
+                </form>
+            </div>
+        </div>
+    </div> 
+</div>
+<!-- Modal Xuất excel chứng từ đã duyệt -->
+<div class="modal fade" id="exportModalReceivingFail" tabindex="-1" aria-labelledby="exportModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="x">Xuất chứng từ nhận lỗi</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="loadingSpinner" class="spinner-border text-primary center" role="status" style="display: none;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <form id="exportFormReceivingFail">
+                    <div class="mb-3">
+                        <div class="field">
+                            <label for="folderMonthId" class="form-label">Tháng quyển chứng từ</label>
+                            <input class="form-select" type="text" id="folderMonthId" name="filterfoldermonth" placeholder="Tháng" >
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="exportFolderFailSubmit">Export</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    document.getElementById('exportBtnReceivingFail').addEventListener('click', function() {
+        var exportModal = new bootstrap.Modal(document.getElementById('exportModalReceivingFail'), {});
+        exportModal.show();
+    });
+
+    document.getElementById('exportFolderFailSubmit').addEventListener('click', function() {
+        var form = document.getElementById('exportFormReceivingFail');
+        var formData = new FormData(form);
+        var queryString = new URLSearchParams(formData).toString();
+        var exportBtn = document.getElementById('exportFolderFailSubmit');
+        var spinner = document.getElementById('loadingSpinner');
+
+        // Show spinner and disable the export button
+        spinner.style.display = 'inline-block';
+        exportBtn.disabled = true;
+
+        fetch("{% url 'export_excel_folder_fail' %}?" + queryString, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                return response.blob();
+            } else {
+                return response.json().then(err => { throw err; });
+            }
+        })
+        .then(blob => {
+            // Hide spinner and re-enable the export button
+            spinner.style.display = 'none';
+            exportBtn.disabled = false;
+
+            var url = window.URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'exported_data.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            // Hide spinner and re-enable the export button in case of error
+            spinner.style.display = 'none';
+            exportBtn.disabled = false;
+        });
+    });
+</script>
+<script>
+// flatpickr date picker
+// Ngày nhận
+var filterreceivedateInstance;
+document.addEventListener("DOMContentLoaded", function () {
+    filterreceivedateInstance =flatpickr("#filterreceivedate", {
+        mode: "range",
+        dateFormat: "Y-m-d",
+        altInput: true,
+        altFormat: "d-m-Y",
+    });
+});
+// Ngày phát sinh
+var filterfolderdateInstance;
+document.addEventListener("DOMContentLoaded", function () {
+    filterfolderdateInstance= flatpickr("#filterfolderdate", {
+        mode: "range",
+        dateFormat: "Y-m-d",
+        altInput: true,
+        altFormat: "d-m-Y",
+    });
+});
+// Ngày nhan thuc te
+var filterTrueReceiveDateInstance;
+document.addEventListener("DOMContentLoaded", function () {
+    filterTrueReceiveDateInstance = flatpickr("#filterTrueLastestReceiveDate", {
+        enableTime: true,
+        maxDate:"today",
+        dateFormat: "Y-m-d H:i",
+        altInput: true,
+        altFormat: "d-m-Y H:i",
+    });
+});
+// Ngày nhan thuc te
+var filterTrueReceiveDateInstanceX;
+document.addEventListener("DOMContentLoaded", function () {
+    filterTrueReceiveDateInstanceX= flatpickr("#filterTrueLastestReceiveDate1", {
+        enableTime: true,
+        maxDate:"today",
+        dateFormat: "Y-m-d H:i",
+        altInput: true,
+        altFormat: "d-m-Y H:i",
+    });
+});
+// Month picker
+document.addEventListener("DOMContentLoaded", function () {
+    flatpickr("#folderMonthId", {
+        plugins: [
+            new monthSelectPlugin({
+            shorthand: true, //defaults to false
+            dateFormat: "m.Y", //defaults to "F Y"
+            altFormat: "F Y", //defaults to "F Y"
+            theme: "light" // defaults to "light"
+            })
+        ]
+    });
+});
+</script>
+
+<script>
+// Xóa lọc
+// Clear filters button
+document.getElementById('clearFilters').addEventListener('click', function() {
+    // Reset the form fields to their default values
+    document.getElementById('exampleDataListShop').value = '';
+    document.getElementById('validateShopFeedbackValid').remove('is-valid');
+    document.getElementById('validateShopFeedbackInvalid').remove('is-invalid');
+    document.getElementById('inputfilterFoldercode').value = '';
+    document.getElementById('exampleDataListUserNhan').value = '';
+    document.getElementById('FilterFolderStatus').selectedIndex = 0;
+    document.getElementById('FilterFolderType').selectedIndex = 0;
+    document.getElementById('filterpackage').value = '';
+    // Clear the flatpickr date field
+    if (filterreceivedateInstance) {
+        filterreceivedateInstance.clear();
+    }
+    if (filterfolderdateInstance) {
+        filterfolderdateInstance.clear();
+    }
+});
+</script>
+<script type="text/javascript"> 
+document.addEventListener('DOMContentLoaded', function () {
+    // Thêm event listener vào tất cả các button với class 'add-package-btn'
+    document.querySelectorAll('.add-package-btn').forEach(button => {
+        button.addEventListener('click', function(event) {
+            event.preventDefault();
+            const folderId = this.getAttribute('data-folder-id'); // Lấy folder ID từ data attribute
+            const userId = this.getAttribute('data-user-id'); // Lấy user ID từ context
+            const windowName = 'Tạo mã thùng mới';
+            const windowSize = 'width=700,height=500';
+            const targetUrl = "{% url 'create_package' user.id %}";
+    
+            window.open(targetUrl , windowName, windowSize);
+        });
+    });
+});
+// Lắng nghe dữ liệu trả về từ pop-up
+window.addEventListener('message', function(event) {
+    // Đảm bảo thông điệp đến từ nguồn đáng tin cậy
+    if (event.origin !== window.location.origin) {
+        return;
+    }
+    if (event.data.success) {
+        // Xử lý dữ liệu, ví dụ: cập nhật danh sách các gói hàng
+        console.log('Package created with ID:', event.data.package_id);
+    } else if (event.data.errors) {
+        // Xử lý lỗi từ form
+        console.error('Errors returned:', event.data.errors);
+    }
+});
+
+// Xóa thùng hiện tại button
+document.addEventListener('DOMContentLoaded', function() {
+    document.body.addEventListener('click', function(event) {
+        if (event.target.id.startsWith('clearpackage')) {
+            const button = event.target;
+            const url = button.getAttribute('data-url');
+            const folderId = button.getAttribute('data-folder-id');
+            const packageId = button.getAttribute('data-package-id');
+            const csrftoken = button.getAttribute('data-csrf-token');
+            const inputId = 'package_code' + folderId; // Construct the ID of the corresponding input field
+            const inputField = document.getElementById(inputId);
+
+            // Hiển thị hộp thoại xác nhận
+            const confirmDelete = confirm('Bạn có chắc chắn muốn gỡ chứng từ ra khỏi thùng này?: '+  packageId);
+            
+            // Nếu người dùng chọn "OK" trong hộp thoại xác nhận
+            if (confirmDelete) {
+                fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrftoken,
+                    },
+                    body: JSON.stringify({
+                        folder_id_submit: folderId,
+                        package_id_submit: packageId,
+                    }),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Xóa thùng thành công.');
+                        if (inputField) {
+                            inputField.value = ''; // Optionally clear the input field's value
+                            inputField.placeholder = 'Nhập mã thùng mới'; // Reset the placeholder to a new default
+                        }
+                        // Reset lại trang sau khi xóa thành công
+                        location.reload();
+                    } else {
+                        alert('Xóa thùng không thành công: '+ data.message);
+                    }
+                })
+                .catch(error => console.error('Lỗi:', error));
+            }
+        }
+    });
+});
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Add event listener for all inputs with an id starting with "package_code"
+        document.querySelectorAll('[id^="package_code"]').forEach(input => {
+            input.addEventListener('blur', function() {
+                var packageCode = this.value;  // Get the value entered in the input
+                if (packageCode.trim() !== '') {  // Check if the input field is not empty
+                    fetch(`/package/checkexists/?user_entering_package_code=${encodeURIComponent(packageCode)}`)  // Adjust the parameter name to match the backend
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.package_exists) {  
+                                this.classList.add('is-valid');  // Add class to show an error state
+                                this.classList.remove('is-invalid');
+                                 // Add the valid class
+                                if (data.partner_package_status_noneligible) {
+                                    this.classList.remove('is-valid');
+                                    this.classList.add('is-invalid');
+                                    alert('Mã hợp đồng đã được chuyển đối tác, vui lòng kiểm tra lại mã thùng hoặc tạo mã thùng mới');
+                                }
+                            } 
+                            else {
+                                this.classList.remove('is-valid');  // Remove the error class if the package code exists (is valid)
+                                this.classList.add('is-invalid');
+                                alert('Thùng không tồn tại, vui lòng nhập thùng khác');
+                                 // Remove the valid class if any
+                                  // Display an alert with the error message from the server
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Request failed', error);
+                            alert('An error occurred while checking the package code.');
+                        });
+                } else {
+                    this.classList.remove('is-invalid');  // Remove the error class if the input is empty
+                    this.classList.remove('is-valid');  // Remove the valid class if the input is empty
+                }
+            });
+        });
+    });
+</script>
+<script>
+    // Hiển thị nút chọn nhận nhiều khi có nút bấm check
+    document.addEventListener('DOMContentLoaded', function() {
+        const checkboxes = document.querySelectorAll('.form-check-input');
+        const bulkActionButton = document.getElementById('bulkActionButton');
+        function updateBulkActionButton() {
+            const isAnyChecked = Array.from(checkboxes).some(checkbox => checkbox.checked);
+            bulkActionButton.style.display = isAnyChecked ? 'inline-flex' : 'none'; 
+        }
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateBulkActionButton);
+        });
+        updateBulkActionButton();
+    });
+</script>
+<script>
+    // Hiển thị thông tin quyển chứng từ đã chọn trong Modal để chọn nhiều
+    document.addEventListener('DOMContentLoaded', function() {
+        const modalButton = document.querySelector('[data-bs-toggle="modal"]');
+        modalButton.addEventListener('click', function() {
+            const selectedFoldersList = document.getElementById('selectedFolders');
+            selectedFoldersList.innerHTML = ''; // Clear the list first
+            // Populate list with selected folder codes and dates
+            document.querySelectorAll('.form-check-input:checked').forEach(item => {
+                const li = document.createElement('li');
+                const folderCode = item.getAttribute('data-folder-code');
+                const folderDate = item.getAttribute('data-folder-created-date');
+                li.textContent = `Mã quyển: ${folderCode}, Ngày phát sinh: ${folderDate}`; // Formatting the text content
+                selectedFoldersList.appendChild(li);
+            });
+        });
+    // Xử lý dữ liệu khi nhấn nút xác nhận trong Modal
+        window.submitData = function() {
+            const statusSelectBulk = document.getElementById('statusSelectBulk').value;
+            const trueReceiveDate = document.getElementById('filterTrueLastestReceiveDate1').value;
+            const packageCode = document.getElementById('package_code').value;
+            const selectedItems = Array.from(document.querySelectorAll('.form-check-input:checked')).map(item => item.value);
+            const folderNote = document.getElementById('folderNoteBulk').value;
+            if (selectedItems.length === 0 || statusSelectBulk === '' || packageCode.trim() === '') {
+                alert('Hãy chọn trạng thái nhận, nhập mã thùng và chọn ít nhất một chứng từ.');
+                return;
+            }
+            fetch("{% url 'bulk_receiving' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}',
+                },
+                body: JSON.stringify({
+                    selectedItems: selectedItems,
+                    trueLastestReceiveDate: trueReceiveDate,
+                    package_choice: packageCode,
+                    folder_status_choice: statusSelectBulk,
+                    folder_note_choice: folderNote,
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Chứng từ đã được nhận thành công.');
+                    location.reload();
+                } else {
+                    alert('Xử lý nhận chứng từ thất bại: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            });
+        };
+    });
+</script>
+<script>
+    // Kích vào row 
+    document.addEventListener('DOMContentLoaded', function() {
+        const tableRows = document.querySelectorAll('#table-data-area tr[data-checkbox-id]');
+        tableRows.forEach(row => {
+            row.addEventListener('click', function(event) {
+                // Prevent triggering when clicking on interactive elements
+                if (event.target.type === 'checkbox' || event.target.nodeName === 'BUTTON' || event.target.nodeName === 'A') return;
+    
+                // Find the checkbox and toggle its state
+                const checkbox = this.querySelector('input[type="checkbox"]');
+                if (checkbox && !checkbox.disabled) {
+                    checkbox.checked = !checkbox.checked;
+                    checkbox.dispatchEvent(new Event('change')); // Trigger change event if any
+                }
+            });
+        });
+    });
+</script>
+<script> 
+// Validate shop input
+    function validateShop(input, listId) {
+        const datalist = document.getElementById(listId);
+        const inputVal = input.value.trim();
+        let isValid = false;
+    
+        for (const option of datalist.options) {
+            if (option.value === inputVal) {
+                isValid = true;
+                break;
+            }
+        }
+        if (!isValid) {
+            input.classList.add('is-invalid');
+            input.classList.remove('is-valid');
+            input.setCustomValidity('Phải chọn từ danh sách có sẵn.');
+            input.reportValidity();  // Hiển thị thông báo lỗi ngay lập tức
+        } else {
+            input.classList.remove('is-invalid');
+            input.classList.add('is-valid');
+            input.setCustomValidity('');  // Xóa tất cả các thông báo lỗi trước đây
+        }
+    }
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const selectAllCheckbox = document.getElementById('select-all');
+        const checkboxes = document.querySelectorAll('.form-check-input');
+        const bulkActionButton = document.getElementById('bulkActionButton');
+        const badge = bulkActionButton.querySelector('.badge');
+        // Function to update the visibility of the "Select All" checkbox and the button text
+        function updateControls() {
+            const checkedItems = Array.from(checkboxes).filter(chk => chk.checked);
+            const anyChecked = checkedItems.length > 0;
+            selectAllCheckbox.style.visibility = anyChecked ? 'visible' : 'hidden';
+            badge.textContent = checkedItems.length;
+            bulkActionButton.style.display = anyChecked ? 'inline-flex' : 'none';
+            // Update the "Select All" checked state
+            selectAllCheckbox.checked = checkedItems.length === checkboxes.length;
+        }
+        // Handle changes to the "Select All" checkbox
+        selectAllCheckbox.addEventListener('change', function() {
+            checkboxes.forEach(checkbox => {
+                if (!checkbox.disabled) {
+                    checkbox.checked = this.checked;
+                }
+            });
+            updateControls();
+        });
+        // Attach change event listeners to individual checkboxes
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateControls);
+        });
+        // Initial check to update controls based on the page state after load
+        updateControls();
+    });
+</script>
+<script>
+    function requestChange(folderId) {
+        // Xác nhận từ người dùng trước khi gửi yêu cầu
+        const userConfirmation = confirm("Bạn có chắc chắn muốn gửi yêu cầu điều chỉnh cho quyển này không?");
+        if (!userConfirmation) {
+            // Nếu người dùng chọn "Cancel", dừng việc gửi yêu cầu
+            return;
+        }
+        const url = `/request-change-folder/${folderId}/`; 
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}',  
+            },
+            body: JSON.stringify({ note: 'Yêu cầu điều chỉnh từ người dùng' })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Hiển thị thông báo thành công
+                alert(data.message);
+                // Tìm phần tử liên kết bằng folderId và disable nó
+                const link = document.querySelector(`a[data-folder-id="${folderId}"]`);
+                if (link) {
+                    link.classList.add('disabled');
+                    link.setAttribute('aria-disabled', 'true');
+                    link.onclick = null; // Hủy sự kiện onclick
+                    link.innerHTML += ' (Đã yêu cầu)'; // Thêm ghi chú "Đã yêu cầu"
+                }
+            } else {
+                // Hiển thị thông báo lỗi
+                alert(data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Có lỗi xảy ra. Vui lòng thử lại sau.');
+        });
+    }
+</script>
+{% endblock content %}

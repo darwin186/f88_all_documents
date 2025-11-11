@@ -1,0 +1,96 @@
+/* Document_type table scrollable */
+body {
+    background-color: #ffffff;
+    height:100% ;
+    margin: 0;
+    padding: 0;
+    overflow-y: hidden; /* Prevent scrolling on the body directly */
+}
+
+.login-container {
+    max-width: 400px;
+    margin: 100px auto;
+    padding: 20px;
+    background-color: #ffffffc4;
+    border-radius: 10px;
+    box-shadow: 0px 0px 10px 0px rgba(0,0,0,0.1);
+}
+/* FOOTER */
+.footer {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    text-align: center;
+    background-color: #e4f1e5; 
+    padding: 5px 0; 
+    margin-left: hidden;
+} 
+/* PAGINATION APPLY FOR ALL */
+#pagination {
+    display: flex;
+    justify-content: end;
+    align-items: center;
+    margin: 2px 0;
+    padding: 0;
+    top: 0; 
+}
+/* MESSAGE AREA */
+#messageArea {
+    display: flex;
+    justify-content: center;
+    align-self: center; 
+    margin-top: 5px;
+}
+/* DATA AREA */
+#data-area {
+    display: block;
+    max-height: calc(110vh - 200px);
+    overflow-y: hidden; 
+}
+/* DATA AREA-TABLE*/
+#table-data-area { 
+    display: block;
+    max-height: calc(100vh - 220px);
+    overflow-y: auto; 
+}
+
+/* DATA AREA-TABLE-table head*/
+#table-data-area thead th {
+    position: sticky;
+    top: 0;
+    background-color: #ffffff;
+    text-align: center;
+    color: #00a34c;
+    border-radius: 1%;
+}
+
+/* #receiving_transaction_tbl { 
+    display: block;
+    max-height: calc(100vh - 170px); 
+    overflow-y: auto; 
+} */
+
+/* Fixed header */
+/* #receiving_transaction_tbl thead th {
+    position: sticky;
+    top: 0;
+    background-color: #ffffff;
+    text-align: middle;
+} */
+
+/* RTL support for specific nav item */
+.rtl-nav-item .navbar-text {
+    direction: rtl; /* Right to left text direction */
+    text-align: right; /* Align text to the right */
+  }
+  
+  /* Optional: Adjust padding or margins if necessary */
+  .rtl-nav-item .navbar-text .badge {
+    margin-left: .5rem; /* Adjust space between text and badges if needed */
+  }
+
+#sidebarMenu {
+  max-height: calc(100vh - 100px); /* Adjust 50px based on your header/footer height */
+  overflow-y: auto; /* This makes the sidebar scrollable when the content is taller than the max-height */ 
+}

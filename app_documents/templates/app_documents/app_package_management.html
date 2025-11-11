@@ -1,0 +1,500 @@
+{% extends 'app_documents/base.html' %}
+{% block content %}
+<div class="container-fluid"> 
+    <div class="row">
+        <!-- Sidebar -->
+        <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse">
+            <br/>
+            <form method = 'get' action="{% url 'package_management' %}" id = 'filterFormPackage'>
+                <div class = align-center><h5 class = 'text-center'>Quản lý thùng chứng từ</h5></div>
+                <br/>
+                <h6 class = 'text-center'>Bộ lọc</h6>
+                <ul class="nav nav-pills flex-column mb-auto">
+                    <div class="row mb-2">
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="inputfilterpackage" class="form-label">Mã thùng F88</label>
+                                    <input type="text" class="form-control" id="inputfilterpackage" placeholder="Tìm kiếm mã thùng F88" name = 'choice_package'>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="inputfilterpartnerpackage" class="form-label">Mã thùng đối tác</label>
+                                    <input type="text" class="form-control" id="inputfilterpartnerpackage" placeholder="Tìm kiếm mã thùng dối tác" name = 'choice_partner_package'>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="filterpackageold" class="form-label">Mã thùng cũ</label>
+                                    <input type="text" class="form-control" id="filterpackageold" placeholder="Tìm kiếm mã thùng cũ" name = 'choice_package_old'>
+                                </div>
+                            </li>
+                        </div>
+                        <div class = "col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <div class="mb-3">
+                                        <label for="FilterFolderStatus" class="form-label">Trạng thái thùng</label>
+                                        <select class="form-select" aria-label="Default select example" name = "filterpackagestatus" id= 'FilterPackageStatus'>
+                                            <option value="">Chọn trạng thái thùng</option>
+                                            {% for packagestatus in partnerpackage_status %}
+                                            <option value= "{{packagestatus.status_id}}" 
+                                                {% if request.GET.filterpackagestatus|stringformat:"s" == packagestatus.status_id|stringformat:"s" %}selected{% endif %}>
+                                                {{packagestatus.package_status_name}}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </li>
+                        </div>    
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="FilterRegion" class="form-label">Khu vực</label> 
+                                    <select class="form-select" aria-label="Default select example" name = "filterregion" id= 'FilterRegion'>
+                                        <option value="">Chọn khu vực</option>
+                                        {% for region in droplist_regions %}
+                                        <option value= "{{region.region_id}}" 
+                                            {% if request.GET.filterregion|stringformat:"s" == region.region_id|stringformat:"s" %}selected{% endif %}>
+                                            {{region.region_name}}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="exampleDataListUserNhan" class="form-label">Người tạo thùng</label>
+                                    <input class="form-control" list="datalistOptionsUserTaoThung" id="exampleDataListUserTaoThung" placeholder="Tìm kiếm user tạo thùng" name = 'choice_user_tao_thung' value ="{% if request.GET.choice_user_tao_thung %}{{request.GET.choice_user_tao_thung}}{% endif %}">
+                                    <datalist id="datalistOptionsUserTaoThung">
+                                        {% for usertaothung in droplist_users %}
+                                        <option value= "{{usertaothung.username}}"></option>
+                                        {% endfor %}
+                                    </datalist>
+                                </div>
+                            </li>
+                        </div>
+                    </div>
+                </ul>       
+                <!-- Lọc  -->
+                <div class = 'text-center'>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-success">Lọc</button>
+                        <button id="clearFilters" class = "btn btn-secondary" type="button">Xóa lọc</button>
+                    </div>
+                </div>
+            </form>
+        </nav>
+        <!-- Main content -->
+        <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4" id ="manage_package">
+            <!-- Message/ paginator/ etc... -->
+            {% include  'app_documents/sys_messages.html'  %}
+            <div class="row shadow-sm p-2 mb-2 bg-body-tertiary rounded">
+                <div class="col-sm-8">
+                    <div class="col-sm">
+                        <div class="col-sm">
+                            <button type="button" class="btn btn-primary" id="export">Xuất Excel
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-box-arrow-down" viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M3.5 10a.5.5 0 0 1-.5-.5v-8a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 0 0 1h2A1.5 1.5 0 0 0 14 9.5v-8A1.5 1.5 0 0 0 12.5 0h-9A1.5 1.5 0 0 0 2 1.5v8A1.5 1.5 0 0 0 3.5 11h2a.5.5 0 0 0 0-1z"/>
+                                    <path fill-rule="evenodd" d="M7.646 15.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 14.293V5.5a.5.5 0 0 0-1 0v8.793l-2.146-2.147a.5.5 0 0 0-.708.708z"/>
+                                </svg>
+                            </button>
+                            <form method="POST" enctype="multipart/form-data" style="display:inline;">
+                                {% csrf_token %}
+                                <input type="file" name="filePackage" id="file-input-package" style="display: none;" accept=".xlsx, .xls" required>
+                                <button type="button" class="btn btn-primary" id="import" onclick="importExcel()">Tải lên mới
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-box-arrow-down" viewBox="0 0 16 16">
+                                        <path fill-rule="evenodd" d="M3.5 10a.5.5 0 0 1-.5-.5v-8a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 .5.5v8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 0 0 1h2A1.5 1.5 0 0 0 14 9.5v-8A1.5 1.5 0 0 0 12.5 0h-9A1.5 1.5 0 0 0 2 1.5v8A1.5 1.5 0 0 0 3.5 11h2a.5.5 0 0 0 0-1z"/>
+                                        <path fill-rule="evenodd" d="M7.646 15.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 14.293V5.5a.5.5 0 0 0-1 0v8.793l-2.146-2.147a.5.5 0 0 0-.708.708z"/>
+                                    </svg>
+                                </button>
+                                <button type="submit" id="submit-button" style="display: none;">Submit</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-4" id ='pagination'>
+                    <!-- Pagination -->
+                    {% if package_list.has_other_pages %}
+                    <nav aria-label="Page navigation" >
+                        <ul class="pagination">
+                            <!-- Link to the first page -->
+                            {% if not package_list.has_previous %}
+                            <li class="page-item disabled"><span class="page-link">&laquo;&laquo;</span></li>
+                            {% else %}
+                            <li class="page-item"><a class="page-link" href="?page=1&{{ query_string }}" aria-label="First">&laquo;&laquo;</a></li>
+                            {% endif %}
+                            <!-- Link to the previous page -->
+                            {% if package_list.has_previous %}
+                            <li class="page-item"><a class="page-link" href="?page={{ package_list.previous_page_number }}&{{ query_string }}" aria-label="Previous">&laquo;</a></li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+                            {% endif %}
+                            <!-- Current page number and surrounding page numbers -->
+                            {% for num in package_list.paginator.page_range %}
+                                {% if package_list.number == num %}
+                                <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                                {% elif num > package_list.number|add:'-3' and num < package_list.number|add:'3' %}
+                                <li class="page-item"><a class="page-link" href="?page={{ num }}&{{ query_string }}">{{ num }}</a></li>
+                                {% endif %}
+                            {% endfor %}
+                            <!-- Link to the next page -->
+                            {% if package_list.has_next %}
+                            <li class="page-item"><a class="page-link" href="?page={{ package_list.next_page_number }}&{{ query_string }}" aria-label="Next">&raquo;</a></li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+                            {% endif %}
+                            <!-- Link to the last page -->
+                            {% if not package_list.has_next %}
+                            <li class="page-item disabled"><span class="page-link">&raquo;&raquo;</span></li>
+                            {% else %}
+                            <li class="page-item"><a class="page-link" href="?page={{ package_list.paginator.num_pages }}&{{ query_string }}" aria-label="Last">&raquo;&raquo;</a></li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                    <!--End Pagination-->
+                </div>
+            </div>
+            <!-- Table -->
+            <div class="row shadow-sm p-2 mb-2 bg-body-tertiary rounded" id ='data-area'>
+                <table class="table table-hover table-light" id = 'table-data-area'>
+                    <thead class="align-middle">
+                        <tr>
+                            <th>STT</th>
+                            <th style="white-space:nowrap">Mã thùng F88</th>
+                            <th style="white-space:nowrap">Mã thùng F88 Cũ</th>
+                            <th style="white-space:nowrap">Mã thùng Đối tác</th> 
+                            <th style="white-space:nowrap">Đối tác</th>
+                            <th>Thông tin tạo thùng</th>
+                            <th>Loại thùng</th>              
+                            <th>Khu vực</th>    
+                            <th>Trạng thái thùng</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if package_list %}
+                        <tr>
+                            {% for package in package_list %}
+                            <td class="align-center">{{forloop.counter|add:package_list.start_index|add:-1}}</td>
+                            <td class="align-center" style="white-space:nowrap">{{ package.package_code }}</td>
+                            <td class="align-center" style="white-space:nowrap">{{ package.package_code_old|default_if_none:"" }}</td>
+                            <td class="align-center">{{ package.partnerpackage.partner_package_code}}</td>
+                            <td>{{ package.partnerpackage.partner_name }}</td>
+                            <td style="white-space:nowrap">{{ package.created_by }}<br/>{{package.created_date|date:'Y-m-d'}}</td>
+                            <td>{{ package.package_type.package_type }}</td>
+                            <td>{{ package.region_id.region_name}}
+                            <td> 
+                                {% comment %} <div class="dropdown"> {% endcomment %}
+                                <button class="btn btn-{% if package.partnerpackage.status_id.status_id|stringformat:'s' == '1' %}secondary{% elif package.partnerpackage.status_id.status_id|stringformat:'s' == '2' %}outline-success{% elif package.partnerpackage.status_id.status_id|stringformat:'s' == '3' %}warning{%endif%} btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="changePartnerStatus">
+                                    {{ package.partnerpackage.status_id.package_status_name }}
+                                </button>
+                                <ul class="dropdown-menu">
+                                    {% for packagestatus in partnerpackage_status %}
+                                    {% if packagestatus.status_id|stringformat:"s" != package.partnerpackage.status_id.status_id|stringformat:"s" %}
+                                    <li>
+                                        <a class="dropdown-item" 
+                                            href="#" data-status-value= "{{ packagestatus.status_id}}" 
+                                            data-bs-toggle="modal"  
+                                            data-package_id= "{{package.package_id}}" 
+                                            data-bs-target="#changePartnerStatusModalConfirm"
+                                            data-bs-whatever="{{ package.partnerpackage.status_id.package_status_name }}" 
+                                            data-bs-package-code="{{ package.package_code }}"
+                                            data-bs-status-new = "{{ packagestatus.package_status_name }}"                                         
+                                            data-bs-status-new-id = "{{ packagestatus.status_id }}"
+                                            >{{packagestatus.package_status_name}}
+                                        </a>
+                                    </li>
+                                    {% endif %}
+                                    {% endfor %}
+                                </ul>
+                                {% comment %} </div> {% endcomment %}
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-primary btn-sm edit-package-button" 
+                                        data-bs-toggle="modal" 
+                                        data-package-id="{{ package.package_id }}"
+                                        data-partner-package-code="{{ package.partnerpackage.partner_package_code }}" 
+                                        data-partner-name = "{{ package.partnerpackage.partner_name }}"
+                                        data-old-package-code = "{{ package.package_code_old | default_if_none:''}}"
+                                        data-package-code="{{ package.package_code }}">Chỉnh sửa
+                                </button>
+                            </td> 
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="10">Không có chứng từ được lọc.</td></tr>
+                        {% endfor %}
+                    {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+</div>
+<!--- Modal điều chỉnh thông tin thùng --->
+<div class="modal fade" id="editPackageModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editModalLabel">Chỉnh sửa thùng</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="#" id="formEditPackage">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="" class="form-label">Mã thùng đối tác</label>
+                        <input type="text" class="form-control" id="parnertCodesubmit" name="partner_code_choice" required disabled>
+                    </div>
+                    <div class='mb-3'>
+                        <label for="partnerchoice">Đối tác lưu trữ</label>
+                        <select class="form-select" name='partner_name_choice' aria-label="Default select example" id='partnerchoice' required disabled>
+                            <option value = "">Chọn đối tác lưu trữ</option>
+                            <option value='CRN'>Crown</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="" class="form-label">Mã thùng cũ &#40;nếu có &#41;</label>
+                        <input type="text" class="form-control" id="oldPackageCode" name="old_package_code_choice">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary" id = 'save'>Lưu</button>
+                    <button type="button" class="btn btn-success" id = 'showUpValue'>Chỉnh sửa</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div> 
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const editModal = new bootstrap.Modal(document.getElementById('editPackageModal'));
+        const formEditPackage = document.getElementById('formEditPackage');
+        
+        document.querySelectorAll('.edit-package-button').forEach(button => {
+            button.addEventListener('click', function() {
+                const packageId = this.dataset.packageId;
+                const packageCode = this.dataset.packageCode;
+                const partnerPackageCode = this.dataset.partnerPackageCode;
+                const partnerName = this.dataset.partnerName;
+                const oldPackageCode = this.dataset.oldPackageCode;
+                const actionUrl = `/package/edit/${packageId}/`;
+                
+                document.getElementById('editModalLabel').innerText = `Điều chỉnh thùng ${packageCode}`;
+                document.getElementById('parnertCodesubmit').value = partnerPackageCode;
+                document.getElementById('partnerchoice').value = partnerName;
+                document.getElementById('oldPackageCode').value = oldPackageCode ? oldPackageCode : '';
+                formEditPackage.action = actionUrl;
+                editModal.show();
+            });
+        });
+        document.getElementById('showUpValue').addEventListener('click', function() {
+            document.getElementById('parnertCodesubmit').disabled = false;
+            document.getElementById('partnerchoice').disabled = false;
+            document.getElementById('oldPackageCode').disabled = false;
+        });
+    
+        document.getElementById('editPackageModal').addEventListener('hidden.bs.modal', function() {
+            document.getElementById('parnertCodesubmit').disabled = true;
+            document.getElementById('partnerchoice').disabled = true;
+            document.getElementById('oldPackageCode').disabled = true;
+        });
+        formEditPackage.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const formData = $(this).serialize(); 
+            $.ajax({
+                type: 'POST',
+                url: formEditPackage.action,
+                data: formData,
+                success: function(response) {
+                    $('#editPackageModal').modal('hide');
+                    location.reload();
+                },
+                error: function(response) {
+                    alert('Lỗi xảy ra khi lưu dữ liệu. Vui lòng thử lại, hoặc liên hệ admin');
+                }
+            });
+        });
+    });
+</script>
+<script>
+// Clear filters button
+document.getElementById('clearFilters').addEventListener('click', function() {
+    // Reset the form fields to their default values
+    document.getElementById('inputfilterpackage').value = '';
+    document.getElementById('inputfilterpartnerpackage').value = '';
+    document.getElementById('filterpackageold').value = '';
+    document.getElementById('FilterPackageStatus').value = '';
+    document.getElementById('FilterRegion').value = '';
+    document.getElementById('exampleDataListUserTaoThung').value = '';
+});
+</script>
+<!-- Modal -->
+<div class="modal fade" id="changePartnerStatusModalConfirm" tabindex="-1" aria-labelledby="changePartnerStatusModalConfirmLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="changePartnerStatusModalConfirmLabel"></h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form method = 'POST'>
+                    {% csrf_token %}
+                    <p> Bạn có xác nhận thay đổi trạng thái từ <span id="currentPartnerStatus" class="text-danger" ></span> => <span class="text-success" id="newPartnerStatus"></span> không?</p>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Không</button>
+                <button type="button" class="btn btn-primary" id="confirmChangeStatusBtn" >Đồng ý</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% comment %} <script>
+    const changePartnerStatusModalConfirm = document.getElementById('changePartnerStatusModalConfirm')
+    let packageId;
+    if (changePartnerStatusModalConfirm) {
+        changePartnerStatusModalConfirm.addEventListener('show.bs.modal', event => {
+        // Button that triggered the modal
+        const button = event.relatedTarget
+        // Extract info from data-bs-* attributes
+        const packageStatus = button.getAttribute('data-bs-whatever')
+        const packageCode = button.getAttribute('data-bs-package-code')
+        const packageId = button.getAttribute('data-package_id') 
+        const newStatus = button.getAttribute('data-bs-status-new')
+        // If necessary, you could initiate an Ajax request here
+        // and then do the updating in a callback.
+        // Update the modal's content.
+        const modalTitle = changePartnerStatusModalConfirm.querySelector('.modal-title')
+        const newPartnerStatus = changePartnerStatusModalConfirm.querySelector('#newPartnerStatus') // Span trạng thái mới
+        const currentPartnerStatus = changePartnerStatusModalConfirm.querySelector('#currentPartnerStatus') // Span trạng thái cũ
+
+        modalTitle.textContent = `Thay đổi trạng thái thùng ${packageCode} `
+        currentPartnerStatus.textContent = packageStatus 
+        newPartnerStatus.textContent = newStatus 
+      })
+    }
+</script> {% endcomment %}
+<script>
+    function importExcel() {
+        // Khi nút import được nhấn, tự động click vào input file để mở hộp thoại chọn file
+        document.getElementById('file-input-package').click();
+    }
+    document.getElementById('file-input-package').addEventListener('change', function() {
+        console.log('File selected, asking for confirmation...');
+        // Hỏi người dùng có muốn tiếp tục upload không
+        var userConfirmed = confirm("Bạn có chắc chắn muốn tải file này lên?");
+        if (!userConfirmed) {
+            console.log('Hủy tải lên file');
+            return;  // Dừng lại nếu người dùng không xác nhận
+        }
+        console.log('Xác nhận tạo thùng!');
+        // Sau khi người dùng chọn file và xác nhận, thực hiện gửi form bằng AJAX
+        var formData = new FormData();
+        var fileInput = document.getElementById('file-input-package');
+        
+        if (fileInput.files.length === 0) {
+            alert("Không có file nào được chọn! Vui lòng chọn file Excel");
+            return;
+        }
+        formData.append('filePackage', fileInput.files[0]);
+        fetch('/import-packages/', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        }).then(response => {
+            if (response.ok) {
+                alert('Import file thành công!');
+                // Bạn có thể redirect người dùng hoặc cập nhật giao diện tùy theo yêu cầu
+            } else {
+                alert('Import file thất bại, vui lòng thử lại!');
+            }
+        }).catch(error => {
+            console.error('Error:', error);
+        });
+    });
+</script>
+<script>
+const changePartnerStatusModalConfirm = document.getElementById('changePartnerStatusModalConfirm');
+let packageId, newStatusId;
+
+if (changePartnerStatusModalConfirm) {
+    changePartnerStatusModalConfirm.addEventListener('show.bs.modal', event => {
+        const button = event.relatedTarget;
+        const packageStatus = button.getAttribute('data-bs-whatever');
+        const packageCode = button.getAttribute('data-bs-package-code');
+        packageId = button.getAttribute('data-package_id');
+        const newStatus = button.getAttribute('data-bs-status-new');
+        newStatusId = button.getAttribute('data-bs-status-new-id');
+
+        const modalTitle = changePartnerStatusModalConfirm.querySelector('.modal-title');
+        const newPartnerStatus = changePartnerStatusModalConfirm.querySelector('#newPartnerStatus');
+        const currentPartnerStatus = changePartnerStatusModalConfirm.querySelector('#currentPartnerStatus');
+
+        modalTitle.textContent = `Thay đổi trạng thái thùng ${packageCode}`;
+        currentPartnerStatus.textContent = packageStatus;
+        newPartnerStatus.textContent = newStatus;
+    });
+
+    const confirmChangeStatusBtn = document.getElementById('confirmChangeStatusBtn');
+    confirmChangeStatusBtn.addEventListener('click', () => {
+        updatePartnerStatus(packageId, newStatusId);
+    });
+}
+
+function updatePartnerStatus(id, newStatusId) {
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    fetch(`/package/change-partnerpackage-status/${id}/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify({ new_partnerpackage_status: newStatusId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Cập nhật trạng thái trên giao diện người dùng (nếu cần)
+            //document.querySelector(`#status-${id}`).textContent = newStatusId;
+            // Đóng modal
+            const modal = bootstrap.Modal.getInstance(changePartnerStatusModalConfirm);
+            modal.hide();
+            location.reload();
+        } else {
+            // Xử lý lỗi (nếu có)
+            alert('Đã xảy ra lỗi khi cập nhật trạng thái.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('' );
+    });
+}
+</script>
+<script> 
+    // Xuất data thùng theo bộ lọc
+    document.getElementById('export').addEventListener('click', function() {
+        const form = document.getElementById('filterFormPackage');
+        const exportInput = document.createElement('input');
+        exportInput.type = 'hidden';
+        exportInput.name = 'export';
+        exportInput.value = '1';
+        form.appendChild(exportInput);
+        form.submit();
+        // Remove the input after the form is submitted
+        exportInput.remove();
+    });
+</script>
+{% endblock content %}

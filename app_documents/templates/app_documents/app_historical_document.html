@@ -1,0 +1,150 @@
+{% extends 'app_documents/base.html' %}
+{% block content %}
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar -->
+        <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse">
+            <br/>
+            <form method='get' action="{% url 'historical_documents_view' %}">
+                <div class="align-center">
+                    <h5 class='text-center'>Historical Documents</h5>
+                </div>
+                <br/>
+                <h6 class='text-center'>Bộ lọc</h6>
+                <ul class="nav nav-pills flex-column mb-auto">
+                    <!-- Filter by Shop -->
+                    <div class="row mb-2">
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="exampleDataListShop" class="form-label">Phòng giao dịch</label>
+                                    <input class="form-control" list="datalistOptionsShop" id="exampleDataListShop"
+                                           value="{% if request.GET.choice_shop %}{{request.GET.choice_shop}}{% endif %}"
+                                           placeholder="Tìm kiếm Phòng Giao Dịch" name='choice_shop'>
+                                    <datalist id="datalistOptionsShop">
+                                        {% for shop in drop_list_shops %}
+                                        <option value="{{ shop.shop_name }}">{{shop.shop_code}}</option>
+                                        {% endfor %}
+                                    </datalist>
+                                </div>
+                            </li>
+                        </div>
+                        <!-- Filter by Document Code -->
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="inputfilterDocumentcode" class="form-label">Mã chứng từ</label>
+                                    <input type="text" class="form-control" id="inputfilterDocumentcode"
+                                           placeholder="Tìm kiếm Mã chứng từ" name='choice_documents_code'
+                                           value="{% if request.GET.choice_documents_code %}{{request.GET.choice_documents_code}}{% endif %}">
+                                </div>
+                            </li>
+                        </div>
+                        <!-- Filter by Document Type -->
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="FilterDocumentType" class="form-label">Loại chứng từ</label>
+                                    <select class="form-select" aria-label="Default select example" name="choice_document_type" id='FilterDocumentType'>
+                                        <option value="">Chọn loại chứng từ</option>
+                                        {% for documenttype in drop_list_document_type %}
+                                        <option value="{{ documenttype.document_type_name }}"
+                                            {% if request.GET.choice_document_type == documenttype.document_type_name %}selected{% endif %}>
+                                            {{documenttype.document_type_name}}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </li>
+                        </div>
+                        <!-- Filter by Business Type -->
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="FilterBusinessType" class="form-label">Loại hình kinh doanh</label>
+                                    <select class="form-select" aria-label="Default select example" name="choice_business_type" id='FilterBusinessType'>
+                                        <option value="">Chọn loại hình kinh doanh</option>
+                                        {% for businesstype in drop_list_business_type %}
+                                        <option value="{{ businesstype.business_type_name }}"
+                                            {% if request.GET.choice_business_type == businesstype.business_type_name %}selected{% endif %}>
+                                            {{businesstype.business_type_name}}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </li>
+                        </div>
+                        <!-- Filter by Package Code -->
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="filterpackage" class="form-label">Mã thùng</label>
+                                    <input class="form-select" type="text" id="filterpackage" name="filter_package"
+                                           placeholder="Mã thùng" value="{% if request.GET.filter_package %}{{request.GET.filter_package}}{% endif %}">
+                                </div>
+                            </li>
+                        </div>
+                    </div>
+                </ul>
+                <!-- Filter and Clear buttons -->
+                <div class='text-center'>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-success">Lọc</button>
+                        <button id="clearFilters" class="btn btn-secondary" type="button">Xóa lọc</button>
+                    </div>
+                </div>
+            </form>
+        </nav>
+
+        <!-- Main content -->
+        <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4" id="document_receiving_transaction">
+            <!-- Table Area-->
+            <div class="row shadow-sm p-2 mb-2 bg-body-tertiary rounded" id='data-area'>
+                <table class="table table-hover table-light" id='table-data-area'>
+                    <thead>
+                        <tr>
+                            <th class='text-center'>STT</th>
+                            <th class='text-center'>Phòng giao dịch</th>
+                            <th class='text-center'>Mã chứng từ</th>
+                            <th class='text-center'>Loại chứng từ</th>
+                            <th class='text-center'>Loại hình kinh doanh</th>
+                            <th class='text-center'>Mã thùng</th>
+                            <th class='text-center'>Ngày lưu trữ</th>
+                            <th class='text-center'>Ghi chú</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% if documents_detail %}
+                    {% for document in documents_detail %}
+                        <tr>
+                            <td>{{ forloop.counter|add:documents_detail.start_index|add:-1}}</td>
+                            <td style="white-space:nowrap">{{ document.shop_id.shop_name }}</td>
+                            <td>{{ document.documents_code }}</td>
+                            <td>{{ document.document_type_name }}</td>
+                            <td>{{ document.business_type_name }}</td>
+                            <td>{{ document.package_id.package_code|default_if_none:"N/A" }}</td>
+                            <td style="white-space:nowrap">{{ document.archived_at|date:"Y-m-d"}}</td>
+                            <td>{{ document.condition|default_if_none:"" }}</td>
+                        </tr>
+                    {% endfor %}
+                    {% else %}
+                        <tr><td colspan="8">Không có dữ liệu phù hợp.</td></tr>
+                    {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+// Script for clearing filters
+document.getElementById('clearFilters').addEventListener('click', function() {
+    document.getElementById('exampleDataListShop').value = '';
+    document.getElementById('inputfilterDocumentcode').value = '';
+    document.getElementById('FilterDocumentType').selectedIndex = 0;
+    document.getElementById('FilterBusinessType').selectedIndex = 0;
+    document.getElementById('filterpackage').value = '';
+});
+</script>
+
+{% endblock content %}

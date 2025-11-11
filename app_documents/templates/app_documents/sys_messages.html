@@ -1,0 +1,36 @@
+{% if messages %}
+    <div aria-live="polite" aria-atomic="true" class="position-relative">
+        <div class="toast-container position-fixed bottom-0 end-0 p-3">
+            {% for message in messages %}
+            <div class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header">
+                    {% if message.level == DEFAULT_MESSAGE_LEVELS.ERROR %}
+                    <strong class="me-auto text-danger">Xảy ra lỗi:</strong>
+                    {% elif message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %}
+                    <strong class="me-auto text-success">Thành công</strong>
+                    {% elif message.level == DEFAULT_MESSAGE_LEVELS.WARNING %}
+                    <strong class="me-auto text-warning">Cảnh báo</strong>
+                    {% elif message.level == DEFAULT_MESSAGE_LEVELS.INFO %}
+                    <strong class="me-auto text-info">Thông tin</strong>
+                    {% endif %}
+                    <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+                <div class="toast-body">
+                    {{ message }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+{% endif %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var toastElems = document.querySelectorAll('.toast');
+    var toastList = [...toastElems].map(function(toastElem) {
+        return new bootstrap.Toast(toastElem, { autohide: true, delay: 9000 });
+    });
+    toastList.forEach(function(toast) {
+        toast.show();
+    });
+});
+</script>

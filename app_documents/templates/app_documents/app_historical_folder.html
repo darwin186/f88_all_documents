@@ -1,0 +1,151 @@
+{% extends 'app_documents/base.html' %}
+{% block content %}
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar -->
+        <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse">
+            <br/>
+            <form method='get' action="{% url 'historical_folder_view' %}">
+                <div class="align-center">
+                    <h5 class='text-center'>Hisorical Folders</h5>
+                </div>
+                <br/>
+                <h6 class='text-center'>Bộ lọc</h6>
+                <ul class="nav nav-pills flex-column mb-auto">
+                    <!-- Filter by Shop -->
+                    <div class="row mb-2">
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="exampleDataListShop" class="form-label">Phòng giao dịch</label>
+                                    <input class="form-control" list="datalistOptionsShop" id="exampleDataListShop"
+                                           value="{% if request.GET.choice_shop %}{{request.GET.choice_shop}}{% endif %}"
+                                           placeholder="Tìm kiếm Phòng Giao Dịch" name='choice_shop'>
+                                    <datalist id="datalistOptionsShop">
+                                        {% for shop in drop_list_shops %}
+                                        <option value="{{ shop.shop_name }}">{{shop.shop_code}}</option>
+                                        {% endfor %}
+                                    </datalist>
+                                </div>
+                            </li>
+                        </div>
+                        <!-- Filter by Folder Code -->
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="inputfilterFoldercode" class="form-label">Mã quyển</label>
+                                    <input type="text" class="form-control" id="inputfilterFoldercode"
+                                           placeholder="Tìm kiếm Mã quyển" name='choice_folder_code'
+                                           value="{% if request.GET.choice_folder_code %}{{request.GET.choice_folder_code}}{% endif %}">
+                                </div>
+                            </li>
+                        </div>
+                        <!-- Filter by Folder Type -->
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="FilterFolderType" class="form-label">Loại quyển</label>
+                                    <select class="form-select" aria-label="Default select example" name="choice_folder_type" id='FilterFolderType'>
+                                        <option value="">Chọn loại quyển</option>
+                                        {% for foldertype in drop_list_folder_type %}
+                                        <option value="{{ foldertype.folder_type_id }}"
+                                            {% if request.GET.choice_folder_type|stringformat:"s" == foldertype.folder_type_id|stringformat:"s" %}selected{% endif %}>
+                                            {{foldertype.folder_type_name}}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </li>
+                        </div>
+                        <!-- Filter by Folder Status -->
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="FilterFolderStatus" class="form-label">Trạng thái quyển</label>
+                                    <select class="form-select" aria-label="Default select example" name="choice_folder_status" id='FilterFolderStatus'>
+                                        <option value="">Chọn trạng thái quyển</option>
+                                        {% for folderstatus in drop_list_folder_status %}
+                                        <option value="{{folderstatus.folder_status_id}}"
+                                            {% if request.GET.choice_folder_status|stringformat:"s" == folderstatus.folder_status_id|stringformat:"s" %}selected{% endif %}>
+                                            {{folderstatus.folder_status_name}}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </li>
+                        </div>
+                        <!-- Filter by Package Code -->
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="filterpackage" class="form-label">Mã thùng</label>
+                                    <input class="form-select" type="text" id="filterpackage" name="filter_package"
+                                           placeholder="Mã thùng" value="{% if request.GET.filter_package %}{{request.GET.filter_package}}{% endif %}">
+                                </div>
+                            </li>
+                        </div>
+                    </div>
+                </ul>
+                <!-- Filter and Clear buttons -->
+                <div class='text-center'>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-success">Lọc</button>
+                        <button id="clearFilters" class="btn btn-secondary" type="button">Xóa lọc</button>
+                    </div>
+                </div>
+            </form>
+        </nav>
+
+        <!-- Main content -->
+        <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4" id="document_receiving_transaction">
+            <!-- Table Area-->
+            <div class="row shadow-sm p-2 mb-2 bg-body-tertiary rounded" id='data-area'>
+                <table class="table table-hover table-light" id='table-data-area'>
+                    <thead>
+                        <tr>
+                            <th class='text-center'>STT</th>
+                            <th class='text-center'>Phòng giao dịch</th>
+                            <th class='text-center'>Loại quyển</th>
+                            <th class='text-center'>Ngày phát sinh</th>
+                            <th class='text-center'>Loại quyển</th>
+                            <th class='text-center'>Trạng thái quyển</th>
+                            <th class='text-center'>Mã thùng</th>
+                            <th class='text-center'>Ghi chú</th>
+                            <th class='text-center'>Thông tin khác </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% if folder_detail %}
+                    {% for folder_dtl in folder_detail %}
+                        <tr>
+                            <td>{{ forloop.counter|add:folder_detail.start_index|add:-1}}</td>
+                            <td style="white-space:nowrap">{{ folder_dtl.shop_id.shop_name }}</td>
+                            <td>{{ folder_dtl.folder_code }}</td>
+                            <td style="white-space:nowrap">{{ folder_dtl.folder_created_date|date:"Y-m-d"}}</td>
+                            <td>{{ folder_dtl.folder_type_id.folder_type_name }}</td>
+                            <td>{{ folder_dtl.folder_status_id.folder_status_name }}</td>
+                            <td>{{ folder_dtl.package_id.package_code|default_if_none:"N/A" }}</td>
+                            <td>{{ folder_dtl.note|default_if_none:"" }}</td>
+                        </tr>
+                    {% endfor %}
+                    {% else %}
+                        <tr><td colspan="8">Không có dữ liệu phù hợp.</td></tr>
+                    {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+</div>
+
+<script>
+// Script for clearing filters
+document.getElementById('clearFilters').addEventListener('click', function() {
+    document.getElementById('exampleDataListShop').value = '';
+    document.getElementById('inputfilterFoldercode').value = '';
+    document.getElementById('FilterFolderStatus').selectedIndex = 0;
+    document.getElementById('FilterFolderType').selectedIndex = 0;
+    document.getElementById('filterpackage').value = '';
+});
+</script>
+
+{% endblock content %}

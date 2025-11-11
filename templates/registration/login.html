@@ -1,0 +1,94 @@
+{% extends 'app_documents/base.html' %}
+{% load static %}
+{% block content %}
+
+<div class="p-5 bg-success text-white text-center">
+  <h2>CHỨNG TỪ F88</h2>
+  <h5 class = "text-center"> Mời bạn đăng nhập </h5>
+</div>
+<div class="container-sm">
+  {% if form.errors %}
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+      <strong>Ôi chời!</strong> Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng thử lại.
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+  {% endif %}
+
+  {% if next %}
+  <div class="alert alert-warning alert-dismissible fade show" role="alert">
+    <strong>!</strong> Bạn không có quyền truy cập vào trang này hoặc thông tin đăng nhập không chính xác.
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
+  {% endif %} 
+
+</div>
+<div class="container">
+  <div class="row">
+    <div class="col-md-6 mx-auto">
+      <div class="login-container">
+        <h3 class="text-center mb-4">XIN CHÀO BẠN</h3>
+        <form method="post" action="{% url 'login' %}"> 
+          {% csrf_token %}
+          <div class="mb-3">
+            <label for="username" class="form-label"></label>
+            <input type="text" class="form-control" id="username" placeholder="Tên đăng nhập" name="username" oninvalid="this.setCustomValidity('Chưa điền tên đăng nhập')" oninput="setCustomValidity('')" required>
+          </div>
+          <div class="mb-3 password-container">
+            <label for="password" class="form-label"></label>
+            <input type="password" class="form-control" id="password" placeholder="Mật khẩu" name="password"  oninvalid="this.setCustomValidity('Chưa điền mật khẩu')" oninput="setCustomValidity('')" required >
+            <button type="button" onclick="togglePasswordVisibility('password')">👁️</button >
+          </div>
+          <div class="mb-3 form-check">
+            <input type="checkbox" class="form-check-input" id="remember">
+            <label class="form-check-label" for="remember">Ghi nhớ mật khẩu</label>
+          </div>
+            <div class="d-flex justify-content-center"> 
+            <button type="submit" class="btn btn-primary btn-block" >Đăng nhập</button>
+          </div>
+          <input type="hidden" name="next" value="{{ next }}">
+        </form>
+        <div class="text-center mt-3" >
+          <a href="{% url 'password_reset' %}">Quên mật khẩu?</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+    function togglePasswordVisibility(inputId) {
+        var passwordInput = document.getElementById(inputId);
+        var type = passwordInput.getAttribute("type") === "password" ? "text" : "password";
+        passwordInput.setAttribute("type", type);
+    }
+</script>
+<style>
+/* Style cho container chứa input và nút con mắt */
+.password-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+/* Style cho input */
+.password-container input {
+    width: 100%;
+    padding-right: 30px; /* Cho thêm khoảng trống để nút không che mất text */
+}
+
+/* Style cho nút con mắt */
+.password-container button {
+    position: absolute;
+    right: 5px; /* Khoảng cách từ nút đến cạnh phải của container */
+    border: none;
+    background: none;
+    cursor: pointer;
+}
+
+/* Optional: Tùy chỉnh thêm để nút không ảnh hưởng đến hành động submit form */
+.password-container button {
+    padding: 10px;
+    margin: 0;
+    height: 100%;
+}
+</style> 
+{% endblock %}

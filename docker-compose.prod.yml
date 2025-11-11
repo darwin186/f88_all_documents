@@ -1,0 +1,30 @@
+services:
+  web:
+    build: .
+    environment:
+      # App settings
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in env}
+      DEBUG: "False"
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
+
+      # Database (production endpoint)
+      DATABASE_NAME: ${DATABASE_NAME:?set DB name}
+      DATABASE_USER: ${DATABASE_USER:?set DB user}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?set DB password}
+      DATABASE_HOST: ${DATABASE_HOST_PROD:?set production DB endpoint}
+      DATABASE_PORT: ${DATABASE_PORT:-5432}
+
+    # In production, do not mount source code; keep only runtime data
+    volumes:
+      - media:/app/media
+      - staticfiles:/app/staticfiles
+
+    # Expose gunicorn port (use a reverse proxy like Nginx in front if needed)
+    ports:
+      - "${HOST_PORT_PROD:-8080}:8000"
+
+    restart: unless-stopped
+
+volumes:
+  media:
+  staticfiles:

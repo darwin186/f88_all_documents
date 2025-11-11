@@ -1,0 +1,1169 @@
+{% extends 'app_documents/base.html'  %} 
+{% block content %}
+
+<div class="container-fluid"> 
+    <div class="row">
+        <!-- Sidebar -->
+        <nav id="sidebarMenu" class="col-md-3 col-lg-2 d-md-block bg-light sidebar collapse">
+            <br/>
+            <form method = 'get' action="{% url 'checking_transaction' %}">
+                <div classs = align-center><h5 class = 'text-center'>Kiểm chứng từ</h5></div>
+                <br/>
+                <h6 class = 'text-center'>Bộ lọc</h6>
+                <ul class="nav nav-pills flex-column mb-auto">
+                    <div class="row mb-2">
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="exampleDataListShop" class="form-label">Phòng giao dịch <span style="color: red;">*</span></label>
+                                    <input  class="form-control"
+                                            list="datalistOptionsShop" 
+                                            id="exampleDataListShop" 
+                                            value = "{% if request.GET.choice_shop %}{{request.GET.choice_shop}}{% endif %}"
+                                            placeholder="Tìm kiếm Phòng Giao Dịch" 
+                                            name = 'choice_shop' 
+                                            onblur="validateShop(this, 'datalistOptionsShop')">
+                                    <datalist id="datalistOptionsShop">
+                                        {% for shop in drop_list_shops %}
+                                        <option value= "{{ shop.shop_name }}">{{shop.shop_code}}</option>
+                                        {% endfor %}
+                                    </datalist>
+                                    <div class="invalid-feedback" id = 'validateShopFeedbackValid'>Phải chọn PGD từ danh sách có sẵn.</div>
+                                    <div class="valid-feedback" id = 'validateShopFeedbackInvalid' >Tên Phòng giao dịch hợp lệ!</div>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="exampleDataListUserDuyet" class="form-label">Người duyệt</label>
+                                    <input class="form-control" list="datalistOptionsUserDuyet" id="exampleDataListUserDuyet" placeholder="Tìm kiếm user duyệt" name = 'choice_user_duyet'  value ="{% if request.GET.choice_user_duyet %}{{request.GET.choice_user_duyet}}{% endif %}">
+                                    <datalist id="datalistOptionsUserDuyet">
+                                        {% for userduyet in drop_list_users %}
+                                        <option value= "{{userduyet.username}}">{{userduyet.username}}</option>
+                                        {% endfor %}
+                                    </datalist>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <div class="field">
+                                        <label for="filtercheckdate" class="form-label">Ngày duyệt</label>
+                                        <input class="form-select" type="text" id="filtercheckdate" name="filtercheckdate" placeholder="Ngày duyệt" value= "{% if request.GET.filtercheckdate %}{{request.GET.filtercheckdate}}{% endif %}">
+                                    </div>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <div class="field">
+                                        <label for="filterdocumentdate" class="form-label">Ngày chứng từ</label>
+                                        <input class="form-select" type="text" id="filterdocumentdate" name="filterdocumentdate" placeholder="Ngày chứng từ" value= "{% if request.GET.filterdocumentdate %}{{request.GET.filterdocumentdate}}{% endif %}">
+                                    </div>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="FilterDocumentStatus" class="form-label">Trạng thái chứng từ</label>
+                                    <select class="form-select" aria-label="Default select example" name = "choicedocumentstatus" id= 'FilterDocumentStatus'>
+                                        <option value="">Chọn trạng thái chứng từ </option> 
+                                        {% for documentstatus in drop_list_document_status %}
+                                        <option value="{{ documentstatus.status_id }}"
+                                                {% if request.GET.choicedocumentstatus|stringformat:"s" == documentstatus.status_id|stringformat:"s" %}selected{% endif %}>
+                                            {{ documentstatus.documents_status_name }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="FilterCheckStatus" class="form-label">Trạng thái duyệt</label>
+                                    <select class="form-select" aria-label="Default select example"  name = "choicecheckstatus" id= 'FilterCheckStatus'>
+                                        <option value="">Chọn trạng thái duyệt</option>
+                                        {% for checkingstatus in drop_list_checking_status %}
+                                        <option value= "{{checkingstatus.status_id}}"
+                                                {% if request.GET.choicecheckstatus|stringformat:"s" == checkingstatus.status_id|stringformat:"s" %}selected{% endif %}>
+                                            {{checkingstatus.checking_status_name}}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="FilterBusinessType" class="form-label">Nghiệp vụ</label>
+                                    <select class="form-select" aria-label="Default select example"  name = "choicebusinesstype" id='FilterBusinessType'>
+                                        <option value="">Chọn nghiệp vụ</option>
+                                        {% for businesstype in drop_list_business_type %}
+                                        <option value= "{{businesstype.business_type_id}}"
+                                            {% if request.GET.choicebusinesstype|stringformat:"s" == businesstype.business_type_id|stringformat:"s" %}selected{% endif %}>
+                                        {{businesstype.business_type_name}}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12"><hr>
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="inputfilterLoancode" class="form-label">Mã giấy nhận nợ</label>
+                                    <input type="text" class="form-control" 
+                                        id="inputfilterLoancode" value= "{% if request.GET.choice_loan_code %}{{request.GET.choice_loan_code}}{% endif %}"
+                                        placeholder="Tìm kiếm giấy nhận nợ" name = 'choice_loan_code'>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12"><hr>
+                            <li class="nav-item">
+                                <div class="mb-3">
+                                    <label for="inputfilterLoancode" class="form-label">Mã hợp đồng cầm cố</label>
+                                    <input type="text" class="form-control" 
+                                        id="inputfilterContractCode" value= "{% if request.GET.choice_contract_code %}{{request.GET.choice_contract_code}}{% endif %}"
+                                        placeholder="Tìm kiếm hợp đồng cầm cố" name = 'choice_contract_code'>
+                                </div>
+                            </li>
+                        </div>
+                    </div>
+                </ul>       
+                <!-- Lọc  -->
+                <div class = 'text-center'>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-success">Lọc</button>
+                        <button id="clearFilters" class = "btn btn-secondary" type="button">Xóa lọc</button>
+                    </div>
+                </div>
+            </form>
+        </nav>
+        <!-- Main content -->
+        <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4" id ="document_checking_transaction">
+            <!-- Message/ paginator/ etc... -->
+            <div class="row shadow-sm p-2 mb-2 bg-body-tertiary rounded">
+                <div class="col-sm-8">
+                    <div class ="col-sm">
+                        <table class="table-light">
+                            <nav style="--bs-breadcrumb-divider: url(&#34;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8'%3E%3Cpath d='M2.5 0L1 1.5 3.5 4 1 6.5 2.5 8l4-4-4-4z' fill='%236c757d'/%3E%3C/svg%3E&#34;);" aria-label="breadcrumb">
+                                <ol class="breadcrumb">
+                                    <li class="breadcrumb-item">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-funnel" viewBox="0 0 16 16">
+                                            <path d="M1.5 1.5A.5.5 0 0 1 2 1h12a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-.128.334L10 8.692V13.5a.5.5 0 0 1-.342.474l-3 1A.5.5 0 0 1 6 14.5V8.692L1.628 3.834A.5.5 0 0 1 1.5 3.5zm1 .5v1.308l4.372 4.858A.5.5 0 0 1 7 8.5v5.306l2-.666V8.5a.5.5 0 0 1 .128-.334L13.5 3.308V2z"/>
+                                        </svg>
+                                    </li>
+                                    {% if request.GET.choice_shop  %}
+                                    <li class="breadcrumb-item">{{ request.GET.choice_shop  }}</li>{% endif %}
+                                    {% if request.GET.filterdocumentdate %}
+                                    <li class="breadcrumb-item"><small>Chứng từ ngày:{{request.GET.filterdocumentdate}}</small>
+                                    {% endif %}  
+                                </ol>
+                            </nav>
+                        </table>
+                    </div>
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#dataInputModal" id="bulkActionButton" style="display: none;">
+                        Duyệt nhiều chứng từ <span class="badge text-bg-danger">0</span>
+                    </button>
+                </div>
+                <div class="col-sm-4" id ='pagination'>
+                    <!-- Pagination -->
+                    {% if documents_detail.has_other_pages %}
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination">
+                            <!-- Link to the first page -->
+                            {% if not documents_detail.has_previous %}
+                            <li class="page-item disabled"><span class="page-link">&laquo;&laquo;</span></li>
+                            {% else %}
+                            <li class="page-item"><a class="page-link" href="?page=1&{{ query_string }}" aria-label="First">&laquo;&laquo;</a></li>
+                            {% endif %}
+                            <!-- Link to the previous page -->
+                            {% if documents_detail.has_previous %}
+                            <li class="page-item"><a class="page-link" href="?page={{ documents_detail.previous_page_number }}&{{ query_string }}" aria-label="Previous">&laquo;</a></li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link">&laquo;</span></li>
+                            {% endif %}
+                            <!-- Current page number and surrounding page numbers -->
+                            {% for num in documents_detail.paginator.page_range %}
+                                {% if documents_detail.number == num %}
+                                <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                                {% elif num > documents_detail.number|add:'-3' and num < documents_detail.number|add:'3' %}
+                                <li class="page-item"><a class="page-link" href="?page={{ num }}&{{ query_string }}">{{ num }}</a></li>
+                                {% endif %}
+                            {% endfor %}
+                            <!-- Link to the next page -->
+                            {% if documents_detail.has_next %}
+                            <li class="page-item"><a class="page-link" href="?page={{ documents_detail.next_page_number }}&{{ query_string }}" aria-label="Next">&raquo;</a></li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link">&raquo;</span></li>
+                            {% endif %}
+                            <!-- Link to the last page -->
+                            {% if not documents_detail.has_next %}
+                            <li class="page-item disabled"><span class="page-link">&raquo;&raquo;</span></li>
+                            {% else %}
+                            <li class="page-item"><a class="page-link" href="?page={{ documents_detail.paginator.num_pages }}&{{ query_string }}" aria-label="Last">&raquo;&raquo;</a></li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                    <!--End Pagination-->
+                </div>
+            </div>
+            <!-- Table -->
+            <div class="row shadow-sm p-2 mb-2 bg-body-tertiary rounded" id ='data-area'>
+                <table class="table table-hover table-light" id = 'table-data-area'>
+                    <thead>
+                        <tr>
+                            <th class = 'text-center'><div class="select-all-container"><input type="checkbox" id="select-all" style="visibility: hidden;"></div></th>
+                            <th>STT</th>
+                            <th>Phòng giao dịch</th>
+                            <th>Quyển ngày</th>
+                            <th>Thông tin</th>
+                            <th>Loại chứng từ</th>                 
+                            <th>Nghiệp vụ</th>
+                            <th style="white-space:nowrap" >Trạng thái<br/>chứng từ</th>
+                            <th>Trạng thái<br/>duyệt</th>
+                            <th>Ngày duyệt</th>
+                            <th>Người duyệt</th>
+                            <th>Mã thùng</th>
+                            <th>Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if documents_detail %}
+                        {% for document_dtl in documents_detail %}
+                        <tr data-checkbox-id="flexCheckDefault{{ document_dtl.document_id}}">
+                            <td>
+                                <div class="form-check">
+                                    <input class="form-check-input" 
+                                        type="checkbox" 
+                                        value="checkingitem{{ document_dtl.documents_id}}" 
+                                        id="flexCheckDefault{{ document_dtl.documents_id}}"
+                                        data-documents-code="{{ document_dtl.documents_code }}"
+                                        data-documents-name="{{ document_dtl.document_type_id.document_type_name }}"
+                                        data-documents-created-date="{{document_dtl.documents_created_date}}"
+                                        data-is-checked="{{ document_dtl.document_status_id.is_checked }}"
+                                        data-is-released="{{ document_dtl.package_id.partnerpackage.is_released }}"
+                                        data-documents-is-checked-yet="{{document_dtl.document_status_id.documents_status_code}}"
+                                        data-documents-is-selectable = "{{ document_dtl.document_status_id.is_selectable }}"
+                                        data-loan-id="{{ document_dtl.loan_id}}" 
+                                        data-loan-code="{{ document_dtl.loan_id.loan_code }}"
+                                        data-folder-status= "{{ document_dtl.folder_id.folder_status_id.folder_status_code }}"
+                                        data-folder-status-is-not-received-yet = "{{ document_dtl.folder_id.folder_status_id.is_not_received_yet }}"
+                                        data-package-partner-status = "{{ document_dtl.package_id.partnerpackage.status_id.status_id }}"
+                                        data-package-partner-status-is-released = "{{ document_dtl.package_id.partnerpackage.status_id.is_released }}"
+                                        {% if document_dtl.folder_id.folder_status_id.is_not_received_yet or not document_dtl.document_status_id.is_selectable  or document_dtl.package_id.partnerpackage.status_id.is_released %}disabled{% endif %}>       
+                                    <label class="form-check-label" for="flexCheckDefault{{ document_dtl.documents_id}}"></label>
+                                </div>
+                            </td>
+                            <td>{{forloop.counter|add:documents_detail.start_index|add:-1}}</td>
+                            <td  style="white-space:nowrap" >{{ document_dtl.shop_id.shop_name }}</td>
+                            <td  style="white-space:nowrap" >{{ document_dtl.documents_created_date| date:"Y-m-d"}}</td>
+                            <td  style="white-space:nowrap" >
+                                {% if document_dtl.loan_id %}
+                                    Mã GNN: {{document_dtl.loan_id.loan_code}}<br/>
+                                    Tên KH: {{document_dtl.loan_id.customer_name|capfirst}}<br/>
+                                {% elif document_dtl.contract_id %}
+                                    Mã HĐCC: {{document_dtl.contract_id.contract_code}}<br/>
+                                    Tên KH: {{ document_dtl.contract_id.customer_id.customer_name|capfirst }}<br/>
+                                {% endif %}
+                            </td> 
+                            <td>{{ document_dtl.document_type_id.document_type_name }}</td>
+                            <td>{{ document_dtl.business_type_id.business_type_name }}</td>
+                            <td class='text-center'><span class="badge text-bg-{{ document_dtl.document_status_id.badge_color }}">{{ document_dtl.document_status_id.documents_status_name }}</span></td>
+                            <td>{{ document_dtl.status_id.checking_status_name|default_if_none:"Chưa duyệt" }}</td>
+                            <td>{{ document_dtl.lastest_checked_date| date:"Y-m-d H:i"}}</td>
+                            <td>{{ document_dtl.lastest_checked_by|default_if_none:"" }}</td>
+                            <td style="white-space:nowrap" >{{ document_dtl.package_id.package_code }}<br/><span class="text-{{ document_dtl.package_id.partnerpackage.status_id.badge_color }}">{{ document_dtl.package_id.partnerpackage.partner_package_code }}</span></td>
+                            <td style="white-space:nowrap">
+                                <div>
+                                    <button type="button" class="btn btn-primary btn-sm"  data-bs-toggle="offcanvas" data-bs-target="#offcanvasRight{{ document_dtl.documents_id }}" aria-controls="offcanvasRight">Duyệt</button>    
+                                    <button type="button" class="btn btn-secondary btn-sm dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <span class="visually-hidden">Khác</span>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                    {% if document_dtl.document_status_id.is_checked  %}
+                                        <li><a class="dropdown-item" type="button"  data-bs-toggle="modal" data-bs-target="#editModal{{ document_dtl.documents_id }}" >Hẹn bổ sung</a></li>
+                                        <li>
+                                            <a class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#borrowModal" id="borrowBtnId" data-action="borrow"
+                                               data-documents-id="{{ document_dtl.documents_id }}"
+                                               data-documents-code="{{ document_dtl.documents_code }}">
+                                               Mượn chứng từ
+                                            </a>
+                                        </li>
+                                        <li>
+                                        {% if document_dtl.document_status_id in change_request %}
+                                            <!-- Nếu yêu cầu thay đổi đã tồn tại thì disable -->
+                                            <a class="dropdown-item disabled" type="button" aria-disabled="true" data-document-id="{{ document_dtl.documents_id }}">
+                                                Yêu cầu điều chỉnh (Đã yêu cầu)
+                                            </a>
+                                        {% else %}
+                                            <!-- Nếu chưa có yêu cầu thay đổi thì cho phép click -->
+                                            <a class="dropdown-item" type="button" onclick="requestChange('{{ document_dtl.documents_id }}')" data-document-id="{{ document_dtl.documents_id }}">
+                                                Yêu cầu điều chỉnh
+                                            </a>
+                                        {% endif %}
+                                        </li>
+                                    {% endif %}
+                                        <!-- Nếu cho mượn-->
+                                        {% if document_dtl.document_status_id.is_borrow %}
+                                        <li><a class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#confirmModal" id="returnBorrowBtnId" data-documents-id="{{ document_dtl.documents_id }}" data-documents-code="{{ document_dtl.documents_code }}" data-url="{% url 'manage_borrow_document' document_dtl.documents_id 'return' %}">Hoàn trả</a></li>
+                                        <li> <a class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#confirmModal" id="viewBorrowBtnId" data-documents-id="{{ document_dtl.documents_id }}" data-documents-code="{{ document_dtl.documents_code }}" data-url="{% url 'manage_borrow_document' document_dtl.documents_id 'lost' %}">Mượn mà làm mất</a></li>
+                                        {% endif %}  
+                                    </ul>
+                                </div>
+                            </td>
+                            <!-- Modal Confirm Borrows -->
+                            <div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title" id="confirmModalLabel">Xác nhận hoàn trả chứng từ</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div id = 'bodyConfirmReturn'>
+                                                <p> Kiểm tra thật kĩ chứng từ trước khi nhận lại </p>
+                                                <div class="mb-3">
+                                                    <label for="returnDate" class="form-label">Ngày trả chứng từ (nếu có):</label>
+                                                    <input type="text" class="form-control" id="returnDate" name="return_date">
+                                                </div>
+                                            </div>
+                                            <div id = 'bodyConfirmLost'>
+                                                <p> Kiểm tra thật kĩ chứng từ trước khi nhận lại </p>
+                                            </div>
+                                        </div>  
+                                        <div class="modal-footer">
+                                            <a href="#" id="confirmAction" class="btn btn-primary">Đồng ý</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <script> 
+                                // Lấy modal xác nhận dựa trên id 'confirmModal'
+                                var confirmModal = document.getElementById('confirmModal');
+                                // Xử lý sự kiện khi modal được mở
+                                confirmModal.addEventListener('show.bs.modal', function (event) {
+                                    var button = event.relatedTarget; // Nút kích hoạt modal, có thể là nút "Hoàn trả" hoặc "Mượn mà làm mất"
+                                    var url = button.getAttribute('data-url'); // Lấy URL từ thuộc tính data-url của nút
+                                    var buttonId = button.getAttribute('id'); // lấy id của nút
+
+                                    // Cập nhật thuộc tính href của nút "Đồng ý" trong modal để thực hiện hành động tương ứng
+                                    var confirmAction = document.getElementById('confirmAction');                              
+                                    confirmAction.setAttribute('href', url); // Gán URL cho nút "Đồng ý"
+
+                                    // Cập nhật tiêu đề của modal dựa trên nút được bấm
+                                    var modalTitle = document.getElementById('confirmModalLabel');
+                                    var bodyConfirmReturn = document.getElementById('bodyConfirmReturn'); // Lấy div của phần hoàn trả
+                                    var bodyConfirmLost = document.getElementById('bodyConfirmLost'); // Lấy div của phần mất chứng từ
+
+
+                                    // Hiển thị/ẩn nội dung dựa trên nút được bấm
+                                    if (buttonId === 'returnBorrowBtnId') {
+                                        modalTitle.textContent = 'Xác nhận hoàn trả chứng từ';
+
+                                        // Hiển thị nội dung hoàn trả và ẩn nội dung mất
+                                        bodyConfirmReturn.style.display = 'block';
+                                        bodyConfirmLost.style.display = 'none';
+                                    } else if (buttonId === 'viewBorrowBtnId') {
+                                        modalTitle.textContent = 'Xác nhận mất chứng từ';
+
+                                        // Hiển thị nội dung mất và ẩn nội dung hoàn trả
+                                        bodyConfirmReturn.style.display = 'none';
+                                        bodyConfirmLost.style.display = 'block';
+                                    }
+                                    // Xóa mọi event listener trước đó để tránh việc gán nhiều lần
+                                    confirmAction.replaceWith(confirmAction.cloneNode(true));
+                                    confirmAction = document.getElementById('confirmAction');
+                                    
+                                    // Lắng nghe sự kiện khi nút "Đồng ý" được nhấn
+                                    confirmAction.addEventListener('click', function (e) {
+                                        e.preventDefault(); // Ngăn trang load lại ngay lập tức
+                                        const returnDate = document.getElementById('returnDate').value;
+                                        // Thực hiện fetch để gửi yêu cầu POST đến server với URL đã được gán
+                                        fetch(url, {
+                                            method: 'POST', // Sử dụng phương thức POST vì bạn đang muốn thay đổi dữ liệu
+                                            headers: {
+                                                'X-CSRFToken': '{{ csrf_token }}', // Gửi token CSRF để bảo vệ dữ liệu
+                                                'Content-Type': 'application/json'  // Xác định kiểu dữ liệu là JSON
+                                            },
+                                            body: JSON.stringify({
+                                                return_date: returnDate
+                                            })
+                                        })
+                                        .then(response => response.json()) // Chuyển đổi phản hồi từ server thành JSON
+                                        .then(data => {
+                                            if (data.status === 'Thao tác thành công?') {
+                                                // Nếu thao tác thành công, ẩn modal
+                                                var modal = bootstrap.Modal.getInstance(confirmModal);
+                                                modal.hide();
+
+                                                // Refresh lại trang để cập nhật trạng thái mới
+                                                location.reload();
+                                            } else {
+                                                // Nếu có lỗi từ server, hiển thị thông báo lỗi
+                                                alert('Lỗi: ' + data.message);
+                                            }
+                                        })
+                                        .catch(error => {
+                                            // Nếu có lỗi khi gửi yêu cầu, ghi log và hiển thị thông báo
+                                            console.error('Error:', error);
+                                            alert('Đã xảy ra lỗi trong quá trình xử lý.');
+                                        });
+                                    });
+                                });
+                            </script> 
+                            <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasRight{{ document_dtl.documents_id }}" aria-labelledby="offcanvasRightLabel{{document_dtl.document_id}}">
+                                <div class="offcanvas-header">
+                                    <h5 class="offcanvas-title" id="offcanvasRightLabel{{document_dtl.documents_id}}">Thông tin chứng từ</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+                                </div>
+                                <div class="offcanvas-body">
+                                    <!---Inside Canvas-->
+                                    <form method="post" action="{% url 'checking_transaction' %}" id ='formcheck' >
+                                    {% csrf_token %}
+                                    <input type="hidden" name="documents_id_submit" value="{{ document_dtl.documents_id }}">           
+                                    <input type="hidden" name="checking_status_previous" value="{{ document_dtl.status_id.status_id }}">
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <div class="mb-3">
+                                                <ul class="list-group">
+                                                    <li class="list-group-item">Mã chứng từ: {{ document_dtl.documents_code }}</li>
+                                                    <li class="list-group-item">Mã giấy nhận nợ: {{ document_dtl.loan_id.loan_code }}</li>
+                                                    <li class="list-group-item">Mã hợp đồng cầm cố: {{ document_dtl.contract_id.contract_code }}</li>
+                                                    <li class="list-group-item">Tên khách hàng: {{document_dtl.loan_id.customer_name}}</li>
+                                                    <li class="list-group-item">Mã khách hàng: {{document_dtl.loan_id.customer_code}}</li>
+                                                    <li class="list-group-item">Tên nhân viên: {{document_dtl.loan_id.employee_name}}</li>
+                                                    <li class="list-group-item">Mã nhân viên: {{document_dtl.loan_id.employee_code}}</li>
+                                                    <li class="list-group-item">Quyển chứng từ gốc: {{document_dtl.folder_id.folder_code}}</li>
+                                                    <li class="list-group-item">Trạng thái quyển: <span class="badge text-bg-{{document_dtl.folder_id.folder_status_id.badge_color}}">{{document_dtl.folder_id.folder_status_id.folder_status_name}}</li> 
+                                                </ul>   
+                                            </div>
+                                            <!-- Trạng thái duyệt-->
+                                            <div class="mb-3">
+                                                <label for="statusSelect{{ document_dtl.documents_id }">Chọn trạng thái duyệt</label>
+                                                <select class="form-select form-select-sm" 
+                                                        aria-label="Small select example" 
+                                                        name="checking_status_submit"  
+                                                        id="statusSelect{{ document_dtl.documents_id }}" 
+                                                        {% if document_dtl.status_id == None %}required{% endif %}
+                                                        oninvalid="this.setCustomValidity('Confirm trạng thái duyệt chứng từ')"
+                                                        oninput="this.setCustomValidity('')">                    
+                                                    <option value = "">{{document_dtl.status_id.checking_status_name }}</option>
+                                                    {% for checking_status in drop_list_checking_status %}
+                                                    {% if checking_status.status_id != document_dtl.status_id.status_id %}
+                                                    <option value={{checking_status.status_id}}>{{checking_status.checking_status_name}}</option>
+                                                    {% endif %}
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                            <!-- note-->
+                                            <div class="mb-3">
+                                                <label for="checking_note">Ghi chú</label>
+                                                <textarea class="form-control" id="checking_note" name="checking_note_submit" rows="3" placeholder="{{document_dtl.note}}"></textarea>
+                                            </div>
+                                            <!-- Mã thùng --> 
+                                            <div class="mb-3">
+                                                <label for="package_code">Mã thùng</label>
+                                                <input type="text" class="form-control" id="package_code{{document_dtl.package_id}}" name="package_code_submit" placeholder="{{ document_dtl.package_id.package_code }}" 
+                                                {% if document_dtl.package_id == None %}required{% endif %}>
+                                            </div>
+                                        </div> 
+                                    </div> 
+                                    <input type="hidden" name="filter_choice_shop" value="{{ request.GET.choice_shop }}">
+                                    <input type="hidden" name="filter_choice_loan_code" value="{{ request.GET.choice_loan_code }}">
+                                    <input type="hidden" name="filter_choice_user_duyet" value="{{ request.GET.choice_user_duyet }}">
+                                    <input type="hidden" name="filter_filtercheckdate" value="{{ request.GET.filtercheckdate }}">
+                                    <input type="hidden" name="filter_filterdocumentdate" value="{{ request.GET.filterdocumentdate }}">
+                                    <input type="hidden" name="filter_choicedocumentstatus" value="{{ request.GET.choicedocumentstatus }}">
+                                    <input type="hidden" name="filter_choicecheckstatus" value="{{ request.GET.choicecheckstatus }}">
+                                    <input type="hidden" name="filter_choicebusinesstype" value="{{ request.GET.choicebusinesstype }}">
+                                    <input type="hidden" name="filter_page" value="{{ documents_detail.number }}">
+                                    <div class="row">
+                                        <div class = 'text-center'>
+                                            <div class="col-12">
+                                                <button type="submit" class="btn btn-success" 
+                                                    {% if document_dtl.folder_id.folder_status_id.is_not_received_yet %}disabled
+                                                    {% elif document_dtl.package_id.partnerpackage.status_id.is_released %}disabled
+                                                    {% elif document_dtl.document_status_id.is_borrow %}disabled 
+                                                    {% elif document_dtl.document_status_id.is_lost %}disabled 
+                                                    {% endif %}>Lưu lại
+                                                </button> 
+                                                
+                                            </div>
+                                        </div>
+                                    </div>
+                                    </form> 
+                                    <br/>
+                                    <div class="row">
+                                        <div class = 'text-center'>
+                                            <div class="col-12">
+                                                <p class="d-inline-flex gap-1">
+                                                    <button 
+                                                        class="history-button" 
+                                                        data-url="{% url 'fetch_history' 0 %}" 
+                                                        data-document-id="{{ document_dtl.documents_id }}"
+                                                        aria-controls="collapseExample-{{ document_dtl.documents_id }}">
+                                                            Lịch sử duyệt chứng từ 
+                                                    </button>
+                                                </p>
+                                                <div class="collapse" id="collapseExample-{{ document_dtl.documents_id }}">
+                                                    <div class="card card-body">
+                                                        <div id="history-container-{{ document_dtl.documents_id }}">
+                                                            <!-- The fetched history data will be displayed here -->
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!---End Inside Canvas-->  
+                                </div>
+                            </div>
+                        </tr>
+                        {% endfor %}
+                        {% else %}
+                        <tr><td colspan="10">Không có chứng từ được lọc.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+</div>
+<!-- Modal Borrow Documents -->
+<div class="modal fade" id="borrowModal" tabindex="-1" aria-labelledby="borrowmodalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="borrowmodalLabel">Mượn chứng từ</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Form to submit via AJAX -->
+                <form id="borrowForm">
+                    {% csrf_token %}
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="documentCode" class="form-label">Mã chứng từ:</label>
+                            <input type="text" class="form-control" id="documentCode" name="document_code" readonly>
+                            <input type="hidden" id="documentId" name="document_id">
+                        </div>
+                        <div class="mb-3">
+                            <label for="borrowStatus" class="form-label">Trạng thái mượn</label>
+                            {% if borrow_status %}
+                                <span id="borrowStatus" class="badge text-bg-{{borrow_status.badge_color}}">
+                                    {{ borrow_status.borrow_status_name }}
+                                </span>
+                            {% else %}
+                                <span id="borrowStatus" class="badge text-bg-secondary">Chưa mượn</span>
+                            {% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label for="borrowBorrowerSelect" class="form-label">Phòng ban mượn chứng từ</label>
+                            <select class="form-select" id="borrowBorrowerSelect" name="borrower_id" required>
+                                    <option value="">Chọn phòng ban</option>
+                                {% for shop in drop_list_shops_borrow %}
+                                    <option value="{{ shop.shop_id }}">{{ shop.shop_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="borrowBorrowerDetail" class="form-label">Tên người mượn:</label>
+                            <input type="text" class="form-control" id="borrowBorrowerDetail" name="borrower_detail">
+                        </div>
+                        <div class="mb-3">
+                            <label for="borrowDate" class="form-label">Ngày mượn:</label>
+                            <input type="text" class="form-control" id="borrowDate" name="borrow_date" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="appointmentDate" class="form-label">Ngày hẹn trả:</label>
+                            <input type="text" class="form-control" id="appointmentDate" name="appointment_date" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="borrowTicket" class="form-label">Mã ticket:</label>
+                            <input type="text" class="form-control" id="borrowTicket" name="borrow_ticket">
+                        </div>
+                        <div class="mb-3">
+                            <label for="borrowNote" class="form-label">Ghi chú:</label>
+                            <textarea class="form-control" id="borrowNote" name="borrow_note" rows="3"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                        <button type="submit" class="btn btn-primary">Lưu thông tin mượn</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+    // Trigger modal borrrow
+    document.getElementById('borrowBtnId').addEventListener('click', function() {
+        var borrowModal = new bootstrap.Modal(document.getElementById('borrowModal'), {});
+        exportModal.show();
+    });
+</script>
+
+<script>
+    /// Xử lý yêu cầu mượn chứng từ
+    document.addEventListener('DOMContentLoaded', function () {
+    // Initialize borrow modal logic
+    document.querySelectorAll('[data-bs-target="#borrowModal"]').forEach(button => {
+        button.addEventListener('click', function () {
+            // Get document data from the clicked button
+            const documentId = this.getAttribute('data-documents-id');
+            const documentCode = this.getAttribute('data-documents-code');
+            document.getElementById('documentId').value = documentId;
+            document.getElementById('documentCode').value = documentCode;
+        });
+    });
+    // Handle borrow form submission with AJAX
+    document.getElementById('borrowForm').addEventListener('submit', function (event) {
+        event.preventDefault();  // Prevent form from submitting normally
+
+        const documentId = document.getElementById('documentId').value;
+        const borrowerId = document.getElementById('borrowBorrowerSelect').value;
+        const borrowDate = document.getElementById('borrowDate').value;
+        const appointmentDate = document.getElementById('appointmentDate').value;
+        const borrowNote = document.getElementById('borrowNote').value;
+        const ticketCode = document.getElementById('borrowTicket').value;
+        const borrowerDetail =document.getElementById('borrowBorrowerDetail').value; 
+        fetch("{% url 'request_borrow_document' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}',
+            },
+            body: JSON.stringify({
+                document_id: documentId,
+                borrower_id: borrowerId,
+                borrow_date: borrowDate,
+                appointment_date: appointmentDate,
+                note: borrowNote,
+                ticket_code: ticketCode,
+                borrower_detail: borrowerDetail
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                // Refresh the page after a successful borrow action
+                window.location.reload();
+            } else {
+                alert(data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Có lỗi xảy ra, vui lòng thử lại.');
+        });
+    });
+});
+</script> 
+<!-- Modal Bulk Checking -->
+<div class="modal fade" id="dataInputModal" tabindex="-1" aria-labelledby="modalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalLabel"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="bulkDataForm">
+                    <!-- Display selected folder IDs -->
+                    <div class="mb-3">
+                        <label for="selectedDocuments">Các chứng từ đã chọn của hợp đồng:</label> 
+                        {% comment %} <label for= "selectedDocuments" id= "selectLoancodeTextID" class="text-danger"></label> {% endcomment %}
+                        <ul id="selectedDocuments"></ul>
+                    </div>   
+                    <div class="mb-3">
+                        <label for="statusSelectBulk">Chọn trạng thái duyệt</label>
+                        <select class="form-select form-select-sm" 
+                                aria-label="Small select example" 
+                                name="checking_status_submit"  
+                                id="statusSelectBulk" 
+                                {% if document_dtl.status_id == None %}required{% endif %}
+                                oninvalid="this.setCustomValidity('Confirm trạng thái duyệt chứng từ')"
+                                oninput="this.setCustomValidity('')">                    
+                            <option value = "">{{document_dtl.status_id.checking_status_name }}</option>
+                            {% for checking_status in drop_list_checking_status %}
+                            {% if checking_status.status_id != document_dtl.status_id.status_id %}
+                            <option value={{checking_status.status_id}}>{{checking_status.checking_status_name}}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <!-- Additional Date and Note fields -->
+                    <div class="mb-3" id="supplementFields" style="display: none;">
+                        <div class="mb-3">
+                            <label for="supplementDate">Ngày hẹn bổ sung</label>
+                            <input type="text" class="form-control" id="supplementDate" name="supplement_date" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="supplementNote">Ghi chú hẹn bổ sung</label>
+                            <textarea class="form-control" id="supplementNote" name="supplement_note" rows="2"></textarea>
+                        </div>
+                    </div>
+                    <!-- note-->
+                    <div class="mb-3">
+                        <label for="checkingNoteBulk">Ghi chú chứng từ duyệt</label>
+                        <textarea class="form-control" id="checkingNoteBulk" name="checking_note_submit" rows="3" placeholder="Thêm ghi chú nếu có"></textarea>
+                    </div>
+                    
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-success" onclick="submitData()">Lưu</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal  ADDITIONAL -->
+{% for documents in documents_detail %}
+<div class="modal fade" id="editModal{{ documents.documents_id }}" tabindex="-1" aria-labelledby="editModalLabel{{ documents.documents_id }}" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editModalLabel{{ documents.documents_id }}">Hẹn bổ sung {{ documents.documents_code }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{% url 'checking_additional_view' documents.documents_id %}" id = "formadditional">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <!-- Form fields populated with the business_type's current data -->
+                    <div class="mb-3">
+                        <label for="date_addition" class="form-label">Ngày hẹn bổ sung</label>
+                        <input type="text" class="form-control" id="date_addition" name="date_addition" placeholder = '{{ documents.checkingadditional.date_addition |date:"Y-m-d" }}'>
+                    </div>
+                    <div class="mb-3">
+                        <label for="additional_note" class="form-label">Ghi chú hẹn bổ sung</label>
+                        <textarea class="form-control" id="additional_note" name="additional_note" rows="3" placeholder = "{{ documents.checkingadditional.additional_note|default_if_none:'' }}"></textarea>
+                    </div>
+                    <!-- Repeat for other fields -->
+                </div>
+                <input type="hidden" name="previous_check_status" value="{{ documents.status_id }}">
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary" >Lưu hẹn</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %} 
+
+<script>
+    // Bổ sung
+    document.addEventListener('click', function(event) {
+        if (event.target.matches('.your-trigger-button-class')) {
+            var documentId = event.target.getAttribute('data-document-id');
+            // Use documentId to fetch data or set values in the modal
+            $('#checkingAdditionalModal').modal('show');
+        }
+    });
+    // flatpickr date picker
+    // Ngày duyệt
+    var filterCheckDateInstance;
+    document.addEventListener("DOMContentLoaded", function () {
+        filterCheckDateInstance = flatpickr("#filtercheckdate", {
+            mode: "range",
+            dateFormat: "Y-m-d",
+            altInput: true,
+            altFormat: "d-m-Y",
+        });
+    });
+    // Ngày chứng từ
+    var filterDocumentDateInstance;
+    document.addEventListener("DOMContentLoaded", function () {
+        filterDocumentDateInstance = flatpickr("#filterdocumentdate", {
+            mode: "range",
+            dateFormat: "Y-m-d",
+            altInput: true,
+            altFormat: "d-m-Y",
+        });
+    });
+    // Ngày bổ sung chứng từ
+    document.addEventListener("DOMContentLoaded", function () {
+        flatpickr("#date_addition", {
+            dateFormat: "Y-m-d",
+            altInput: true,
+            minDate: "today",
+            altFormat: "d-m-Y",
+        });
+    });
+    // Ngày hẹn bổ sung BULK 
+    document.addEventListener("DOMContentLoaded", function () {
+        flatpickr("#supplementDate", {
+            dateFormat: "Y-m-d",
+            altInput: true,
+            minDate: "today",
+            altFormat: "d-m-Y",
+        });
+    });
+    // Initialize flatpickr for borrow date and appointment date fields
+    document.addEventListener("DOMContentLoaded", function () {
+        flatpickr("#borrowDate", {
+            dateFormat: "Y-m-d",
+            altInput: true,
+            altFormat: "d-m-Y",
+            minDate: "today",
+        });
+    });
+   
+    document.addEventListener("DOMContentLoaded", function () {
+    flatpickr("#appointmentDate", {
+        dateFormat: "Y-m-d",
+        altInput: true,
+        altFormat: "d-m-Y",
+        minDate: "today",
+        });
+    });     
+
+    document.addEventListener("DOMContentLoaded", function () {
+        flatpickr("#returnDate", {
+            dateFormat: "Y-m-d",
+            altInput: true,
+            altFormat: "d-m-Y",
+            maxDate: "today",
+            });
+        });     
+</script>
+<script>
+    // Clear filters button
+    document.getElementById('clearFilters').addEventListener('click', function() {
+        // Reset the form fields to their default values
+        document.getElementById('exampleDataListShop').value = '';
+        document.getElementById('inputfilterLoancode').value = '';
+        document.getElementById('exampleDataListUserDuyet').value = '';
+        document.getElementById('FilterDocumentStatus').selectedIndex = 0;
+        document.getElementById('FilterCheckStatus').selectedIndex = 0;
+        document.getElementById('FilterBusinessType').selectedIndex = 0;
+        // Clear the flatpickr date fields
+        if (filterCheckDateInstance) {
+            filterCheckDateInstance.clear();
+        }
+
+        if (filterDocumentDateInstance) {
+            filterDocumentDateInstance.clear();
+        }
+    });
+</script>
+<script>
+//  Nút hẹn bổ sung khi chọn trạng thái chứng từ hẹn bổ sung
+function checkDocumentStatus(statusSelectElement, documentId) {
+    const buttonId = 'editButton' + documentId; // Tạo một ID duy nhất cho nút
+    let existingButton = document.getElementById(buttonId);
+    
+    if (statusSelectElement.value == "3") {
+        // Nếu giá trị là "3" và nút chưa tồn tại, tạo nút mới
+        if (!existingButton) {
+            let newButton = document.createElement('button');
+            newButton.textContent = 'Hẹn bổ sung'; // Text cho nút
+            newButton.type = 'button';
+            newButton.id = buttonId; // Set ID duy nhất cho nút
+            newButton.className = 'btn btn-warning btn-sm';
+            newButton.setAttribute('data-bs-toggle', 'modal');
+            newButton.setAttribute('data-bs-target', '#editModal' + documentId);
+            // Chèn nút mới vào sau dropdown
+            statusSelectElement.parentNode.insertBefore(newButton, statusSelectElement.nextSibling);
+        }
+    } else {
+        // Nếu giá trị không phải là "3" và nút tồn tại, xóa nút đó
+        if (existingButton) {
+            existingButton.remove();
+        }
+    }
+}
+{% for document_dtl in documents_detail %}
+// Gắn sự kiện 'change' vào dropdown
+document.addEventListener('DOMContentLoaded', function() {
+    let statusSelectElement = document.getElementById('statusSelect{{ document_dtl.documents_id }}');
+    if (statusSelectElement) {
+        statusSelectElement.addEventListener('change', function() {
+            checkDocumentStatus(this, '{{ document_dtl.documents_id }}');
+        });
+    }
+});
+{% endfor %}
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Add event listener for all inputs with an id starting with "package_code"
+        document.querySelectorAll('[id^="package_code"]').forEach(input => {
+            input.addEventListener('blur', function() {
+                var packageCode = this.value;  // Get the value entered in the input
+                if (packageCode.trim() !== '') {  // Check if the input field is not empty
+                    fetch(`/package/checkexists/?user_entering_package_code=${encodeURIComponent(packageCode)}`)  // Adjust the parameter name to match the backend
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.package_exists ) {  
+                                this.classList.add('is-valid');  // Add class to show an error state
+                                this.classList.remove('is-invalid');
+                                 // Add the valid class
+                            } else {
+                                this.classList.remove('is-valid');  // Remove the error class if the package code exists (is valid)
+                                this.classList.add('is-invalid');
+                                alert('Thùng không tồn tại, vui lòng nhập thùng khác');
+                                 // Remove the valid class if any
+                                  // Display an alert with the error message from the server
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Request failed', error);
+                            alert('An error occurred while checking the package code.');
+                        });
+                } else {
+                    this.classList.remove('is-invalid');  // Remove the error class if the input is empty
+                    this.classList.remove('is-valid');  // Remove the valid class if the input is empty
+                }
+            });
+        });
+    });
+</script>
+<script> 
+    // Validate shop input
+    function validateShop(input, listId) {
+        const datalist = document.getElementById(listId);
+        const inputVal = input.value.trim();
+        let isValid = false;
+    
+        for (const option of datalist.options) {
+            if (option.value === inputVal) {
+                isValid = true;
+                break;
+            }
+        }
+        if (!isValid) {
+            input.classList.add('is-invalid');
+            input.classList.remove('is-valid');
+            input.setCustomValidity('Phải chọn từ danh sách có sẵn.');
+            input.reportValidity();  // Hiển thị thông báo lỗi ngay lập tức
+        } else {
+            input.classList.remove('is-invalid');
+            input.classList.add('is-valid');
+            input.setCustomValidity('');  // Xóa tất cả các thông báo lỗi trước đây
+        }
+    }
+</script>
+<script>// Kích vào row 
+    document.addEventListener('DOMContentLoaded', function() {
+        const tableRows = document.querySelectorAll('#table-data-area tr[data-checkbox-id]');
+        tableRows.forEach(row => {
+            row.addEventListener('click', function(event) {
+                // Prevent triggering when clicking on interactive elements
+                if (event.target.type === 'checkbox' || event.target.nodeName === 'BUTTON' || event.target.nodeName === 'A') return;
+    
+                // Find the checkbox and toggle its state
+                const checkbox = this.querySelector('input[type="checkbox"]');
+                if (checkbox && !checkbox.disabled) {
+                    checkbox.checked = !checkbox.checked;
+                    checkbox.dispatchEvent(new Event('change')); // Trigger change event if any
+                }
+            });
+        });
+    });
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const checkboxes = document.querySelectorAll('.form-check-input');
+        const bulkActionButton = document.getElementById('bulkActionButton');
+        const badge = bulkActionButton.querySelector('.badge');
+
+        function updateBulkActionButton() {
+            const checkedItems = Array.from(checkboxes).filter(checkbox => checkbox.checked);
+            const checkedCount = checkedItems.length;
+            const loanCode = checkedCount > 0 ? checkedItems[0].dataset.loanCode : '';
+            
+            requestAnimationFrame(() => {
+                badge.textContent = checkedCount;
+                bulkActionButton.style.display = checkedCount > 0 ? 'inline-flex' : 'none';
+                bulkActionButton.innerHTML = checkedCount > 0 
+                    ? `Duyệt nhiều chứng từ của hợp đồng ${loanCode} <span class="badge text-bg-danger">${checkedCount}</span>` 
+                    : 'Duyệt nhiều chứng từ <span class="badge text-bg-danger">0</span>';
+            });
+        }
+            
+        function initializeCheckboxes() {
+            checkboxes.forEach(checkbox => {
+                const isNotReceiveFolder = checkbox.dataset.folderStatusIsNotReceivedYet.toLowerCase() === 'true'; // Quyển chưa nhận thì không được chọn
+                if (isNotReceiveFolder) {
+                    checkbox.disabled = true; // Không cho tick luôn nếu quyển chưa nhận
+                    return; // Thoát ra, không xét các điều kiện khác
+                }
+                
+                const isChecked = checkbox.dataset.isChecked.toLowerCase() === 'true'; // Đã kiểm thì không được chọn nhiều
+                const isSelectable = checkbox.dataset.documentsIsSelectable.toLowerCase() === 'true' || checkbox.dataset.documentsIsSelectable === '';
+                const isReleased = checkbox.dataset.packagePartnerStatusIsReleased.toLowerCase() === 'true'; // Đã xuất kho thì không được chọn nhiều
+        
+                checkbox.disabled = isChecked || isReleased || !isSelectable;
+            });
+        }
+        
+        function updateCheckboxAvailability(selectedLoanCode) {
+            checkboxes.forEach(checkbox => {
+                const isNotReceiveFolder = checkbox.dataset.folderStatusIsNotReceivedYet.toLowerCase() === 'true'; // Quyển chưa nhận thì không được chọn
+                if (isNotReceiveFolder) {
+                    checkbox.disabled = true; // Không cho tick luôn nếu quyển chưa nhận
+                    return; // Thoát ra, không xét các điều kiện khác
+                }
+                const isSameLoanCode = checkbox.dataset.loanCode === selectedLoanCode;
+                const isChecked = checkbox.dataset.isChecked.toLowerCase() === 'true';
+                const isSelectable = checkbox.dataset.documentsIsSelectable.toLowerCase() === 'true' || checkbox.dataset.documentsIsSelectable === '';
+                const isReleased = checkbox.dataset.packagePartnerStatusIsReleased.toLowerCase() === 'true';
+                
+                checkbox.disabled = !isSameLoanCode || isChecked || isReleased || !isSelectable;
+            });
+        }
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                if (this.checked) {
+                    const selectedLoanCode = this.dataset.loanCode;
+                    updateCheckboxAvailability(selectedLoanCode);
+                } else {
+                    const anyChecked = Array.from(checkboxes).some(c => c.checked);
+                    if (!anyChecked) {
+                        initializeCheckboxes();
+                    }
+                }
+                updateBulkActionButton();
+            });
+        });
+        initializeCheckboxes();
+        updateBulkActionButton(); // Gọi ngay lần đầu để thiết lập trạng thái ban đầu
+    });
+</script>
+<script>// Hiển thị thông tin quyển chứng từ đã chọn trong Modal để chọn nhiều
+    document.addEventListener('DOMContentLoaded', function() {
+        const modalButton = document.querySelector('[data-bs-toggle="modal"]');
+        modalButton.addEventListener('click', function() {
+            const selectedDocumentsList = document.getElementById('selectedDocuments');
+            selectedDocumentsList.innerHTML = ''; // Clear the list first
+            // Populate list with selected document codes and formatted dates
+            document.querySelectorAll('.form-check-input:checked').forEach(item => {
+                const li = document.createElement('li');
+                const documentCode = item.getAttribute('data-documents-code');
+                const documentName = item.getAttribute('data-documents-name');
+                li.textContent = `${documentName} (${documentCode})`; // Formatting the text content
+                selectedDocumentsList.appendChild(li);
+            });
+        });
+    // Xử lý dữ liệu khi nhấn nút xác nhận trong Modal
+        window.submitData = function() {
+            event.preventDefault();
+            const statusSelectBulk = document.getElementById('statusSelectBulk').value;
+            const selectedItems = Array.from(document.querySelectorAll('.form-check-input:checked')).map(item => item.value);
+            const checkNote = document.getElementById('checkingNoteBulk').value;
+            const additionalBulkDate = document.getElementById('supplementDate').value;
+            const additionalBulkNote = document.getElementById('supplementNote').value;
+            if (selectedItems.length === 0 || statusSelectBulk === '' ) 
+                alert('Hãy chọn trạng thái duyệt, chọn ít nhất một chứng từ.');
+            // Additional validation for specific status
+            if (statusSelectBulk === '3' && additionalBulkDate === '') {
+                alert('Hãy chọn ngày hẹn bổ sung.');
+                return; 
+            }
+            fetch("{% url 'bulk_checking' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}',
+                },
+                body: JSON.stringify({
+                    selectedItems: selectedItems,
+                    documents_status_choice: statusSelectBulk, 
+                    checking_note_submit: checkNote,
+                    additional_bulk_date_choice: additionalBulkDate,
+                    additional_bulk_note_choice: additionalBulkNote,
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Chứng từ đã được duyệt thành công.');
+                    window.location.href = window.location.href; 
+                } else {
+                    alert('Xử lý duyệt chứng từ thất bại: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Đã xảy ra lỗi, vui lòng thử lại.');
+            });
+        };
+    });
+</script>
+<script>
+    function requestChange(documentId) {
+        // Xác nhận từ người dùng trước khi gửi yêu cầu
+        const userConfirmation = confirm("Bạn có chắc chắn muốn gửi yêu cầu điều chỉnh cho chứng từ này không?");
+        if (!userConfirmation) {
+            // Nếu người dùng chọn "Cancel", dừng việc gửi yêu cầu
+            return;
+        }
+        const url = `/request-change-document/${documentId}/`; 
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}',  
+            },
+            body: JSON.stringify({ note: 'Yêu cầu điều chỉnh từ người dùng' })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Hiển thị thông báo thành công
+                alert(data.message);
+                // Tìm phần tử liên kết bằng documentId và disable nó
+                const link = document.querySelector(`a[data-document-id="${documentId}"]`);
+                if (link) {
+                    link.classList.add('disabled');
+                    link.setAttribute('aria-disabled', 'true');
+                    link.onclick = null; // Hủy sự kiện onclick
+                    link.innerHTML += ' (Đã yêu cầu)'; // Thêm ghi chú "Đã yêu cầu"
+                }
+            } else {
+                // Hiển thị thông báo lỗi
+                alert(data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Có lỗi xảy ra. Vui lòng thử lại sau.');
+        });
+    }
+</script>
+<script>
+    // Hẹn bổ sung cho BULK check
+    // Bỏ ẩn 2 trường
+    function toggleSupplementaryFields() {
+        const statusDropdown = document.getElementById('statusSelectBulk');
+        const supplementDiv = document.getElementById('supplementFields');
+        // Check if the selected status is "3" for "Hẹn bổ sung"
+        if (statusDropdown.value === "3") {
+            supplementDiv.style.display = 'block';
+        } else {
+            supplementDiv.style.display = 'none';
+        }
+    }
+    // Attach event listener to the status dropdown to handle changes
+    document.addEventListener('DOMContentLoaded', function() {
+        const statusDropdown = document.getElementById('statusSelectBulk');
+        if (statusDropdown) {
+            statusDropdown.addEventListener('change', toggleSupplementaryFields);
+        }
+        // Also check on initial load in case the default value is "3"
+        toggleSupplementaryFields();
+    });
+</script>
+{% endblock %}

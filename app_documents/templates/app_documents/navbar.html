@@ -1,0 +1,116 @@
+<nav class="navbar navbar-expand-lg fixed-top navbar-dark bg-dark" id="mynavbar">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="{% url 'home' %}">
+      <img src="https://f88.vn/images/root/logo-f88-primary.svg" alt="Logo">
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="navbarNavDropdown">
+      <ul class="navbar-nav">
+        {% if is_admin or is_checker %}
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'receiving_transaction' %}">Nhận quyển chứng từ</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'checking_transaction' %}">Duyệt chứng từ</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'additional_management' %}">Chứng từ hẹn bổ sung</a>
+        </li>
+        {% endif %}
+        {% if is_admin %}
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'package_management' %}">Quản lý thùng chứng từ</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{% url 'dashboard' %}">Dashboard</a>
+        </li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            Thông tin khác
+          </a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="{% url 'historical_folder_view' %}">Migrate nhận quyển</a></li>
+            <li><a class="dropdown-item" href="{% url 'historical_documents_view' %}">Migrate duyệt</a></li>
+            <li><a class="dropdown-item" href="{% url 'admin:index' %}">Admin Portal</a></li>  
+          </ul>
+        </li>
+        {% endif %}
+      </ul>
+
+    <!-- Phần profile icon ở bên phải -->
+    {% if user.is_authenticated %}
+    <ul class="navbar-nav ms-auto">
+      <li class="nav-item dropdown">
+        <!-- Profile Icon -->
+        <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <img src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" class="rounded-circle" alt="Profile Icon" width="30" height="30">
+          <div class= "ms-2">
+            <span>
+              {% if is_admin %}
+              Admin: {{user.last_name}} {{ user.first_name }}
+              {% elif is_risk %}
+              Risk: {{user.last_name}} {{ user.first_name }}
+              {% elif is_supervisor %}
+              Supervisor: {{user.last_name}} {{ user.first_name }}
+              {% elif is_checker %}
+              CTV: {{user.last_name}} {{ user.first_name }}
+              {% elif is_shop_user %}
+              PGD: {{ user.first_name }} {{user.last_name}}
+              {% endif %}
+            </span>
+            <div class="small text">
+              {{ profile.region.region_name }}
+            </div>
+          </div>  
+        </a>
+        <!-- Dropdown -->
+        <ul class="dropdown-menu dropdown-menu-end">
+          <!-- Menu chuyển vùng với drop-left -->
+          <li class="dropdown-submenu">
+            <a class="dropdown-item" href="#">Chuyển vùng</a>
+            <ul class="dropdown-menu dropdown-menu-left">
+              {% for region in regions %}
+              <li><a class="dropdown-item" href="{% url 'switch_region' region.region_id %}">{{ region.region_name }}</a></li>
+              {% endfor %}
+            </ul>
+          </li>
+
+          <!-- Other items -->
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <!-- Đăng xuất -->
+            <form action="{% url 'logout' %}" method="post" style="display: inline;">
+              {% csrf_token %}
+              <button type="submit" class="dropdown-item">Đăng xuất</button>
+            </form>
+          </li>
+        </ul>
+      </li>
+    </ul>
+    {% endif %}
+    </div>
+  </div>
+</nav>
+
+<style>
+  /* Đảm bảo rằng dropdown mở sang trái */
+  .dropdown-submenu {
+    position: relative;
+  }
+  .dropdown-submenu > .dropdown-menu {
+    top: 0;
+    left: -100%;
+    margin-top: -1px;
+  }
+  /* Hiển thị dropdown con khi rê chuột vào "Chuyển vùng" */
+  .dropdown-submenu:hover > .dropdown-menu {
+    display: block;
+  }
+  /* Xóa hiển thị mũi tên dropdown mặc định của Bootstrap */
+  .dropdown-submenu > a::after {
+    content: none;
+  }
+</style>
