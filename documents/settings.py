@@ -29,7 +29,7 @@ DEBUG = os.getenv('DEBUG', default=False)
 ALLOWED_HOSTS = ['localhost', '127.0.0.1','ida-chungtu.f88.co']
 
 CSRF_TRUSTED_ORIGINS = [
-    'https://ida-chungtu.f88.co','chungtu.f88.vn'
+    'https://ida-chungtu.f88.co','https://chungtu.f88.vn'
 ]
 
 # Application definition
