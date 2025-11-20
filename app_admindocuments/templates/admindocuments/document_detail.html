@@ -1,0 +1,204 @@
+{% extends "admindocuments/base.html" %}
+{% block title %}Chi tiết văn bản{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-semibold text-gray-700">Chi tiết văn bản</h1>
+  <button data-modal-target="editModal" data-modal-toggle="editModal"
+          class="bg-f88green hover:bg-f88dark text-white px-4 py-2 rounded-lg shadow">Edit</button>
+</div>
+
+<div class="relative overflow-x-auto shadow-md sm:rounded-lg">
+  <table class="w-full text-sm text-left rtl:text-right text-gray-500">
+    <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+      <tr>
+        <th scope="col" class="px-6 py-3">Thuộc tính</th>
+        <th scope="col" class="px-6 py-3">Giá trị</th>
+        <th scope="col" class="px-6 py-3"><span class="sr-only">Edit</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Số hiệu</th>
+        <td class="px-6 py-4 font-mono">{{ doc.document_number_full }}</td>
+        <td class="px-6 py-4 text-right"><a href="#" data-modal-target="editModal" data-modal-toggle="editModal" class="font-medium text-blue-600 hover:underline">Edit</a></td>
+      </tr>
+      <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Tiêu đề</th>
+        <td class="px-6 py-4">{{ doc.title }}</td>
+        <td class="px-6 py-4"></td>
+      </tr>
+      <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Loại văn bản</th>
+        <td class="px-6 py-4">{{ doc.doc_type.name }}</td>
+        <td class="px-6 py-4"></td>
+      </tr>
+      <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Loại nội dung</th>
+        <td class="px-6 py-4">{{ doc.content_type.name }}</td>
+        <td class="px-6 py-4"></td>
+      </tr>
+      <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Trạng thái</th>
+        <td class="px-6 py-4">{{ doc.status.name }} ({{ doc.status.code }})</td>
+        <td class="px-6 py-4"></td>
+      </tr>
+      <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Công ty</th>
+        <td class="px-6 py-4">{{ doc.issuing_company.name }}</td>
+        <td class="px-6 py-4"></td>
+      </tr>
+      <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Phòng ban</th>
+        <td class="px-6 py-4">{{ doc.issuing_department.name }}</td>
+        <td class="px-6 py-4"></td>
+      </tr>
+      <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Chức danh người ký</th>
+        <td class="px-6 py-4">{{ doc.signer_role.title }}</td>
+        <td class="px-6 py-4"></td>
+      </tr>
+      <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Số hiệu tham chiếu</th>
+        <td class="px-6 py-4">{{ doc.reference_number|default:'-' }}</td>
+        <td class="px-6 py-4"></td>
+      </tr>
+      <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Mã ticket</th>
+        <td class="px-6 py-4">{{ doc.ticket_code|default:'-' }}</td>
+        <td class="px-6 py-4"></td>
+      </tr>
+      <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Ngày hết hiệu lực</th>
+        <td class="px-6 py-4">{{ doc.expiry_date|date:'d/m/Y'|default:'-' }}</td>
+        <td class="px-6 py-4"></td>
+      </tr>
+      <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Tệp đính kèm</th>
+        <td class="px-6 py-4">
+          {% if doc.attachment %}
+            <a href="{{ doc.attachment.url }}" target="_blank" class="text-blue-600 hover:underline">Tải tệp</a>
+          {% else %}-{% endif %}
+        </td>
+        <td class="px-6 py-4"></td>
+      </tr>
+      <tr class="bg-white hover:bg-gray-50">
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Ghi chú</th>
+        <td class="px-6 py-4 whitespace-pre-line">{{ doc.note|default:'-' }}</td>
+        <td class="px-6 py-4"></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div id="editModal" tabindex="-1" aria-hidden="true"
+     class="fixed inset-0 z-50 hidden bg-black/40 flex justify-center items-center">
+  <div class="relative p-4 w-full max-w-2xl max-h-full">
+    <div class="relative bg-white rounded-lg shadow">
+      <div class="flex justify-between items-center p-4 border-b rounded-t">
+        <h3 class="text-xl font-semibold text-gray-900">Cập nhật văn bản</h3>
+        <button type="button" data-modal-hide="editModal"
+                class="text-gray-400 hover:text-gray-900 rounded-lg text-sm p-2 ml-auto inline-flex items-center">×</button>
+      </div>
+      <div class="p-6 space-y-4">
+        <form method="post" action="{% url 'admindocuments:admindocuments_update' doc.id %}" enctype="multipart/form-data" class="grid grid-cols-2 gap-4" x-data="{ attachmentMode: 'file' }">
+          {% csrf_token %}
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Loại văn bản</label>
+            <select name="doc_type" class="block w-full rounded-lg border border-gray-300 px-3 py-2">
+              {% for it in doc_types %}
+                <option value="{{ it.id }}" {% if form.instance.doc_type_id == it.id %}selected{% endif %}>{{ it.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Loại nội dung</label>
+            <select name="content_type" class="block w-full rounded-lg border border-gray-300 px-3 py-2">
+              {% for it in content_types %}
+                <option value="{{ it.id }}" {% if form.instance.content_type_id == it.id %}selected{% endif %}>{{ it.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Tiêu đề</label>
+            <input type="text" name="title" value="{{ form.instance.title }}" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Người ký</label>
+            <select name="signer_role" class="block w-full rounded-lg border border-gray-300 px-3 py-2">
+              {% for it in signer_roles %}
+                <option value="{{ it.id }}" {% if form.instance.signer_role_id == it.id %}selected{% endif %}>{{ it.title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Số hiệu VB tham chiếu</label>
+            <input type="text" name="reference_number" value="{{ form.instance.reference_number }}" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Công ty ban hành</label>
+            <select name="issuing_company" class="block w-full rounded-lg border border-gray-300 px-3 py-2">
+              {% for it in companies %}
+                <option value="{{ it.id }}" {% if form.instance.issuing_company_id == it.id %}selected{% endif %}>{{ it.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Phòng ban</label>
+            <select name="issuing_department" class="block w-full rounded-lg border border-gray-300 px-3 py-2">
+              {% for it in departments %}
+                <option value="{{ it.id }}" {% if form.instance.issuing_department_id == it.id %}selected{% endif %}>{{ it.name }} ({{ it.company.code }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Ngày hết hiệu lực</label>
+            <input type="date" name="expiry_date" value="{{ form.instance.expiry_date|date:'Y-m-d' }}" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Trạng thái</label>
+            <select name="status" class="block w-full rounded-lg border border-gray-300 px-3 py-2">
+              {% for s in statuses %}
+                <option value="{{ s.id }}" {% if form.instance.status_id == s.id %}selected{% endif %}>{{ s.name }} ({{ s.code }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-2">File đính kèm</label>
+            <div class="flex items-center gap-4 mb-2">
+              <label class="inline-flex items-center gap-2 text-sm">
+                <input type="radio" name="attachment_mode" value="file" class="text-f88green" x-model="attachmentMode">
+                <span>Upload file</span>
+              </label>
+              <label class="inline-flex items-center gap-2 text-sm">
+                <input type="radio" name="attachment_mode" value="text" class="text-f88green" x-model="attachmentMode">
+                <span>Nhập link (text)</span>
+              </label>
+            </div>
+            <div x-show="attachmentMode === 'file'">
+              <input type="file" name="attachment" class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-f88green file:text-white hover:file:bg-f88dark" />
+            </div>
+            <div x-show="attachmentMode === 'text'">
+              <input type="text" name="attachment_link" placeholder="https://link-tai-lieu" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Mã ticket</label>
+            <input type="text" name="ticket_code" value="{{ form.instance.ticket_code }}" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
+          </div>
+          <div class="col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
+            <textarea name="note" rows="3" class="block w-full rounded-lg border border-gray-300 px-3 py-2">{{ form.instance.note }}</textarea>
+          </div>
+
+          <div class="col-span-2 flex justify-end gap-2 mt-4">
+            <button data-modal-hide="editModal" type="button" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">Hủy</button>
+            <button type="submit" class="px-4 py-2 bg-f88green text-white rounded hover:bg-f88dark">Update</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

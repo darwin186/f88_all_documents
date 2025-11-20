@@ -6,7 +6,7 @@ from .models import (
     Manager, Shop, Region,Gender, AreaManager, RegionManager, Employee , LoanCustomer, 
     DocumentType, BusinessType, FolderType, DocumentStatus, CheckingStatusType, FolderStatus, CheckingTransactionStatus,PartnerPackageStatus,
     DocumentsDetail, Folder, DocumentsTransactionChecking, FoldersTransactionReceiving,
-    Package,LoanDetail, PartnerPackage, ContractDetail,
+    Package,LoanDetail, PartnerPackage, ContractDetail, Partner,
     HistoricalDocuments,HistoricalFolder,PackageDocumentHistory, PackageFolderHistory,
     UserProfile,ChangeRequest,
     CheckingAdditional,
@@ -75,6 +75,14 @@ class BorrowingStatusAdmin(admin.ModelAdmin):
     list_display = ('borrow_status_code', 'borrow_status_name', 'flag_return', 'flag_is_borrowing', 'flag_is_lost', 'badge_color')
     search_fields = ('borrow_status_code', 'borrow_status_name')
 admin.site.register(BorrowingStatus,BorrowingStatusAdmin)
+
+class PartnerAdmin(admin.ModelAdmin):
+    list_display = ('partner_code', 'partner_name', 'require_partner_selection', 'require_partner_code', 'is_active')
+    search_fields = ('partner_code', 'partner_name')
+    list_filter = ('is_active', 'require_partner_selection', 'require_partner_code')
+    list_per_page = 25
+
+admin.site.register(Partner, PartnerAdmin)
 
 #Business Type
 class BusinessTypeAdmin(admin.ModelAdmin):

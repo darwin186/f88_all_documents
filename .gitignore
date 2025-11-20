@@ -31,3 +31,11 @@ documents/__pycache__/settings.cpython-311.pyc
 documents/__pycache__/local_settings.cpython-311.pyc
 documents/__pycache__/settings.cpython-311.pyc
 documents/__pycache__/settings.cpython-311.pyc
+# Virtual environment
+.venv/
+# Local env setup files
+create_venv.ps1
+ENV_SETUP.md
+docker-compose.db.yml
+docker-compose.yml
+docker-compose.yml

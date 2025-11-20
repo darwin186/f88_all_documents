@@ -289,6 +289,22 @@ class PartnerPackageStatus(models.Model):
     
     def __str__(self):
         return self.package_status_name
+
+class Partner(models.Model):
+    partner_id = models.AutoField(primary_key=True)
+    partner_code = models.CharField(max_length=10, unique=True)
+    partner_name = models.CharField(max_length=255, unique=True)
+    is_active = models.BooleanField(default=True)
+    require_partner_code = models.BooleanField(default=False)
+    require_partner_selection = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'd_Partner'
+        verbose_name = 'Partner Vendor'
+        verbose_name_plural = 'Partners'
+
+    def __str__(self):
+        return f"{self.partner_name} ({self.partner_code})"
         
 # Mã thùng F88 
 class Package(models.Model):
@@ -311,13 +327,10 @@ class Package(models.Model):
  
 # Dim Thùng hàng của đối tác với mỗi thùng hàng sẽ có một mã thùng hàng đối tác tương ứng mã thùng F88
 class PartnerPackage(models.Model):
-    CROWN = 'CRN'
-    PARTNER_LIST = {
-        CROWN: "Crown",
-    }
     package_id = models.OneToOneField( Package, db_column='package_id', on_delete=models.CASCADE, null= True)
-    partner_package_code = models.CharField(max_length= 50, null= False, blank= False, unique= True, default= None) 
-    partner_name = models.CharField( PARTNER_LIST,  max_length=3 ,null= True, blank= True, unique= False, default= None)
+    partner_package_code = models.CharField(max_length= 50, null= True, blank= True, unique= True, default= None) 
+    partner_name = models.CharField(max_length=10 ,null= True, blank= True, unique= False, default= None)
+    partner = models.ForeignKey(Partner, db_column='partner_id', on_delete=models.SET_NULL, null=True, blank=True)
     created_date = models.DateTimeField(auto_now_add=False, null= False) # Ngày tạo thùng hàng  
     updated_date = models.DateTimeField(auto_now_add=False, null= True, blank= True) # Ngày cập nhật thùng hàng
     status_id = models.ForeignKey( PartnerPackageStatus, db_column='partnerpackagestatus_id', on_delete=models.CASCADE, null= True) # Trạng thái của thùng hàng đối tác
@@ -326,7 +339,7 @@ class PartnerPackage(models.Model):
         db_table = 'd_PartnerPackage'  
 
     def __str__(self):
-        return self.partner_package_code
+        return self.partner_package_code or f"{self.package_id.package_code if self.package_id else 'PartnerPackage'}"
     
 # Rule áp dụng cho gửi chứng từ đúng hạn
 class FolderDeadlineRule(models.Model):

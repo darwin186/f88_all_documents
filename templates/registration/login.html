@@ -4,7 +4,7 @@
 
 <div class="p-5 bg-success text-white text-center">
   <h2>CHỨNG TỪ F88</h2>
-  <h5 class = "text-center"> Mời bạn đăng nhập </h5>
+  <h5 class="text-center"> Mời bạn đăng nhập </h5>
 </div>
 <div class="container-sm">
   {% if form.errors %}
@@ -19,7 +19,7 @@
     <strong>!</strong> Bạn không có quyền truy cập vào trang này hoặc thông tin đăng nhập không chính xác.
     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
   </div>
-  {% endif %} 
+  {% endif %}
 
 </div>
 <div class="container">
@@ -62,29 +62,22 @@
     }
 </script>
 <style>
-/* Style cho container chứa input và nút con mắt */
 .password-container {
     position: relative;
     display: flex;
     align-items: center;
 }
-
-/* Style cho input */
 .password-container input {
     width: 100%;
-    padding-right: 30px; /* Cho thêm khoảng trống để nút không che mất text */
+    padding-right: 30px;
 }
-
-/* Style cho nút con mắt */
 .password-container button {
     position: absolute;
-    right: 5px; /* Khoảng cách từ nút đến cạnh phải của container */
+    right: 5px;
     border: none;
     background: none;
     cursor: pointer;
 }
-
-/* Optional: Tùy chỉnh thêm để nút không ảnh hưởng đến hành động submit form */
 .password-container button {
     padding: 10px;
     margin: 0;

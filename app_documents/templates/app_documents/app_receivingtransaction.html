@@ -332,14 +332,18 @@
                                                     <select class="form-select form-select-sm" 
                                                             aria-label="Small select example" 
                                                             name="folder_status_submit"  
-                                                            id="statusSelect{{ folder_dtl.folder_id }}"  {% if folder_dtl.folder_status_id.is_not_received_yet %}required{% endif %}>
-                                                        <option value = "">{{folder_dtl.folder_status_id.folder_status_name }}</option>
-                                                        {% for folder_status in drop_list_folder_status %}
-                                                        {% if folder_status.folder_status_id != folder_dtl.folder_status_id.folder_status_id %}
-                                                        <option value={{folder_status.folder_status_id}}>{{folder_status.folder_status_name}}</option>
+                                                            id="statusSelect{{ folder_dtl.folder_id }}"
+                                                            {% if not folder_dtl.folder_status_id.is_not_received_yet %}disabled{% else %}required{% endif %}>
+                                                        <option value="">{{folder_dtl.folder_status_id.folder_status_name }}</option>
+                                                        {% if folder_dtl.folder_status_id.is_not_received_yet %}
+                                                            {% for folder_status in drop_list_folder_status_received %}
+                                                                <option value="{{folder_status.folder_status_id}}">{{folder_status.folder_status_name}}</option>
+                                                            {% endfor %}
                                                         {% endif %}
-                                                        {% endfor %}
                                                     </select>
+                                                    {% if not folder_dtl.folder_status_id.is_not_received_yet %}
+                                                        <small class="text-muted">Chỉ quyển chưa nhận mới được cập nhật trạng thái.</small>
+                                                    {% endif %}
                                                 </div>
                                                 <!--- Ngày nhận thùng thực tế-->
                                                 <div class="mb-3">
@@ -531,7 +535,7 @@
                                 id="statusSelectBulk" required
                                 oninvalid="this.setCustomValidity('Phải chọn trạng thái nhận')" oninput="this.setCustomValidity('')">
                             <option value="">Chọn trạng thái nhận</option>
-                            {% for folder_status in drop_list_folder_status %}
+                            {% for folder_status in drop_list_folder_status_received %}
                             <option value="{{folder_status.folder_status_id}}">{{folder_status.folder_status_name}}</option>
                             {% endfor %}
                         </select>

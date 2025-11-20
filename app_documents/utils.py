@@ -4,6 +4,7 @@ from .models import UserProfile
 from datetime import datetime, timedelta
 from app_documents.models import Folder,FolderGroup 
 from calendar import monthrange
+from django.utils import timezone
 
 def get_user_context(user):
     profile = UserProfile.objects.get(user=user)
@@ -62,8 +63,10 @@ def assign_group_to_folders():
 def check_on_time(folder, lasted_received_date_submit):
     """Hàm kiểm tra và cập nhật trạng thái đúng hạn (on time) của một folder dựa trên group đã gán."""
     try:
+        deadline = None
+        received_date = None
         # Kiểm tra xem folder có được gán group hay không
-        if folder.group and folder.is_original and folder.is_issue:
+        if folder.group : # and folder.is_original and folder.is_issue:
             # Lấy rule từ group đã gán cho folder
             rule = folder.group.rule_deadline
             if rule and rule.is_valid:
@@ -93,11 +96,14 @@ def check_on_time(folder, lasted_received_date_submit):
                 # Tạo đối tượng deadline
                 deadline = datetime(deadline_year, deadline_month, day_to)
                 deadline += timedelta(days=rule.deadline_day)
+                if timezone.is_naive(deadline):
+                    deadline = timezone.make_aware(deadline, timezone.get_current_timezone())
 
                 # Sử dụng `lasted_received_date_submit` nếu có, nếu không thì dùng `folder.lastest_received_date`
                 received_date = lasted_received_date_submit or folder.lastest_received_date
-
-                # Kiểm tra ngày nhận chứng từ để đánh dấu đúng hạn hay trễ hạn
+                if received_date and timezone.is_naive(received_date):
+                    received_date = timezone.make_aware(received_date, timezone.get_current_timezone())
+    
                 if received_date:
                     if received_date <= deadline:
                         folder.is_on_time = True
@@ -115,7 +121,9 @@ def check_on_time(folder, lasted_received_date_submit):
 
         # Lưu lại folder sau khi kiểm tra
         folder.save(update_fields=['is_on_time', 'is_late'])
-
+        if deadline and received_date:
+            return f"Thời gian nhận thực tế: {received_date.date()} so với hạn deadline {deadline.date()}"
+        return "Folder on-time status checked without deadline comparison."
     except Exception as e:
         # Xử lý lỗi, nếu cần thiết
         print(f"Error in check_on_time: {e}")
