@@ -8,7 +8,8 @@ services:
       DATABASE_NAME: ${DATABASE_NAME:-test}
       DATABASE_USER: ${DATABASE_USER:-postgres}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-postgres}
-      DATABASE_HOST: ${DATABASE_HOST:-host.docker.internal}
+      # When using docker-compose this defaults to the service name 'db'
+      DATABASE_HOST: ${DATABASE_HOST:-db}
       
       DATABASE_PORT: ${DATABASE_PORT:-5432}
     volumes:
