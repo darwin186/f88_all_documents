@@ -24,6 +24,7 @@ from django.http import Http404
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("", include("app_documents.urls")),
+    path("admindocuments/", include("app_admindocuments.urls")),
     path("accounts/", include("django.contrib.auth.urls")),
 
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

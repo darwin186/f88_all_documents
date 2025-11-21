@@ -57,6 +57,7 @@ from .models import (
     Package,
     PartnerPackage,
     PartnerPackageStatus,
+    Partner,
     Region,
     HistoricalFolder,
     HistoricalDocuments,
@@ -104,7 +105,7 @@ def home_view(request):
           'user': user,
            'regions':regions
           }
-    return render(request, 'app_documents/home.html', context)
+    return render(request, 'home.html', context)
 
 def handle_400(request, exception):
     return render(request, '400.html', status=400)
@@ -1011,6 +1012,7 @@ def package_management_view(request):
         filterpackagestatus = request.GET.get('filterpackagestatus')
         filterregion = request.GET.get('filterregion')  
         choice_user_tao_thung = request.GET.get('choice_user_tao_thung')
+        filter_empty_package = request.GET.get('filter_empty_package')
         
         if choice_package:
             filters['package_code__iexact'] = choice_package
@@ -1024,11 +1026,14 @@ def package_management_view(request):
             filters['created_by__username'] = choice_user_tao_thung.lower()
         if filterregion:
             filters['created_by__userprofile__region__region_id'] = filterregion
+        if filter_empty_package == '1':
+            filters['folder__isnull'] = True
         
+        base_queryset = Package.objects.select_related('partnerpackage', 'package_type', 'region_id').annotate(folder_count=Count('folder', distinct=True)).order_by('-created_date')
         if len(filters)   == 0:
-            package_list = package_list
+            package_list = base_queryset
         else : 
-            package_list = Package.objects.filter(**filters).select_related('partnerpackage', 'package_type', 'region_id').order_by('-created_date')
+            package_list = base_queryset.filter(**filters)
 
         # Check if export to Excel is requested
         if request.GET.get('export') == '1':
@@ -1049,6 +1054,8 @@ def package_management_view(request):
     region_by_role = AccessControls.get_regions_based_on_role(user)
     partnerpackage_status = PartnerPackageStatus.objects.all()
     partnerpackage_list = PartnerPackage.objects.all()
+    partners = Partner.objects.filter(is_active=True).order_by('partner_name')
+    partners_require_selection = partners.filter(require_partner_selection=True).exists()
     droplist_users =  user_by_role #User.objects.filter()
     droplist_regions = region_by_role ##Region.objects.filter()
     query_string = '&'.join(f"{key}={value}" for key, value in request.GET.items() if key != 'page')
@@ -1060,6 +1067,8 @@ def package_management_view(request):
         'partnerpackage_list': partnerpackage_list,
         'droplist_users': droplist_users,
         'droplist_regions': droplist_regions,
+        'partners': partners,
+        'partners_require_selection': partners_require_selection,
      }
     context['query_string'] = query_string
     return render(request, 'app_documents/app_package_management.html', context )
@@ -1072,32 +1081,62 @@ def edit_package_view(request, package_id):
     if not user_context['is_admin'] and not user_context['is_checker']:
         return JsonResponse({'error': 'Unauthorized access.'}, status=403)
     package = get_object_or_404(Package, pk=package_id)
+    partners_qs = Partner.objects.filter(is_active=True)
+    partners_require_selection = partners_qs.filter(require_partner_selection=True).exists()
     if request.method == 'POST':
-        partner_package_code_submit = request.POST.get('partner_code_choice')
-        partner_name = request.POST.get('partner_name_choice')
+        partner_package_code_submit = request.POST.get('partner_code_choice', '').strip()
+        partner_id_choice = request.POST.get('partner_id_choice')
         old_package_code_choice = request.POST.get('old_package_code_choice')
         date_action = timezone.now()
+
+        partner_instance = None
+        if partner_id_choice:
+            partner_instance = partners_qs.filter(partner_id=partner_id_choice).first()
+            if not partner_instance:
+                return JsonResponse({'error': 'Đối tác không tồn tại hoặc đã bị vô hiệu.'}, status=400)
+        elif partners_require_selection and partners_qs.exists():
+            return JsonResponse({'error': 'Vui lòng chọn đối tác lưu trữ.'}, status=400)
+        if partner_instance and partner_instance.require_partner_code and not partner_package_code_submit:
+            return JsonResponse({'error': f'Đối tác {partner_instance.partner_name} yêu cầu nhập mã thùng đối tác.'}, status=400)
+        if partner_package_code_submit and PartnerPackage.objects.exclude(package_id=package).filter(partner_package_code=partner_package_code_submit).exists():
+            return JsonResponse({'error': f'Mã thùng đối tác {partner_package_code_submit} đã tồn tại.'}, status=400)
         
-        if partner_package_code_submit:
-            try:
-                partner_package = PartnerPackage.objects.get(package_id=package)
-                if partner_package.partner_package_code != partner_package_code_submit or partner_package.partner_name != partner_name:
-                    partner_package.partner_package_code = partner_package_code_submit
-                    partner_package.partner_name = partner_name
+        partner_package_code_value = partner_package_code_submit or None
+        try:
+            partner_package = PartnerPackage.objects.get(package_id=package)
+        except PartnerPackage.DoesNotExist:
+            partner_package = None
+
+        if partner_instance:
+            if partner_package:
+                has_changes = (
+                    partner_package.partner_package_code != partner_package_code_value or
+                    partner_package.partner_id != (partner_instance.partner_id if partner_instance else None)
+                )
+                if has_changes:
+                    partner_package.partner_package_code = partner_package_code_value
+                    partner_package.partner_name = partner_instance.partner_code
+                    partner_package.partner = partner_instance
                     partner_package.updated_date = date_action
                     partner_package.save()
                 else:
                     return JsonResponse({'message': 'No changes detected.'})
-            except PartnerPackage.DoesNotExist:
+            else:
                 default_status = PartnerPackageStatus.objects.get(status_id=1)
                 PartnerPackage.objects.create(
                     package_id=package,
-                    partner_package_code=partner_package_code_submit,
-                    partner_name=partner_name,
+                    partner_package_code=partner_package_code_value,
+                    partner_name=partner_instance.partner_code,
+                    partner=partner_instance,
                     created_date=date_action,
                     created_by=user,
                     status_id=default_status
                 )
+        else:
+            # No partner selected, remove existing relation if exists
+            if partner_package:
+                partner_package.delete()
+        
         if old_package_code_choice and old_package_code_choice != package.package_code_old:
             package.package_code_old = old_package_code_choice
             package.updated_date = date_action
@@ -1147,6 +1186,8 @@ def create_package_view(request, user_id):
     user_profiles = UserProfile.objects.get(user=user)
     package_type = FolderType.objects.all()
     regions = Region.objects.all()
+    partners_qs = Partner.objects.filter(is_active=True).order_by('partner_name')
+    partners_require_selection = partners_qs.filter(require_partner_selection=True).exists()
     context = {
         'employee_code': user_profiles.employee_code,
         'region_code': user_profiles.region.region_code,
@@ -1154,17 +1195,33 @@ def create_package_view(request, user_id):
         'user': user,
         'user_profiles': user_profiles,
         'package_types': package_type,
-        'regions' : regions
+        'regions' : regions,
+        'partners': partners_qs,
+        'partners_require_selection': partners_require_selection,
         }
     if not user_context['is_admin'] and not user_context['is_checker']:
         messages.error(request, "Bạn không có quyền truy cập trang này.")
         return redirect('home')
     if request.method == 'POST':
         package_code_submit = request.POST.get('package_code_submit')
-        partner_package_code_submit = request.POST.get('partner_package_code_choice')
-        partner_name_submit = request.POST.get('partner_name_choice')
+        partner_package_code_submit = request.POST.get('partner_package_code_choice', '').strip()
+        partner_id_submit = request.POST.get('partner_id_choice')
         package_type_submit = request.POST.get('package_type_choice')
         package_region_submit = request.POST.get('region_choice')
+        partner_instance = None
+        if partner_id_submit:
+            try:
+                partner_instance = partners_qs.get(partner_id=partner_id_submit)
+            except Partner.DoesNotExist:
+                return JsonResponse({'success': False, 'message': 'Đối tác không tồn tại hoặc đã bị vô hiệu.'}, status=400)
+        elif partners_require_selection and partners_qs.exists():
+            return JsonResponse({'success': False, 'message': 'Vui lòng chọn đối tác lưu trữ.'}, status=400)
+        if partner_instance and partner_instance.require_partner_code and not partner_package_code_submit:
+            return JsonResponse({'success': False, 'message': f'Đối tác {partner_instance.partner_name} yêu cầu nhập mã thùng đối tác.'}, status=400)
+        if partner_package_code_submit and PartnerPackage.objects.filter(partner_package_code=partner_package_code_submit).exists():
+            return JsonResponse({'success': False, 'message': f'Mã thùng đối tác {partner_package_code_submit} đã tồn tại trong hệ thống.'}, status=400)
+        if not partner_instance and partners_qs.exists():
+            return JsonResponse({'success': False, 'message': 'Vui lòng chọn đối tác lưu trữ.'}, status=400)
         # Validate package code using the custom validation function
         validation_result = validate_package_code(package_code_submit, user)
         if not validation_result['is_valid']:
@@ -1177,19 +1234,20 @@ def create_package_view(request, user_id):
             region_id =  Region.objects.get(region_code=package_region_submit) 
         )
         partner_package = None
-        if partner_package_code_submit:
+        if partner_instance:
             partner_status_instance_1 = PartnerPackageStatus.objects.get(status_id=1)  # Assuming status_id=1 means 'newly created'
             partner_package = PartnerPackage.objects.create(
                 package_id=package,
-                partner_package_code=partner_package_code_submit,
-                partner_name=partner_name_submit,
+                partner_package_code=partner_package_code_submit or None,
+                partner_name=partner_instance.partner_code,
+                partner=partner_instance,
                 created_date=timezone.now(),
                 status_id=partner_status_instance_1,
                 created_by=request.user
             )
         payload = {
             'package_id': model_to_dict(package),
-            'partner_package': model_to_dict(partner_package) if partner_package_code_submit else None,
+            'partner_package': model_to_dict(partner_package) if partner_package else None,
             'success': True,
             'message': 'Tạo thùng mới thành công.'
             }
@@ -1330,15 +1388,22 @@ def import_packages_view(request):
         try:
             df = pd.read_excel(excel_file)
             user_created = request.user
+            partners_qs = Partner.objects.filter(is_active=True)
+            partners_require_selection = partners_qs.filter(require_partner_selection=True).exists()
             with transaction.atomic():
                 for index, row in df.iterrows():
-                    new_package_code = row['newPackageCode']
+                    new_package_code_raw = row['newPackageCode']
                     old_package_code = row['oldPackageCode']
                     partner_package_code = row['partnerPackageCode']
-                    partner_name = row['partnerName']
+                    partner_name_value = row['partnerName']
                     package_type_name = row['packageType']
                     partner_package_status = row['partnerPackageStatus']
                     package_region = row['packageRegion']
+                    if pd.isna(new_package_code_raw):
+                        raise transaction.TransactionManagementError("Missing package code in import file.")
+                    new_package_code = str(new_package_code_raw).strip()
+                    partner_package_code_value = None if pd.isna(partner_package_code) or str(partner_package_code).strip() == '' else str(partner_package_code).strip()
+                    partner_name_value = None if pd.isna(partner_name_value) or str(partner_name_value).strip() == '' else str(partner_name_value).strip()
                    
                     # Validate package type by matching with FolderType's package_type
                     try:
@@ -1362,7 +1427,18 @@ def import_packages_view(request):
                         region_id= Region.objects.get(region_code = package_region )
                     )
                     # Create or update PartnerPackage
-                    if partner_package_code:
+                    partner_instance = None
+                    if partner_name_value:
+                        partner_instance = partners_qs.filter(partner_code__iexact=partner_name_value).first()
+                        if not partner_instance:
+                            partner_instance = partners_qs.filter(partner_name__iexact=partner_name_value).first()
+                    if not partner_instance and partners_require_selection and partners_qs.exists():
+                        raise transaction.TransactionManagementError(f"Vui lòng cấu hình và chọn đối tác hợp lệ cho thùng {new_package_code}.")
+                    if partner_instance and partner_instance.require_partner_code and not partner_package_code_value:
+                        raise transaction.TransactionManagementError(f"Đối tác {partner_instance.partner_name} yêu cầu mã thùng đối tác cho thùng {new_package_code}.")
+                    if partner_package_code_value and PartnerPackage.objects.exclude(package_id=package).filter(partner_package_code=partner_package_code_value).exists():
+                        raise transaction.TransactionManagementError(f"Mã thùng đối tác {partner_package_code_value} đã tồn tại.")
+                    if partner_instance or partner_package_code_value:
                         if partner_package_status: 
                             status = PartnerPackageStatus.objects.get(status_id=partner_package_status)  
                         else: 
@@ -1370,8 +1446,9 @@ def import_packages_view(request):
                         PartnerPackage.objects.update_or_create(
                             package_id=package,
                             defaults={
-                                'partner_package_code': partner_package_code,
-                                'partner_name': partner_name,
+                                'partner_package_code': partner_package_code_value,
+                                'partner_name': partner_instance.partner_code if partner_instance else partner_name_value,
+                                'partner': partner_instance,
                                 'created_date': timezone.now(),
                                 'created_by': request.user,
                                 'status_id': status,
@@ -1383,7 +1460,7 @@ def import_packages_view(request):
         except Exception as e:
             messages.error(request, f"Đã xảy ra lỗi trong quá trình tải lên: {e}")
             # Rollback will happen automatically due to atomic
-    return render(request, 'app_documents/app_package_management.html')
+    return redirect('package_management')
 
 #---------------DASHBOARD-------------------------
 

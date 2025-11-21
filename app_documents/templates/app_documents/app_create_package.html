@@ -26,7 +26,7 @@
                 <div class='mb-3 text-center'>
                     <label for="formGroupCreatepackageType" class="form-label">Loại thùng <span style="color:red;">&#40;* Bắt buộc &#41;</span> </label>
                     <select class="form-select" name='package_type_choice' aria-label="Default select example" id='packageType' required>
-                        <option selected>Chọn loại thùng</option>
+                        <option value="" selected>Chọn loại thùng</option>
                         {% for package_type in package_types %}
                         <option value="{{ package_type.package_type }}">Thùng {{package_type.folder_type_name }}</option>
                         {% endfor %}
@@ -34,11 +34,11 @@
                 </div>
                 <div class="mb-3 text-center">
                     <label for="packageCreatedDate" class="form-label">Ngày tạo thùng</label> 
-                    <input class="form-select" type="text" id="packageCreatedDate" name="package_created_date" placeholder="Ngày tạo thùng" required>
+                    <input class="form-select" type="text" id="packageCreatedDate" name="package_created_date" placeholder="Ngày tạo thùng" required disabled>
                 </div>
                 <div class='mb-3 text-center'>
                     <label for="package_code_submit" class="form-label">Mã thùng F88 <span style="color:red;">&#40;* Bắt buộc &#41;</span> </label>
-                    <input type="text" name='package_code_submit' class="form-control" id="package_code_submit" placeholder="Nhập mã thùng F88" required>
+                    <input type="text" name='package_code_submit' class="form-control" id="package_code_submit" placeholder="Mã sẽ được gợi ý tự động" required readonly>
                 </div>
                 <div class='mb-3 text-center'>
                     <label for="regionChoice" class="form-label">Chọn khu vực thùng</label>
@@ -57,14 +57,17 @@
                 </div>
                 <div class='mb-3 text-center'>
                     <label for="partnerchoice">Đối tác lưu trữ</label>
-                    <select class="form-select" name='partner_name_choice' aria-label="Default select example" id='partnerchoice'>
-                        <option selected>Chọn đối tác lưu trữ</option>
-                        <option value="CRN">Crown</option>
+                    <select class="form-select" name='partner_id_choice' aria-label="Default select example" id='partnerchoice' disabled>
+                        <option value="" selected>Chọn đối tác lưu trữ</option>
+                        {% for partner in partners %}
+                        <option value="{{ partner.partner_id }}" data-requires-code="{{ partner.require_partner_code|yesno:'true,false' }}" data-requires-selection="{{ partner.require_partner_selection|yesno:'true,false' }}">{{ partner.partner_name }} ({{ partner.partner_code }})</option>
+                        {% endfor %}
                     </select>
+                    <div class="form-text" id="partnerRequirementMessage"></div>
                 </div>
                 <div class='mb-3 text-center'>
                     <label for="formGroupExampleInput" class="form-label">Mã thùng đối tác &#40;nếu có &#41;</label>
-                    <input type="text" name='partner_package_code_choice' class="form-control" id="partner_package_code" placeholder="Nhập mã thùng đối tác">
+                    <input type="text" name='partner_package_code_choice' class="form-control" id="partner_package_code" placeholder="Nhập mã thùng đối tác" disabled>
                 </div>
                 <div class='mb-3 text-center'>
                     <button type="submit" class="btn btn-success" onclick="copyToClipboard()">Tạo thùng mới</button>
@@ -74,54 +77,177 @@
     </form>
 </div>
 <script>
-    document.addEventListener("DOMContentLoaded", function () {
-        flatpickr("#packageCreatedDate", {
+    document.addEventListener('DOMContentLoaded', function() {
+        const packageType = document.getElementById('packageType');
+        const packageCreatedDateInput = document.getElementById('packageCreatedDate');
+        const regionRadios = document.querySelectorAll('input[name="region_choice"]');
+        const packageCodeInput = document.getElementById('package_code_submit');
+        const partnerSelect = document.getElementById('partnerchoice');
+        const partnerCodeInput = document.getElementById('partner_package_code');
+        const partnerRequirementMessage = document.getElementById('partnerRequirementMessage');
+        const baseUrl = "{% url 'get-next-package-sequence' %}";
+        const regionOriginalState = new Map();
+        const partnerSelectMustChoose = {{ partners_require_selection|yesno:"true,false" }};
+
+        const packageDatePicker = flatpickr("#packageCreatedDate", {
             mode: "single",
             dateFormat: "Y-m-d",
             altInput: true,
             altFormat: "Y-m-d",
+            onChange: restoreRegionsIfReady
         });
-    });
-</script>
-<script>
-    // Tự gen mã thùng ra khi chọn loại thùng và ngày tạo thùng 
-    document.addEventListener('DOMContentLoaded', function() {
-        const packageType = document.getElementById('packageType');
-        const packageCreatedDate = document.getElementById('packageCreatedDate');
-        const userRegion = "{{ region_code|safe }}";
-        //const userCTVCode = "{{ employee_code|safe }}"; Phần này chưa sử dụng
-        const packageCodeInput = document.getElementById('package_code_submit');
-        // Hàm cập nhật mã thùng liên tục vào input
-        function updatePackageCode() {
+        const packageCreatedDateAlt = packageDatePicker.altInput;
+
+        regionRadios.forEach(radio => {
+            regionOriginalState.set(radio.id, radio.disabled);
+        });
+
+        togglePartnerFields(false);
+        setDateEnabled(false);
+        disableRegionsForFlow();
+        restoreRegionsIfReady();
+
+        function togglePartnerFields(enable) {
+            partnerSelect.disabled = !enable;
+            partnerSelect.required = enable && partnerSelectMustChoose;
+            partnerCodeInput.disabled = !enable;
+            if (!enable) {
+                partnerSelect.value = '';
+                partnerCodeInput.value = '';
+                partnerCodeInput.required = false;
+                partnerRequirementMessage.textContent = '';
+            } else {
+                updatePartnerGuidance();
+            }
+        }
+
+        function setDateEnabled(enable) {
+            packageCreatedDateInput.disabled = !enable;
+            if (packageCreatedDateAlt) {
+                packageCreatedDateAlt.disabled = !enable;
+                if (enable) {
+                    packageCreatedDateAlt.classList.remove('disabled');
+                } else {
+                    packageCreatedDateAlt.classList.add('disabled');
+                }
+            }
+            if (!enable) {
+                packageDatePicker.clear();
+            }
+        }
+
+        function disableRegionsForFlow() {
+            regionRadios.forEach(radio => {
+                radio.disabled = true;
+            });
+        }
+
+        function restoreRegionsIfReady() {
+            const ready = Boolean(packageType.value && packageCreatedDateInput.value);
+            regionRadios.forEach(radio => {
+                const originallyDisabled = regionOriginalState.get(radio.id);
+                radio.disabled = !ready || originallyDisabled;
+            });
+            if (!ready) {
+                clearPackageCode();
+            } else {
+                maybeGeneratePackageCode();
+            }
+        }
+
+        function clearPackageCode() {
+            packageCodeInput.value = '';
+            togglePartnerFields(false);
+        }
+
+        function maybeGeneratePackageCode() {
+            const selectedRegion = document.querySelector('input[name="region_choice"]:checked');
+            if (!packageType.value || !packageCreatedDateInput.value || !selectedRegion || selectedRegion.disabled) {
+                clearPackageCode();
+                return;
+            }
+            generatePackageCode(selectedRegion.value);
+        }
+
+        function generatePackageCode(regionCode) {
             const selectedPackageType = packageType.value;
-            const createdDate = packageCreatedDate.value;
+            const createdDate = packageCreatedDateInput.value;
             if (!selectedPackageType || !createdDate) {
-                return; // Exit if not all fields are filled
+                clearPackageCode();
+                return;
             }
             const date = new Date(createdDate);
+            if (Number.isNaN(date.getTime())) {
+                clearPackageCode();
+                return;
+            }
             const yy = date.getFullYear().toString().slice(-2);
             const mm = (date.getMonth() + 1).toString().padStart(2, '0');
             const dd = date.getDate().toString().padStart(2, '0');
             const datePart = `${yy}${mm}${dd}`;
-    
-            const baseCode = `${selectedPackageType}-${datePart}-${userRegion}`;
-            const baseUrl = "{% url 'get-next-package-sequence' %}";
+            const baseCode = `${selectedPackageType}-${datePart}-${regionCode}`;
+
             fetch(`${baseUrl}?baseCode=${encodeURIComponent(baseCode)}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
                         packageCodeInput.value = `${baseCode}${data.nextSequence}`;
+                        togglePartnerFields(true);
                     } else {
+                        clearPackageCode();
                         alert(data.message || 'Không thể Gen mã thùng mới do sai cú pháp hoặc lỗi hệ thống!');
                     }
                 })
                 .catch(error => {
+                    clearPackageCode();
                     console.error('Lỗi tìm kiếm lũy kế thùng:', error);
-                    alert(data.message);
+                    alert('Không thể tra cứu mã thùng. Vui lòng thử lại.');
                 });
         }
-        packageType.addEventListener('change', updatePackageCode);
-        packageCreatedDate.addEventListener('change', updatePackageCode);
+
+        packageType.addEventListener('change', function() {
+            if (packageType.value) {
+                setDateEnabled(true);
+            } else {
+                setDateEnabled(false);
+            }
+            restoreRegionsIfReady();
+        });
+
+        if (packageCreatedDateAlt) {
+            packageCreatedDateAlt.addEventListener('input', restoreRegionsIfReady);
+        }
+        packageCreatedDateInput.addEventListener('change', restoreRegionsIfReady);
+
+        regionRadios.forEach(radio => {
+            radio.addEventListener('change', maybeGeneratePackageCode);
+        });
+
+        partnerSelect.addEventListener('change', updatePartnerGuidance);
+
+        function updatePartnerGuidance() {
+            if (partnerSelect.disabled) {
+                partnerRequirementMessage.textContent = '';
+                partnerCodeInput.required = false;
+                return;
+            }
+            const selectedOption = partnerSelect.options[partnerSelect.selectedIndex];
+            if (selectedOption && selectedOption.value) {
+                const requiresCode = selectedOption.dataset.requiresCode === 'true';
+                partnerCodeInput.required = requiresCode;
+                if (requiresCode) {
+                    partnerRequirementMessage.textContent = 'Đối tác này yêu cầu nhập mã thùng đối tác.';
+                    partnerRequirementMessage.classList.remove('text-muted');
+                } else {
+                    partnerRequirementMessage.textContent = 'Đối tác này không bắt buộc nhập mã thùng đối tác.';
+                    partnerRequirementMessage.classList.add('text-muted');
+                }
+            } else {
+                partnerRequirementMessage.textContent = partnerSelectMustChoose ? 'Vui lòng chọn đối tác lưu trữ.' : 'Chọn đối tác lưu trữ (nếu có).';
+                partnerRequirementMessage.classList.add('text-muted');
+                partnerCodeInput.required = false;
+            }
+        }
     });
 </script>
 {% comment %} Check Thùng {% endcomment %}

@@ -18,7 +18,10 @@ else:
     raise SystemExit('Database not reachable')
 PY
 
+python manage.py.makemigrations app_admindocuments --noinput
 python manage.py migrate --noinput
+
+python manage.py.makemigrations app_documents --noinput
 python manage.py collectstatic --noinput || true
 
 exec gunicorn documents.wsgi:application \

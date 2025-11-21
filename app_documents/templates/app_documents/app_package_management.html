@@ -51,7 +51,7 @@
                                     </div>
                                 </div>
                             </li>
-                        </div>    
+                        </div>
                         <div class="col-12">
                             <li class="nav-item">
                                 <div class="mb-3">
@@ -64,6 +64,16 @@
                                             {{region.region_name}}</option>
                                         {% endfor %}
                                     </select>
+                                </div>
+                            </li>
+                        </div>
+                        <div class="col-12">
+                            <li class="nav-item">
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" value="1" id="filterEmptyPackage" name="filter_empty_package" {% if request.GET.filter_empty_package == '1' %}checked{% endif %}>
+                                    <label class="form-check-label" for="filterEmptyPackage">
+                                        Chỉ hiển thị thùng chưa có quyển chứng từ
+                                    </label>
                                 </div>
                             </li>
                         </div>
@@ -172,6 +182,7 @@
                             <th style="white-space:nowrap">Mã thùng F88 Cũ</th>
                             <th style="white-space:nowrap">Mã thùng Đối tác</th> 
                             <th style="white-space:nowrap">Đối tác</th>
+                            <th>Số quyển trong thùng</th>
                             <th>Thông tin tạo thùng</th>
                             <th>Loại thùng</th>              
                             <th>Khu vực</th>    
@@ -183,29 +194,44 @@
                         {% if package_list %}
                         <tr>
                             {% for package in package_list %}
+                            {% with partnerpkg=package.partnerpackage %}
                             <td class="align-center">{{forloop.counter|add:package_list.start_index|add:-1}}</td>
                             <td class="align-center" style="white-space:nowrap">{{ package.package_code }}</td>
                             <td class="align-center" style="white-space:nowrap">{{ package.package_code_old|default_if_none:"" }}</td>
-                            <td class="align-center">{{ package.partnerpackage.partner_package_code}}</td>
-                            <td>{{ package.partnerpackage.partner_name }}</td>
+                            <td class="align-center">
+                                {% if partnerpkg %}
+                                    {{ partnerpkg.partner_package_code|default_if_none:"" }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if partnerpkg %}
+                                    {% if partnerpkg.partner %}
+                                        {{ partnerpkg.partner.partner_name }} ({{ partnerpkg.partner.partner_code }})
+                                    {% else %}
+                                        {{ partnerpkg.partner_name }}
+                                    {% endif %}
+                                {% endif %}
+                            </td>
+                            <td class="align-center">{{ package.folder_count|default:0 }}</td>
                             <td style="white-space:nowrap">{{ package.created_by }}<br/>{{package.created_date|date:'Y-m-d'}}</td>
                             <td>{{ package.package_type.package_type }}</td>
                             <td>{{ package.region_id.region_name}}
                             <td> 
                                 {% comment %} <div class="dropdown"> {% endcomment %}
-                                <button class="btn btn-{% if package.partnerpackage.status_id.status_id|stringformat:'s' == '1' %}secondary{% elif package.partnerpackage.status_id.status_id|stringformat:'s' == '2' %}outline-success{% elif package.partnerpackage.status_id.status_id|stringformat:'s' == '3' %}warning{%endif%} btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="changePartnerStatus">
-                                    {{ package.partnerpackage.status_id.package_status_name }}
+                                {% if partnerpkg and partnerpkg.status_id %}
+                                <button class="btn btn-{% if partnerpkg.status_id.status_id|stringformat:'s' == '1' %}secondary{% elif partnerpkg.status_id.status_id|stringformat:'s' == '2' %}outline-success{% elif partnerpkg.status_id.status_id|stringformat:'s' == '3' %}warning{%endif%} btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="changePartnerStatus">
+                                    {{ partnerpkg.status_id.package_status_name }}
                                 </button>
                                 <ul class="dropdown-menu">
                                     {% for packagestatus in partnerpackage_status %}
-                                    {% if packagestatus.status_id|stringformat:"s" != package.partnerpackage.status_id.status_id|stringformat:"s" %}
+                                    {% if packagestatus.status_id|stringformat:"s" != partnerpkg.status_id.status_id|stringformat:"s" %}
                                     <li>
                                         <a class="dropdown-item" 
                                             href="#" data-status-value= "{{ packagestatus.status_id}}" 
                                             data-bs-toggle="modal"  
                                             data-package_id= "{{package.package_id}}" 
                                             data-bs-target="#changePartnerStatusModalConfirm"
-                                            data-bs-whatever="{{ package.partnerpackage.status_id.package_status_name }}" 
+                                            data-bs-whatever="{{ partnerpkg.status_id.package_status_name }}" 
                                             data-bs-package-code="{{ package.package_code }}"
                                             data-bs-status-new = "{{ packagestatus.package_status_name }}"                                         
                                             data-bs-status-new-id = "{{ packagestatus.status_id }}"
@@ -215,18 +241,22 @@
                                     {% endif %}
                                     {% endfor %}
                                 </ul>
+                                {% else %}
+                                <span class="badge text-bg-secondary">Chưa gán đối tác</span>
+                                {% endif %}
                                 {% comment %} </div> {% endcomment %}
                             </td>
                             <td>
                                 <button type="button" class="btn btn-primary btn-sm edit-package-button" 
                                         data-bs-toggle="modal" 
                                         data-package-id="{{ package.package_id }}"
-                                        data-partner-package-code="{{ package.partnerpackage.partner_package_code }}" 
-                                        data-partner-name = "{{ package.partnerpackage.partner_name }}"
+                                        data-partner-package-code="{% if partnerpkg %}{{ partnerpkg.partner_package_code|default_if_none:'' }}{% endif %}" 
+                                        data-partner-id = "{% if partnerpkg and partnerpkg.partner %}{{ partnerpkg.partner.partner_id }}{% endif %}"
                                         data-old-package-code = "{{ package.package_code_old | default_if_none:''}}"
                                         data-package-code="{{ package.package_code }}">Chỉnh sửa
                                 </button>
                             </td> 
+                            {% endwith %}
                         </tr>
                         {% empty %}
                         <tr><td colspan="10">Không có chứng từ được lọc.</td></tr>
@@ -255,10 +285,13 @@
                     </div>
                     <div class='mb-3'>
                         <label for="partnerchoice">Đối tác lưu trữ</label>
-                        <select class="form-select" name='partner_name_choice' aria-label="Default select example" id='partnerchoice' required disabled>
+                        <select class="form-select" name='partner_id_choice' aria-label="Default select example" id='partnerchoice' disabled>
                             <option value = "">Chọn đối tác lưu trữ</option>
-                            <option value='CRN'>Crown</option>
+                            {% for partner in partners %}
+                            <option value='{{ partner.partner_id }}' data-requires-code="{{ partner.require_partner_code|yesno:'true,false' }}">{{ partner.partner_name }} ({{ partner.partner_code }})</option>
+                            {% endfor %}
                         </select>
+                        <div class="form-text" id="partnerRequirementMessageEdit"></div>
                     </div>
                     <div class="mb-3">
                         <label for="" class="form-label">Mã thùng cũ &#40;nếu có &#41;</label>
@@ -278,35 +311,70 @@
     document.addEventListener('DOMContentLoaded', function() {
         const editModal = new bootstrap.Modal(document.getElementById('editPackageModal'));
         const formEditPackage = document.getElementById('formEditPackage');
+        const partnerCodeInput = document.getElementById('parnertCodesubmit');
+        const partnerSelect = document.getElementById('partnerchoice');
+        const partnerRequirementMessage = document.getElementById('partnerRequirementMessageEdit');
+        const partnersRequireSelection = {{ partners_require_selection|yesno:'true,false' }};
         
         document.querySelectorAll('.edit-package-button').forEach(button => {
             button.addEventListener('click', function() {
                 const packageId = this.dataset.packageId;
                 const packageCode = this.dataset.packageCode;
-                const partnerPackageCode = this.dataset.partnerPackageCode;
-                const partnerName = this.dataset.partnerName;
+                const partnerPackageCode = this.dataset.partnerPackageCode || '';
+                const partnerId = this.dataset.partnerId || '';
                 const oldPackageCode = this.dataset.oldPackageCode;
                 const actionUrl = `/package/edit/${packageId}/`;
                 
                 document.getElementById('editModalLabel').innerText = `Điều chỉnh thùng ${packageCode}`;
-                document.getElementById('parnertCodesubmit').value = partnerPackageCode;
-                document.getElementById('partnerchoice').value = partnerName;
+                partnerCodeInput.value = partnerPackageCode;
+                partnerSelect.value = partnerId;
                 document.getElementById('oldPackageCode').value = oldPackageCode ? oldPackageCode : '';
                 formEditPackage.action = actionUrl;
+                updatePartnerRequirementEdit();
                 editModal.show();
             });
         });
         document.getElementById('showUpValue').addEventListener('click', function() {
-            document.getElementById('parnertCodesubmit').disabled = false;
-            document.getElementById('partnerchoice').disabled = false;
+            partnerCodeInput.disabled = false;
+            partnerSelect.disabled = false;
+            partnerSelect.required = partnersRequireSelection;
             document.getElementById('oldPackageCode').disabled = false;
+            updatePartnerRequirementEdit();
         });
     
         document.getElementById('editPackageModal').addEventListener('hidden.bs.modal', function() {
-            document.getElementById('parnertCodesubmit').disabled = true;
-            document.getElementById('partnerchoice').disabled = true;
+            partnerCodeInput.disabled = true;
+            partnerSelect.disabled = true;
+            partnerSelect.required = false;
+            partnerCodeInput.required = false;
+            partnerRequirementMessage.textContent = '';
             document.getElementById('oldPackageCode').disabled = true;
         });
+        partnerSelect.addEventListener('change', updatePartnerRequirementEdit);
+        function updatePartnerRequirementEdit() {
+            if (partnerSelect.disabled) {
+                partnerRequirementMessage.textContent = '';
+                partnerRequirementMessage.classList.remove('text-muted');
+                partnerCodeInput.required = false;
+                return;
+            }
+            const option = partnerSelect.options[partnerSelect.selectedIndex];
+            if (option && option.value) {
+                const requiresCode = option.dataset.requiresCode === 'true';
+                partnerCodeInput.required = requiresCode;
+                if (requiresCode) {
+                    partnerRequirementMessage.textContent = 'Đối tác này yêu cầu nhập mã thùng đối tác.';
+                    partnerRequirementMessage.classList.remove('text-muted');
+                } else {
+                    partnerRequirementMessage.textContent = 'Đối tác này không bắt buộc nhập mã thùng đối tác.';
+                    partnerRequirementMessage.classList.add('text-muted');
+                }
+            } else {
+                partnerRequirementMessage.textContent = partnersRequireSelection ? 'Vui lòng chọn đối tác lưu trữ.' : 'Chọn đối tác lưu trữ (nếu có).';
+                partnerRequirementMessage.classList.add('text-muted');
+                partnerCodeInput.required = false;
+            }
+        }
         formEditPackage.addEventListener('submit', function(event) {
             event.preventDefault();
             const formData = $(this).serialize(); 
@@ -319,7 +387,11 @@
                     location.reload();
                 },
                 error: function(response) {
-                    alert('Lỗi xảy ra khi lưu dữ liệu. Vui lòng thử lại, hoặc liên hệ admin');
+                    if (response.responseJSON && response.responseJSON.error) {
+                        alert(response.responseJSON.error);
+                    } else {
+                        alert('Lỗi xảy ra khi lưu dữ liệu. Vui lòng thử lại, hoặc liên hệ admin');
+                    }
                 }
             });
         });
@@ -335,6 +407,10 @@ document.getElementById('clearFilters').addEventListener('click', function() {
     document.getElementById('FilterPackageStatus').value = '';
     document.getElementById('FilterRegion').value = '';
     document.getElementById('exampleDataListUserTaoThung').value = '';
+    const emptyCheckbox = document.getElementById('filterEmptyPackage');
+    if (emptyCheckbox) {
+        emptyCheckbox.checked = false;
+    }
 });
 </script>
 <!-- Modal -->

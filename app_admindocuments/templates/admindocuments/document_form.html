@@ -1,0 +1,24 @@
+{% extends "admindocuments/base.html" %}
+{% block title %}Danh sách văn bản hành chính{% endblock %}
+
+{% block content %}
+<h2 class="text-2xl font-semibold text-gray-700 mb-4">Danh sách văn bản hành chính</h2>
+
+<div class="bg-white rounded-lg shadow p-6">
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    <table class="w-full">
+      {% for field in form %}
+      <tr>
+        <th class="text-left align-top w-1/3 py-2 pr-4 text-sm font-medium text-gray-600">{{ field.label_tag }}</th>
+        <td class="py-2">{{ field }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    <div class="mt-4 flex gap-3">
+      <button type="submit" class="bg-f88green text-white px-4 py-2 rounded-lg shadow hover:bg-f88dark">💾 Lưu văn bản</button>
+      <a href="{% url 'admindocuments:admindocuments_list' %}" class="bg-gray-500 text-white px-4 py-2 rounded-lg shadow hover:bg-gray-600">↩ Quay lại</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
