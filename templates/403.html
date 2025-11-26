@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>500 - Lỗi hệ thống</title>
+    <title>403 - Không có quyền truy cập</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = { theme: { extend: { colors: { f88: '#16a34a', f88dark: '#0b6b2f' } } } }
@@ -19,9 +19,15 @@
     <div class="flex justify-center mb-4">
       <a href="{% url 'home' %}"><img src="https://f88.vn/images/root/logo-f88-primary.svg" alt="F88" class="h-12"></a>
     </div>
-    <h1 class="text-2xl font-semibold text-red-600 mb-2">500 - Đã xảy ra lỗi</h1>
-    <p class="text-gray-700 mb-6">Xin lỗi bạn vì sự cố không mong muốn. Vui lòng thử tải lại trang hoặc liên hệ hỗ trợ.</p>
-    <img src="{% static 'media/images/404/meo404.png' %}" class="mx-auto w-48 mb-6" alt="500">
+    <h1 class="text-2xl font-semibold text-red-600 mb-2">403 - Không có quyền truy cập</h1>
+    <p class="text-gray-700 mb-4">Bạn không có quyền truy cập trang này.</p>
+    {% if messages %}
+      <div class="space-y-2 mb-4">
+        {% for message in messages %}
+          <div class="rounded-lg border border-amber-200 bg-amber-50 text-amber-700 px-4 py-2 text-sm">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
     <div class="flex flex-col sm:flex-row sm:justify-center gap-3">
       <a href="{% url 'home' %}" class="inline-flex justify-center items-center rounded-lg bg-f88 hover:bg-f88dark text-white font-semibold px-4 py-2.5 transition">Về trang chủ</a>
     </div>

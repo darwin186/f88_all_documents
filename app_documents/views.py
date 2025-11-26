@@ -16,16 +16,20 @@ from django.utils import timezone, dateparse
 from django.utils.dateparse import parse_datetime
 from django.conf import settings
 from django.db import IntegrityError, transaction, connection
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Max, Q, Min
 from django.forms.models import model_to_dict
 from django.core.serializers.json import DjangoJSONEncoder
 from urllib.parse import urlencode
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
 import json
 import re
 import logging
 import os
+import requests
 import pandas as pd
 from datetime import datetime, timedelta
+from django.db.models.functions import ExtractHour
 import openpyxl
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -66,15 +70,67 @@ from .models import (
     BorrowingStatus
 )
 # Import các form
-from .forms import PackageForm
+from .forms import PackageForm, GapoPasswordResetForm
 # Import các custom utilities
 from .access_controls import AccessControls
 from .utils import get_user_context, check_on_time
+from .dashboard import parse_dates, get_dashboard_metrics, get_folder_received_metrics
 class CustomPasswordResetView(PasswordResetView):
+    form_class = GapoPasswordResetForm
     email_template_name = 'registration/password_reset_email.html'
     subject_template_name = 'registration/password_reset_subject.txt'
     html_email_template_name = 'registration/password_reset_email.html'
+    
+    def form_valid(self, form):
+        gapo_url = getattr(settings, 'GAPO_API_URL', '')
+        gapo_api_key = getattr(settings, 'GAPO_BOT_API_KEY', '')
+        gapo_bot_id = getattr(settings, 'GAPO_BOT_ID', '')
+        if not (gapo_url and gapo_api_key and gapo_bot_id):
+            messages.error(self.request, "Chưa cấu hình GAPO bot. Liên hệ quản trị.")
+            return self.form_invalid(form)
+        user = form.get_user()
+        if not user:
+            messages.error(self.request, "Không tìm thấy tài khoản phù hợp.")
+            return self.form_invalid(form)
+        try:
+            self._send_gapo_reset(user, gapo_url, gapo_api_key, gapo_bot_id)
+            messages.success(self.request, "Thông tin đã được gửi qua địa chỉ GAPO của bạn.")
+            return HttpResponseRedirect(self.get_success_url())
+        except ValueError as ve:
+            messages.error(self.request, str(ve))
+        except Exception as exc:
+            logger.error("Gửi reset password qua GAPO thất bại", exc_info=exc)
+            messages.error(self.request, "Gửi qua GAPO thất bại. Vui lòng thử lại sau.")
+        return self.form_invalid(form)
 
+    def _send_gapo_reset(self, user, gapo_url, gapo_api_key, gapo_bot_id):
+        profile = getattr(user, "userprofile", None)
+        gapo_user_id = getattr(profile, "gapo_user_id", None)
+        if not gapo_user_id:
+            raise ValueError(f"User {user.username} chưa có GAPO ID. Liên hệ admin để cập nhật.")
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = self.token_generator.make_token(user)
+        reset_path = reverse('password_reset_confirm', kwargs={'uidb64': uid, 'token': token})
+        reset_url = self.request.build_absolute_uri(reset_path)
+        payload = {
+            "bot_id": gapo_bot_id,
+            "receiver_id": int(gapo_user_id),
+            "body": {
+                "type": "text",
+                "text": f"Bạn yêu cầu đặt lại mật khẩu. Nhấn vào liên kết sau để đặt lại: {reset_url}",
+                "is_markdown_text": True
+            },
+        }
+        headers = {
+            "x-gapo-api-key": gapo_api_key,
+            "Content-Type": "application/json",
+        }
+        print(payload)
+        response = requests.post(gapo_url, json=payload, headers=headers, timeout=10)
+        if response.status_code >= 400:
+            print(response.text)
+            raise ValueError(f"GAPO trả về lỗi {response.status_code}: {response.text}")
+        
 logger = logging.getLogger(__name__)
 
 @login_required
@@ -792,6 +848,7 @@ def receive_folder_view(request):
         drop_list_users = user_by_role
         drop_list_folder_type = FolderType.objects.all()
         drop_list_folder_status = FolderStatus.objects.all()
+        drop_list_folder_status_received = FolderStatus.objects.filter(is_received=True)
         regions = Region.objects.all()
         context = {
             **user_context,
@@ -801,6 +858,7 @@ def receive_folder_view(request):
             'drop_list_users': drop_list_users,
             'drop_list_folder_type': drop_list_folder_type,
             'drop_list_folder_status': drop_list_folder_status,
+            'drop_list_folder_status_received': drop_list_folder_status_received,
             'regions': regions,
             'change_request':change_requests_map,
         }
@@ -1469,10 +1527,55 @@ def documents_dashboard (request):
      # Get user context from the utility function
     user = request.user
     user_context = get_user_context(user)
+    if not user_context.get("is_admin"):
+        messages.error(request, "Bạn không có quyền truy cập dashboard.")
+        return redirect("home")
+
+    # Thời gian lọc
+    start_date_str = request.GET.get("start_date")
+    end_date_str = request.GET.get("end_date")
+    checker_user_id = request.GET.get("checker_user")
+    heatmap_mode = request.GET.get("heatmap_mode", "hour")
+
+    start_date, end_date = parse_dates(start_date_str, end_date_str)
+    metrics = get_dashboard_metrics(start_date, end_date, checker_user_id, heatmap_mode)
+
     context = {
         **user_context,
-          'user': user, }
-    return render(request, 'app_documents/app_dashboard.html',context)
+        "user": user,
+        "start_date": start_date.strftime("%Y-%m-%d"),
+        "end_date": end_date.strftime("%Y-%m-%d"),
+        "approved_contracts": metrics["approved_contracts"],
+        "first_time_contracts": metrics["first_time_contracts"],
+        "checker_user_id": checker_user_id or "",
+        "drop_checkers": metrics["drop_checkers"],
+        "heatmap_list": metrics["heatmap_list"],
+        "ranking": metrics["ranking"],
+        "heatmap_mode": heatmap_mode,
+    }
+    return render(request, 'app_documents/app_dashboard.html', context)
+
+@login_required
+def folder_received_dashboard(request):
+    user = request.user
+    user_context = get_user_context(user)
+    if not user_context.get("is_admin"):
+        messages.error(request, "Bạn không có quyền truy cập báo cáo này.")
+        return redirect("home")
+
+    start_date_str = request.GET.get("start_date")
+    end_date_str = request.GET.get("end_date")
+    start_date, end_date = parse_dates(start_date_str, end_date_str)
+    metrics = get_folder_received_metrics(start_date, end_date)
+
+    context = {
+        **user_context,
+        "user": user,
+        "start_date": start_date.strftime("%Y-%m-%d"),
+        "end_date": end_date.strftime("%Y-%m-%d"),
+        "folder_received_count": metrics["folder_received_count"],
+    }
+    return render(request, "app_documents/app_dashboard_folder.html", context)
 
 def export_excel_folder_fail(request):
     documents_created_date = request.GET.get('filterfoldermonth', None) 

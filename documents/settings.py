@@ -188,5 +188,10 @@ EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL')
 
+# GAPO bot settings
+GAPO_API_URL = os.getenv('GAPO_API_URL')
+GAPO_BOT_API_KEY = (os.getenv('BOT_API_KEY') or '').strip()
+GAPO_BOT_ID = os.getenv('BOT_ID')
+
 AUTH_PASSWORD_RESET_SUBJECT = 'registration/password_reset_subject.txt'
 PASSWORD_RESET_EMAIL_TEMPLATE = 'registration/password_reset_email.html'

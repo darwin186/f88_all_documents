@@ -1,151 +1,137 @@
 {% extends 'app_documents/base.html' %} 
 {% block content %}
-
-<!-- Table 2 - Bootstrap Brain Component -->
-<section class="py-3 py-md-5">
+<section class="py-4">
   <div class="container">
-    <div class="row justify-content-center">
-      <div class="col-12 col-lg-9 col-xl-8">
-        <div class="card widget-card border-light shadow-sm">
-          <div class="card-body p-4">
-            <h5 class="card-title widget-card-title mb-4">Marketing Campaigns</h5>
-            <div class="table-responsive">
-              <table class="table table-borderless bsb-table-xl text-nowrap align-middle m-0">
-                <thead>
-                  <tr>
-                    <th>Campaign</th>
-                    <th>Client</th>
-                    <th>Project</th>
-                    <th>Status</th>
-                    <th>Budget</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>
-                      <div class="d-flex align-items-center">
-                        <span class="fs-6 bsb-w-35 bsb-h-35 text-bg-primary rounded-circle d-flex align-items-center justify-content-center me-2">
-                          <i class="bi bi-twitter-x"></i>
-                        </span>
-                        <div>
-                          <h6 class="m-0">Twitter</h6>
-                          <span class="text-secondary fs-7">SMM</span>
+    <div class="row mb-3">
+      <div class="col">
+        <h3 class="fw-bold text-success">Dashboard - Hiệu suất CTV</h3>
+        <p class="text-muted mb-0">Chỉ tiêu theo thời gian.</p>
+      </div>
+    </div>
+
+    <form method="get" class="row g-3 align-items-end mb-4">
+      <div class="col-sm-4 col-md-3">
+        <label for="start_date" class="form-label">Từ ngày</label>
+        <input type="date" id="start_date" name="start_date" value="{{ start_date }}" class="form-control">
+      </div>
+      <div class="col-sm-4 col-md-3">
+        <label for="end_date" class="form-label">Đến ngày</label>
+        <input type="date" id="end_date" name="end_date" value="{{ end_date }}" class="form-control">
+      </div>
+      <div class="col-sm-4 col-md-3">
+        <label for="checker_user" class="form-label">Người duyệt (CTV)</label>
+        <select id="checker_user" name="checker_user" class="form-select">
+          <option value="">Tất cả</option>
+          {% for checker in drop_checkers %}
+            <option value="{{ checker.id }}" {% if checker_user_id|stringformat:"s" == checker.id|stringformat:"s" %}selected{% endif %}>{{ checker.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-4 col-md-3">
+        <label for="heatmap_mode" class="form-label">Chế độ heatmap</label>
+        <select id="heatmap_mode" name="heatmap_mode" class="form-select">
+          <option value="hour" {% if heatmap_mode == 'hour' %}selected{% endif %}>Theo giờ (8h-18h)</option>
+          <option value="week" {% if heatmap_mode == 'week' %}selected{% endif %}>Theo tuần (Th2-Th7)</option>
+          <option value="month" {% if heatmap_mode == 'month' %}selected{% endif %}>Theo ngày trong tháng</option>
+        </select>
+      </div>
+      <div class="col-sm-4 col-md-3 d-flex gap-2">
+        <button type="submit" class="btn btn-success">Lọc</button>
+        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">Xóa lọc</a>
+      </div>
+    </form>
+
+    <div class="row g-3">
+      <div class="col-12 col-md-6 col-lg-4">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <div>
+                <div class="text-uppercase text-muted small">Hợp đồng CTV đã duyệt</div>
+                <h2 class="fw-bold text-success mb-0">{{ approved_contracts|default:0 }}</h2>
+              </div>
+              <span class="badge bg-success-subtle text-success">Distinct contract</span>
+            </div>
+            <p class="mb-0 text-muted">Số lượng HĐCC có trạng thái đã duyệt (document_status.is_checked=True) trong khoảng {{ start_date }} → {{ end_date }}.</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-md-6 col-lg-4">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <div>
+                <div class="text-uppercase text-muted small">Duyệt lần đầu</div>
+                <h2 class="fw-bold text-primary mb-0">{{ first_time_contracts|default:0 }}</h2>
+              </div>
+              <span class="badge bg-primary-subtle text-primary">First approval</span>
+            </div>
+            <p class="mb-0 text-muted">Cộng tác viên thao tác duyệt lần đầu (ghi log DocumentTransactionChecking) cho HĐCC bất kỳ trong khoảng {{ start_date }} → {{ end_date }}.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mt-2">
+            <div class="col-12 col-lg-8">
+              <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                  <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0 fw-semibold">Heatmap (lượt duyệt)</h5>
+                    <span class="text-muted small">Dựa trên thời gian lọc hiện tại</span>
+                  </div>
+                  <div class="row row-cols-6 g-2">
+                    {% for item in heatmap_list %}
+                    <div class="col">
+                      <div class="p-2 text-center rounded border {% if item.count > 0 %}bg-success-subtle{% else %}bg-light{% endif %}">
+                        <div class="fw-semibold">
+                          {% if heatmap_mode == 'week' %}
+                            T{{ item.hour }}
+                          {% elif heatmap_mode == 'month' %}
+                            Ngày {{ item.hour }}
+                          {% else %}
+                            {{ item.hour }}h
+                          {% endif %}
                         </div>
+                        <div class="text-muted small">{{ item.count }} lượt</div>
                       </div>
-                    </td>
-                    <td>
-                      <h6 class="mb-1">Oliver</h6>
-                      <span class="text-secondary fs-7">United States</span>
-                    </td>
-                    <td>
-                      <h6 class="mb-1">Bootstrap</h6>
-                      <span class="text-secondary fs-7">v5.3+</span>
-                    </td>
-                    <td>
-                      <span class="badge bg-danger bsb-w-85">Pending</span>
-                    </td>
-                    <td>$495</td>
-                  </tr>
-                  <tr>
-                    <td>
-                      <div class="d-flex align-items-center">
-                        <span class="fs-6 bsb-w-35 bsb-h-35 text-bg-success rounded-circle d-flex align-items-center justify-content-center me-2">
-                          <i class="bi bi-facebook"></i>
-                        </span>
-                        <div>
-                          <h6 class="m-0">Facebook</h6>
-                          <span class="text-secondary fs-7">PPC</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <h6 class="mb-1">Emma</h6>
-                      <span class="text-secondary fs-7">United Kingdom</span>
-                    </td>
-                    <td>
-                      <h6 class="mb-1">WordPress</h6>
-                      <span class="text-secondary fs-7">v6.3+</span>
-                    </td>
-                    <td>
-                      <span class="badge bg-success bsb-w-85">Paid</span>
-                    </td>
-                    <td>$950</td>
-                  </tr>
-                  <tr>
-                    <td>
-                      <div class="d-flex align-items-center">
-                        <span class="fs-6 bsb-w-35 bsb-h-35 text-bg-danger rounded-circle d-flex align-items-center justify-content-center me-2">
-                          <i class="bi bi-github"></i>
-                        </span>
-                        <div>
-                          <h6 class="m-0">Github</h6>
-                          <span class="text-secondary fs-7">PPC</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <h6 class="mb-1">Isabella</h6>
-                      <span class="text-secondary fs-7">Canada</span>
-                    </td>
-                    <td>
-                      <h6 class="mb-1">React</h6>
-                      <span class="text-secondary fs-7">v18+</span>
-                    </td>
-                    <td>
-                      <span class="badge bg-info bsb-w-85">Paused</span>
-                    </td>
-                    <td>$700</td>
-                  </tr>
-                  <tr>
-                    <td>
-                      <div class="d-flex align-items-center">
-                        <span class="fs-6 bsb-w-35 bsb-h-35 bg-info text-white rounded-circle d-flex align-items-center justify-content-center me-2">
-                          <i class="bi bi-youtube"></i>
-                        </span>
-                        <div>
-                          <h6 class="m-0">YouTube</h6>
-                          <span class="text-secondary fs-7">SMM</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <h6 class="mb-1">William</h6>
-                      <span class="text-secondary fs-7">UAE</span>
-                    </td>
-                    <td>
-                      <h6 class="mb-1">Vue</h6>
-                      <span class="text-secondary fs-7">v3+</span>
-                    </td>
-                    <td>
-                      <span class="badge bg-warning bsb-w-85">Active</span>
-                    </td>
-                    <td>$875</td>
-                  </tr>
-                  <tr>
-                    <td>
-                      <div class="d-flex align-items-center">
-                        <span class="fs-6 bsb-w-35 bsb-h-35 bg-warning text-white rounded-circle d-flex align-items-center justify-content-center me-2">
-                          <i class="bi bi-google"></i>
-                        </span>
-                        <div>
-                          <h6 class="m-0">Google</h6>
-                          <span class="text-secondary fs-7">SEM</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <h6 class="mb-1">Preston</h6>
-                      <span class="text-secondary fs-7">Australia</span>
-                    </td>
-                    <td>
-                      <h6 class="mb-1">Svelte</h6>
-                      <span class="text-secondary fs-7">v4+</span>
-                    </td>
-                    <td>
-                      <span class="badge bg-primary bsb-w-85">Closed</span>
-                    </td>
-                    <td>$1230</td>
-                  </tr>
+                    </div>
+                    {% endfor %}
+                  </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-lg-4">
+              <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                  <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0 fw-semibold">Danh sách cộng tác viên duyệt</h5>
+                    <span class="text-muted small">Theo thời gian lọc</span>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                      <thead class="table-light">
+                        <tr>
+                          <th>#</th>
+                          <th>CTV</th>
+                          <th class="text-end">Lượt</th>
+                          <th class="text-end">HĐ duyệt</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for row in ranking %}
+                        <tr>
+                          <td>{{ forloop.counter }}</td>
+                          <td>
+                            <div class="fw-semibold">{{ row.name }}</div>
+                            <div class="text-muted small">First: {{ row.first_approvals }}</div>
+                          </td>
+                          <td class="text-end">{{ row.total_actions }}</td>
+                          <td class="text-end">{{ row.approved_contracts }}</td>
+                        </tr>
+                  {% empty %}
+                  <tr><td colspan="4" class="text-muted text-center">Không có dữ liệu</td></tr>
+                  {% endfor %}
                 </tbody>
               </table>
             </div>
@@ -155,145 +141,4 @@
     </div>
   </div>
 </section>
-
-<!-- Card 1 - Bootstrap Brain Component -->
-<section class="py-3 py-md-5">
-  <div class="container">
-    <div class="row justify-content-center">
-      <div class="col-12 col-lg-10 col-xl-8 col-xxl-7">
-        <div class="row gy-4">
-          <div class="col-12 col-sm-6">
-            <div class="card widget-card border-light shadow-sm">
-              <div class="card-body p-4">
-                <div class="row">
-                  <div class="col-8">
-                    <h5 class="card-title widget-card-title mb-3">Sales</h5>
-                    <h4 class="card-subtitle text-body-secondary m-0">$6,820</h4>
-                  </div>
-                  <div class="col-4">
-                    <div class="d-flex justify-content-end">
-                      <div class="lh-1 text-white bg-info rounded-circle p-3 d-flex align-items-center justify-content-center">
-                        <i class="bi bi-truck fs-4"></i>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div class="row">
-                  <div class="col-12">
-                    <div class="d-flex align-items-center mt-3">
-                      <span class="lh-1 me-3 bg-danger-subtle text-danger rounded-circle p-1 d-flex align-items-center justify-content-center">
-                        <i class="bi bi-arrow-right-short bsb-rotate-45"></i>
-                      </span>
-                      <div>
-                        <p class="fs-7 mb-0">-9%</p>
-                        <p class="fs-7 mb-0 text-secondary">since last week</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="col-12 col-sm-6">
-            <div class="card widget-card border-light shadow-sm">
-              <div class="card-body p-4">
-                <div class="row">
-                  <div class="col-8">
-                    <h5 class="card-title widget-card-title mb-3">Earnings</h5>
-                    <h4 class="card-subtitle text-body-secondary m-0">$21,900</h4>
-                  </div>
-                  <div class="col-4">
-                    <div class="d-flex justify-content-end">
-                      <div class="lh-1 text-white bg-info rounded-circle p-3 d-flex align-items-center justify-content-center">
-                        <i class="bi bi-currency-dollar fs-4"></i>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div class="row">
-                  <div class="col-12">
-                    <div class="d-flex align-items-center mt-3">
-                      <span class="lh-1 me-3 bg-success-subtle text-success rounded-circle p-1 d-flex align-items-center justify-content-center">
-                        <i class="bi bi-arrow-right-short bsb-rotate-n45"></i>
-                      </span>
-                      <div>
-                        <p class="fs-7 mb-0">+26%</p>
-                        <p class="fs-7 mb-0 text-secondary">since last week</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="col-12 col-sm-6">
-            <div class="card widget-card border-light shadow-sm">
-              <div class="card-body p-4">
-                <div class="row">
-                  <div class="col-8">
-                    <h5 class="card-title widget-card-title mb-3">Visitors</h5>
-                    <h4 class="card-subtitle text-body-secondary m-0">3,764</h4>
-                  </div>
-                  <div class="col-4">
-                    <div class="d-flex justify-content-end">
-                      <div class="lh-1 text-white bg-info rounded-circle p-3 d-flex align-items-center justify-content-center">
-                        <i class="bi bi-person fs-4"></i>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div class="row">
-                  <div class="col-12">
-                    <div class="d-flex align-items-center mt-3">
-                      <span class="lh-1 me-3 bg-success-subtle text-success rounded-circle p-1 d-flex align-items-center justify-content-center">
-                        <i class="bi bi-arrow-right-short bsb-rotate-n45"></i>
-                      </span>
-                      <div>
-                        <p class="fs-7 mb-0">+69%</p>
-                        <p class="fs-7 mb-0 text-secondary">since last week</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="col-12 col-sm-6">
-            <div class="card widget-card border-light shadow-sm">
-              <div class="card-body p-4">
-                <div class="row">
-                  <div class="col-8">
-                    <h5 class="card-title widget-card-title mb-3">Orders</h5>
-                    <h4 class="card-subtitle text-body-secondary m-0">786</h4>
-                  </div>
-                  <div class="col-4">
-                    <div class="d-flex justify-content-end">
-                      <div class="lh-1 text-white bg-info rounded-circle p-3 d-flex align-items-center justify-content-center">
-                        <i class="bi bi-cart fs-4"></i>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div class="row">
-                  <div class="col-12">
-                    <div class="d-flex align-items-center mt-3">
-                      <span class="lh-1 me-3 bg-danger-subtle text-danger rounded-circle p-1 d-flex align-items-center justify-content-center">
-                        <i class="bi bi-arrow-right-short bsb-rotate-45"></i>
-                      </span>
-                      <div>
-                        <p class="fs-7 mb-0">-21%</p>
-                        <p class="fs-7 mb-0 text-secondary">since last week</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
 {% endblock %}

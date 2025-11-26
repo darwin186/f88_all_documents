@@ -20,6 +20,26 @@ class CustomPasswordResetForm(PasswordResetForm):
             raise forms.ValidationError('Không tìm thấy tài khoản với Email này.') 
         return email
 
+class GapoPasswordResetForm(forms.Form):
+    username = forms.CharField(max_length=150, label="Tài khoản (username)")
+    email = forms.EmailField(label="Email đã đăng ký")
+
+    def clean(self):
+        cleaned = super().clean()
+        username = cleaned.get("username")
+        email = cleaned.get("email")
+        if not username or not email:
+            return cleaned
+        try:
+            user = User.objects.get(username=username, email=email)
+        except User.DoesNotExist:
+            raise forms.ValidationError("Không tìm thấy tài khoản với username và email này.")
+        cleaned["user_instance"] = user
+        return cleaned
+
+    def get_user(self):
+        return self.cleaned_data.get("user_instance")
+
 class PackageForm(forms.ModelForm):
     package_code = forms.CharField(validators=[validate_package_code])
     class Meta:

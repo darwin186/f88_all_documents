@@ -39,3 +39,4 @@ ENV_SETUP.md
 docker-compose.db.yml
 docker-compose.yml
 docker-compose.yml
+chatbot_docs.pdf

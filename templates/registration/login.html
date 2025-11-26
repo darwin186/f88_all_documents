@@ -2,86 +2,100 @@
 {% load static %}
 {% block content %}
 
-<div class="p-5 bg-success text-white text-center">
-  <h2>CHỨNG TỪ F88</h2>
-  <h5 class="text-center"> Mời bạn đăng nhập </h5>
-</div>
-<div class="container-sm">
-  {% if form.errors %}
-    <div class="alert alert-warning alert-dismissible fade show" role="alert">
-      <strong>Ôi chời!</strong> Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng thử lại.
-      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-    </div>
-  {% endif %}
-
-  {% if next %}
-  <div class="alert alert-warning alert-dismissible fade show" role="alert">
-    <strong>!</strong> Bạn không có quyền truy cập vào trang này hoặc thông tin đăng nhập không chính xác.
-    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-  </div>
-  {% endif %}
-
-</div>
-<div class="container">
-  <div class="row">
-    <div class="col-md-6 mx-auto">
-      <div class="login-container">
-        <h3 class="text-center mb-4">XIN CHÀO BẠN</h3>
-        <form method="post" action="{% url 'login' %}"> 
-          {% csrf_token %}
-          <div class="mb-3">
-            <label for="username" class="form-label"></label>
-            <input type="text" class="form-control" id="username" placeholder="Tên đăng nhập" name="username" oninvalid="this.setCustomValidity('Chưa điền tên đăng nhập')" oninput="setCustomValidity('')" required>
-          </div>
-          <div class="mb-3 password-container">
-            <label for="password" class="form-label"></label>
-            <input type="password" class="form-control" id="password" placeholder="Mật khẩu" name="password"  oninvalid="this.setCustomValidity('Chưa điền mật khẩu')" oninput="setCustomValidity('')" required >
-            <button type="button" onclick="togglePasswordVisibility('password')">👁️</button >
-          </div>
-          <div class="mb-3 form-check">
-            <input type="checkbox" class="form-check-input" id="remember">
-            <label class="form-check-label" for="remember">Ghi nhớ mật khẩu</label>
-          </div>
-            <div class="d-flex justify-content-center"> 
-            <button type="submit" class="btn btn-primary btn-block" >Đăng nhập</button>
-          </div>
-          <input type="hidden" name="next" value="{{ next }}">
-        </form>
-        <div class="text-center mt-3" >
-          <a href="{% url 'password_reset' %}">Quên mật khẩu?</a>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+<!-- Tailwind play CDN for this page -->
+<script src="https://cdn.tailwindcss.com"></script>
 <script>
-    function togglePasswordVisibility(inputId) {
-        var passwordInput = document.getElementById(inputId);
-        var type = passwordInput.getAttribute("type") === "password" ? "text" : "password";
-        passwordInput.setAttribute("type", type);
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          f88: '#16a34a',
+          f88dark: '#0b6b2f'
+        }
+      }
     }
+  }
 </script>
 <style>
-.password-container {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-.password-container input {
-    width: 100%;
-    padding-right: 30px;
-}
-.password-container button {
-    position: absolute;
-    right: 5px;
-    border: none;
-    background: none;
-    cursor: pointer;
-}
-.password-container button {
-    padding: 10px;
-    margin: 0;
-    height: 100%;
-}
-</style> 
+  #mynavbar { display: none !important; }
+  .footer { display: none !important; }
+</style>
+
+<div class="min-h-screen bg-gradient-to-b from-emerald-50 via-white to-white flex flex-col">
+  <div class="py-10 text-center">
+    <div class="mt-4 flex justify-center">
+      <a href="{% url 'home' %}"><img src="https://f88.vn/images/root/logo-f88-primary.svg" alt="F88" class="h-12"></a>
+    </div>
+    <h1 class="text-3xl font-bold text-f88dark tracking-wide mt-4 mb-2">HỆ THỐNG CHỨNG TỪ</h1>
+    <p class="text-gray-600">Đăng nhập để tiếp tục</p>
+  </div>
+
+  <div class="max-w-xl w-full mx-auto px-4">
+    {% if form.errors %}
+      <div class="mb-4 rounded-lg border border-red-200 bg-red-50 text-red-700 px-4 py-3 text-sm">
+        Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng thử lại.
+      </div>
+    {% endif %}
+    {% if next %}
+      <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 px-4 py-3 text-sm">
+        Bạn không có quyền truy cập vào trang này hoặc thông tin đăng nhập không chính xác.
+      </div>
+    {% endif %}
+    {% if messages %}
+      {% for message in messages %}
+        <div class="mb-4 rounded-lg px-4 py-3 text-sm border
+          {% if message.tags == 'error' %} border-red-200 bg-red-50 text-red-700
+          {% elif message.tags == 'warning' %} border-amber-200 bg-amber-50 text-amber-700
+          {% else %} border-emerald-200 bg-emerald-50 text-emerald-700
+          {% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <div class="bg-white shadow-xl shadow-emerald-100/60 rounded-2xl border border-gray-100 p-6">
+      <h2 class="text-xl font-semibold text-gray-900 text-center mb-6">Xin chào bạn</h2>
+      <form method="post" action="{% url 'login' %}" class="space-y-4">
+        {% csrf_token %}
+        <div>
+          <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Tên đăng nhập</label>
+          <input type="text" id="username" name="username" required
+                 class="w-full rounded-lg border border-gray-200 px-3 py-2 focus:ring-2 focus:ring-f88 focus:border-f88 outline-none"
+                 placeholder="Nhập tên đăng nhập">
+        </div>
+        <div>
+          <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Mật khẩu</label>
+          <div class="relative">
+            <input type="password" id="password" name="password" required
+                   class="w-full rounded-lg border border-gray-200 px-3 py-2 pr-10 focus:ring-2 focus:ring-f88 focus:border-f88 outline-none"
+                   placeholder="Nhập mật khẩu">
+            <button type="button" onclick="togglePasswordVisibility('password')" class="absolute inset-y-0 right-0 px-3 text-gray-500 hover:text-f88dark">
+              👁️
+            </button>
+          </div>
+        </div>
+        <div class="flex items-center justify-between text-sm">
+          <label class="inline-flex items-center gap-2 text-gray-700">
+            <input type="checkbox" class="rounded border-gray-300 text-f88 focus:ring-f88">
+            Ghi nhớ mật khẩu
+          </label>
+          <a href="{% url 'password_reset' %}" class="text-f88 hover:text-f88dark font-medium">Quên mật khẩu?</a>
+        </div>
+        <input type="hidden" name="next" value="{{ next }}">
+        <button type="submit"
+                class="w-full bg-f88 hover:bg-f88dark text-white font-semibold py-2.5 rounded-lg shadow-sm transition">
+          Đăng nhập
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  function togglePasswordVisibility(inputId) {
+    var passwordInput = document.getElementById(inputId);
+    var type = passwordInput.getAttribute("type") === "password" ? "text" : "password";
+    passwordInput.setAttribute("type", type);
+  }
+</script>
 {% endblock %}

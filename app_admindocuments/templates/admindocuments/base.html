@@ -34,34 +34,36 @@
     class="fixed top-0 left-0 z-30 w-64 h-screen bg-white border-r border-gray-200 dark:bg-zinc-900 dark:border-zinc-700 flex flex-col justify-between transform transition-transform duration-300 ease-in-out">
     <div class="p-4 border-b border-gray-200 dark:border-zinc-700">
       <div class="flex items-center gap-3">
-        <span class="text-lg font-semibold text-gray-800 dark:text-white">Chứng từ hành chính</span>
+        <a href="{% url 'home' %}">
+          <img src="https://f88.vn/images/root/logo-f88-primary.svg" alt="F88" class="h-8">
+        </a>
       </div>
     </div>
-    <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-1 text-gray-100">
+    <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-1 text-gray-700 dark:text-gray-100">
       {% with active=request.resolver_match.url_name %}
       {% if has_admin_docs_access or request.user.is_superuser %}
       <a href="{% url 'admindocuments:admindocuments_dashboard' %}" 
-         class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'admindocuments_dashboard' %}bg-zinc-800 text-yellow-300{% else %}text-gray-100 hover:text-yellow-200 hover:bg-zinc-800{% endif %}">
+         class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'admindocuments_dashboard' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 9.75V19.5A1.5 1.5 0 004.5 21h15a1.5 1.5 0 001.5-1.5V9.75m-18 0L12 3l9 6.75m-18 0h18"/></svg>
         <span>Dashboard</span>
       </a>
       {% endif %}
       <a href="{% url 'admindocuments:admindocuments_list' %}" 
-         class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'admindocuments_list' or active == 'admindocuments_detail' or active == 'admindocuments_update' %}bg-zinc-800 text-yellow-300{% else %}text-gray-100 hover:text-yellow-200 hover:bg-zinc-800{% endif %}">
+         class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'admindocuments_list' or active == 'admindocuments_detail' or active == 'admindocuments_update' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h16"/></svg>
         <span>Văn bản hành chính</span>
       </a>
       <a href="{% url 'admindocuments:paper_document_list' %}" 
-         class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'paper_document_list' %}bg-zinc-800 text-yellow-300{% else %}text-gray-100 hover:text-yellow-200 hover:bg-zinc-800{% endif %}">
+         class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'paper_document_list' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h16"/></svg>
         <span>Giấy hành chính</span>
       </a>
       <a href="/admin/" 
-         class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-gray-100 hover:text-yellow-200 hover:bg-zinc-800">
+         class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v8m4-4H8m12 0a8 8 0 11-16 0 8 8 0 0116 0z"/></svg>
         <span>Admin Portal</span>
       </a>
-      <a href="#" class="flex items-center gap-3 px-3 py-2 text-gray-500 rounded-lg cursor-not-allowed">
+      <a href="#" class="flex items-center gap-3 px-3 py-2 text-gray-500 dark:text-gray-400 rounded-lg cursor-not-allowed">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10m-9 4h10m-7 4h4m-9 0h1m6-8h1"/></svg>
         <span>Lịch sử (đang phát triển)</span>
       </a>

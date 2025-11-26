@@ -19,12 +19,14 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static 
 from django.http import Http404
+from app_documents.views import CustomPasswordResetView
 
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("", include("app_documents.urls")),
     path("admindocuments/", include("app_admindocuments.urls")),
+    path("accounts/password_reset/", CustomPasswordResetView.as_view(), name="password_reset"),
     path("accounts/", include("django.contrib.auth.urls")),
 
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

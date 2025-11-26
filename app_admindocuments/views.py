@@ -38,10 +38,13 @@ from .services import allocate_running_number
 
 def _has_admin_docs_access(user) -> bool:
     allowed_groups = ["administrative staff", "adminpaper"]
-    return bool(
-        getattr(user, "is_superuser", False)
-        or user.groups.filter(name__in=allowed_groups).exists()
-    )
+    is_checker = user.groups.filter(name="checker").exists()
+    if getattr(user, "is_superuser", False):
+        return True
+    # Block checkers even if they are added to admin groups
+    if is_checker:
+        return False
+    return user.groups.filter(name__in=allowed_groups).exists()
 
 
 def admin_staff_required(view_func):
@@ -51,7 +54,8 @@ def admin_staff_required(view_func):
             raise PermissionDenied
         if _has_admin_docs_access(request.user):
             return view_func(request, *args, **kwargs)
-        raise PermissionDenied
+        messages.error(request, "Bạn không có quyền truy cập mục này.")
+        return render(request, "403.html", status=403)
 
     return _wrapped
 

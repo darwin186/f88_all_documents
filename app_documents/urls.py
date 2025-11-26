@@ -38,6 +38,7 @@ urlpatterns = [
     path('historical/documents/', views.historical_documents_view, name='historical_documents_view'),
     #Dashboard
     path('dashboard', views.documents_dashboard, name = 'dashboard'),
+    path('dashboard/folder-received', views.folder_received_dashboard, name='dashboard_folder_received'),
     path('export-excel-folder-fail/', views.export_excel_folder_fail, name='export_excel_folder_fail'),
     #Request Change
     path('request-change-folder/<int:folder_id>/', views.request_change_folder_view, name='request_change_folder'),

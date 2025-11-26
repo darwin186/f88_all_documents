@@ -148,6 +148,7 @@ class UserProfile(models.Model):
     department = models.CharField(max_length= 100, null= False, blank= False, unique= False, default= None) 
     region = models.ForeignKey(Region, db_column='region_id', on_delete=models.CASCADE, null= True)
     shop = models.ForeignKey(Shop, db_column='shop_id', on_delete=models.CASCADE, null= True)
+    gapo_user_id = models.CharField(max_length=50, null=True, blank=True, unique=True)
     employee_code = models.CharField(max_length= 10, null= True, blank= True, unique= False, default= None)
     gender = models.ForeignKey(Gender, on_delete=models.SET_NULL, null=True, blank=True)
     class Meta:
