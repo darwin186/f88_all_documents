@@ -46,4 +46,6 @@ urlpatterns = [
     # Mượn chứng từ
     path('request-borrow-document/', views.request_borrow_document_view, name='request_borrow_document'),
     path('manage-borrow/return-or-report-lost/<int:document_id>/<str:action>/', views.manage_borrow_document, name='manage_borrow_document'),
+    path('gapo/schedule/', views.gapo_schedule_view, name='gapo_schedule'),
+    path('gapo/schedule/ai-draft/', views.gapo_ai_generate_view, name='gapo_ai_generate'),
 ]   

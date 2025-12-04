@@ -24,19 +24,43 @@
     body { background-color: #f5f6f8; font-family: "Inter", sans-serif; }
   </style>
 </head>
-<body class="flex h-screen text-gray-800" x-data="{ sidebarOpen: false }">
+<body class="flex h-screen text-gray-800" x-data="{
+    sidebarOpen: false,
+    sidebarPinned: false,
+    init() {
+      const pinned = localStorage.getItem('admindoc_sidebar_pinned');
+      this.sidebarPinned = pinned === '1';
+      this.sidebarOpen = this.sidebarPinned;
+    },
+    togglePin() {
+      this.sidebarPinned = !this.sidebarPinned;
+      localStorage.setItem('admindoc_sidebar_pinned', this.sidebarPinned ? '1' : '0');
+      if (this.sidebarPinned) this.sidebarOpen = true;
+    }
+  }">
   <div class="fixed top-0 left-0 h-full w-2 z-40 cursor-pointer"
-       @mouseenter="sidebarOpen = true"></div>
+       @mouseenter="if(!sidebarPinned) sidebarOpen = true"></div>
   <aside id="sidebar"
-    x-on:mouseenter="sidebarOpen = true"
-    x-on:mouseleave="sidebarOpen = false"
-    :class="sidebarOpen ? 'translate-x-0 shadow-xl' : '-translate-x-60 opacity-80'"
+    x-on:mouseenter="if(!sidebarPinned) sidebarOpen = true"
+    x-on:mouseleave="if(!sidebarPinned) sidebarOpen = false"
+    :class="(sidebarOpen || sidebarPinned) ? 'translate-x-0 shadow-xl' : '-translate-x-60 opacity-80'"
     class="fixed top-0 left-0 z-30 w-64 h-screen bg-white border-r border-gray-200 dark:bg-zinc-900 dark:border-zinc-700 flex flex-col justify-between transform transition-transform duration-300 ease-in-out">
     <div class="p-4 border-b border-gray-200 dark:border-zinc-700">
-      <div class="flex items-center gap-3">
-        <a href="{% url 'home' %}">
-          <img src="https://f88.vn/images/root/logo-f88-primary.svg" alt="F88" class="h-8">
-        </a>
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <a href="{% url 'home' %}">
+            <img src="https://f88.vn/images/root/logo-f88-primary.svg" alt="F88" class="h-8">
+          </a>
+        </div>
+        <button type="button"
+          @click="togglePin"
+          class="p-2 rounded-lg border border-gray-200 hover:bg-green-50 text-gray-600 dark:text-gray-200 dark:border-zinc-700"
+          :class="sidebarPinned ? 'bg-green-50 text-f88green' : ''"
+          title="Ghim thanh bên">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M6.94 3.44 9 5.5V9l-2 2 2 2v3l-2.06 2.06a.75.75 0 0 1-1.28-.53V10L4 8.5 5.66 6.5V4a.75.75 0 0 1 1.28-.56Zm6.12 0 2.06 2.06a.75.75 0 0 1 .22.53V10l1.34 1.5L14.5 13v4a.75.75 0 0 1-1.28.53L11 15v-3l2-2-2-2V5.5l2-2.06a.75.75 0 0 1 1.06 0Z"/>
+          </svg>
+        </button>
       </div>
     </div>
     <nav class="flex-1 overflow-y-auto px-3 py-4 space-y-1 text-gray-700 dark:text-gray-100">
@@ -57,6 +81,11 @@
          class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'paper_document_list' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h16"/></svg>
         <span>Giấy hành chính</span>
+      </a>
+      <a href="{% url 'admindocuments:admindocuments_counters' %}" 
+         class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'admindocuments_counters' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4h16v6H4zm0 10h10v6H4z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14 14h6v6h-6z"/></svg>
+        <span>Quản lý số hiệu</span>
       </a>
       <a href="/admin/" 
          class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800">
@@ -99,8 +128,8 @@
       </div>
     </div>
   </aside>
-  <main :class="sidebarOpen ? 'ml-64' : 'ml-4'" class="flex-1 overflow-y-auto p-8 transition-all duration-300"
-        @click="if(!sidebarOpen) return; const sidebar = document.getElementById('sidebar'); if(!sidebar.contains($event.target)){ sidebarOpen = false; }">
+  <main :class="(sidebarOpen || sidebarPinned) ? 'ml-64' : 'ml-4'" class="flex-1 overflow-y-auto p-8 transition-all duration-300"
+        @click="if(sidebarPinned) return; if(!sidebarOpen) return; const sidebar = document.getElementById('sidebar'); if(!sidebar.contains($event.target)){ sidebarOpen = false; }">
     {% block content %}{% endblock %}
   </main>
 </body>

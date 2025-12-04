@@ -1,0 +1,196 @@
+{% extends 'app_documents/base.html' %}
+{% block content %}
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: { colors: { f88: '#16a34a', f88dark: '#0b6b2f' } } } }
+</script>
+<style>
+  /* Hide bootstrap navbar for this page if needed? keep visible */
+</style>
+
+<div class="min-h-screen bg-slate-50 py-6">
+  <div class="max-w-7xl mx-auto px-6">
+    <div class="flex items-center gap-3 mb-6">
+      <div class="h-10 w-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-f88dark" viewBox="0 0 20 20" fill="currentColor"><path d="M2.94 6.34a1.5 1.5 0 0 1 .35-1.77l3.02-2.72a1.5 1.5 0 0 1 2.0.03l2.4 2.3 2.43-2.3a1.5 1.5 0 0 1 2-.02l3.04 2.76a1.5 1.5 0 0 1 .35 1.77l-1.3 3.14c-.18.45-.55.8-1.01.95l-3.1 1.03-.95 3.16a1.5 1.5 0 0 1-2.86 0l-.95-3.16-3.1-1.03a1.5 1.5 0 0 1-1-.95L2.94 6.34Z"/></svg>
+      </div>
+      <div>
+        <h2 class="text-2xl font-semibold text-f88dark">GAPO Scheduler</h2>
+        <p class="text-sm text-slate-600">Soạn tin nhắn và lên lịch gửi đến GAPO user</p>
+      </div>
+    </div>
+
+    {% if messages %}
+      <div class="space-y-2 mb-4">
+        {% for message in messages %}
+          <div class="rounded-lg border px-4 py-3 text-sm
+            {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-700
+            {% elif message.tags == 'warning' %}border-amber-200 bg-amber-50 text-amber-700
+            {% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div class="md:col-span-1">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+          <div class="flex items-center gap-2 mb-4">
+            <span class="text-f88dark text-lg">✈</span>
+            <div>
+              <p class="font-semibold text-slate-800">Soạn tin nhắn mới</p>
+              <p class="text-sm text-slate-500">Lên lịch gửi tin tự động</p>
+            </div>
+          </div>
+          <div class="mb-4 rounded-lg border border-dashed border-emerald-200 bg-emerald-50/60 p-3">
+            <div class="flex items-center justify-between mb-2">
+              <p class="text-sm font-semibold text-emerald-800">AI hỗ trợ soạn nội dung</p>
+              <span class="text-[11px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full">beta</span>
+            </div>
+            <label class="block text-sm text-slate-700 mb-1">Phong cách</label>
+            <select id="ai-style" class="w-full rounded-lg border border-emerald-200 px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 mb-2">
+              <option value="formal">Trang trọng</option>
+              <option value="friendly">Thân thiện</option>
+              <option value="fun">Vui vẻ</option>
+            </select>
+            <label class="block text-sm text-slate-700 mb-1">Ý chính tin nhắn</label>
+            <textarea id="ai-seed" rows="3" class="w-full rounded-lg border border-emerald-200 px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400" placeholder="Nhập ý chính để AI viết lại ngắn gọn..."></textarea>
+            <button id="ai-generate" type="button" class="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold py-2 rounded-lg disabled:opacity-60">Tạo nội dung từ AI</button>
+            <p id="ai-status" class="mt-1 text-[12px] text-slate-500"></p>
+          </div>
+          <form method="post" class="space-y-4">
+            {% csrf_token %}
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">GAPO User ID</label>
+              {{ form.receiver_id }}
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Thời gian gửi</label>
+              {{ form.schedule_at }}
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Nội dung tin nhắn</label>
+              {{ form.message }}
+            </div>
+            <button type="submit" class="w-full bg-f88 hover:bg-f88dark text-white font-semibold py-2.5 rounded-lg shadow-sm transition">Hẹn giờ gửi tin</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="md:col-span-2">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 max-h-[70vh] overflow-y-auto">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <p class="font-semibold text-slate-800">Lịch sử gửi gần đây</p>
+              <p class="text-sm text-slate-500">Theo dõi trạng thái tin nhắn đã lên lịch</p>
+            </div>
+            <span class="text-sm text-slate-500">Tổng: {{ schedules|length }}</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead>
+                <tr class="text-left text-slate-500 border-b">
+                  <th class="py-2">Receiver ID</th>
+                  <th class="py-2">Thời gian</th>
+                  <th class="py-2">Trạng thái</th>
+                  <th class="py-2">Lỗi</th>
+                  <th class="py-2 text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y">
+                {% for s in schedules %}
+                <tr class="text-slate-700">
+                  <td class="py-2 font-semibold">{{ s.receiver_id }}</td>
+                  <td class="py-2">{{ s.schedule_at }}</td>
+                  <td class="py-2">
+                    {% if s.status == 'sent' %}
+                      <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-1 text-xs">● Đã gửi</span>
+                    {% elif s.status == 'pending' %}
+                      <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-700 px-2 py-1 text-xs">● Đang chờ</span>
+                    {% elif s.status == 'failed' %}
+                      <span class="inline-flex items-center gap-1 rounded-full bg-red-50 text-red-700 px-2 py-1 text-xs">● Lỗi</span>
+                    {% else %}
+                      <span class="inline-flex items-center gap-1 rounded-full bg-slate-50 text-slate-600 px-2 py-1 text-xs">● {{ s.status }}</span>
+                    {% endif %}
+                  </td>
+                  <td class="py-2 text-red-600 text-xs">{{ s.last_error|default:"-" }}</td>
+                  <td class="py-2 text-right">
+                    <div class="flex justify-end gap-2">
+                      {% if s.status == 'pending' or s.status == 'failed' %}
+                      <form method="post" class="inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="retry">
+                        <input type="hidden" name="schedule_id" value="{{ s.id }}">
+                        <button class="px-3 py-1 rounded border border-amber-200 text-amber-700 text-xs hover:bg-amber-50">Retry</button>
+                      </form>
+                      {% endif %}
+                      <form method="post" class="inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="resend_now">
+                        <input type="hidden" name="schedule_id" value="{{ s.id }}">
+                        <button class="px-3 py-1 rounded border border-emerald-200 text-emerald-700 text-xs hover:bg-emerald-50">Gửi lại</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="py-4 text-center text-slate-500">Chưa có lịch gửi</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const btn = document.getElementById("ai-generate");
+    const seedEl = document.getElementById("ai-seed");
+    const styleEl = document.getElementById("ai-style");
+    const statusEl = document.getElementById("ai-status");
+    const messageEl = document.getElementById("id_message");
+    const csrfToken = document.querySelector("input[name=csrfmiddlewaretoken]")?.value || "";
+
+    if (!btn || !seedEl || !styleEl || !messageEl) return;
+
+    const setStatus = (text, isError = false) => {
+      statusEl.textContent = text || "";
+      statusEl.className = `mt-1 text-[12px] ${isError ? "text-red-600" : "text-slate-500"}`;
+    };
+
+    btn.addEventListener("click", async () => {
+      const seed = seedEl.value.trim();
+      if (!seed) {
+        setStatus("Nhập ý chính trước khi gọi AI.", true);
+        return;
+      }
+      btn.disabled = true;
+      setStatus("Đang gọi AI...", false);
+      try {
+        const resp = await fetch("{% url 'gapo_ai_generate' %}", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken,
+          },
+          body: JSON.stringify({ text: seed, style: styleEl.value }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.error) {
+          throw new Error(data.error || "Gọi AI thất bại.");
+        }
+        messageEl.value = data.draft || "";
+        setStatus("Đã tạo nội dung, bạn có thể chỉnh sửa trước khi gửi.");
+      } catch (err) {
+        setStatus(err.message || "Không tạo được nội dung.", true);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  })();
+</script>
+{% endblock %}

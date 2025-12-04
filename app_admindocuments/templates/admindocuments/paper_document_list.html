@@ -8,6 +8,18 @@
           class="bg-f88green hover:bg-f88dark text-white px-4 py-2 rounded-lg shadow">Tạo mới</button>
 </div>
 
+<form method="get" class="mb-4 flex items-center gap-2">
+  <input type="text" name="q" value="{{ request.GET.q|default:'' }}"
+         placeholder="Tìm theo số hiệu hoặc mã vận đơn..."
+         class="border border-gray-300 rounded-lg px-3 py-2 w-80 focus:outline-none focus:ring focus:ring-green-300" />
+  <input type="hidden" name="paper_type" value="{{ selected_type }}" />
+  <input type="hidden" name="sort" value="{{ sort }}" />
+  <input type="hidden" name="dir" value="{{ dir }}" />
+  <button type="submit" class="bg-f88green hover:bg-f88dark text-white px-4 py-2 rounded-lg">Tìm kiếm</button>
+  <a href="{% url 'admindocuments:paper_document_template' %}"
+     class="bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 px-3 py-2 rounded-lg">Tải file mẫu</a>
+</form>
+
 <ul class="flex flex-wrap text-sm font-medium text-center text-gray-600 border-b border-gray-200 mb-4">
   <li class="mr-2">
     <a href="{% url 'admindocuments:paper_document_list' %}" class="inline-block px-4 py-2 rounded-t-lg {% if not selected_type %}text-blue-600 bg-blue-100{% else %}hover:bg-gray-50{% endif %}">Tất cả</a>
@@ -29,40 +41,40 @@
   <table class="min-w-full text-sm">
     <thead class="bg-gray-100 text-gray-700 uppercase text-xs font-semibold">
       <tr>
+        <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=running&dir={% if sort == 'running' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Số thứ tự</a></th>
         <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=code&dir={% if sort == 'code' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Số hiệu</a></th>
-        <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=running&dir={% if sort == 'running' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">STT</a></th>
         <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=type&dir={% if sort == 'type' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Loại giấy</a></th>
         <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=region&dir={% if sort == 'region' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Miền</a></th>
         <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=responsible&dir={% if sort == 'responsible' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Người phụ trách</a></th>
         <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=department&dir={% if sort == 'department' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Đơn vị yêu cầu</a></th>
-        <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=ticket&dir={% if sort == 'ticket' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Mã ticket</a></th>
         <th class="px-4 py-3 text-left">Nội dung</th>
         <th class="px-4 py-3 text-left">Đơn vị CPN</th>
         <th class="px-4 py-3 text-left">Mã vận đơn</th>
-        <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=status&dir={% if sort == 'status' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Tình trạng</a></th>
         <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=created&dir={% if sort == 'created' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Ngày tạo</a></th>
         <th class="px-4 py-3 text-left">Ghi chú</th>
+        <th class="px-4 py-3 text-left">Thao tác</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-200">
       {% for doc in documents %}
       <tr class="hover:bg-gray-50">
-        <td class="px-4 py-3 font-mono">{{ doc.document_number_full }}</td>
         <td class="px-4 py-3">{{ doc.running_number }}</td>
+        <td class="px-4 py-3 font-mono">{{ doc.document_number_full }}</td>
         <td class="px-4 py-3">{{ doc.paper_type.name }}</td>
         <td class="px-4 py-3">{{ doc.region|default:'-' }}</td>
         <td class="px-4 py-3">{{ doc.responsible_person|default:'-' }}</td>
         <td class="px-4 py-3">{{ doc.requested_department.shop_name }}</td>
-        <td class="px-4 py-3">{{ doc.ticket_code|default:'-' }}</td>
         <td class="px-4 py-3">{{ doc.summary }}</td>
         <td class="px-4 py-3">{{ doc.courier_company.name|default:'-' }}</td>
         <td class="px-4 py-3">{{ doc.courier_tracking_code|default:'-' }}</td>
-        <td class="px-4 py-3">{{ doc.status|default:'-' }}</td>
         <td class="px-4 py-3">{{ doc.created_at|date:"d/m/Y" }}</td>
         <td class="px-4 py-3">{{ doc.note|default:'-' }}</td>
+        <td class="px-4 py-3">
+          <a href="{% url 'admindocuments:paper_document_detail' doc.id %}" class="text-blue-600 hover:underline text-sm">Chi tiết</a>
+        </td>
       </tr>
       {% empty %}
-      <tr><td colspan="13" class="text-center py-6 text-gray-500">Chưa có giấy tờ nào</td></tr>
+      <tr><td colspan="12" class="text-center py-6 text-gray-500">Chưa có giấy tờ nào</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -106,6 +118,9 @@
       <div class="p-6 space-y-4">
         <form method="post" action="{% url 'admindocuments:paper_document_list' %}" class="grid grid-cols-2 gap-4">
           {% csrf_token %}
+          {% if edit_id %}
+          <input type="hidden" name="edit_id" value="{{ edit_id }}">
+          {% endif %}
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Loại giấy</label>
             {{ form.paper_type }}
@@ -113,10 +128,6 @@
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Miền</label>
             {{ form.region }}
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Người phụ trách</label>
-            {{ form.responsible_person }}
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Đơn vị yêu cầu</label>
@@ -131,7 +142,7 @@
             {{ form.status }}
           </div>
           <div class="col-span-2">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Tóm tắt</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Nội dung</label>
             {{ form.summary }}
           </div>
           <div class="col-span-2">
@@ -150,7 +161,7 @@
             <button data-modal-hide="paperModal" type="button"
                     class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">Hủy</button>
             <button type="submit"
-                    class="px-4 py-2 bg-f88green text-white rounded hover:bg-f88dark">Lưu</button>
+                    class="px-4 py-2 bg-f88green text-white rounded hover:bg-f88dark">{% if edit_id %}Cập nhật{% else %}Lưu{% endif %}</button>
           </div>
         </form>
       </div>

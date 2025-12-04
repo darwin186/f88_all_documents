@@ -67,14 +67,22 @@ from .models import (
     HistoricalDocuments,
     ChangeRequest,
     BorrowingDocument,
-    BorrowingStatus
+    BorrowingStatus,
+    GapoScheduledMessage
 )
 # Import các form
-from .forms import PackageForm, GapoPasswordResetForm
+from .forms import PackageForm, GapoPasswordResetForm, GapoScheduleForm
 # Import các custom utilities
 from .access_controls import AccessControls
 from .utils import get_user_context, check_on_time
 from .dashboard import parse_dates, get_dashboard_metrics, get_folder_received_metrics
+from .tasks import send_gapo_scheduled_message
+
+AI_STYLE_HINTS = {
+    "formal": "Viết ngắn gọn, lịch sự, trang trọng, dùng đại từ phù hợp công việc.",
+    "friendly": "Viết thân thiện, gần gũi, rõ ràng, tránh từ ngữ quá trang trọng.",
+    "fun": "Viết vui vẻ, dí dỏm, tích cực nhưng vẫn lịch sự.",
+}
 class CustomPasswordResetView(PasswordResetView):
     form_class = GapoPasswordResetForm
     email_template_name = 'registration/password_reset_email.html'
@@ -1576,6 +1584,108 @@ def folder_received_dashboard(request):
         "folder_received_count": metrics["folder_received_count"],
     }
     return render(request, "app_documents/app_dashboard_folder.html", context)
+
+@login_required
+def gapo_schedule_view(request):
+    user = request.user
+    user_context = get_user_context(user)
+    if not user_context.get("is_admin"):
+        messages.error(request, "Bạn không có quyền truy cập tính năng này.")
+        return redirect("home")
+
+    if request.method == "POST" and request.POST.get("action"):
+        action = request.POST.get("action")
+        schedule_id = request.POST.get("schedule_id")
+        try:
+            schedule = GapoScheduledMessage.objects.get(pk=schedule_id)
+        except GapoScheduledMessage.DoesNotExist:
+            messages.error(request, "Không tìm thấy lịch gửi.")
+            return redirect("gapo_schedule")
+        now = timezone.now()
+        if action == "retry":
+            schedule.status = GapoScheduledMessage.Status.PENDING
+            schedule.last_error = None
+            schedule.save(update_fields=["status", "last_error", "updated_at"])
+            eta = schedule.schedule_at if schedule.schedule_at > now else None
+            send_gapo_scheduled_message.apply_async(args=[schedule.id], eta=eta)
+            messages.success(request, "Đã retry lịch gửi.")
+        elif action == "resend_now":
+            schedule.status = GapoScheduledMessage.Status.PENDING
+            schedule.last_error = None
+            schedule.schedule_at = now
+            schedule.save(update_fields=["status", "last_error", "schedule_at", "updated_at"])
+            send_gapo_scheduled_message.apply_async(args=[schedule.id])
+            messages.success(request, "Đã gửi lại ngay.")
+        else:
+            messages.error(request, "Hành động không hợp lệ.")
+        return redirect("gapo_schedule")
+
+    if request.method == "POST" and not request.POST.get("action"):
+        form = GapoScheduleForm(request.POST)
+        if form.is_valid():
+            schedule = form.save(commit=False)
+            schedule.created_by = user
+            schedule.save()
+            send_gapo_scheduled_message.apply_async(args=[schedule.id], eta=schedule.schedule_at)
+            messages.success(request, "Đã lên lịch gửi tin GAPO.")
+            return redirect("gapo_schedule")
+    else:
+        form = GapoScheduleForm()
+
+    schedules = GapoScheduledMessage.objects.order_by("-created_at")[:20]
+    context = {
+        **user_context,
+        "user": user,
+        "form": form,
+        "schedules": schedules,
+    }
+    return render(request, "app_documents/app_gapo_schedule.html", context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def gapo_ai_generate_view(request):
+    user_context = get_user_context(request.user)
+    if not user_context.get("is_admin"):
+        return JsonResponse({"error": "Bạn không có quyền sử dụng AI soạn tin nhắn."}, status=403)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        payload = {}
+    base_text = (payload.get("text") or "").strip()
+    style = (payload.get("style") or "formal").strip()
+
+    if not base_text:
+        return JsonResponse({"error": "Vui lòng nhập nội dung gốc để AI xử lý."}, status=400)
+
+    api_key = getattr(settings, "GEMINI_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
+    if not api_key:
+        return JsonResponse({"error": "Chưa cấu hình khóa API cho AI."}, status=500)
+
+    hint = AI_STYLE_HINTS.get(style, "")
+    prompt = f"{hint}\nYêu cầu: viết tin nhắn ngắn gọn, rõ ràng bằng tiếng Việt dựa trên nội dung: \"{base_text}\". Trả về đúng phần nội dung tin nhắn."
+    request_body = {"contents": [{"parts": [{"text": prompt}]}]}
+
+    try:
+        resp = requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+            headers={"Content-Type": "application/json", "X-goog-api-key": api_key},
+            json=request_body,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        candidates = resp.json().get("candidates", [])
+        draft = ""
+        if candidates:
+            parts = candidates[0].get("content", {}).get("parts", [])
+            draft = "".join(part.get("text", "") for part in parts)
+        if not draft:
+            return JsonResponse({"error": "AI không trả về nội dung. Thử lại sau."}, status=502)
+        return JsonResponse({"draft": draft})
+    except requests.RequestException as exc:
+        logger.error("GAPO AI draft failed", exc_info=exc)
+        return JsonResponse({"error": "Gọi AI thất bại. Vui lòng thử lại."}, status=502)
 
 def export_excel_folder_fail(request):
     documents_created_date = request.GET.get('filterfoldermonth', None) 

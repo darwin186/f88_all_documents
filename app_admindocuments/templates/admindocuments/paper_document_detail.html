@@ -1,0 +1,66 @@
+{% extends "admindocuments/base.html" %}
+{% block title %}Chi tiết giấy tờ{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-semibold text-gray-700">Chi tiết giấy tờ</h1>
+  <a href="{% url 'admindocuments:paper_document_list' %}" class="text-sm text-gray-600 hover:underline">← Quay lại danh sách</a>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <div class="bg-white shadow-sm rounded-lg p-4">
+    <h3 class="text-lg font-semibold text-gray-800 mb-3">Thông tin</h3>
+    <table class="w-full text-sm text-gray-700">
+      <tr><th class="py-1 pr-3 text-gray-500 text-left">Số hiệu</th><td class="py-1 font-mono">{{ doc.document_number_full }}</td></tr>
+      <tr><th class="py-1 pr-3 text-gray-500 text-left">Loại giấy</th><td class="py-1">{{ doc.paper_type.name }}</td></tr>
+      <tr><th class="py-1 pr-3 text-gray-500 text-left">Số thứ tự</th><td class="py-1">{{ doc.running_number }}</td></tr>
+      <tr><th class="py-1 pr-3 text-gray-500 text-left">Miền</th><td class="py-1">{{ doc.region|default:"-" }}</td></tr>
+      <tr><th class="py-1 pr-3 text-gray-500 text-left">Người phụ trách</th><td class="py-1">{{ doc.responsible_person|default:"-" }}</td></tr>
+      <tr><th class="py-1 pr-3 text-gray-500 text-left">Đơn vị yêu cầu</th><td class="py-1">{{ doc.requested_department.shop_name }}</td></tr>
+      <tr><th class="py-1 pr-3 text-gray-500 text-left">Đơn vị CPN</th><td class="py-1">{{ doc.courier_company.name|default:"-" }}</td></tr>
+      <tr><th class="py-1 pr-3 text-gray-500 text-left">Mã vận đơn</th><td class="py-1">{{ doc.courier_tracking_code|default:"-" }}</td></tr>
+      <tr><th class="py-1 pr-3 text-gray-500 text-left">Ngày tạo</th><td class="py-1">{{ doc.created_at|date:"d/m/Y" }}</td></tr>
+      <tr><th class="py-1 pr-3 text-gray-500 text-left">Ghi chú</th><td class="py-1 whitespace-pre-line">{{ doc.note|default:"-" }}</td></tr>
+    </table>
+  </div>
+
+  <div class="bg-white shadow-sm rounded-lg p-4">
+    <h3 class="text-lg font-semibold text-gray-800 mb-3">Chỉnh sửa</h3>
+    <form method="post" class="grid grid-cols-2 gap-4">
+      {% csrf_token %}
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Loại giấy</label>
+        {{ form.paper_type }}
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Miền</label>
+        {{ form.region }}
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Đơn vị yêu cầu</label>
+        {{ form.requested_department }}
+      </div>
+      <div class="col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Nội dung</label>
+        {{ form.summary }}
+      </div>
+      <div class="col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Đơn vị CPN</label>
+        {{ form.courier_company }}
+      </div>
+      <div class="col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Mã vận đơn</label>
+        {{ form.courier_tracking_code }}
+      </div>
+      <div class="col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
+        {{ form.note }}
+      </div>
+      <div class="col-span-2 flex justify-end gap-2 mt-2">
+        <a href="{% url 'admindocuments:paper_document_list' %}" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm">Hủy</a>
+        <button type="submit" class="px-4 py-2 bg-f88green text-white rounded hover:bg-f88dark text-sm">Cập nhật</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

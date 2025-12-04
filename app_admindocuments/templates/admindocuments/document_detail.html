@@ -4,8 +4,11 @@
 {% block content %}
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-semibold text-gray-700">Chi tiết văn bản</h1>
-  <button data-modal-target="editModal" data-modal-toggle="editModal"
-          class="bg-f88green hover:bg-f88dark text-white px-4 py-2 rounded-lg shadow">Edit</button>
+  <div class="flex gap-2">
+    <a href="{% url 'admindocuments:admindocuments_list' %}" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg shadow">← Quay lại</a>
+    <button data-modal-target="editModal" data-modal-toggle="editModal"
+            class="bg-f88green hover:bg-f88dark text-white px-4 py-2 rounded-lg shadow">Edit</button>
+  </div>
 </div>
 
 <div class="relative overflow-x-auto shadow-md sm:rounded-lg">
@@ -39,8 +42,22 @@
         <td class="px-6 py-4"></td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Ngày ban hành</th>
+        <td class="px-6 py-4">{{ doc.created_at|date:'d/m/Y' }}</td>
+        <td class="px-6 py-4"></td>
+      </tr>
+      <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Trạng thái</th>
-        <td class="px-6 py-4">{{ doc.status.name }} ({{ doc.status.code }})</td>
+        <td class="px-6 py-4">
+          <span class="px-2 py-1 text-xs font-semibold rounded
+            {% if doc.status.code == STATUS_ISSUED %} bg-green-100 text-green-800
+            {% elif doc.status.code == STATUS_DRAFT %} bg-yellow-100 text-yellow-800
+            {% elif doc.status.code == STATUS_PENDING %} bg-blue-100 text-blue-800
+            {% elif doc.status.code == STATUS_EXPIRED %} bg-red-100 text-red-800
+            {% else %} bg-gray-100 text-gray-700 {% endif %}">
+            {{ doc.status.name }}
+          </span>
+        </td>
         <td class="px-6 py-4"></td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
@@ -64,12 +81,7 @@
         <td class="px-6 py-4"></td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
-        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Mã ticket</th>
-        <td class="px-6 py-4">{{ doc.ticket_code|default:'-' }}</td>
-        <td class="px-6 py-4"></td>
-      </tr>
-      <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
-        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Ngày hết hiệu lực</th>
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Ngày hiệu lực</th>
         <td class="px-6 py-4">{{ doc.expiry_date|date:'d/m/Y'|default:'-' }}</td>
         <td class="px-6 py-4"></td>
       </tr>
@@ -87,6 +99,66 @@
         <td class="px-6 py-4 whitespace-pre-line">{{ doc.note|default:'-' }}</td>
         <td class="px-6 py-4"></td>
       </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="mt-6 bg-white shadow-sm rounded-lg p-4">
+  <div class="flex items-center justify-between mb-3">
+    <h3 class="text-lg font-semibold text-gray-800">Tệp/Link đính kèm</h3>
+    <div class="text-sm text-gray-500">Phiên bản mới nhất được đánh dấu</div>
+  </div>
+  <table class="min-w-full text-sm">
+    <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
+      <tr>
+        <th class="px-3 py-2 text-left">Version</th>
+        <th class="px-3 py-2 text-left">Tên</th>
+        <th class="px-3 py-2 text-left">Loại</th>
+        <th class="px-3 py-2 text-left">Trạng thái</th>
+        <th class="px-3 py-2 text-left">Người tạo</th>
+        <th class="px-3 py-2 text-left">Ngày tạo</th>
+        <th class="px-3 py-2 text-left">Hành động</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y">
+      {% for att in doc.attachments.all %}
+      <tr>
+        <td class="px-3 py-2 font-mono">v{{ att.version }}</td>
+        <td class="px-3 py-2">
+          {% if att.file %}
+            {{ att.original_name|default:att.file.name|default:"(file)" }}
+          {% elif att.link %}
+            {{ att.link|truncatechars:60 }}
+          {% else %}-{% endif %}
+        </td>
+        <td class="px-3 py-2">
+          {% if att.file %}File{% elif att.link %}Link{% else %}-{% endif %}
+        </td>
+        <td class="px-3 py-2">
+          <span class="px-2 py-1 text-xs rounded {% if att.is_deleted %}bg-red-50 text-red-700{% elif att.is_latest %}bg-emerald-50 text-emerald-700{% else %}bg-gray-100 text-gray-700{% endif %}">
+            {% if att.is_deleted %}Đã đánh dấu xóa{% elif att.is_latest %}Mới nhất{% else %}Cũ{% endif %}
+          </span>
+        </td>
+        <td class="px-3 py-2">{{ att.created_by.get_full_name|default:att.created_by.username|default:"-" }}</td>
+        <td class="px-3 py-2">{{ att.created_at|date:"d/m/Y H:i" }}</td>
+        <td class="px-3 py-2 flex gap-2 items-center">
+          {% if att.file and not att.is_deleted %}
+            <a href="{{ att.file.url }}" class="text-f88green hover:underline text-sm" download>Download</a>
+          {% endif %}
+          {% if att.link %}
+            <a href="{{ att.link }}" target="_blank" class="text-blue-600 hover:underline text-sm">Mở link</a>
+          {% endif %}
+          {% if not att.is_deleted %}
+          <form method="post" action="{% url 'admindocuments:admindocuments_attachment_delete' doc.id att.id %}">
+            {% csrf_token %}
+            <button class="text-red-600 text-xs hover:underline" type="submit">Đánh dấu xóa</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" class="px-3 py-4 text-center text-gray-500">Chưa có tệp đính kèm</td></tr>
+      {% endfor %}
     </tbody>
   </table>
 </div>
@@ -152,6 +224,10 @@
             </select>
           </div>
           <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Ngày ban hành</label>
+            <input type="date" name="issue_date" value="{{ doc.created_at|date:'Y-m-d' }}" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
+          </div>
+          <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Ngày hết hiệu lực</label>
             <input type="date" name="expiry_date" value="{{ form.instance.expiry_date|date:'Y-m-d' }}" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
           </div>
@@ -181,10 +257,6 @@
             <div x-show="attachmentMode === 'text'">
               <input type="text" name="attachment_link" placeholder="https://link-tai-lieu" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
             </div>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Mã ticket</label>
-            <input type="text" name="ticket_code" value="{{ form.instance.ticket_code }}" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
           </div>
           <div class="col-span-2">
             <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>

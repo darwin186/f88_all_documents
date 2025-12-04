@@ -195,3 +195,11 @@ GAPO_BOT_ID = os.getenv('BOT_ID')
 
 AUTH_PASSWORD_RESET_SUBJECT = 'registration/password_reset_subject.txt'
 PASSWORD_RESET_EMAIL_TEMPLATE = 'registration/password_reset_email.html'
+
+# Celery settings
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', CELERY_BROKER_URL)
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE

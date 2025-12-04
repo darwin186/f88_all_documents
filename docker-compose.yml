@@ -1,5 +1,11 @@
 
 services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
   web:
     build: .
     environment:
@@ -10,8 +16,9 @@ services:
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-postgres}
       # When using docker-compose this defaults to the service name 'db'
       DATABASE_HOST: ${DATABASE_HOST:-db}
-      
       DATABASE_PORT: ${DATABASE_PORT:-5432}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
     volumes:
       - .:/app
       - media:/app/media

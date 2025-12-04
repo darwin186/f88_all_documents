@@ -1,0 +1,92 @@
+{% extends "admindocuments/base.html" %}
+{% block title %}Counter văn bản{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-2xl font-semibold text-gray-700">Quản lý số chạy văn bản</h1>
+  <a href="{% url 'admindocuments:admindocuments_list' %}" class="text-sm text-gray-600 hover:underline">← Quay lại danh sách</a>
+</div>
+
+{% if messages %}
+  <div class="space-y-2 mb-4">
+    {% for message in messages %}
+      <div class="px-4 py-3 rounded-lg text-sm
+        {% if message.tags == 'error' %}bg-red-50 text-red-700 border border-red-200
+        {% elif message.tags == 'warning' %}bg-amber-50 text-amber-700 border border-amber-200
+        {% else %}bg-emerald-50 text-emerald-700 border border-emerald-200{% endif %}">
+        {{ message }}
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<div class="bg-white shadow-sm rounded-lg p-4 mb-6">
+  <h3 class="text-lg font-semibold text-gray-800 mb-3">Cập nhật số tiếp theo</h3>
+  <form method="post" class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    {% csrf_token %}
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Loại văn bản</label>
+      <select name="doc_type" class="w-full rounded border px-3 py-2">
+        <option value="">-- Chọn --</option>
+        {% for dt in doc_types %}
+        <option value="{{ dt.id }}">{{ dt.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Công ty</label>
+      <select name="company" class="w-full rounded border px-3 py-2">
+        <option value="">-- Chọn --</option>
+        {% for c in companies %}
+        <option value="{{ c.id }}">{{ c.code }} - {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Năm</label>
+      <input type="number" name="year" value="{{ year_now }}" class="w-full rounded border px-3 py-2" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Số tiếp theo</label>
+      <input type="number" name="next_number" class="w-full rounded border px-3 py-2" placeholder="vd: 15" min="1" />
+    </div>
+    <div class="col-span-2 lg:col-span-4 flex justify-end mt-2">
+      <button type="submit" class="px-4 py-2 bg-f88green text-white rounded hover:bg-f88dark">Cập nhật</button>
+    </div>
+  </form>
+</div>
+
+<div class="bg-white shadow-sm rounded-lg p-4">
+  <h3 class="text-lg font-semibold text-gray-800 mb-3">Theo dõi</h3>
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-100 text-gray-700 uppercase text-xs font-semibold">
+        <tr>
+          <th class="px-3 py-2 text-left">Loại văn bản</th>
+          <th class="px-3 py-2 text-left">Công ty</th>
+          <th class="px-3 py-2 text-left">Năm</th>
+          <th class="px-3 py-2 text-left">Đã dùng đến</th>
+          <th class="px-3 py-2 text-left">Số tiếp theo</th>
+          <th class="px-3 py-2 text-left">Chưa dùng từ</th>
+          <th class="px-3 py-2 text-left">Tổng bản ghi</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y">
+        {% for row in counters %}
+        <tr>
+          <td class="px-3 py-2">{{ row.doc_type.name }}</td>
+          <td class="px-3 py-2">{{ row.company.code }}</td>
+          <td class="px-3 py-2">{{ row.year }}</td>
+          <td class="px-3 py-2 font-mono">{{ row.used_max }}</td>
+          <td class="px-3 py-2 font-mono">{{ row.next_number }}</td>
+          <td class="px-3 py-2 font-mono">{{ row.gap_from }}</td>
+          <td class="px-3 py-2">{{ row.total }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="px-3 py-4 text-center text-gray-500">Chưa có counter</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

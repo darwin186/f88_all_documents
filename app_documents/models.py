@@ -519,7 +519,29 @@ class BorrowingStatus(models.Model):
     badge_color = models.CharField(max_length=50, null= True ) 
     class Meta: 
         db_table = 'd_BorrowingStatus'
-    
+
+class GapoScheduledMessage(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SENT = "sent", "Sent"
+        FAILED = "failed", "Failed"
+        CANCELLED = "cancelled", "Cancelled"
+
+    id = models.AutoField(primary_key=True)
+    receiver_id = models.CharField(max_length=50)
+    message = models.TextField()
+    schedule_at = models.DateTimeField()
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(null=True, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="gapo_schedules")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "f_GapoScheduledMessage"
+        ordering = ["-created_at"]
+
     def __str__(self):
         return self.borrow_status_name
     

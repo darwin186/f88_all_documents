@@ -1,4 +1,7 @@
 from datetime import date
+import uuid
+
+from django.utils import timezone
 
 from django.contrib.auth.models import User
 from django.db import models
@@ -261,7 +264,9 @@ class AdmAdministrativeDocument(models.Model):
             current_year = date.today().year
             last_doc = (
                 AdmAdministrativeDocument.objects.filter(
-                    doc_type=self.doc_type, created_at__year=current_year
+                    doc_type=self.doc_type,
+                    issuing_company=self.issuing_company,
+                    created_at__year=current_year,
                 )
                 .order_by("-running_number")
                 .first()
@@ -273,7 +278,7 @@ class AdmAdministrativeDocument(models.Model):
         signer_code = self.signer_role.code if self.signer_role else "NA"
         doc_type_code = self.doc_type.code if self.doc_type else "NA"
         self.document_number_full = (
-            f"{self.running_number:03d}-{year_now}-{doc_type_code}-{company_code}/{signer_code}"
+            f"{self.running_number:03d}/{year_now}/{doc_type_code}-{company_code}/{signer_code}"
         )
 
         super().save(*args, **kwargs)
@@ -409,22 +414,68 @@ class AdmPaperDocument(models.Model):
         return f"{self.paper_type} - {self.summary}"
 
 
+def _attachment_upload_path(instance, filename):
+    doc_part = instance.document_id or "tmp"
+    unique = uuid.uuid4().hex[:8]
+    return f"admindocuments/files/{doc_part}/{timezone.now():%Y/%m}/{unique}_{filename}"
+
+
+class AdmDocumentAttachment(models.Model):
+    document = models.ForeignKey(
+        AdmAdministrativeDocument,
+        on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    version = models.PositiveIntegerField()
+    file = models.FileField(upload_to=_attachment_upload_path, null=True, blank=True)
+    original_name = models.CharField(max_length=255, blank=True, null=True)
+    link = models.URLField(max_length=1000, blank=True, null=True)
+    is_latest = models.BooleanField(default=True)
+    is_deleted = models.BooleanField(default=False)
+    note = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="adm_doc_attachment_created",
+    )
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    deleted_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="adm_doc_attachment_deleted",
+    )
+
+    class Meta:
+        db_table = "adm_document_attachment"
+        unique_together = ("document", "version")
+        ordering = ["-version"]
+
+    def __str__(self):
+        return f"{self.document_id} v{self.version} ({self.original_name or self.link or 'file'})"
+
+
 class AdmDocumentCounter(models.Model):
     """Per doc_type and year counter to allocate running numbers safely."""
 
     doc_type = models.ForeignKey(AdmDocumentType, on_delete=models.CASCADE)
+    company = models.ForeignKey(AdmCompany, on_delete=models.CASCADE)
     year = models.PositiveIntegerField()
     next_number = models.PositiveIntegerField(default=1)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "adm_document_counter"
-        unique_together = ("doc_type", "year")
+        unique_together = ("doc_type", "company", "year")
         verbose_name = "Document Counter"
         verbose_name_plural = "Document Counters"
 
     def __str__(self):
-        return f"{self.doc_type.code}-{self.year}: next={self.next_number}"
+        return f"{self.doc_type.code}-{self.company.code}-{self.year}: next={self.next_number}"
 
 
 class AdmAdministrativeDocumentHistory(models.Model):

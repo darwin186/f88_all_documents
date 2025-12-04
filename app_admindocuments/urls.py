@@ -12,5 +12,9 @@ urlpatterns = [
     path("documents/<int:doc_id>/", views.document_detail, name="admindocuments_detail"),
     path("documents/<int:doc_id>/update/", views.document_update, name="admindocuments_update"),
     path("documents/<int:doc_id>/status/", views.document_change_status, name="admindocuments_change_status"),
+    path("documents/<int:doc_id>/attachments/<int:att_id>/delete/", views.document_attachment_delete, name="admindocuments_attachment_delete"),
+    path("counters/", views.document_counter_manage, name="admindocuments_counters"),
     path("paper-documents/", views.paper_document_list, name="paper_document_list"),
+    path("paper-documents/<int:doc_id>/", views.paper_document_detail, name="paper_document_detail"),
+    path("paper-documents/template/", views.paper_document_template, name="paper_document_template"),
 ]

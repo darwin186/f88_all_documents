@@ -13,6 +13,11 @@ from .models import (
 
 class AdmAdministrativeDocumentForm(forms.ModelForm):
     attachment_link = forms.CharField(required=False, label="Link đính kèm")
+    issue_date = forms.DateField(
+        required=False,
+        label="Ngày ban hành",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
 
     class Meta:
         model = AdmAdministrativeDocument
@@ -24,8 +29,10 @@ class AdmAdministrativeDocumentForm(forms.ModelForm):
             "signer_role",
             "issuing_company",
             "issuing_department",
+            "issue_date",
             "expiry_date",
             "attachment",
+            "status",
             "ticket_code",
             "note",
         ]
@@ -41,7 +48,7 @@ class AdmAdministrativeDocumentForm(forms.ModelForm):
             "signer_role": "Người ký",
             "issuing_company": "Công ty ban hành",
             "issuing_department": "Phòng ban ban hành",
-            "expiry_date": "Ngày hết hiệu lực",
+            "expiry_date": "Ngày hiệu lực",
             "attachment": "File đính kèm",
             "status": "Trạng thái văn bản",
             "ticket_code": "Mã ticket yêu cầu",
@@ -88,6 +95,11 @@ class AdmAdministrativeDocumentForm(forms.ModelForm):
 
 class AdmAdministrativeDocumentUpdateForm(forms.ModelForm):
     attachment_link = forms.CharField(required=False, label="Link đính kèm")
+    issue_date = forms.DateField(
+        required=False,
+        label="Ngày ban hành",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
 
     class Meta:
         model = AdmAdministrativeDocument
@@ -99,6 +111,7 @@ class AdmAdministrativeDocumentUpdateForm(forms.ModelForm):
             "signer_role",
             "issuing_company",
             "issuing_department",
+            "issue_date",
             "expiry_date",
             "attachment",
             "status",
@@ -168,7 +181,7 @@ class AdmPaperDocumentForm(forms.ModelForm):
         region_choices = [("", "Chọn miền")]
         region_choices += [
             (region.region_name, region.region_name)
-            for region in Region.objects.all().order_by("region_name")
+            for region in Region.objects.exclude(pk=3).order_by("region_name")
         ]
         self.fields["region"].choices = region_choices
         base_classes = "block w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green"
@@ -181,7 +194,6 @@ class AdmPaperDocumentForm(forms.ModelForm):
         fields = [
             "paper_type",
             "region",
-            "responsible_person",
             "requested_department",
             "ticket_code",
             "summary",
@@ -195,9 +207,8 @@ class AdmPaperDocumentForm(forms.ModelForm):
         }
         labels = {
             "region": "Miền",
-            "responsible_person": "Người phụ trách",
             "ticket_code": "Mã ticket yêu cầu",
-            "summary": "Tên, trích yếu nội dung",
+            "summary": "Nội dung",
             "courier_tracking_code": "Mã vận đơn CPN",
             "status": "Tình trạng",
             "note": "Ghi chú",

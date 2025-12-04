@@ -1,6 +1,7 @@
 import csv
 import os
-from datetime import datetime
+from datetime import datetime, time
+from io import BytesIO
 from functools import wraps
 
 from django.conf import settings
@@ -8,13 +9,15 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, transaction, models
 from django.db.models import Count, Q, Max
-from django.db.models.functions import TruncDay
+from django.db.models.functions import TruncDay, ExtractYear
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+
+from openpyxl import Workbook
 
 from .forms import (
     AdmAdministrativeDocumentForm,
@@ -29,6 +32,8 @@ from .models import (
     AdmDepartment,
     AdmDocumentStatus,
     AdmDocumentType,
+    AdmDocumentAttachment,
+    AdmDocumentCounter,
     AdmPaperDocument,
     AdmPaperType,
     AdmSignerRole,
@@ -45,6 +50,34 @@ def _has_admin_docs_access(user) -> bool:
     if is_checker:
         return False
     return user.groups.filter(name__in=allowed_groups).exists()
+
+
+def _create_attachment_version(document, user, uploaded_file=None, link=None, note=None):
+    """Create a new attachment version (file or link) for a document."""
+    if not uploaded_file and not link:
+        return None
+    current_max = (
+        document.attachments.aggregate(max_version=Max("version")).get("max_version")
+        or 0
+    )
+    new_version = current_max + 1
+    document.attachments.filter(is_latest=True).update(is_latest=False)
+    attachment = AdmDocumentAttachment.objects.create(
+        document=document,
+        version=new_version,
+        file=uploaded_file if uploaded_file else None,
+        original_name=getattr(uploaded_file, "name", None),
+        link=link or None,
+        is_latest=True,
+        is_deleted=False,
+        created_by=user,
+        note=note,
+    )
+    if uploaded_file:
+        # keep compatibility field pointing to latest file
+        document.attachment = attachment.file
+        document.save(update_fields=["attachment"])
+    return attachment
 
 
 def admin_staff_required(view_func):
@@ -286,8 +319,11 @@ def dashboard_export(request):
 def document_list(request):
     query = request.GET.get("q", "").strip()
     company_filter = request.GET.get("company")
+    content_type_filter = request.GET.get("ctype")
+    doc_type_filter = request.GET.get("dtype")
     sort = request.GET.get("sort", "created")
     direction = request.GET.get("dir", "desc")
+    new_doc_id = request.GET.get("new")
 
     sort_map = {
         "number": "document_number_full",
@@ -311,6 +347,10 @@ def document_list(request):
         )
     if company_filter:
         documents_qs = documents_qs.filter(issuing_company_id=company_filter)
+    if content_type_filter:
+        documents_qs = documents_qs.filter(content_type_id=content_type_filter)
+    if doc_type_filter:
+        documents_qs = documents_qs.filter(doc_type_id=doc_type_filter)
     documents_qs = documents_qs.order_by(order_field)
 
     page = request.GET.get("page", "1")
@@ -326,6 +366,7 @@ def document_list(request):
     doc_types = AdmDocumentType.objects.all().order_by("name")
     content_types = AdmContentType.objects.all().order_by("name")
     signer_roles = AdmSignerRole.objects.all().order_by("title")
+    statuses = AdmDocumentStatus.objects.all().order_by("name")
     companies = AdmCompany.objects.all().order_by("name")
     departments = (
         AdmDepartment.objects.select_related("company").all().order_by("name")
@@ -350,6 +391,7 @@ def document_list(request):
             "doc_types": doc_types,
             "content_types": content_types,
             "signer_roles": signer_roles,
+            "statuses": statuses,
             "companies": companies,
             "departments": departments,
             "default_status": default_status,
@@ -358,6 +400,9 @@ def document_list(request):
             "STATUS_PENDING": AdmDocumentStatus.CODE_PENDING,
             "STATUS_ISSUED": AdmDocumentStatus.CODE_ISSUED,
             "STATUS_EXPIRED": AdmDocumentStatus.CODE_EXPIRED,
+            "new_doc_id": new_doc_id or "",
+            "active_content_type_id": content_type_filter or "",
+            "active_doc_type_id": doc_type_filter or "",
         },
     )
 
@@ -366,8 +411,10 @@ def document_list(request):
 @admin_staff_required
 def paper_document_list(request):
     selected_type = request.GET.get("paper_type", "")
+    query = request.GET.get("q", "").strip()
     sort = request.GET.get("sort", "created")
     direction = request.GET.get("dir", "desc")
+    edit_id = request.GET.get("edit")
 
     sort_map = {
         "code": "document_number_full",
@@ -386,36 +433,60 @@ def paper_document_list(request):
 
     documents_qs = AdmPaperDocument.objects.select_related(
         "requested_department", "paper_type", "courier_company"
-    ).order_by(order_field)
+    )
+    if query:
+        documents_qs = documents_qs.filter(
+            Q(document_number_full__icontains=query)
+            | Q(courier_tracking_code__icontains=query)
+        )
+    documents_qs = documents_qs.order_by(order_field)
     paper_types = AdmPaperType.objects.filter(is_active=True).order_by("name")
     if selected_type:
         documents_qs = documents_qs.filter(paper_type_id=selected_type)
 
+    edit_instance = None
+    if edit_id:
+        edit_instance = AdmPaperDocument.objects.filter(pk=edit_id).first()
+
     if request.method == "POST":
-        form = AdmPaperDocumentForm(request.POST)
+        edit_target_id = request.POST.get("edit_id")
+        edit_instance = (
+            AdmPaperDocument.objects.filter(pk=edit_target_id).first()
+            if edit_target_id
+            else None
+        )
+        form = AdmPaperDocumentForm(request.POST, instance=edit_instance)
         if form.is_valid():
             paper_doc = form.save(commit=False)
-            paper_doc.created_by = request.user
-            max_running = (
-                AdmPaperDocument.objects.filter(paper_type=paper_doc.paper_type).aggregate(
-                    Max("running_number")
-                )["running_number__max"]
-                or 0
-            )
-            paper_doc.running_number = max_running + 1
-            year_now = timezone.now().year
-            paper_doc.document_number_full = (
-                f"{paper_doc.running_number:05d}/{year_now}/{paper_doc.paper_type.code}-F88"
-            )
-            paper_doc.save()
-            messages.success(request, "Tạo phiếu giấy tờ thành công.")
+            if edit_instance:
+                paper_doc.updated_by = request.user
+                paper_doc.save()
+                messages.success(request, "Cập nhật giấy tờ thành công.")
+            else:
+                paper_doc.created_by = request.user
+                full_name = (request.user.get_full_name() or "").strip()
+                paper_doc.responsible_person = full_name if full_name else request.user.username
+                max_running = (
+                    AdmPaperDocument.objects.filter(paper_type=paper_doc.paper_type).aggregate(
+                        Max("running_number")
+                    )["running_number__max"]
+                    or 0
+                )
+                paper_doc.running_number = max_running + 1
+                year_now = timezone.now().year
+                paper_doc.document_number_full = (
+                    f"{paper_doc.running_number:05d}/{year_now}/{paper_doc.paper_type.code}-F88"
+                )
+                paper_doc.save()
+                messages.success(request, "Tạo phiếu giấy tờ thành công.")
             params = request.GET.copy()
             redirect_url = reverse("admindocuments:paper_document_list")
             if params:
+                params.pop("edit", None)
                 redirect_url += f"?{params.urlencode()}"
             return redirect(redirect_url)
         messages.error(request, "Dữ liệu không hợp lệ, vui lòng kiểm tra lại.")
-    form = AdmPaperDocumentForm()
+    form = AdmPaperDocumentForm(instance=edit_instance)
 
     total_by_type = {
         row["paper_type"]: row["total"]
@@ -441,8 +512,177 @@ def paper_document_list(request):
         "sort": sort,
         "dir": direction,
         "paginator": paginator,
+        "edit_id": edit_id or "",
     }
     return render(request, "admindocuments/paper_document_list.html", context)
+
+
+@login_required
+@admin_staff_required
+def paper_document_detail(request, doc_id: int):
+    paper_doc = get_object_or_404(
+        AdmPaperDocument.objects.select_related(
+            "paper_type", "requested_department", "courier_company"
+        ),
+        pk=doc_id,
+    )
+    if request.method == "POST":
+        form = AdmPaperDocumentForm(request.POST, instance=paper_doc)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.updated_by = request.user
+            obj.save()
+            messages.success(request, "Cập nhật giấy tờ thành công.")
+            return redirect("admindocuments:paper_document_detail", doc_id=doc_id)
+        messages.error(request, "Dữ liệu không hợp lệ, vui lòng kiểm tra lại.")
+    else:
+        form = AdmPaperDocumentForm(instance=paper_doc)
+
+    return render(
+        request,
+        "admindocuments/paper_document_detail.html",
+        {"doc": paper_doc, "form": form},
+    )
+
+
+@login_required
+@admin_staff_required
+def paper_document_template(request):
+    """Generate Excel template for paper documents import."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Template"
+    headers = [
+        "Số hiệu",
+        "Loại giấy",
+        "Miền",
+        "Đơn vị yêu cầu",
+        "Nội dung",
+        "Đơn vị chuyển phát",
+        "Mã vận đơn",
+        "Tình trạng",
+        "Ngày tạo (yyyy-mm-dd)",
+        "Ghi chú",
+        "Người phụ trách",
+    ]
+    ws.append(headers)
+    ws.append(
+        [
+            "00001/2025/ABC-F88",  # Số hiệu (có thể để trống để hệ thống đánh số)
+            "Công văn",  # Loại giấy
+            "Miền Bắc",  # Miền
+            "PGD Hà Nội",  # Đơn vị yêu cầu
+            "Nội dung ví dụ",  # Nội dung
+            "VNPost",  # Đơn vị chuyển phát
+            "ABC123456",  # Mã vận đơn
+            "Đang chờ",  # Tình trạng
+            "2025-02-03",  # Ngày tạo
+            "Ghi chú ví dụ",  # Ghi chú
+            "Nguyễn Văn A",  # Người phụ trách
+        ]
+    )
+    stream = BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+    response = HttpResponse(
+        stream.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response[
+        "Content-Disposition"
+    ] = 'attachment; filename="paper_document_template.xlsx"'
+    return response
+
+
+@login_required
+@admin_staff_required
+def document_counter_manage(request):
+    doc_types = AdmDocumentType.objects.all().order_by("name")
+    companies = AdmCompany.objects.all().order_by("name")
+    year_now = timezone.now().year
+
+    if request.method == "POST":
+        doc_type_id = request.POST.get("doc_type")
+        company_id = request.POST.get("company")
+        year = request.POST.get("year") or year_now
+        next_number = request.POST.get("next_number")
+
+        try:
+            year = int(year)
+            next_number = int(next_number)
+        except (TypeError, ValueError):
+            messages.error(request, "Năm và số tiếp theo phải là số.")
+            return redirect("admindocuments:admindocuments_counters")
+
+        if not doc_type_id or not company_id:
+            messages.error(request, "Vui lòng chọn đủ loại văn bản và công ty.")
+            return redirect("admindocuments:admindocuments_counters")
+
+        max_used = (
+            AdmAdministrativeDocument.objects.filter(
+                doc_type_id=doc_type_id,
+                issuing_company_id=company_id,
+                created_at__year=year,
+            ).aggregate(mx=Max("running_number"))["mx"]
+            or 0
+        )
+        if next_number <= max_used:
+            messages.error(
+                request,
+                f"Số tiếp theo phải lớn hơn số đã dùng ({max_used}).",
+            )
+            return redirect("admindocuments:admindocuments_counters")
+
+        counter, _ = AdmDocumentCounter.objects.get_or_create(
+            doc_type_id=doc_type_id, company_id=company_id, year=year, defaults={"next_number": next_number}
+        )
+        if not _:
+            counter.next_number = next_number
+            counter.save(update_fields=["next_number", "updated_at"])
+        messages.success(request, "Cập nhật counter thành công.")
+        return redirect("admindocuments:admindocuments_counters")
+
+    # prepare tracking
+    used_map = {
+        (row["doc_type_id"], row["issuing_company_id"], row["created_year"]): {
+            "used_max": row["used_max"],
+            "total": row["total"],
+        }
+        for row in AdmAdministrativeDocument.objects.values(
+            "doc_type_id", "issuing_company_id", created_year=ExtractYear("created_at")
+        ).annotate(used_max=Max("running_number"), total=Count("id"))
+    }
+
+    counters = AdmDocumentCounter.objects.select_related("doc_type", "company").order_by(
+        "-year", "doc_type__name", "company__name"
+    )
+    counter_rows = []
+    for c in counters:
+        key = (c.doc_type_id, c.company_id, c.year)
+        used_info = used_map.get(key, {"used_max": 0, "total": 0})
+        gap_from = (used_info["used_max"] or 0) + 1
+        counter_rows.append(
+            {
+                "doc_type": c.doc_type,
+                "company": c.company,
+                "year": c.year,
+                "next_number": c.next_number,
+                "used_max": used_info["used_max"] or 0,
+                "total": used_info["total"] or 0,
+                "gap_from": gap_from,
+            }
+        )
+
+    return render(
+        request,
+        "admindocuments/document_counters.html",
+        {
+            "doc_types": doc_types,
+            "companies": companies,
+            "year_now": year_now,
+            "counters": counter_rows,
+        },
+    )
 
 
 @login_required
@@ -466,9 +706,10 @@ def document_create(request):
             doc.status = default_status
 
     attachment_link = form.cleaned_data.get("attachment_link")
-    if not request.FILES.get("attachment") and attachment_link:
-        prefix = "\n" if doc.note else ""
-        doc.note = f"{doc.note or ''}{prefix}Link đính kèm: {attachment_link}"
+    issue_date = form.cleaned_data.get("issue_date")
+    if issue_date:
+        tz = timezone.get_current_timezone()
+        doc.created_at = timezone.make_aware(datetime.combine(issue_date, time.min), tz)
 
     attempts = 0
     while attempts < 3:
@@ -477,9 +718,15 @@ def document_create(request):
             with transaction.atomic():
                 current_year = timezone.now().year
                 doc.running_number = allocate_running_number(
-                    doc.doc_type_id, current_year
+                    doc.doc_type_id, doc.issuing_company_id, current_year
                 )
                 doc.save()
+                _create_attachment_version(
+                    document=doc,
+                    user=request.user,
+                    uploaded_file=request.FILES.get("attachment"),
+                    link=attachment_link,
+                )
             break
         except IntegrityError:
             if attempts >= 3:
@@ -489,8 +736,12 @@ def document_create(request):
                 return redirect("admindocuments:admindocuments_list")
             continue
 
-    messages.success(request, "Document created successfully!")
-    return redirect("admindocuments:admindocuments_list")
+    messages.success(
+        request,
+        f"Văn bản {doc.document_number_full} đã tạo thành công.",
+    )
+    redirect_url = f"{reverse('admindocuments:admindocuments_list')}?new={doc.id}"
+    return redirect(redirect_url)
 
 
 @login_required
@@ -538,7 +789,7 @@ def document_detail(request, doc_id: int):
             "issuing_company",
             "issuing_department",
             "status",
-        ).get(pk=doc_id)
+        ).prefetch_related("attachments__created_by", "attachments__deleted_by").get(pk=doc_id)
     except AdmAdministrativeDocument.DoesNotExist:
         messages.error(request, "Document not found.")
         return redirect("admindocuments:admindocuments_list")
@@ -591,6 +842,11 @@ def document_update(request, doc_id: int):
         return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
 
     doc = form.save(commit=False)
+    issue_date = form.cleaned_data.get("issue_date")
+    attachment_link = form.cleaned_data.get("attachment_link")
+    if issue_date:
+        tz = timezone.get_current_timezone()
+        doc.created_at = timezone.make_aware(datetime.combine(issue_date, time.min), tz)
     doc.updated_by = request.user
 
     try:
@@ -598,14 +854,50 @@ def document_update(request, doc_id: int):
     except Exception:
         pass
 
-    if request.FILES.get("attachment"):
-        doc.attachment = request.FILES["attachment"]
+    with transaction.atomic():
+        doc.save()
+        _create_attachment_version(
+            document=doc,
+            user=request.user,
+            uploaded_file=request.FILES.get("attachment"),
+            link=attachment_link,
+        )
 
-    attachment_link = form.cleaned_data.get("attachment_link")
-    if not request.FILES.get("attachment") and attachment_link:
-        prefix = "\n" if doc.note else ""
-        doc.note = f"{doc.note or ''}{prefix}Link đính kèm: {attachment_link}"
-
-    doc.save()
     messages.success(request, "Document updated successfully!")
+    return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
+
+
+@login_required
+@admin_staff_required
+def document_attachment_delete(request, doc_id: int, att_id: int):
+    try:
+        attachment = AdmDocumentAttachment.objects.select_related("document").get(
+            pk=att_id, document_id=doc_id
+        )
+    except AdmDocumentAttachment.DoesNotExist:
+        messages.error(request, "File không tồn tại.")
+        return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
+
+    if request.method != "POST":
+        return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
+
+    with transaction.atomic():
+        attachment.is_deleted = True
+        attachment.is_latest = False
+        attachment.deleted_by = request.user
+        attachment.deleted_at = timezone.now()
+        attachment.save(update_fields=["is_deleted", "is_latest", "deleted_by", "deleted_at"])
+
+        latest = (
+            AdmDocumentAttachment.objects.filter(
+                document_id=doc_id, is_deleted=False
+            )
+            .order_by("-version")
+            .first()
+        )
+        if latest:
+            latest.is_latest = True
+            latest.save(update_fields=["is_latest"])
+
+    messages.success(request, "Đã đánh dấu xóa file.")
     return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
