@@ -16,7 +16,8 @@
       <tr><th class="py-1 pr-3 text-gray-500 text-left">Số thứ tự</th><td class="py-1">{{ doc.running_number }}</td></tr>
       <tr><th class="py-1 pr-3 text-gray-500 text-left">Miền</th><td class="py-1">{{ doc.region|default:"-" }}</td></tr>
       <tr><th class="py-1 pr-3 text-gray-500 text-left">Người phụ trách</th><td class="py-1">{{ doc.responsible_person|default:"-" }}</td></tr>
-      <tr><th class="py-1 pr-3 text-gray-500 text-left">Đơn vị yêu cầu</th><td class="py-1">{{ doc.requested_department.shop_name }}</td></tr>
+      <tr><th class="py-1 pr-3 text-gray-500 text-left">Phòng giao dịch</th><td class="py-1">{% if doc.requested_department %}{{ doc.requested_department.shop_name }}{% else %}-{% endif %}</td></tr>
+      <tr><th class="py-1 pr-3 text-gray-500 text-left">Phòng ban nội bộ</th><td class="py-1">{% if doc.department %}{{ doc.department.name }}{% else %}-{% endif %}</td></tr>
       <tr><th class="py-1 pr-3 text-gray-500 text-left">Đơn vị CPN</th><td class="py-1">{{ doc.courier_company.name|default:"-" }}</td></tr>
       <tr><th class="py-1 pr-3 text-gray-500 text-left">Mã vận đơn</th><td class="py-1">{{ doc.courier_tracking_code|default:"-" }}</td></tr>
       <tr><th class="py-1 pr-3 text-gray-500 text-left">Ngày tạo</th><td class="py-1">{{ doc.created_at|date:"d/m/Y" }}</td></tr>
@@ -36,9 +37,53 @@
         <label class="block text-sm font-medium text-gray-700 mb-1">Miền</label>
         {{ form.region }}
       </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Đơn vị yêu cầu</label>
-        {{ form.requested_department }}
+      <div x-data="admRequestedDepartmentDropdown('{{ doc.requested_department_id }}')" x-init="init()" class="relative">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Phòng giao dịch</label>
+        <input type="hidden" name="requested_department" x-model="selectedValue">
+        <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-lg border border-gray-300 px-3 py-2 text-left focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green bg-white">
+          <span class="truncate" x-text="selectedLabel || '-- Phòng giao dịch --'"></span>
+          <svg class="w-4 h-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div x-show="open" @click.outside="open = false" x-transition class="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
+          <div class="p-2 border-b border-gray-200">
+            <input type="text" x-model="searchTerm" placeholder="Tìm kiếm phòng giao dịch..." class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green">
+          </div>
+          <ul class="max-h-56 overflow-y-auto py-1 text-sm">
+            <template x-for="opt in filteredOptions()" :key="opt.id">
+              <li>
+                <button type="button" @click="select(opt)" class="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center justify-between" :class="opt.id === selectedValue ? 'bg-gray-50' : ''">
+                  <span x-text="opt.name" class="truncate"></span>
+                  <svg x-show="opt.id === selectedValue" class="w-4 h-4 text-f88green" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                </button>
+              </li>
+            </template>
+            <li x-show="filteredOptions().length === 0" class="px-3 py-2 text-gray-500">Không tìm thấy đơn vị</li>
+          </ul>
+        </div>
+      </div>
+      <div x-data="admInternalDepartmentDropdown('{{ doc.department_id }}')" x-init="init()" class="relative">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Phòng ban nội bộ</label>
+        <input type="hidden" name="department" x-model="selectedValue">
+        <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-lg border border-gray-300 px-3 py-2 text-left focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green bg-white">
+          <span class="truncate" x-text="selectedLabel || '-- Chọn phòng ban --'"></span>
+          <svg class="w-4 h-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div x-show="open" @click.outside="open = false" x-transition class="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
+          <div class="p-2 border-b border-gray-200">
+            <input type="text" x-model="searchTerm" placeholder="Tìm kiếm phòng ban..." class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green">
+          </div>
+          <ul class="max-h-56 overflow-y-auto py-1 text-sm">
+            <template x-for="opt in filteredOptions()" :key="opt.id">
+              <li>
+                <button type="button" @click="select(opt)" class="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center justify-between" :class="opt.id === selectedValue ? 'bg-gray-50' : ''">
+                  <span x-text="opt.name" class="truncate"></span>
+                  <svg x-show="opt.id === selectedValue" class="w-4 h-4 text-f88green" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                </button>
+              </li>
+            </template>
+            <li x-show="filteredOptions().length === 0" class="px-3 py-2 text-gray-500">Không tìm thấy phòng ban</li>
+          </ul>
+        </div>
       </div>
       <div class="col-span-2">
         <label class="block text-sm font-medium text-gray-700 mb-1">Nội dung</label>
@@ -63,4 +108,70 @@
     </form>
   </div>
 </div>
+<script>
+  const PD_REQUEST_DEPARTMENTS = [
+    {% for dept in paper_request_departments %}
+    { id: "{{ dept.pk }}", name: "{{ dept.shop_name|escapejs }}{% if dept.shop_code %} ({{ dept.shop_code|escapejs }}){% endif %}" }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+  const PD_INTERNAL_DEPARTMENTS = [
+    {% for dept in internal_departments %}
+    { id: "{{ dept.id }}", name: "{{ dept.name|escapejs }} ({{ dept.company.code|escapejs }})" }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+
+  function admRequestedDepartmentDropdown(preselect = '') {
+    return {
+      open: false,
+      searchTerm: '',
+      selectedValue: preselect || '',
+      selectedLabel: '',
+      options: PD_REQUEST_DEPARTMENTS,
+      filteredOptions() {
+        const term = this.searchTerm.trim().toLowerCase();
+        return this.options.filter((opt) => !term || opt.name.toLowerCase().includes(term));
+      },
+      select(opt) {
+        this.selectedValue = opt.id;
+        this.selectedLabel = opt.name;
+        this.searchTerm = '';
+        this.open = false;
+      },
+      syncSelected() {
+        const match = this.options.find((o) => o.id === this.selectedValue);
+        this.selectedLabel = match ? match.name : '';
+      },
+      init() {
+        this.syncSelected();
+      },
+    };
+  }
+
+  function admInternalDepartmentDropdown(preselect = '') {
+    return {
+      open: false,
+      searchTerm: '',
+      selectedValue: preselect || '',
+      selectedLabel: '',
+      options: PD_INTERNAL_DEPARTMENTS,
+      filteredOptions() {
+        const term = this.searchTerm.trim().toLowerCase();
+        return this.options.filter((opt) => !term || opt.name.toLowerCase().includes(term));
+      },
+      select(opt) {
+        this.selectedValue = opt.id;
+        this.selectedLabel = opt.name;
+        this.searchTerm = '';
+        this.open = false;
+      },
+      syncSelected() {
+        const match = this.options.find((o) => o.id === this.selectedValue);
+        this.selectedLabel = match ? match.name : '';
+      },
+      init() {
+        this.syncSelected();
+      },
+    };
+  }
+</script>
 {% endblock %}

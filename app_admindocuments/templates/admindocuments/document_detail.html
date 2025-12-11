@@ -410,7 +410,7 @@
               <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                 <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
               </div>
-              <input name="issue_date" datepicker datepicker-buttons datepicker-autoselect-today data-datepicker-format="yyyy-mm-dd" type="text" value="{{ doc.issue_date|default:doc.created_at|date:'Y-m-d' }}" class="block w-full pl-9 pr-3 py-2.5 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-f88green focus:border-f88green placeholder:text-gray-500" placeholder="Chọn ngày ban hành" />
+              <input name="issue_date" datepicker datepicker-buttons datepicker-autoselect-today datepicker-format="dd/mm/yyyy" type="text" value="{{ doc.issue_date|default:doc.created_at|date:'d/m/Y' }}" class="block w-full pl-9 pr-3 py-2.5 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-f88green focus:border-f88green placeholder:text-gray-500" placeholder="dd/mm/yyyy" />
             </div>
           </div>
           <div>
@@ -419,7 +419,7 @@
               <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                 <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
               </div>
-              <input name="effective_date" datepicker datepicker-buttons data-datepicker-format="yyyy-mm-dd" type="text" value="{{ form.instance.effective_date|date:'Y-m-d' }}" class="block w-full pl-9 pr-3 py-2.5 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-f88green focus:border-f88green placeholder:text-gray-500" placeholder="Chọn ngày hiệu lực" />
+              <input name="effective_date" datepicker datepicker-buttons datepicker-format="dd/mm/yyyy" type="text" value="{{ form.instance.effective_date|date:'d/m/Y' }}" class="block w-full pl-9 pr-3 py-2.5 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-f88green focus:border-f88green placeholder:text-gray-500" placeholder="dd/mm/yyyy" />
             </div>
           </div>
           <div>
@@ -428,7 +428,7 @@
               <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                 <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
               </div>
-              <input name="expiry_date" datepicker datepicker-buttons data-datepicker-format="yyyy-mm-dd" type="text" value="{{ form.instance.expiry_date|date:'Y-m-d' }}" class="block w-full pl-9 pr-3 py-2.5 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-f88green focus:border-f88green placeholder:text-gray-500" placeholder="Chọn ngày hết hiệu lực" />
+              <input name="expiry_date" datepicker datepicker-buttons datepicker-format="dd/mm/yyyy" type="text" value="{{ form.instance.expiry_date|date:'d/m/Y' }}" class="block w-full pl-9 pr-3 py-2.5 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-f88green focus:border-f88green placeholder:text-gray-500" placeholder="dd/mm/yyyy" />
             </div>
           </div>
           <div class="col-span-2 flex items-center gap-2">

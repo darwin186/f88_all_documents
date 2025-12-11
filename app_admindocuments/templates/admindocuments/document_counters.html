@@ -69,6 +69,7 @@
           <th class="px-3 py-2 text-left">Số tiếp theo</th>
           <th class="px-3 py-2 text-left">Chưa dùng từ</th>
           <th class="px-3 py-2 text-left">Tổng bản ghi</th>
+          <th class="px-3 py-2 text-left">Chỉnh</th>
         </tr>
       </thead>
       <tbody class="divide-y">
@@ -81,9 +82,21 @@
           <td class="px-3 py-2 font-mono">{{ row.next_number }}</td>
           <td class="px-3 py-2 font-mono">{{ row.gap_from }}</td>
           <td class="px-3 py-2">{{ row.total }}</td>
+          <td class="px-3 py-2">
+            <form method="post" class="flex items-center gap-2">
+              {% csrf_token %}
+              <input type="hidden" name="doc_type" value="{{ row.doc_type_id }}">
+              <input type="hidden" name="company" value="{{ row.company_id }}">
+              <input type="hidden" name="year" value="{{ row.year }}">
+              <input type="number" name="next_number" value="{{ row.next_number }}" min="1"
+                     class="w-28 rounded border px-2 py-1 text-sm">
+              <button type="submit" class="px-3 py-1 bg-f88green text-white rounded hover:bg-f88dark text-xs">Lưu</button>
+            </form>
+            <p class="text-[11px] text-gray-500 mt-1">Nếu nhập số nhỏ hơn, chỉ cần số đó chưa được dùng.</p>
+          </td>
         </tr>
         {% empty %}
-        <tr><td colspan="7" class="px-3 py-4 text-center text-gray-500">Chưa có counter</td></tr>
+        <tr><td colspan="8" class="px-3 py-4 text-center text-gray-500">Chưa có counter</td></tr>
         {% endfor %}
       </tbody>
     </table>

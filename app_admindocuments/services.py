@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.utils import timezone
 
-from .models import AdmDocumentCounter
+from .models import AdmAdministrativeDocument, AdmDocumentCounter
 
 
 @transaction.atomic
@@ -19,8 +19,23 @@ def allocate_running_number(
             defaults={"next_number": 1},
         )
     )
-    current = counter.next_number
-    counter.next_number = current + 1
+    candidate = counter.next_number or 1
+    attempts = 0
+    while True:
+        exists = AdmAdministrativeDocument.objects.filter(
+            doc_type_id=doc_type_id,
+            issuing_company_id=company_id,
+            created_at__year=year,
+            running_number=candidate,
+        ).exists()
+        if not exists:
+            break
+        candidate += 1
+        attempts += 1
+        if attempts > 1000:
+            raise ValueError("Could not allocate unique running number.")
+
+    counter.next_number = candidate + 1
     counter.save(update_fields=["next_number", "updated_at"])
-    return current
+    return candidate
 

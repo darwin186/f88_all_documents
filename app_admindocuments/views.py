@@ -21,6 +21,8 @@ from django.utils import timezone
 from openpyxl import Workbook
 from openpyxl import load_workbook
 
+from app_documents.models import Shop
+
 from .forms import (
     AdmAdministrativeDocumentForm,
     AdmAdministrativeDocumentUpdateForm,
@@ -117,6 +119,14 @@ def _parse_filters(request):
     doc_type_id = request.GET.get("doc_type")
     department_id = request.GET.get("department")
 
+    def parse_date_str(value):
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(value, fmt).replace(tzinfo=tz)
+            except (TypeError, ValueError):
+                continue
+        raise ValueError
+
     if month and year:
         try:
             m = int(month)
@@ -138,7 +148,8 @@ def _parse_filters(request):
         def parse_d(value, default):
             if not value:
                 return default
-            return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=tz)
+            parsed = parse_date_str(value)
+            return parsed
 
         default_start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         default_end = default_start.replace(
@@ -367,15 +378,25 @@ def document_list(request):
         documents_qs = documents_qs.filter(content_type_id=content_type_filter)
     if doc_type_filter:
         documents_qs = documents_qs.filter(doc_type_id=doc_type_filter)
-    try:
-        if start_date:
-            sd = datetime.strptime(start_date, "%Y-%m-%d").date()
-            documents_qs = documents_qs.filter(created_at__date__gte=sd)
-        if end_date:
-            ed = datetime.strptime(end_date, "%Y-%m-%d").date()
-            documents_qs = documents_qs.filter(created_at__date__lte=ed)
-    except ValueError:
-        pass
+    def _parse_dt(value):
+        if not value:
+            return None
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(value, fmt).date()
+            except (TypeError, ValueError):
+                continue
+        return None
+    sd = _parse_dt(start_date)
+    ed = _parse_dt(end_date)
+    if not sd and not ed:
+        today = timezone.localdate() if settings.USE_TZ else date.today()
+        sd = date(today.year, 1, 1)
+        ed = date(today.year, 12, 31)
+    if sd:
+        documents_qs = documents_qs.filter(created_at__date__gte=sd)
+    if ed:
+        documents_qs = documents_qs.filter(created_at__date__lte=ed)
     documents_qs = documents_qs.order_by(order_field)
 
     page = request.GET.get("page", "1")
@@ -478,15 +499,26 @@ def document_list_export(request):
         documents_qs = documents_qs.filter(content_type_id=content_type_filter)
     if doc_type_filter:
         documents_qs = documents_qs.filter(doc_type_id=doc_type_filter)
-    try:
-        if start_date:
-            sd = datetime.strptime(start_date, "%Y-%m-%d").date()
-            documents_qs = documents_qs.filter(created_at__date__gte=sd)
-        if end_date:
-            ed = datetime.strptime(end_date, "%Y-%m-%d").date()
-            documents_qs = documents_qs.filter(created_at__date__lte=ed)
-    except ValueError:
-        pass
+    def _parse_date(value):
+        if not value:
+            return None
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(value, fmt).date()
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    sd = _parse_date(start_date)
+    ed = _parse_date(end_date)
+    if not sd and not ed:
+        today = timezone.localdate() if settings.USE_TZ else date.today()
+        sd = date(today.year, 1, 1)
+        ed = date(today.year, 12, 31)
+    if sd:
+        documents_qs = documents_qs.filter(created_at__date__gte=sd)
+    if ed:
+        documents_qs = documents_qs.filter(created_at__date__lte=ed)
     documents_qs = documents_qs.order_by(order_field)
 
     wb = Workbook()
@@ -615,18 +647,38 @@ def paper_document_list(request):
                 paper_doc.created_by = request.user
                 full_name = (request.user.get_full_name() or "").strip()
                 paper_doc.responsible_person = full_name if full_name else request.user.username
-                max_running = (
-                    AdmPaperDocument.objects.filter(paper_type=paper_doc.paper_type).aggregate(
-                        Max("running_number")
-                    )["running_number__max"]
-                    or 0
-                )
-                paper_doc.running_number = max_running + 1
-                year_now = timezone.now().year
-                paper_doc.document_number_full = (
-                    f"{paper_doc.running_number:05d}/{year_now}/{paper_doc.paper_type.code}-F88"
-                )
-                paper_doc.save()
+                attempts = 0
+                saved = False
+                while attempts < 3 and not saved:
+                    attempts += 1
+                    try:
+                        with transaction.atomic():
+                            year_now = timezone.now().year
+                            # Khóa các bản ghi cùng loại/năm để tránh race
+                            last_doc = (
+                                AdmPaperDocument.objects.select_for_update()
+                                .filter(paper_type=paper_doc.paper_type, created_at__year=year_now)
+                                .order_by("-running_number")
+                                .first()
+                            )
+                            running_number = (last_doc.running_number if last_doc else 0) + 1
+                            while True:
+                                doc_num = f"{running_number:05d}/{year_now}/{paper_doc.paper_type.code}-F88"
+                                if not AdmPaperDocument.objects.filter(document_number_full=doc_num).exists():
+                                    break
+                                running_number += 1
+                            paper_doc.running_number = running_number
+                            paper_doc.document_number_full = doc_num
+                            paper_doc.save()
+                        saved = True
+                    except IntegrityError:
+                        if attempts >= 3:
+                            messages.error(
+                                request,
+                                "Không thể sinh số hiệu duy nhất, vui lòng thử lại.",
+                            )
+                            return redirect("admindocuments:paper_document_list")
+                        continue
                 messages.success(request, "Tạo phiếu giấy tờ thành công.")
             params = request.GET.copy()
             redirect_url = reverse("admindocuments:paper_document_list")
@@ -634,7 +686,14 @@ def paper_document_list(request):
                 params.pop("edit", None)
                 redirect_url += f"?{params.urlencode()}"
             return redirect(redirect_url)
-        messages.error(request, "Dữ liệu không hợp lệ, vui lòng kiểm tra lại.")
+        errors_str = []
+        for field, errs in form.errors.items():
+            label = form.fields.get(field).label if field in form.fields else field
+            errors_str.append(f"{label}: {', '.join(errs)}")
+        if errors_str:
+            messages.error(request, "Dữ liệu không hợp lệ: " + " | ".join(errors_str))
+        else:
+            messages.error(request, "Dữ liệu không hợp lệ, vui lòng kiểm tra lại.")
     form = AdmPaperDocumentForm(instance=edit_instance)
 
     total_by_type = {
@@ -657,6 +716,9 @@ def paper_document_list(request):
     requested_department_initial = ""
     if edit_instance and getattr(edit_instance, "requested_department_id", None):
         requested_department_initial = str(edit_instance.requested_department_id)
+    edit_department_initial = ""
+    if edit_instance and getattr(edit_instance, "department_id", None):
+        edit_department_initial = str(edit_instance.department_id)
 
     context = {
         "documents": documents,
@@ -669,6 +731,7 @@ def paper_document_list(request):
         "edit_id": edit_id or "",
         "paper_request_departments": request_departments,
         "edit_requested_department_id": requested_department_initial,
+        "edit_department_id": edit_department_initial,
         "internal_departments": AdmDepartment.objects.select_related("company").all().order_by("name"),
     }
     return render(request, "admindocuments/paper_document_list.html", context)
@@ -679,7 +742,7 @@ def paper_document_list(request):
 def paper_document_detail(request, doc_id: int):
     paper_doc = get_object_or_404(
         AdmPaperDocument.objects.select_related(
-            "paper_type", "requested_department", "courier_company"
+            "paper_type", "requested_department", "courier_company", "department"
         ),
         pk=doc_id,
     )
@@ -691,14 +754,28 @@ def paper_document_detail(request, doc_id: int):
             obj.save()
             messages.success(request, "Cập nhật giấy tờ thành công.")
             return redirect("admindocuments:paper_document_detail", doc_id=doc_id)
-        messages.error(request, "Dữ liệu không hợp lệ, vui lòng kiểm tra lại.")
+        errors_str = []
+        for field, errs in form.errors.items():
+            label = form.fields.get(field).label if field in form.fields else field
+            errors_str.append(f"{label}: {', '.join(errs)}")
+        if errors_str:
+            messages.error(request, "Dữ liệu không hợp lệ: " + " | ".join(errors_str))
+        else:
+            messages.error(request, "Dữ liệu không hợp lệ, vui lòng kiểm tra lại.")
     else:
         form = AdmPaperDocumentForm(instance=paper_doc)
 
     return render(
         request,
         "admindocuments/paper_document_detail.html",
-        {"doc": paper_doc, "form": form},
+        {
+            "doc": paper_doc,
+            "form": form,
+            "paper_request_departments": Shop.objects.all().order_by("shop_name"),
+            "internal_departments": AdmDepartment.objects.select_related("company")
+            .all()
+            .order_by("name"),
+        },
     )
 
 
@@ -785,11 +862,10 @@ def paper_document_import(request):
             continue
 
         requested_dept = find_shop(str(requested_dept_name).strip()) if requested_dept_name else None
-        if not requested_dept:
-            errors.append(f"Dòng {idx}: Phòng giao dịch không hợp lệ/để trống.")
-            continue
-
         internal_dept = find_department(str(internal_dept_name).strip()) if internal_dept_name else None
+        if not requested_dept and not internal_dept:
+            errors.append(f"Dòng {idx}: Cần chọn Phòng giao dịch hoặc Phòng ban nội bộ (có thể chọn cả hai).")
+            continue
 
         courier = find_courier(str(courier_name).strip()) if courier_name else None
 
@@ -945,18 +1021,17 @@ def document_counter_manage(request):
             messages.error(request, "Vui lòng chọn đủ loại văn bản và công ty.")
             return redirect("admindocuments:admindocuments_counters")
 
-        max_used = (
-            AdmAdministrativeDocument.objects.filter(
-                doc_type_id=doc_type_id,
-                issuing_company_id=company_id,
-                created_at__year=year,
-            ).aggregate(mx=Max("running_number"))["mx"]
-            or 0
+        used_qs = AdmAdministrativeDocument.objects.filter(
+            doc_type_id=doc_type_id,
+            issuing_company_id=company_id,
+            created_at__year=year,
         )
-        if next_number <= max_used:
+        max_used = used_qs.aggregate(mx=Max("running_number"))["mx"] or 0
+        exists_number = used_qs.filter(running_number=next_number).exists()
+        if exists_number:
             messages.error(
                 request,
-                f"Số tiếp theo phải lớn hơn số đã dùng ({max_used}).",
+                f"Số {next_number} đã được sử dụng (đã dùng tới {max_used}).",
             )
             return redirect("admindocuments:admindocuments_counters")
 
@@ -991,7 +1066,9 @@ def document_counter_manage(request):
         counter_rows.append(
             {
                 "doc_type": c.doc_type,
+                "doc_type_id": c.doc_type_id,
                 "company": c.company,
+                "company_id": c.company_id,
                 "year": c.year,
                 "next_number": c.next_number,
                 "used_max": used_info["used_max"] or 0,
@@ -1091,7 +1168,7 @@ def document_create(request):
     attachment_link = form.cleaned_data.get("attachment_link")
     issue_date = form.cleaned_data.get("issue_date")
     if not issue_date:
-        issue_date = timezone.localdate()
+        issue_date = timezone.localdate() if settings.USE_TZ else date.today()
     doc.issue_date = issue_date
 
     attempts = 0
@@ -1265,7 +1342,7 @@ def document_update(request, doc_id: int):
     attachment_link = form.cleaned_data.get("attachment_link")
     issue_date = form.cleaned_data.get("issue_date") or doc.issue_date
     if not issue_date:
-        issue_date = timezone.localdate()
+        issue_date = timezone.localdate() if settings.USE_TZ else date.today()
     doc.issue_date = issue_date
     doc.updated_by = request.user
 

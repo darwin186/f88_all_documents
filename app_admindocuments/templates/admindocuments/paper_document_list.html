@@ -1,9 +1,22 @@
 {% extends "admindocuments/base.html" %}
-{% block title %}Giấy tờ hành chính{% endblock %}
+{% block title %}Danh sách giấy tờ hành chính{% endblock %}
 
 {% block content %}
+{% if messages %}
+<div class="fixed bottom-4 right-4 space-y-2 z-50">
+  {% for message in messages %}
+    <div class="px-4 py-3 rounded-lg shadow text-sm
+      {% if message.tags == 'error' %}bg-red-50 text-red-700 border border-red-200
+      {% elif message.tags == 'warning' %}bg-amber-50 text-amber-700 border border-amber-200
+      {% else %}bg-emerald-50 text-emerald-700 border border-emerald-200{% endif %}">
+      {{ message }}
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
 <div class="flex justify-between items-center mb-6">
-  <h1 class="text-2xl font-semibold text-gray-700">Giấy tờ hành chính</h1>
+  <h1 class="text-2xl font-semibold text-gray-700">Danh sách giấy tờ hành chính</h1>
   <button data-modal-target="paperModal" data-modal-toggle="paperModal"
           class="bg-f88green hover:bg-f88dark text-white px-4 py-2 rounded-lg shadow">Tạo mới</button>
 </div>
@@ -67,13 +80,13 @@
     <tbody class="divide-y divide-gray-200">
       {% for doc in documents %}
       <tr class="hover:bg-gray-50">
-        <td class="px-4 py-3">{{ doc.running_number }}</td>
+        <td class="px-4 py-3">{{ forloop.counter }}</td>
         <td class="px-4 py-3 font-mono">{{ doc.document_number_full }}</td>
         <td class="px-4 py-3">{{ doc.paper_type.name }}</td>
         <td class="px-4 py-3">{{ doc.region|default:'-' }}</td>
         <td class="px-4 py-3">{{ doc.responsible_person|default:'-' }}</td>
-        <td class="px-4 py-3">{{ doc.requested_department.shop_name }}</td>
-        <td class="px-4 py-3">{{ doc.department.name|default:'-' }}</td>
+        <td class="px-4 py-3">{% if doc.requested_department %}{{ doc.requested_department.shop_name }}{% else %}-{% endif %}</td>
+        <td class="px-4 py-3">{% if doc.department %}{{ doc.department.name }}{% else %}-{% endif %}</td>
         <td class="px-4 py-3">{{ doc.summary }}</td>
         <td class="px-4 py-3">{{ doc.courier_company.name|default:'-' }}</td>
         <td class="px-4 py-3">{{ doc.courier_tracking_code|default:'-' }}</td>
@@ -153,12 +166,15 @@
           </div>
           <div x-data="admRequestedDepartmentDropdown('{{ edit_requested_department_id }}')" x-init="init()" class="relative">
             <label class="block text-sm font-medium text-gray-700 mb-1">Phòng giao dịch</label>
-            <input type="hidden" name="requested_department" x-model="selectedValue" required>
+            <input type="hidden" name="requested_department" x-model="selectedValue">
             <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-lg border border-gray-300 px-3 py-2 text-left focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green bg-white">
               <span class="truncate" x-text="selectedLabel || '-- Phòng giao dịch --'"></span>
               <svg class="w-4 h-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6"/></svg>
             </button>
             <div x-show="open" @click.outside="open = false" x-transition class="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
+              <div class="px-3 pt-2 pb-1 flex justify-end">
+                <button type="button" @click="clear()" class="text-xs text-blue-600 hover:underline">Bỏ chọn</button>
+              </div>
               <div class="p-2 border-b border-gray-200">
                 <input type="text" x-model="searchTerm" placeholder="Tìm kiếm phòng giao dịch..." class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green">
               </div>
@@ -175,7 +191,7 @@
               </ul>
             </div>
           </div>
-          <div x-data="admInternalDepartmentDropdown()" x-init="init()" class="relative">
+          <div x-data="admInternalDepartmentDropdown('{{ edit_department_id }}')" x-init="init()" class="relative">
             <label class="block text-sm font-medium text-gray-700 mb-1">Phòng ban nội bộ</label>
             <input type="hidden" name="department" x-model="selectedValue">
             <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-lg border border-gray-300 px-3 py-2 text-left focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green bg-white">
@@ -183,6 +199,9 @@
               <svg class="w-4 h-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6"/></svg>
             </button>
             <div x-show="open" @click.outside="open = false" x-transition class="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
+              <div class="px-3 pt-2 pb-1 flex justify-end">
+                <button type="button" @click="clear()" class="text-xs text-blue-600 hover:underline">Bỏ chọn</button>
+              </div>
               <div class="p-2 border-b border-gray-200">
                 <input type="text" x-model="searchTerm" placeholder="Tìm kiếm phòng ban..." class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green">
               </div>
@@ -263,6 +282,12 @@
         this.searchTerm = '';
         this.open = false;
       },
+      clear() {
+        this.selectedValue = '';
+        this.selectedLabel = '';
+        this.searchTerm = '';
+        this.open = false;
+      },
       syncSelected() {
         const match = this.options.find((o) => o.id === this.selectedValue);
         this.selectedLabel = match ? match.name : '';
@@ -273,11 +298,11 @@
     };
   }
 
-  function admInternalDepartmentDropdown() {
+  function admInternalDepartmentDropdown(preselect = '') {
     return {
       open: false,
       searchTerm: '',
-      selectedValue: '',
+      selectedValue: preselect || '',
       selectedLabel: '',
       options: ADM_INTERNAL_DEPARTMENTS,
       filteredOptions() {
@@ -289,6 +314,12 @@
         this.selectedLabel = opt.name;
         this.open = false;
         this.searchTerm = '';
+      },
+      clear() {
+        this.selectedValue = '';
+        this.selectedLabel = '';
+        this.searchTerm = '';
+        this.open = false;
       },
       syncSelected() {
         const match = this.options.find((o) => o.id === this.selectedValue);

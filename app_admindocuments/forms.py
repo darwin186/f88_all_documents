@@ -22,12 +22,14 @@ class AdmAdministrativeDocumentForm(forms.ModelForm):
     issue_date = forms.DateField(
         required=False,
         label="Ngày ban hành",
-        widget=forms.DateInput(attrs={"type": "date"}),
+        input_formats=["%d/%m/%Y", "%Y-%m-%d"],
+        widget=forms.DateInput(attrs={"type": "text"}),
     )
     effective_date = forms.DateField(
         required=False,
         label="Ngày hiệu lực",
-        widget=forms.DateInput(attrs={"type": "date"}),
+        input_formats=["%d/%m/%Y", "%Y-%m-%d"],
+        widget=forms.DateInput(attrs={"type": "text"}),
     )
     reference_document = forms.ModelChoiceField(
         queryset=AdmAdministrativeDocument.objects.none(),
@@ -39,6 +41,7 @@ class AdmAdministrativeDocumentForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         qs = AdmAdministrativeDocument.objects.order_by("-created_at")
         self.fields["reference_document"].queryset = qs
+        self.fields["expiry_date"].input_formats = ["%d/%m/%Y", "%Y-%m-%d"]
 
     class Meta:
         model = AdmAdministrativeDocument
@@ -61,7 +64,9 @@ class AdmAdministrativeDocumentForm(forms.ModelForm):
             "note",
         ]
         widgets = {
-            "expiry_date": forms.DateInput(attrs={"type": "date"}),
+            "expiry_date": forms.DateInput(
+                attrs={"type": "text"}, format="%d/%m/%Y"
+            ),
             "note": forms.Textarea(attrs={"rows": 3}),
         }
         labels = {
@@ -130,12 +135,14 @@ class AdmAdministrativeDocumentUpdateForm(forms.ModelForm):
     issue_date = forms.DateField(
         required=False,
         label="Ngày ban hành",
-        widget=forms.DateInput(attrs={"type": "date"}),
+        input_formats=["%d/%m/%Y", "%Y-%m-%d"],
+        widget=forms.DateInput(attrs={"type": "text"}),
     )
     effective_date = forms.DateField(
         required=False,
         label="Ngày hiệu lực",
-        widget=forms.DateInput(attrs={"type": "date"}),
+        input_formats=["%d/%m/%Y", "%Y-%m-%d"],
+        widget=forms.DateInput(attrs={"type": "text"}),
     )
     reference_document = forms.ModelChoiceField(
         queryset=AdmAdministrativeDocument.objects.none(),
@@ -149,6 +156,7 @@ class AdmAdministrativeDocumentUpdateForm(forms.ModelForm):
         if getattr(self, "instance", None) and self.instance.pk:
             qs = qs.exclude(pk=self.instance.pk)
         self.fields["reference_document"].queryset = qs
+        self.fields["expiry_date"].input_formats = ["%d/%m/%Y", "%Y-%m-%d"]
 
     class Meta:
         model = AdmAdministrativeDocument
@@ -171,7 +179,9 @@ class AdmAdministrativeDocumentUpdateForm(forms.ModelForm):
             "note",
         ]
         widgets = {
-            "expiry_date": forms.DateInput(attrs={"type": "date"}),
+            "expiry_date": forms.DateInput(
+                attrs={"type": "text"}, format="%d/%m/%Y"
+            ),
             "note": forms.Textarea(attrs={"rows": 3}),
         }
 
@@ -226,7 +236,8 @@ class AdmPaperDocumentForm(forms.ModelForm):
     )
     requested_department = forms.ModelChoiceField(
         queryset=Shop.objects.all().order_by("shop_name"),
-        label="Phòng/PGD yêu cầu",
+        label="Phòng giao dịch",
+        required=False,
     )
     department = forms.ModelChoiceField(
         queryset=AdmDepartment.objects.all().order_by("name"),
@@ -252,6 +263,7 @@ class AdmPaperDocumentForm(forms.ModelForm):
             existing = field.widget.attrs.get("class", "")
             field.widget.attrs["class"] = f"{existing} {base_classes}".strip()
         self.fields["department"].empty_label = "Chọn phòng ban"
+        self.fields["requested_department"].empty_label = "Phòng giao dịch"
         self.fields["courier_company"].empty_label = "Chọn đơn vị CPN"
 
     class Meta:
@@ -260,6 +272,7 @@ class AdmPaperDocumentForm(forms.ModelForm):
             "paper_type",
             "region",
             "requested_department",
+            "department",
             "ticket_code",
             "summary",
             "courier_company",
@@ -278,6 +291,21 @@ class AdmPaperDocumentForm(forms.ModelForm):
             "status": "Tình trạng",
             "note": "Ghi chú",
         }
+
+    def clean(self):
+        cleaned = super().clean()
+        requested_department = cleaned.get("requested_department")
+        internal_department = cleaned.get("department")
+        if not requested_department and not internal_department:
+            self.add_error(
+                "requested_department",
+                "Chọn Phòng giao dịch hoặc Phòng ban nội bộ (có thể chọn cả hai).",
+            )
+            self.add_error(
+                "department",
+                "Chọn Phòng ban nội bộ hoặc Phòng giao dịch (có thể chọn cả hai).",
+            )
+        return cleaned
 
 
 class _MasterBaseForm(forms.ModelForm):
