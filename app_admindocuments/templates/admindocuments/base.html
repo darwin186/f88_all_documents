@@ -19,6 +19,7 @@
   </script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.3.0/flowbite.min.css" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.3.0/flowbite.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.3.0/datepicker.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
   <style>
     body { background-color: #f5f6f8; font-family: "Inter", sans-serif; }
@@ -81,6 +82,14 @@
          class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'paper_document_list' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h16"/></svg>
         <span>Giấy hành chính</span>
+      </a>
+      <a href="{% url 'admindocuments:master_data' %}" 
+         class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'master_data' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <circle cx="12" cy="12" r="9" stroke-width="1.5" fill="none"></circle>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v8m4-4H8"></path>
+        </svg>
+        <span>Master data</span>
       </a>
       <a href="{% url 'admindocuments:admindocuments_counters' %}" 
          class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'admindocuments_counters' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">

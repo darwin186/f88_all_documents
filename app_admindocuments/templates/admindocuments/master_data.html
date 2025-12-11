@@ -1,0 +1,448 @@
+{% extends "admindocuments/base.html" %}
+{% block title %}Master data văn bản{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-semibold text-gray-700">Master data văn bản</h1>
+    <p class="text-sm text-gray-500 mt-1">Tạo nhanh danh mục phục vụ văn bản hành chính, phòng ban và giấy tờ.</p>
+  </div>
+  <a href="{% url 'admindocuments:admindocuments_dashboard' %}" class="text-sm text-gray-600 hover:underline">← Về dashboard</a>
+</div>
+
+{% if messages %}
+  <div class="space-y-2 mb-4">
+    {% for message in messages %}
+      <div class="px-4 py-3 rounded-lg text-sm
+        {% if message.tags == 'error' %}bg-red-50 text-red-700 border border-red-200
+        {% elif message.tags == 'warning' %}bg-amber-50 text-amber-700 border border-amber-200
+        {% else %}bg-emerald-50 text-emerald-700 border border-emerald-200{% endif %}">
+        {{ message }}
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<div class="grid xl:grid-cols-2 gap-5">
+  <div id="doc_type" class="bg-white shadow-sm rounded-lg p-4">
+    <div class="flex items-start justify-between gap-3 mb-3">
+      <div>
+        <h2 class="text-lg font-semibold text-gray-800">Loại văn bản</h2>
+        <p class="text-sm text-gray-500">Phân loại văn bản hành chính.</p>
+      </div>
+      <span class="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">Tổng {{ doc_types|length }}</span>
+    </div>
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="md:col-span-2">
+        <div class="border rounded-lg overflow-hidden">
+          <div class="max-h-64 overflow-y-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
+                <tr><th class="px-3 py-2 text-left">Mã</th><th class="px-3 py-2 text-left">Tên</th><th class="px-3 py-2 text-left">Trạng thái</th></tr>
+              </thead>
+              <tbody class="divide-y">
+                {% for item in doc_types %}
+                <tr>
+                  <td class="px-3 py-2 font-mono text-xs">{{ item.code }}</td>
+                  <td class="px-3 py-2">{{ item.name }}</td>
+                  <td class="px-3 py-2">
+                    <span class="px-2 py-1 text-xs rounded {% if item.is_active %}bg-emerald-50 text-emerald-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                      {% if item.is_active %}Đang dùng{% else %}Tạm ngưng{% endif %}
+                    </span>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="px-3 py-3 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+        <form method="post" class="space-y-3">
+          {% csrf_token %}
+          <input type="hidden" name="form_name" value="doc_type" />
+          {% for field in forms.doc_type %}
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<p class="text-xs text-red-600 mt-1">{{ field.errors.0 }}</p>{% endif %}
+          </div>
+          {% endfor %}
+          <button type="submit" class="w-full px-3 py-2 bg-f88green text-white rounded hover:bg-f88dark text-sm">Thêm loại văn bản</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="content_type" class="bg-white shadow-sm rounded-lg p-4">
+    <div class="flex items-start justify-between gap-3 mb-3">
+      <div>
+        <h2 class="text-lg font-semibold text-gray-800">Loại nội dung</h2>
+        <p class="text-sm text-gray-500">Mới / Sửa đổi / Thay thế...</p>
+      </div>
+      <span class="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">Tổng {{ content_types|length }}</span>
+    </div>
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="md:col-span-2">
+        <div class="border rounded-lg overflow-hidden">
+          <div class="max-h-64 overflow-y-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
+                <tr><th class="px-3 py-2 text-left">Mã</th><th class="px-3 py-2 text-left">Tên</th><th class="px-3 py-2 text-left">Trạng thái</th></tr>
+              </thead>
+              <tbody class="divide-y">
+                {% for item in content_types %}
+                <tr>
+                  <td class="px-3 py-2 font-mono text-xs">{{ item.code }}</td>
+                  <td class="px-3 py-2">{{ item.name }}</td>
+                  <td class="px-3 py-2">
+                    <span class="px-2 py-1 text-xs rounded {% if item.is_active %}bg-emerald-50 text-emerald-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                      {% if item.is_active %}Đang dùng{% else %}Tạm ngưng{% endif %}
+                    </span>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="px-3 py-3 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+        <form method="post" class="space-y-3">
+          {% csrf_token %}
+          <input type="hidden" name="form_name" value="content_type" />
+          {% for field in forms.content_type %}
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<p class="text-xs text-red-600 mt-1">{{ field.errors.0 }}</p>{% endif %}
+          </div>
+          {% endfor %}
+          <button type="submit" class="w-full px-3 py-2 bg-f88green text-white rounded hover:bg-f88dark text-sm">Thêm loại nội dung</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="signer_role" class="bg-white shadow-sm rounded-lg p-4">
+    <div class="flex items-start justify-between gap-3 mb-3">
+      <div>
+        <h2 class="text-lg font-semibold text-gray-800">Chức danh người ký</h2>
+        <p class="text-sm text-gray-500">Quản lý vai trò ký văn bản.</p>
+      </div>
+      <span class="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">Tổng {{ signer_roles|length }}</span>
+    </div>
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="md:col-span-2">
+        <div class="border rounded-lg overflow-hidden">
+          <div class="max-h-64 overflow-y-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
+                <tr><th class="px-3 py-2 text-left">Mã</th><th class="px-3 py-2 text-left">Chức danh</th><th class="px-3 py-2 text-left">Trạng thái</th></tr>
+              </thead>
+              <tbody class="divide-y">
+                {% for item in signer_roles %}
+                <tr>
+                  <td class="px-3 py-2 font-mono text-xs">{{ item.code }}</td>
+                  <td class="px-3 py-2">{{ item.title }}</td>
+                  <td class="px-3 py-2">
+                    <span class="px-2 py-1 text-xs rounded {% if item.is_active %}bg-emerald-50 text-emerald-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                      {% if item.is_active %}Đang dùng{% else %}Tạm ngưng{% endif %}
+                    </span>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="px-3 py-3 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+        <form method="post" class="space-y-3">
+          {% csrf_token %}
+          <input type="hidden" name="form_name" value="signer_role" />
+          {% for field in forms.signer_role %}
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<p class="text-xs text-red-600 mt-1">{{ field.errors.0 }}</p>{% endif %}
+          </div>
+          {% endfor %}
+          <button type="submit" class="w-full px-3 py-2 bg-f88green text-white rounded hover:bg-f88dark text-sm">Thêm chức danh</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="status" class="bg-white shadow-sm rounded-lg p-4">
+    <div class="flex items-start justify-between gap-3 mb-2">
+      <div>
+        <h2 class="text-lg font-semibold text-gray-800">Trạng thái văn bản</h2>
+        <p class="text-sm text-gray-500">Mã trạng thái (ví dụ 100/101/102/103) cần duy trì nhất quán.</p>
+      </div>
+      <span class="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">Tổng {{ statuses|length }}</span>
+    </div>
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="md:col-span-2">
+        <div class="border rounded-lg overflow-hidden">
+          <div class="max-h-64 overflow-y-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
+                <tr><th class="px-3 py-2 text-left">Mã</th><th class="px-3 py-2 text-left">Tên</th><th class="px-3 py-2 text-left">Trạng thái</th></tr>
+              </thead>
+              <tbody class="divide-y">
+                {% for item in statuses %}
+                <tr>
+                  <td class="px-3 py-2 font-mono text-xs">{{ item.code }}</td>
+                  <td class="px-3 py-2">{{ item.name }}</td>
+                  <td class="px-3 py-2">
+                    <span class="px-2 py-1 text-xs rounded {% if item.is_active %}bg-emerald-50 text-emerald-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                      {% if item.is_active %}Đang dùng{% else %}Tạm ngưng{% endif %}
+                    </span>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="px-3 py-3 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+        <form method="post" class="space-y-3">
+          {% csrf_token %}
+          <input type="hidden" name="form_name" value="status" />
+          {% for field in forms.status %}
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<p class="text-xs text-red-600 mt-1">{{ field.errors.0 }}</p>{% endif %}
+          </div>
+          {% endfor %}
+          <button type="submit" class="w-full px-3 py-2 bg-f88green text-white rounded hover:bg-f88dark text-sm">Thêm trạng thái</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="grid xl:grid-cols-2 gap-5 mt-6">
+  <div id="company" class="bg-white shadow-sm rounded-lg p-4">
+    <div class="flex items-start justify-between gap-3 mb-3">
+      <div>
+        <h2 class="text-lg font-semibold text-gray-800">Công ty ban hành</h2>
+        <p class="text-sm text-gray-500">Danh mục công ty dùng để ghép số hiệu.</p>
+      </div>
+      <span class="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">Tổng {{ companies|length }}</span>
+    </div>
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="md:col-span-2">
+        <div class="border rounded-lg overflow-hidden">
+          <div class="max-h-64 overflow-y-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
+                <tr><th class="px-3 py-2 text-left">Mã</th><th class="px-3 py-2 text-left">Tên</th><th class="px-3 py-2 text-left">Trạng thái</th></tr>
+              </thead>
+              <tbody class="divide-y">
+                {% for item in companies %}
+                <tr>
+                  <td class="px-3 py-2 font-mono text-xs">{{ item.code }}</td>
+                  <td class="px-3 py-2">{{ item.name }}</td>
+                  <td class="px-3 py-2">
+                    <span class="px-2 py-1 text-xs rounded {% if item.is_active %}bg-emerald-50 text-emerald-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                      {% if item.is_active %}Đang dùng{% else %}Tạm ngưng{% endif %}
+                    </span>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="px-3 py-3 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+        <form method="post" class="space-y-3">
+          {% csrf_token %}
+          <input type="hidden" name="form_name" value="company" />
+          {% for field in forms.company %}
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<p class="text-xs text-red-600 mt-1">{{ field.errors.0 }}</p>{% endif %}
+          </div>
+          {% endfor %}
+          <button type="submit" class="w-full px-3 py-2 bg-f88green text-white rounded hover:bg-f88dark text-sm">Thêm công ty</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="department" class="bg-white shadow-sm rounded-lg p-4">
+    <div class="flex items-start justify-between gap-3 mb-3">
+      <div>
+        <h2 class="text-lg font-semibold text-gray-800">Phòng ban</h2>
+        <p class="text-sm text-gray-500">Gắn phòng ban với công ty.</p>
+      </div>
+      <span class="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">Tổng {{ departments|length }}</span>
+    </div>
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="md:col-span-2">
+        <div class="border rounded-lg overflow-hidden">
+          <div class="max-h-64 overflow-y-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
+                <tr><th class="px-3 py-2 text-left">Mã</th><th class="px-3 py-2 text-left">Tên</th><th class="px-3 py-2 text-left">Công ty</th><th class="px-3 py-2 text-left">Trạng thái</th></tr>
+              </thead>
+              <tbody class="divide-y">
+                {% for item in departments %}
+                <tr>
+                  <td class="px-3 py-2 font-mono text-xs">{{ item.code }}</td>
+                  <td class="px-3 py-2">{{ item.name }}</td>
+                  <td class="px-3 py-2 text-xs">{{ item.company.code }} - {{ item.company.name }}</td>
+                  <td class="px-3 py-2">
+                    <span class="px-2 py-1 text-xs rounded {% if item.is_active %}bg-emerald-50 text-emerald-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                      {% if item.is_active %}Đang dùng{% else %}Tạm ngưng{% endif %}
+                    </span>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="px-3 py-3 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+        <form method="post" class="space-y-3">
+          {% csrf_token %}
+          <input type="hidden" name="form_name" value="department" />
+          {% for field in forms.department %}
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<p class="text-xs text-red-600 mt-1">{{ field.errors.0 }}</p>{% endif %}
+          </div>
+          {% endfor %}
+          <button type="submit" class="w-full px-3 py-2 bg-f88green text-white rounded hover:bg-f88dark text-sm">Thêm phòng ban</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="grid xl:grid-cols-2 gap-5 mt-6">
+  <div id="paper_type" class="bg-white shadow-sm rounded-lg p-4">
+    <div class="flex items-start justify-between gap-3 mb-3">
+      <div>
+        <h2 class="text-lg font-semibold text-gray-800">Loại giấy (paper)</h2>
+        <p class="text-sm text-gray-500">Phân loại giấy tờ gửi/nhận.</p>
+      </div>
+      <span class="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">Tổng {{ paper_types|length }}</span>
+    </div>
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="md:col-span-2">
+        <div class="border rounded-lg overflow-hidden">
+          <div class="max-h-64 overflow-y-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
+                <tr><th class="px-3 py-2 text-left">Mã</th><th class="px-3 py-2 text-left">Tên</th><th class="px-3 py-2 text-left">Trạng thái</th></tr>
+              </thead>
+              <tbody class="divide-y">
+                {% for item in paper_types %}
+                <tr>
+                  <td class="px-3 py-2 font-mono text-xs">{{ item.code }}</td>
+                  <td class="px-3 py-2">{{ item.name }}</td>
+                  <td class="px-3 py-2">
+                    <span class="px-2 py-1 text-xs rounded {% if item.is_active %}bg-emerald-50 text-emerald-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                      {% if item.is_active %}Đang dùng{% else %}Tạm ngưng{% endif %}
+                    </span>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="px-3 py-3 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+        <form method="post" class="space-y-3">
+          {% csrf_token %}
+          <input type="hidden" name="form_name" value="paper_type" />
+          {% for field in forms.paper_type %}
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<p class="text-xs text-red-600 mt-1">{{ field.errors.0 }}</p>{% endif %}
+          </div>
+          {% endfor %}
+          <button type="submit" class="w-full px-3 py-2 bg-f88green text-white rounded hover:bg-f88dark text-sm">Thêm loại giấy</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="courier" class="bg-white shadow-sm rounded-lg p-4">
+    <div class="flex items-start justify-between gap-3 mb-3">
+      <div>
+        <h2 class="text-lg font-semibold text-gray-800">Đơn vị chuyển phát</h2>
+        <p class="text-sm text-gray-500">Danh mục hãng CPN hỗ trợ giấy hành chính.</p>
+      </div>
+      <span class="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">Tổng {{ couriers|length }}</span>
+    </div>
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="md:col-span-2">
+        <div class="border rounded-lg overflow-hidden">
+          <div class="max-h-64 overflow-y-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
+                <tr><th class="px-3 py-2 text-left">Tên</th><th class="px-3 py-2 text-left">Liên hệ</th><th class="px-3 py-2 text-left">Trạng thái</th></tr>
+              </thead>
+              <tbody class="divide-y">
+                {% for item in couriers %}
+                <tr>
+                  <td class="px-3 py-2">{{ item.name }}</td>
+                  <td class="px-3 py-2 text-xs text-gray-600">{{ item.contact|default:"-" }}</td>
+                  <td class="px-3 py-2">
+                    <span class="px-2 py-1 text-xs rounded {% if item.is_active %}bg-emerald-50 text-emerald-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                      {% if item.is_active %}Đang dùng{% else %}Tạm ngưng{% endif %}
+                    </span>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="px-3 py-3 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+        <form method="post" class="space-y-3">
+          {% csrf_token %}
+          <input type="hidden" name="form_name" value="courier" />
+          {% for field in forms.courier %}
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<p class="text-xs text-red-600 mt-1">{{ field.errors.0 }}</p>{% endif %}
+          </div>
+          {% endfor %}
+          <button type="submit" class="w-full px-3 py-2 bg-f88green text-white rounded hover:bg-f88dark text-sm">Thêm đơn vị CPN</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

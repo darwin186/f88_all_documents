@@ -8,6 +8,12 @@ from .models import (
     AdmPaperDocument,
     AdmPaperType,
     AdmCourierCompany,
+    AdmDocumentType,
+    AdmContentType,
+    AdmSignerRole,
+    AdmDocumentStatus,
+    AdmCompany,
+    AdmDepartment,
 )
 
 
@@ -18,6 +24,21 @@ class AdmAdministrativeDocumentForm(forms.ModelForm):
         label="Ngày ban hành",
         widget=forms.DateInput(attrs={"type": "date"}),
     )
+    effective_date = forms.DateField(
+        required=False,
+        label="Ngày hiệu lực",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    reference_document = forms.ModelChoiceField(
+        queryset=AdmAdministrativeDocument.objects.none(),
+        required=False,
+        label="Tham chiếu tới văn bản",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        qs = AdmAdministrativeDocument.objects.order_by("-created_at")
+        self.fields["reference_document"].queryset = qs
 
     class Meta:
         model = AdmAdministrativeDocument
@@ -25,11 +46,14 @@ class AdmAdministrativeDocumentForm(forms.ModelForm):
             "doc_type",
             "content_type",
             "reference_number",
+            "reference_document",
+            "is_reference_document",
             "title",
             "signer_role",
             "issuing_company",
             "issuing_department",
             "issue_date",
+            "effective_date",
             "expiry_date",
             "attachment",
             "status",
@@ -48,7 +72,9 @@ class AdmAdministrativeDocumentForm(forms.ModelForm):
             "signer_role": "Người ký",
             "issuing_company": "Công ty ban hành",
             "issuing_department": "Phòng ban ban hành",
-            "expiry_date": "Ngày hiệu lực",
+            "effective_date": "Ngày hiệu lực",
+            "expiry_date": "Ngày hết hiệu lực",
+            "is_reference_document": "Đánh dấu văn bản tham chiếu",
             "attachment": "File đính kèm",
             "status": "Trạng thái văn bản",
             "ticket_code": "Mã ticket yêu cầu",
@@ -57,6 +83,12 @@ class AdmAdministrativeDocumentForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        ref_doc = cleaned.get("reference_document")
+        ref_number = cleaned.get("reference_number")
+        if ref_doc and not ref_number:
+            cleaned["reference_number"] = ref_doc.document_number_full
+        if ref_doc and self.instance.pk and ref_doc.pk == self.instance.pk:
+            self.add_error("reference_document", "Không thể tham chiếu chính văn bản này.")
         doc_type = cleaned.get("doc_type")
         title = cleaned.get("title")
         reference_number = cleaned.get("reference_number")
@@ -100,6 +132,23 @@ class AdmAdministrativeDocumentUpdateForm(forms.ModelForm):
         label="Ngày ban hành",
         widget=forms.DateInput(attrs={"type": "date"}),
     )
+    effective_date = forms.DateField(
+        required=False,
+        label="Ngày hiệu lực",
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+    reference_document = forms.ModelChoiceField(
+        queryset=AdmAdministrativeDocument.objects.none(),
+        required=False,
+        label="Tham chiếu tới văn bản",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        qs = AdmAdministrativeDocument.objects.order_by("-created_at")
+        if getattr(self, "instance", None) and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        self.fields["reference_document"].queryset = qs
 
     class Meta:
         model = AdmAdministrativeDocument
@@ -107,11 +156,14 @@ class AdmAdministrativeDocumentUpdateForm(forms.ModelForm):
             "doc_type",
             "content_type",
             "reference_number",
+            "reference_document",
+            "is_reference_document",
             "title",
             "signer_role",
             "issuing_company",
             "issuing_department",
             "issue_date",
+            "effective_date",
             "expiry_date",
             "attachment",
             "status",
@@ -125,6 +177,12 @@ class AdmAdministrativeDocumentUpdateForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        ref_doc = cleaned.get("reference_document")
+        ref_number = cleaned.get("reference_number")
+        if ref_doc and not ref_number:
+            cleaned["reference_number"] = ref_doc.document_number_full
+        if ref_doc and self.instance.pk and ref_doc.pk == self.instance.pk:
+            self.add_error("reference_document", "Không thể tham chiếu chính văn bản này.")
         doc_type = cleaned.get("doc_type")
         title = cleaned.get("title")
         reference_number = cleaned.get("reference_number")
@@ -170,6 +228,11 @@ class AdmPaperDocumentForm(forms.ModelForm):
         queryset=Shop.objects.all().order_by("shop_name"),
         label="Phòng/PGD yêu cầu",
     )
+    department = forms.ModelChoiceField(
+        queryset=AdmDepartment.objects.all().order_by("name"),
+        required=False,
+        label="Phòng ban nội bộ",
+    )
     courier_company = forms.ModelChoiceField(
         queryset=AdmCourierCompany.objects.filter(is_active=True).order_by("name"),
         label="Đơn vị CPN",
@@ -188,6 +251,8 @@ class AdmPaperDocumentForm(forms.ModelForm):
         for name, field in self.fields.items():
             existing = field.widget.attrs.get("class", "")
             field.widget.attrs["class"] = f"{existing} {base_classes}".strip()
+        self.fields["department"].empty_label = "Chọn phòng ban"
+        self.fields["courier_company"].empty_label = "Chọn đơn vị CPN"
 
     class Meta:
         model = AdmPaperDocument
@@ -212,4 +277,80 @@ class AdmPaperDocumentForm(forms.ModelForm):
             "courier_tracking_code": "Mã vận đơn CPN",
             "status": "Tình trạng",
             "note": "Ghi chú",
+        }
+
+
+class _MasterBaseForm(forms.ModelForm):
+    """Add consistent styling for small master data forms."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        base_classes = "block w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green"
+        for field in self.fields.values():
+            existing = field.widget.attrs.get("class", "")
+            field.widget.attrs["class"] = f"{existing} {base_classes}".strip()
+
+
+class AdmDocumentTypeForm(_MasterBaseForm):
+    class Meta:
+        model = AdmDocumentType
+        fields = ["code", "name", "is_active"]
+        labels = {"code": "Mã", "name": "Tên loại", "is_active": "Đang dùng"}
+
+
+class AdmContentTypeForm(_MasterBaseForm):
+    class Meta:
+        model = AdmContentType
+        fields = ["code", "name", "is_active"]
+        labels = {"code": "Mã", "name": "Tên loại", "is_active": "Đang dùng"}
+
+
+class AdmSignerRoleForm(_MasterBaseForm):
+    class Meta:
+        model = AdmSignerRole
+        fields = ["code", "title", "is_active"]
+        labels = {"code": "Mã", "title": "Chức danh", "is_active": "Đang dùng"}
+
+
+class AdmDocumentStatusForm(_MasterBaseForm):
+    class Meta:
+        model = AdmDocumentStatus
+        fields = ["code", "name", "is_active"]
+        labels = {"code": "Mã", "name": "Tên trạng thái", "is_active": "Đang dùng"}
+
+
+class AdmCompanyForm(_MasterBaseForm):
+    class Meta:
+        model = AdmCompany
+        fields = ["code", "name", "is_active"]
+        labels = {"code": "Mã công ty", "name": "Tên công ty", "is_active": "Đang dùng"}
+
+
+class AdmDepartmentForm(_MasterBaseForm):
+    class Meta:
+        model = AdmDepartment
+        fields = ["code", "name", "company", "is_active"]
+        labels = {
+            "code": "Mã phòng ban",
+            "name": "Tên phòng ban",
+            "company": "Công ty",
+            "is_active": "Đang dùng",
+        }
+
+
+class AdmPaperTypeForm(_MasterBaseForm):
+    class Meta:
+        model = AdmPaperType
+        fields = ["code", "name", "is_active"]
+        labels = {"code": "Mã loại", "name": "Tên loại", "is_active": "Đang dùng"}
+
+
+class AdmCourierCompanyForm(_MasterBaseForm):
+    class Meta:
+        model = AdmCourierCompany
+        fields = ["name", "contact", "is_active"]
+        labels = {
+            "name": "Tên đơn vị",
+            "contact": "Thông tin liên hệ",
+            "is_active": "Đang dùng",
         }

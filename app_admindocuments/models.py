@@ -217,7 +217,26 @@ class AdmAdministrativeDocument(models.Model):
     signer_role = models.ForeignKey(AdmSignerRole, on_delete=models.PROTECT)
     issuing_company = models.ForeignKey(AdmCompany, on_delete=models.PROTECT)
     issuing_department = models.ForeignKey(AdmDepartment, on_delete=models.PROTECT)
+    is_reference_document = models.BooleanField(default=False)
+    reference_document = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="referenced_by",
+    )
+    issue_date = models.DateField(blank=True, null=True)
+    effective_date = models.DateField(blank=True, null=True)
     expiry_date = models.DateField(blank=True, null=True)
+    is_void = models.BooleanField(default=False)
+    voided_at = models.DateTimeField(null=True, blank=True)
+    voided_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="adm_document_voided_by",
+    )
     attachment = models.FileField(
         upload_to="admindocuments/files/%Y/%m/", blank=True, null=True
     )
@@ -318,6 +337,13 @@ class AdmAdministrativeDocument(models.Model):
             "issuing_department": str(self.issuing_department)
             if self.issuing_department_id
             else None,
+            "is_reference_document": self.is_reference_document,
+            "reference_document": self.reference_document_id,
+            "is_void": self.is_void,
+            "issue_date": self.issue_date.isoformat() if self.issue_date else None,
+            "effective_date": self.effective_date.isoformat()
+            if self.effective_date
+            else None,
             "expiry_date": self.expiry_date.isoformat() if self.expiry_date else None,
             "attachment": self.attachment.name if self.attachment else None,
             "status": str(self.status) if self.status_id else None,
@@ -379,6 +405,13 @@ class AdmPaperDocument(models.Model):
     responsible_person = models.CharField(max_length=255)
     document_number_full = models.CharField(max_length=255, unique=True, editable=False)
     requested_department = models.ForeignKey(Shop, on_delete=models.PROTECT)
+    department = models.ForeignKey(
+        AdmDepartment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Phòng ban nội bộ phụ trách",
+    )
     ticket_code = models.CharField(max_length=200, blank=True, null=True)
     summary = models.CharField(max_length=500)
     courier_company = models.ForeignKey(

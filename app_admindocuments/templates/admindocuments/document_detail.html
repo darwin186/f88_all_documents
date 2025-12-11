@@ -6,8 +6,125 @@
   <h1 class="text-2xl font-semibold text-gray-700">Chi tiết văn bản</h1>
   <div class="flex gap-2">
     <a href="{% url 'admindocuments:admindocuments_list' %}" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded-lg shadow">← Quay lại</a>
+    <button type="button" data-modal-target="docRefCreateModal" data-modal-toggle="docRefCreateModal" class="bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-2 rounded-lg shadow">Tạo VB tham chiếu</button>
+    <form method="post" action="{% url 'admindocuments:admindocuments_delete' doc.id %}" onsubmit="return confirm('Vô hiệu văn bản này?');">
+      {% csrf_token %}
+      <button type="submit" class="bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-lg shadow">Vô hiệu</button>
+    </form>
     <button data-modal-target="editModal" data-modal-toggle="editModal"
             class="bg-f88green hover:bg-f88dark text-white px-4 py-2 rounded-lg shadow">Edit</button>
+  </div>
+</div>
+
+<div id="docRefCreateModal" tabindex="-1" aria-hidden="true"
+  class="fixed inset-0 z-50 hidden bg-black/40 flex justify-center items-center">
+  <div class="relative p-4 w-full max-w-4xl max-h-[90vh]">
+    <div class="relative bg-white rounded-lg shadow max-h-[90vh] flex flex-col">
+      <div class="flex justify-between items-center p-4 border-b rounded-t">
+        <h3 class="text-xl font-semibold text-gray-900">Tạo văn bản tham chiếu</h3>
+        <button type="button" data-modal-hide="docRefCreateModal"
+                class="text-gray-400 hover:text-gray-900 rounded-lg text-sm p-2 ml-auto inline-flex items-center">×</button>
+      </div>
+      <div class="p-6 space-y-4 overflow-y-auto">
+        <div class="p-3 bg-blue-50 border border-blue-100 rounded text-sm text-blue-800">
+          Đang tham chiếu tới văn bản: <strong>{{ doc.document_number_full }}</strong>
+        </div>
+        <form method="post" action="{% url 'admindocuments:admindocuments_create' %}" enctype="multipart/form-data" class="grid grid-cols-2 gap-4">
+          {% csrf_token %}
+          <input type="hidden" name="reference_document" value="{{ doc.id }}">
+          <input type="hidden" name="is_reference_document" value="true">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Số hiệu tham chiếu</label>
+            <input type="text" name="reference_number" value="{{ doc.document_number_full }}" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Loại văn bản</label>
+            <select name="doc_type" required class="block w-full rounded-lg border border-gray-300 px-3 py-2">
+              <option value="">-- Chọn loại văn bản--</option>
+              {% for it in doc_types %}
+              <option value="{{ it.id }}">{{ it.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Loại nội dung</label>
+            <select name="content_type" required class="block w-full rounded-lg border border-gray-300 px-3 py-2">
+              <option value="">-- Chọn loại nội dung --</option>
+              {% for it in content_types %}
+              <option value="{{ it.id }}">{{ it.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Tên văn bản</label>
+            <input type="text" name="title" required class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Người ký</label>
+            <select name="signer_role" required class="block w-full rounded-lg border border-gray-300 px-3 py-2">
+              <option value="">-- Chọn người ký --</option>
+              {% for it in signer_roles %}
+              <option value="{{ it.id }}">{{ it.title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Công ty ban hành</label>
+            <select name="issuing_company" required class="block w-full rounded-lg border border-gray-300 px-3 py-2">
+              <option value="">-- Chọn công ty--</option>
+              {% for it in companies %}
+              <option value="{{ it.id }}">{{ it.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Phòng ban</label>
+            <select name="issuing_department" required class="block w-full rounded-lg border border-gray-300 px-3 py-2">
+              <option value="">-- Chọn phòng ban --</option>
+              {% for it in departments %}
+              <option value="{{ it.id }}">{{ it.name }} ({{ it.company.code }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Ngày ban hành</label>
+            <input type="date" name="issue_date" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Ngày hiệu lực</label>
+            <input type="date" name="effective_date" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Ngày hết hiệu lực</label>
+            <input type="date" name="expiry_date" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Trạng thái</label>
+            <select name="status" class="block w-full rounded-lg border border-gray-300 px-3 py-2">
+              {% for s in statuses %}
+              <option value="{{ s.id }}" {% if default_status and s.id == default_status.id %}selected{% endif %}>{{ s.name }} ({{ s.code }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Mã ticket</label>
+            <input type="text" name="ticket_code" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
+          </div>
+          <div class="col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Link đính kèm</label>
+            <input type="text" name="attachment_link" placeholder="https://link-tai-lieu" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
+          </div>
+          <div class="col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
+            <textarea name="note" rows="3" class="block w-full rounded-lg border border-gray-300 px-3 py-2"></textarea>
+          </div>
+          <div class="col-span-2 flex justify-end gap-2 mt-4">
+            <button data-modal-hide="docRefCreateModal" type="button" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">Hủy</button>
+            <button type="submit" class="px-4 py-2 bg-f88green text-white rounded hover:bg-f88dark">Lưu văn bản</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -23,7 +140,22 @@
     <tbody>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Số hiệu</th>
-        <td class="px-6 py-4 font-mono">{{ doc.document_number_full }}</td>
+        <td class="px-6 py-4">
+          <div class="font-mono text-base">{{ doc.document_number_full }}</div>
+          <div class="flex flex-wrap gap-2 mt-1">
+            {% if doc.is_reference_document %}
+            <span class="text-xs text-blue-700 inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 border border-blue-100 rounded">Văn bản tham chiếu</span>
+            {% endif %}
+            {% if doc.is_void %}
+            <span class="text-xs text-red-700 inline-flex items-center gap-1 px-2 py-0.5 bg-red-50 border border-red-100 rounded">Đã vô hiệu</span>
+            {% endif %}
+          </div>
+          {% if doc.reference_document %}
+          <div class="text-xs text-blue-600 mt-1">Tham chiếu tới: {{ doc.reference_document.document_number_full }}</div>
+          {% elif doc.reference_number %}
+          <div class="text-xs text-blue-600 mt-1">Tham chiếu: {{ doc.reference_number }}</div>
+          {% endif %}
+        </td>
         <td class="px-6 py-4 text-right"><a href="#" data-modal-target="editModal" data-modal-toggle="editModal" class="font-medium text-blue-600 hover:underline">Edit</a></td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
@@ -43,7 +175,9 @@
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Ngày ban hành</th>
-        <td class="px-6 py-4">{{ doc.created_at|date:'d/m/Y' }}</td>
+        <td class="px-6 py-4">
+          {% if doc.issue_date %}{{ doc.issue_date|date:'d/m/Y' }}{% else %}{{ doc.created_at|date:'d/m/Y' }}{% endif %}
+        </td>
         <td class="px-6 py-4"></td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
@@ -76,12 +210,17 @@
         <td class="px-6 py-4"></td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
-        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Số hiệu tham chiếu</th>
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Số hiệu văn bản bổ sung/thay thế</th>
         <td class="px-6 py-4">{{ doc.reference_number|default:'-' }}</td>
         <td class="px-6 py-4"></td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Ngày hiệu lực</th>
+        <td class="px-6 py-4">{{ doc.effective_date|date:'d/m/Y'|default:'-' }}</td>
+        <td class="px-6 py-4"></td>
+      </tr>
+      <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
+        <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Ngày hết hiệu lực</th>
         <td class="px-6 py-4">{{ doc.expiry_date|date:'d/m/Y'|default:'-' }}</td>
         <td class="px-6 py-4"></td>
       </tr>
@@ -101,6 +240,39 @@
       </tr>
     </tbody>
   </table>
+</div>
+
+<div class="mt-6 bg-white shadow-sm rounded-lg p-4">
+  <h3 class="text-lg font-semibold text-gray-800 mb-4">Lịch sử trạng thái</h3>
+  {% if status_history %}
+  <ol class="relative border-s border-gray-200">
+    {% for item in status_history %}
+    <li class="mb-6 ms-6">
+      {% with ns=item.new_status|default:""|lower %}
+      <span class="absolute flex items-center justify-center w-6 h-6 rounded-full -start-3 ring-8 ring-white
+        {% if ns|slice:':11' == 'đã ban hành' or ns|slice:':6' == 'issued' %}bg-green-100 text-green-700
+        {% elif ns|slice:':4' == 'nháp' or ns|slice:':5' == 'draft' %}bg-amber-100 text-amber-700
+        {% elif ns|slice:':13' == 'hết hiệu lực' or ns|slice:':7' == 'expired' %}bg-gray-200 text-gray-700
+        {% else %}bg-blue-100 text-blue-700{% endif %}">
+      {% endwith %}
+        <svg class="w-3 h-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
+      </span>
+      <div class="flex items-center gap-2 text-xs text-gray-600">
+        <time class="bg-gray-100 border border-gray-200 text-gray-800 font-medium px-2 py-0.5 rounded">{{ item.timestamp|date:"d/m/Y H:i" }}</time>
+        {% if item.user %}<span>• {{ item.user.get_full_name|default:item.user.username }}</span>{% endif %}
+      </div>
+      <h4 class="mt-2 text-sm font-semibold text-gray-800">
+        {% if item.type == 'created' %}Tạo mới{% else %}Đổi trạng thái{% endif %} → {{ item.new_status|default:"(Không rõ)" }}
+      </h4>
+      {% if item.old_status %}
+      <p class="text-xs text-gray-500">Từ: {{ item.old_status }}</p>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="text-sm text-gray-500">Chưa có lịch sử trạng thái.</p>
+  {% endif %}
 </div>
 
 <div class="mt-6 bg-white shadow-sm rounded-lg p-4">
@@ -204,8 +376,17 @@
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Số hiệu VB tham chiếu</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Số hiệu văn bản bổ sung/thay thế</label>
             <input type="text" name="reference_number" value="{{ form.instance.reference_number }}" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Tham chiếu tới văn bản</label>
+            <select name="reference_document" class="block w-full rounded-lg border border-gray-300 px-3 py-2">
+              <option value="">-- Chọn văn bản --</option>
+              {% for it in reference_docs %}
+                <option value="{{ it.id }}" {% if form.instance.reference_document_id == it.id %}selected{% endif %}>{{ it.document_number_full }} - {{ it.title }}</option>
+              {% endfor %}
+            </select>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Công ty ban hành</label>
@@ -225,11 +406,36 @@
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Ngày ban hành</label>
-            <input type="date" name="issue_date" value="{{ doc.created_at|date:'Y-m-d' }}" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
+            <div class="relative">
+              <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
+              </div>
+              <input name="issue_date" datepicker datepicker-buttons datepicker-autoselect-today data-datepicker-format="yyyy-mm-dd" type="text" value="{{ doc.issue_date|default:doc.created_at|date:'Y-m-d' }}" class="block w-full pl-9 pr-3 py-2.5 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-f88green focus:border-f88green placeholder:text-gray-500" placeholder="Chọn ngày ban hành" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Ngày hiệu lực</label>
+            <div class="relative">
+              <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
+              </div>
+              <input name="effective_date" datepicker datepicker-buttons data-datepicker-format="yyyy-mm-dd" type="text" value="{{ form.instance.effective_date|date:'Y-m-d' }}" class="block w-full pl-9 pr-3 py-2.5 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-f88green focus:border-f88green placeholder:text-gray-500" placeholder="Chọn ngày hiệu lực" />
+            </div>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Ngày hết hiệu lực</label>
-            <input type="date" name="expiry_date" value="{{ form.instance.expiry_date|date:'Y-m-d' }}" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
+            <div class="relative">
+              <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
+              </div>
+              <input name="expiry_date" datepicker datepicker-buttons data-datepicker-format="yyyy-mm-dd" type="text" value="{{ form.instance.expiry_date|date:'Y-m-d' }}" class="block w-full pl-9 pr-3 py-2.5 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-f88green focus:border-f88green placeholder:text-gray-500" placeholder="Chọn ngày hết hiệu lực" />
+            </div>
+          </div>
+          <div class="col-span-2 flex items-center gap-2">
+            <label class="inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" name="is_reference_document" value="true" {% if form.instance.is_reference_document %}checked{% endif %} class="text-f88green">
+              <span>Đánh dấu văn bản tham chiếu</span>
+            </label>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Trạng thái</label>

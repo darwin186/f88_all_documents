@@ -8,6 +8,7 @@ from .models import (
     AdmDepartment,
     AdmDocumentStatus,
     AdmDocumentType,
+    AdmDocumentCounter,
     AdmPaperDocument,
     AdmPaperType,
     AdmSignerRole,
@@ -61,6 +62,13 @@ class AdmAdministrativeDocumentAdmin(admin.ModelAdmin):
     list_filter = ("doc_type", "status", "issuing_company")
     search_fields = ("title", "ticket_code", "document_number_full")
     readonly_fields = ("document_number_full", "running_number", "created_at")
+
+
+@admin.register(AdmDocumentCounter)
+class AdmDocumentCounterAdmin(admin.ModelAdmin):
+    list_display = ("doc_type", "company", "year", "next_number", "updated_at")
+    list_filter = ("doc_type", "company", "year")
+    search_fields = ("doc_type__name", "company__name")
 
 
 @admin.register(AdmPaperDocument)
