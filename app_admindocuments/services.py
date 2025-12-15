@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.utils import timezone
 
-from .models import AdmAdministrativeDocument, AdmDocumentCounter
+from .models import AdmAdministrativeDocument, AdmDocumentCounter, AdmPaperDocument
 
 
 @transaction.atomic
@@ -45,4 +45,34 @@ def allocate_running_number(
     counter.next_number = candidate + 1
     counter.save(update_fields=["next_number", "updated_at"])
     return candidate
+
+
+@transaction.atomic
+def allocate_paper_running_number(
+    paper_type_id: int, paper_type_code: str, year: int
+) -> tuple[int, str]:
+    """
+    Allocate the next available running number for a paper type/year.
+
+    - Locks existing rows of that paper_type/year (select_for_update).
+    - Fills vào khoảng trống nhỏ nhất (gap) nếu có, không chỉ +1.
+    - Trả về (running_number, document_number_full).
+    """
+    existing = (
+        AdmPaperDocument.objects.select_for_update()
+        .filter(paper_type_id=paper_type_id, created_at__year=year, is_deleted=False)
+        .order_by("running_number")
+    )
+    candidate = 1
+    for doc in existing:
+        if doc.running_number > candidate:
+            break
+        candidate = doc.running_number + 1
+
+    while True:
+        doc_num = f"{candidate:05d}/{year}/{paper_type_code}-F88"
+        if not AdmPaperDocument.objects.filter(document_number_full=doc_num).exists():
+            break
+        candidate += 1
+    return candidate, doc_num
 

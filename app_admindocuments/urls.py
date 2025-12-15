@@ -19,6 +19,9 @@ urlpatterns = [
     path("counters/", views.document_counter_manage, name="admindocuments_counters"),
     path("paper-documents/", views.paper_document_list, name="paper_document_list"),
     path("paper-documents/<int:doc_id>/", views.paper_document_detail, name="paper_document_detail"),
+    path("paper-documents/<int:doc_id>/hide/", views.paper_document_hide, name="paper_document_hide"),
     path("paper-documents/template/", views.paper_document_template, name="paper_document_template"),
     path("paper-documents/import/", views.paper_document_import, name="paper_document_import"),
+    path("paper-documents/import-url/", views.paper_document_import_url, name="paper_document_import_url"),
+    path("paper-documents/import-commit/", views.paper_document_import_commit, name="paper_document_import_commit"),
 ]

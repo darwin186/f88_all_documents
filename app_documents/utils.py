@@ -61,49 +61,42 @@ def assign_group_to_folders():
         check_group(folder)
         
 def check_on_time(folder, lasted_received_date_submit):
-    """Hàm kiểm tra và cập nhật trạng thái đúng hạn (on time) của một folder dựa trên group đã gán."""
+    """
+    Kiểm tra/cập nhật trạng thái đúng hạn và trả về dữ liệu cấu trúc để hiển thị.
+    Trả về dict: {'deadline': date|None, 'received_date': date|None, 'is_on_time': bool|None, 'message': str}
+    """
+    result = {"deadline": None, "received_date": None, "is_on_time": None, "message": ""}
     try:
         deadline = None
         received_date = None
-        # Kiểm tra xem folder có được gán group hay không
-        if folder.group : # and folder.is_original and folder.is_issue:
-            # Lấy rule từ group đã gán cho folder
+        if folder.group:
             rule = folder.group.rule_deadline
             if rule and rule.is_valid:
                 created_month = folder.folder_created_date.month
                 created_year = folder.folder_created_date.year
                 day_to = folder.group.day_to
 
-                # Tính toán năm và tháng cho deadline
                 if rule.next_month:
-                    if created_month == 12:
-                        deadline_year = created_year + 1
-                        deadline_month = 1
-                    else:
-                        deadline_year = created_year
-                        deadline_month = created_month + 1
+                    # Chuyển sang tháng kế tiếp và dùng deadline_day làm ngày trong tháng đích
+                    deadline_year = created_year + 1 if created_month == 12 else created_year
+                    deadline_month = 1 if created_month == 12 else created_month + 1
+                    last_day_target = monthrange(deadline_year, deadline_month)[1]
+                    target_day = min(rule.deadline_day, last_day_target)
+                    deadline_date = datetime(deadline_year, deadline_month, target_day)
                 else:
-                    deadline_year = created_year
-                    deadline_month = created_month
+                    # Dùng day_to (có clamp cuối tháng) rồi cộng offset deadline_day
+                    last_day_current = monthrange(created_year, created_month)[1]
+                    base_day = min(day_to, last_day_current)
+                    deadline_date = datetime(created_year, created_month, base_day) + timedelta(days=rule.deadline_day)
 
-                # Lấy ngày cuối cùng của tháng
-                last_day_of_month = monthrange(deadline_year, deadline_month)[1]
-
-                # Đảm bảo `day_to` không vượt quá ngày cuối cùng của tháng
-                if day_to > last_day_of_month:
-                    day_to = last_day_of_month
-
-                # Tạo đối tượng deadline
-                deadline = datetime(deadline_year, deadline_month, day_to)
-                deadline += timedelta(days=rule.deadline_day)
+                deadline = deadline_date
                 if timezone.is_naive(deadline):
                     deadline = timezone.make_aware(deadline, timezone.get_current_timezone())
 
-                # Sử dụng `lasted_received_date_submit` nếu có, nếu không thì dùng `folder.lastest_received_date`
                 received_date = lasted_received_date_submit or folder.lastest_received_date
                 if received_date and timezone.is_naive(received_date):
                     received_date = timezone.make_aware(received_date, timezone.get_current_timezone())
-    
+
                 if received_date:
                     if received_date <= deadline:
                         folder.is_on_time = True
@@ -115,17 +108,22 @@ def check_on_time(folder, lasted_received_date_submit):
                     folder.is_on_time = None
                     folder.is_late = None
             else:
-                # Nếu không có rule hoặc rule không hợp lệ
                 folder.is_on_time = None
                 folder.is_late = None
 
-        # Lưu lại folder sau khi kiểm tra
         folder.save(update_fields=['is_on_time', 'is_late'])
+        result["deadline"] = deadline.date() if deadline else None
+        result["received_date"] = received_date.date() if received_date else None
+        result["is_on_time"] = folder.is_on_time
         if deadline and received_date:
-            return f"Thời gian nhận thực tế: {received_date.date()} so với hạn deadline {deadline.date()}"
-        return "Folder on-time status checked without deadline comparison."
+            status_text = "đúng hạn" if folder.is_on_time else "trễ hạn"
+            result["message"] = f"Nhận ngày {received_date.date()} so với hạn {deadline.date()} → {status_text}"
+        else:
+            result["message"] = "Đã kiểm tra trạng thái đúng/trễ hạn."
+        return result
     except Exception as e:
-        # Xử lý lỗi, nếu cần thiết
         print(f"Error in check_on_time: {e}")
+        result["message"] = "Lỗi khi kiểm tra hạn nhận."
+        return result
 
      

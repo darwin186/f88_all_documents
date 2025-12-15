@@ -1,5 +1,6 @@
 import csv
 import os
+import uuid
 from datetime import datetime, date
 from io import BytesIO
 from functools import wraps
@@ -17,11 +18,13 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.conf import settings
+from django.http import JsonResponse
+from django.core.cache import cache
 
 from openpyxl import Workbook
 from openpyxl import load_workbook
 
-from app_documents.models import Shop
+from app_documents.models import Shop, Region
 
 from .forms import (
     AdmAdministrativeDocumentForm,
@@ -52,7 +55,7 @@ from .models import (
     AdmAdministrativeDocumentHistory,
     AdmDepartment,
 )
-from .services import allocate_running_number
+from .services import allocate_running_number, allocate_paper_running_number
 
 
 def _has_admin_docs_access(user) -> bool:
@@ -92,6 +95,129 @@ def _create_attachment_version(document, user, uploaded_file=None, link=None, no
         document.attachment = attachment.file
         document.save(update_fields=["attachment"])
     return attachment
+
+
+def _parse_paper_rows(ws, request_user):
+    """Parse worksheet for paper import. Return (errors, rows_data)."""
+    headers = [
+        "số hiệu (để trống nếu muốn hệ thống sinh)",
+        "loại giấy",
+        "miền",
+        "phòng giao dịch",
+        "phòng ban nội bộ",
+        "người phụ trách",
+        "nội dung",
+        "đơn vị cpn",
+        "mã vận đơn",
+        "tình trạng",
+        "ghi chú",
+        "ngày tạo (yyyy-mm-dd)",
+    ]
+    header_row = [str(cell.value).strip().lower() if cell.value else "" for cell in next(ws.iter_rows(max_row=1))]
+    if header_row != headers:
+        return ["Header không đúng định dạng mẫu, vui lòng tải file mẫu mới nhất."], []
+
+    paper_type_map = {p.name.lower(): p for p in AdmPaperType.objects.all()}
+    shop_map = {s.shop_name.lower(): s for s in Shop.objects.all()}
+    dept_map = {d.name.lower(): d for d in AdmDepartment.objects.all()}
+    courier_map = {c.name.lower(): c for c in AdmCourierCompany.objects.all()}
+    region_map = {r.region_name.lower(): r for r in Region.objects.all()}
+
+    today = timezone.localdate() if settings.USE_TZ else date.today()
+
+    errors = []
+    rows_data = []
+
+    for idx, row in enumerate(ws.iter_rows(min_row=2), start=2):
+        values = [cell.value for cell in row]
+        (
+            number_full,
+            paper_type_name,
+            region,
+            requested_dept_name,
+            internal_dept_name,
+            responsible,
+            summary,
+            courier_name,
+            tracking_code,
+            status_text,
+            note,
+            created_str,
+        ) = values
+
+        row_errors = []
+
+        pt_key = str(paper_type_name).strip().lower() if paper_type_name else ""
+        paper_type = paper_type_map.get(pt_key)
+        if not paper_type:
+            row_errors.append("Loại giấy không hợp lệ/để trống.")
+
+        region_val = str(region).strip() if region else ""
+        region_obj = None
+        if not region_val:
+            row_errors.append("Miền không được để trống.")
+        else:
+            region_obj = region_map.get(region_val.lower())
+            if not region_obj:
+                row_errors.append(f"Miền '{region_val}' không tồn tại.")
+
+        requested_dept = None
+        if requested_dept_name:
+            requested_dept = shop_map.get(str(requested_dept_name).strip().lower())
+            if not requested_dept:
+                row_errors.append(f"Phòng giao dịch '{requested_dept_name}' không tồn tại.")
+
+        internal_dept = None
+        if internal_dept_name:
+            internal_dept = dept_map.get(str(internal_dept_name).strip().lower())
+            if not internal_dept:
+                row_errors.append(f"Phòng ban nội bộ '{internal_dept_name}' không tồn tại.")
+
+        if not requested_dept and not internal_dept:
+            row_errors.append("Cần chọn Phòng giao dịch hoặc Phòng ban nội bộ (có thể chọn cả hai).")
+
+        courier = None
+        if courier_name:
+            courier = courier_map.get(str(courier_name).strip().lower())
+            if not courier:
+                row_errors.append(f"Đơn vị CPN '{courier_name}' không tồn tại.")
+
+        try:
+            created_date = (
+                datetime.strptime(str(created_str), "%Y-%m-%d").date() if created_str else today
+            )
+        except ValueError:
+            row_errors.append("Ngày tạo không đúng định dạng yyyy-mm-dd.")
+
+        summary_text = str(summary).strip() if summary else ""
+        if not summary_text:
+            row_errors.append("Nội dung không được để trống.")
+
+        if row_errors:
+            errors.append(f"Dòng {idx}: " + "; ".join(row_errors))
+            continue
+
+        rows_data.append(
+            {
+                "paper_type_id": paper_type.id,
+                "paper_type_code": paper_type.code,
+                "region": region_val,
+                "requested_dept_id": requested_dept.id if requested_dept else None,
+                "internal_dept_id": internal_dept.id if internal_dept else None,
+                "responsible": str(responsible).strip()
+                if responsible
+                else (request_user.get_full_name() or request_user.username),
+                "summary": summary_text,
+                "courier_id": courier.id if courier else None,
+                "tracking_code": str(tracking_code).strip() if tracking_code else None,
+                "status": str(status_text).strip() if status_text else "",
+                "note": str(note).strip() if note else "",
+                "created_date": created_date,
+                "number_full": str(number_full).strip() if number_full else None,
+            }
+        )
+
+    return errors, rows_data
 
 
 def admin_staff_required(view_func):
@@ -290,7 +416,9 @@ def dashboard(request):
         if dept_id
     ]
 
-    paper_queryset = AdmPaperDocument.objects.filter(created_at__gte=start, created_at__lt=end)
+    paper_queryset = AdmPaperDocument.objects.filter(
+        created_at__gte=start, created_at__lt=end, is_deleted=False
+    )
     if paper_department:
         paper_queryset = paper_queryset.filter(requested_department_id=paper_department)
 
@@ -664,7 +792,7 @@ def paper_document_list(request):
 
     documents_qs = AdmPaperDocument.objects.select_related(
         "requested_department", "paper_type", "courier_company"
-    )
+    ).filter(is_deleted=False)
     if query:
         documents_qs = documents_qs.filter(
             Q(document_number_full__icontains=query)
@@ -704,19 +832,9 @@ def paper_document_list(request):
                     try:
                         with transaction.atomic():
                             year_now = timezone.now().year
-                            # Khóa các bản ghi cùng loại/năm để tránh race
-                            last_doc = (
-                                AdmPaperDocument.objects.select_for_update()
-                                .filter(paper_type=paper_doc.paper_type, created_at__year=year_now)
-                                .order_by("-running_number")
-                                .first()
+                            running_number, doc_num = allocate_paper_running_number(
+                                paper_doc.paper_type_id, paper_doc.paper_type.code, year_now
                             )
-                            running_number = (last_doc.running_number if last_doc else 0) + 1
-                            while True:
-                                doc_num = f"{running_number:05d}/{year_now}/{paper_doc.paper_type.code}-F88"
-                                if not AdmPaperDocument.objects.filter(document_number_full=doc_num).exists():
-                                    break
-                                running_number += 1
                             paper_doc.running_number = running_number
                             paper_doc.document_number_full = doc_num
                             paper_doc.save()
@@ -748,7 +866,9 @@ def paper_document_list(request):
 
     total_by_type = {
         row["paper_type"]: row["total"]
-        for row in AdmPaperDocument.objects.values("paper_type").annotate(total=Count("id"))
+        for row in AdmPaperDocument.objects.filter(is_deleted=False)
+        .values("paper_type")
+        .annotate(total=Count("id"))
     }
     paper_type_tabs = [
         {"id": p.pk, "name": p.name, "total": total_by_type.get(p.pk, 0)} for p in paper_types
@@ -795,6 +915,7 @@ def paper_document_detail(request, doc_id: int):
             "paper_type", "requested_department", "courier_company", "department"
         ),
         pk=doc_id,
+        is_deleted=False,
     )
     if request.method == "POST":
         form = AdmPaperDocumentForm(request.POST, instance=paper_doc)
@@ -831,6 +952,20 @@ def paper_document_detail(request, doc_id: int):
 
 @login_required
 @admin_staff_required
+def paper_document_hide(request, doc_id: int):
+    if request.method != "POST":
+        return redirect("admindocuments:paper_document_list")
+    paper_doc = get_object_or_404(AdmPaperDocument, pk=doc_id, is_deleted=False)
+    paper_doc.document_number_full = f"{paper_doc.document_number_full}#VOID#{uuid.uuid4().hex[:6]}"
+    paper_doc.is_deleted = True
+    paper_doc.deleted_at = timezone.now()
+    paper_doc.save(update_fields=["document_number_full", "is_deleted", "deleted_at"])
+    messages.success(request, "Đã ẩn giấy và thu hồi số hiệu.")
+    return redirect("admindocuments:paper_document_list")
+
+
+@login_required
+@admin_staff_required
 def paper_document_import(request):
     if request.method != "POST" or "file" not in request.FILES:
         messages.error(request, "Vui lòng chọn file .xlsx để tải lên.")
@@ -844,134 +979,40 @@ def paper_document_import(request):
         messages.error(request, "File không hợp lệ hoặc không thể đọc.")
         return redirect("admindocuments:paper_document_list")
 
-    headers = [
-        "số hiệu (để trống nếu muốn hệ thống sinh)",
-        "loại giấy",
-        "miền",
-        "phòng giao dịch",
-        "phòng ban nội bộ",
-        "người phụ trách",
-        "nội dung",
-        "đơn vị cpn",
-        "mã vận đơn",
-        "tình trạng",
-        "ghi chú",
-        "ngày tạo (yyyy-mm-dd)",
-    ]
-    header_row = [str(cell.value).strip().lower() if cell.value else "" for cell in next(ws.iter_rows(max_row=1))]
-    if header_row != headers:
-        messages.error(request, "Header không đúng định dạng mẫu, vui lòng tải file mẫu mới nhất.")
-        return redirect("admindocuments:paper_document_list")
-
-    errors = []
-    to_create = []
-
-    def find_paper_type(name):
-        return AdmPaperType.objects.filter(name__iexact=name).first()
-
-    def find_shop(name):
-        return Shop.objects.filter(shop_name__iexact=name).first()
-
-    def find_department(name):
-        return AdmDepartment.objects.filter(name__iexact=name).first()
-
-    def find_courier(name):
-        return AdmCourierCompany.objects.filter(name__iexact=name).first()
-
-    today = timezone.now().date()
-    max_running = {
-        pt.id: (
-            AdmPaperDocument.objects.filter(paper_type_id=pt.id).aggregate(Max("running_number"))[
-                "running_number__max"
-            ]
-            or 0
-        )
-        for pt in AdmPaperType.objects.all()
-    }
-
-    for idx, row in enumerate(ws.iter_rows(min_row=2), start=2):
-        values = [cell.value for cell in row]
-        (
-            number_full,
-            paper_type_name,
-            region,
-            requested_dept_name,
-            internal_dept_name,
-            responsible,
-            summary,
-            courier_name,
-            tracking_code,
-            status_text,
-            note,
-            created_str,
-        ) = values
-
-        paper_type = find_paper_type(str(paper_type_name).strip()) if paper_type_name else None
-        if not paper_type:
-            errors.append(f"Dòng {idx}: Loại giấy không hợp lệ/để trống.")
-            continue
-
-        requested_dept = find_shop(str(requested_dept_name).strip()) if requested_dept_name else None
-        internal_dept = find_department(str(internal_dept_name).strip()) if internal_dept_name else None
-        if not requested_dept and not internal_dept:
-            errors.append(f"Dòng {idx}: Cần chọn Phòng giao dịch hoặc Phòng ban nội bộ (có thể chọn cả hai).")
-            continue
-
-        courier = find_courier(str(courier_name).strip()) if courier_name else None
-
-        try:
-            created_date = (
-                datetime.strptime(str(created_str), "%Y-%m-%d").date() if created_str else today
-            )
-        except ValueError:
-            errors.append(f"Dòng {idx}: Ngày tạo không đúng định dạng yyyy-mm-dd.")
-            continue
-
-        summary_text = str(summary).strip() if summary else ""
-        if not summary_text:
-            errors.append(f"Dòng {idx}: Nội dung không được để trống.")
-            continue
-
-        max_running[paper_type.id] = max_running.get(paper_type.id, 0) + 1
-        running_number = max_running[paper_type.id]
-        year_now = created_date.year
-        document_number_full = (
-            str(number_full).strip()
-            if number_full
-            else f"{running_number:05d}/{year_now}/{paper_type.code}-F88"
-        )
-
-        to_create.append(
-            AdmPaperDocument(
-                paper_type=paper_type,
-                running_number=running_number,
-                region=str(region).strip() if region else None,
-                requested_department=requested_dept,
-                department=internal_dept,
-                responsible_person=str(responsible).strip()
-                if responsible
-                else (request.user.get_full_name() or request.user.username),
-                document_number_full=document_number_full,
-                summary=summary_text,
-                courier_company=courier,
-                courier_tracking_code=str(tracking_code).strip() if tracking_code else None,
-                status=str(status_text).strip() if status_text else "",
-                note=str(note).strip() if note else "",
-                created_by=request.user,
-                created_at=datetime.combine(created_date, datetime.min.time()).replace(
-                    tzinfo=timezone.get_current_timezone()
-                ),
-            )
-        )
-
+    errors, rows_data = _parse_paper_rows(ws, request.user)
     if errors:
         messages.error(request, "Không nhập dữ liệu. Lỗi:\n" + "\n".join(errors))
         return redirect("admindocuments:paper_document_list")
 
+    created_count = 0
     with transaction.atomic():
-        AdmPaperDocument.objects.bulk_create(to_create)
+        for item in rows_data:
+            year_now = item["created_date"].year
+            running_number, document_number_full = allocate_paper_running_number(
+                item["paper_type_id"], item["paper_type_code"], year_now
+            )
+            obj = AdmPaperDocument(
+                paper_type_id=item["paper_type_id"],
+                running_number=running_number,
+                region=item["region"],
+                requested_department_id=item["requested_dept_id"],
+                department_id=item["internal_dept_id"],
+                responsible_person=item["responsible"],
+                document_number_full=document_number_full,
+                summary=item["summary"],
+                courier_company_id=item["courier_id"],
+                courier_tracking_code=item["tracking_code"],
+                status=item["status"],
+                note=item["note"],
+                created_by=request.user,
+                created_at=datetime.combine(item["created_date"], datetime.min.time()).replace(
+                    tzinfo=timezone.get_current_timezone()
+                ),
+            )
+            obj.save()
+            created_count += 1
 
-    messages.success(request, f"Đã nhập {len(to_create)} dòng thành công.")
+    messages.success(request, f"Đã nhập {created_count} dòng thành công.")
     return redirect("admindocuments:paper_document_list")
 
 @login_required
@@ -1045,6 +1086,72 @@ def paper_document_template(request):
         "Content-Disposition"
     ] = 'attachment; filename="paper_document_template.xlsx"'
     return response
+
+
+@login_required
+@admin_staff_required
+def paper_document_import_url(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    if "file" not in request.FILES:
+        return JsonResponse({"error": "Thiếu file .xlsx"}, status=400)
+    upload = request.FILES["file"]
+    try:
+        wb = load_workbook(upload)
+        ws = wb.active
+    except Exception:
+        return JsonResponse({"error": "File không hợp lệ hoặc không thể đọc."}, status=400)
+
+    errors, rows_data = _parse_paper_rows(ws, request.user)
+    if errors:
+        return JsonResponse({"error": "Lỗi dữ liệu", "details": errors}, status=400)
+
+    token = uuid.uuid4().hex
+    cache.set(f"paper_import:{token}", rows_data, timeout=3600)
+    return JsonResponse({"status": "ok", "token": token, "rows": len(rows_data)})
+
+
+@login_required
+@admin_staff_required
+def paper_document_import_commit(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    token = request.POST.get("token")
+    if not token:
+        return JsonResponse({"error": "Thiếu token"}, status=400)
+    rows_data = cache.get(f"paper_import:{token}")
+    if not rows_data:
+        return JsonResponse({"error": "Token không hợp lệ hoặc đã hết hạn"}, status=400)
+
+    created_count = 0
+    with transaction.atomic():
+        for item in rows_data:
+            year_now = item["created_date"].year
+            running_number, document_number_full = allocate_paper_running_number(
+                item["paper_type_id"], item["paper_type_code"], year_now
+            )
+            obj = AdmPaperDocument(
+                paper_type_id=item["paper_type_id"],
+                running_number=running_number,
+                region=item["region"],
+                requested_department_id=item["requested_dept_id"],
+                department_id=item["internal_dept_id"],
+                responsible_person=item["responsible"],
+                document_number_full=document_number_full,
+                summary=item["summary"],
+                courier_company_id=item["courier_id"],
+                courier_tracking_code=item["tracking_code"],
+                status=item["status"],
+                note=item["note"],
+                created_by=request.user,
+                created_at=datetime.combine(item["created_date"], datetime.min.time()).replace(
+                    tzinfo=timezone.get_current_timezone()
+                ),
+            )
+            obj.save()
+            created_count += 1
+    cache.delete(f"paper_import:{token}")
+    return JsonResponse({"status": "ok", "created": created_count})
 
 
 @login_required

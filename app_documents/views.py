@@ -16,7 +16,7 @@ from django.utils import timezone, dateparse
 from django.utils.dateparse import parse_datetime
 from django.conf import settings
 from django.db import IntegrityError, transaction, connection
-from django.db.models import Count, Max, Q, Min
+from django.db.models import Count, Max, Q, Min, Prefetch
 from django.forms.models import model_to_dict
 from django.core.serializers.json import DjangoJSONEncoder
 from urllib.parse import urlencode
@@ -775,8 +775,8 @@ def receive_folder_view(request, template_name="app_documents/app_receivingtrans
                             folder_detail_instance.update(  folder_status_id = folder_status_submit, 
                                                             lastest_received_date= lasted_received_date_submit, 
                                                             lastest_received_by = user)
-                            message_check_on_time =  check_on_time(folder_detail_instance_log,lasted_received_date_submit) # Đánh dấu lại tối ưu sau
-                            messages.add_message(request, messages.INFO, message_check_on_time) 
+                            result_check = check_on_time(folder_detail_instance_log, lasted_received_date_submit)
+                            messages.add_message(request, messages.INFO, result_check.get("message", "")) 
                             # Nếu trạng thái được thay đổi thì lưu lại log trong bảng FolderTransactionReceiving
                             if is_folderstatus_changed:
                                 # Lấy ins của trạng thái quyển mới
@@ -1150,6 +1150,125 @@ def package_management_view(request):
      }
     context['query_string'] = query_string
     return render(request, 'app_documents/app_package_management.html', context )
+
+@login_required
+def package_list_management_view(request):
+    user = request.user
+    user_context = get_user_context(user)
+    if not user_context['is_admin'] and not user_context['is_checker']:
+        messages.error(request, "Unauthorized access.")
+        return redirect('home')
+
+    package_code_filter = request.GET.get('package_code', '').strip()
+    partner_package_code_filter = request.GET.get('partner_package_code', '').strip()
+    package_code_old_filter = request.GET.get('package_code_old', '').strip()
+
+    filters = {}
+    if package_code_filter:
+        filters['package_code__icontains'] = package_code_filter
+    if partner_package_code_filter:
+        filters['partnerpackage__partner_package_code__icontains'] = partner_package_code_filter
+    if package_code_old_filter:
+        filters['package_code_old__icontains'] = package_code_old_filter
+
+    base_queryset = Package.objects.select_related('partnerpackage', 'package_type', 'region_id').annotate(
+        folder_count=Count('folder', distinct=True),
+        shop_count=Count('folder__shop_id', distinct=True)
+    ).order_by('-created_date')
+
+    filtered_queryset = base_queryset.filter(**filters) if filters else base_queryset
+
+    total_packages = filtered_queryset.count()
+    stored_packages = filtered_queryset.filter(partnerpackage__status_id__is_in_warehouse=True).count()
+    open_packages = filtered_queryset.filter(
+        Q(partnerpackage__status_id__is_released=False) | Q(partnerpackage__status_id__isnull=True)
+    ).count()
+
+    documents_prefetch = Prefetch(
+        'documentsdetail_set',
+        queryset=DocumentsDetail.objects.select_related('document_type_id').order_by('documents_created_date')
+    )
+    folders_prefetch = Prefetch(
+        'folder_set',
+        queryset=Folder.objects.select_related('shop_id', 'folder_type_id').prefetch_related(documents_prefetch).order_by('shop_id__shop_name', 'folder_created_date')
+    )
+    packages_queryset = filtered_queryset.prefetch_related(folders_prefetch)[:200]
+
+    packages_data = []
+    for package in packages_queryset:
+        partner_package = getattr(package, 'partnerpackage', None)
+        status = partner_package.status_id if partner_package else None
+        status_name = status.package_status_name if status else 'Chưa cập nhật'
+        status_color = status.badge_color if status and status.badge_color else '#E5E7EB'
+        region_name = package.region_id.region_name if package.region_id else 'Chưa cập nhật'
+        package_type = package.package_type.folder_type_name if package.package_type else 'Loại thùng'
+
+        shop_groups = {}
+        folders = getattr(package, 'folder_set', None)
+        folders_iterable = folders.all() if hasattr(folders, 'all') else folders or []
+        for folder in folders_iterable:
+            shop = folder.shop_id
+            shop_name = shop.shop_name if shop else 'PGD chưa rõ'
+            shop_code = shop.shop_code if shop else ''
+            key = f"{shop_name}-{shop_code}"
+            if key not in shop_groups:
+                shop_groups[key] = {
+                    'shopName': shop_name,
+                    'shopCode': shop_code,
+                    'count': 0,
+                    'folders': []
+                }
+            shop_groups[key]['count'] += 1
+            documents = getattr(folder, 'documentsdetail_set', None)
+            documents_iterable = documents.all() if hasattr(documents, 'all') else documents or []
+            docs_payload = []
+            for doc in documents_iterable:
+                doc_type = doc.document_type_id.document_type_name if doc.document_type_id else ''
+                docs_payload.append({
+                    'code': doc.documents_code,
+                    'type': doc_type,
+                    'createdDate': doc.documents_created_date.strftime('%Y-%m-%d') if doc.documents_created_date else ''
+                })
+
+            shop_groups[key]['folders'].append({
+                'folderCode': folder.folder_code,
+                'typeLabel': 'Gốc' if folder.is_original else 'Bổ sung',
+                'createdDate': folder.folder_created_date.strftime('%Y-%m-%d') if folder.folder_created_date else '',
+                'documents': docs_payload,
+            })
+
+        packages_data.append({
+            'id': package.package_id,
+            'packageCode': package.package_code,
+            'packageCodeOld': package.package_code_old or '',
+            'partnerPackageCode': partner_package.partner_package_code if partner_package else '',
+            'createdDate': package.created_date.strftime('%Y-%m-%d') if package.created_date else '',
+            'status': {
+                'name': status_name,
+                'color': status_color,
+            },
+            'packageType': package_type,
+            'regionName': region_name,
+            'folderCount': getattr(package, 'folder_count', 0),
+            'shopCount': getattr(package, 'shop_count', 0),
+            'foldersByShop': list(shop_groups.values()),
+        })
+
+    context = {
+        **user_context,
+        'packages_json': json.dumps(packages_data, cls=DjangoJSONEncoder, ensure_ascii=False),
+        'package_metrics_json': json.dumps({
+            'total': total_packages,
+            'stored': stored_packages,
+            'open': open_packages,
+        }, cls=DjangoJSONEncoder, ensure_ascii=False),
+        'filters_json': json.dumps({
+            'package_code': package_code_filter,
+            'partner_package_code': partner_package_code_filter,
+            'package_code_old': package_code_old_filter,
+        }, cls=DjangoJSONEncoder, ensure_ascii=False),
+    }
+    return render(request, 'app_documents/app_package_list.html', context)
 
 # Package management edit view
 @login_required

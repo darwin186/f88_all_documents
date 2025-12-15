@@ -21,7 +21,7 @@
           class="bg-f88green hover:bg-f88dark text-white px-4 py-2 rounded-lg shadow">Tạo mới</button>
 </div>
 
-<form method="get" class="mb-4 flex items-center gap-2">
+<form method="get" class="mb-2 flex items-center gap-2 flex-wrap">
   <input type="text" name="q" value="{{ request.GET.q|default:'' }}"
          placeholder="Tìm theo số hiệu hoặc mã vận đơn..."
          class="border border-gray-300 rounded-lg px-3 py-2 w-80 focus:outline-none focus:ring focus:ring-green-300" />
@@ -31,14 +31,14 @@
   <button type="submit" class="bg-f88green hover:bg-f88dark text-white px-4 py-2 rounded-lg">Tìm kiếm</button>
   <a href="{% url 'admindocuments:paper_document_template' %}"
      class="bg-green-50 text-f88green border border-green-200 hover:bg-green-100 px-3 py-2 rounded-lg">Tải file mẫu</a>
-  <form method="post" action="{% url 'admindocuments:paper_document_import' %}" enctype="multipart/form-data" class="flex items-center gap-2">
-    {% csrf_token %}
-    <input type="hidden" name="paper_type" value="{{ selected_type }}">
-    <label class="flex items-center gap-2 text-sm text-gray-700 border border-gray-300 rounded-lg px-3 py-2 cursor-pointer bg-white hover:bg-gray-50">
-      <input type="file" name="file" accept=".xlsx" class="hidden" onchange="this.form.submit()">
-      <span>Tải file lên</span>
-    </label>
-  </form>
+</form>
+<form method="post" action="{% url 'admindocuments:paper_document_import' %}" enctype="multipart/form-data" class="flex items-center gap-2 mb-4">
+  {% csrf_token %}
+  <input type="hidden" name="paper_type" value="{{ selected_type }}">
+  <label class="flex items-center gap-2 text-sm text-gray-700 border border-gray-300 rounded-lg px-3 py-2 cursor-pointer bg-white hover:bg-gray-50">
+    <input type="file" name="file" accept=".xlsx" class="hidden" onchange="this.form.submit()">
+    <span>Tải file lên</span>
+  </label>
 </form>
 
 <ul class="flex flex-wrap text-sm font-medium text-center text-gray-600 border-b border-gray-200 mb-4">
@@ -150,7 +150,14 @@
         <button type="button" data-modal-hide="paperModal"
                 class="text-gray-400 hover:text-gray-900 rounded-lg text-sm p-2 ml-auto inline-flex items-center">×</button>
       </div>
+      <div class="px-6 pt-4">
+        <div class="flex border-b border-gray-200 text-sm font-semibold">
+          <button type="button" class="tab-btn px-4 py-2 border-b-2 border-f88green text-f88green" data-tab="tab-create">Tạo giấy tờ</button>
+          <button type="button" class="tab-btn px-4 py-2 text-gray-500 hover:text-f88green" data-tab="tab-upload">Tạo giấy tờ theo file</button>
+        </div>
+      </div>
       <div class="p-6 space-y-4 overflow-y-auto">
+        <div id="tab-create" class="tab-panel block">
         <form method="post" action="{% url 'admindocuments:paper_document_list' %}" class="grid grid-cols-2 gap-4">
           {% csrf_token %}
           {% if edit_id %}
@@ -242,13 +249,31 @@
             <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
             {{ form.note }}
           </div>
-          <div class="col-span-2 flex justify-end gap-2 mt-4">
+        <div class="col-span-2 flex justify-end gap-2 mt-4">
             <button data-modal-hide="paperModal" type="button"
                     class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">Hủy</button>
             <button type="submit"
                     class="px-4 py-2 bg-f88green text-white rounded hover:bg-f88dark">{% if edit_id %}Cập nhật{% else %}Lưu{% endif %}</button>
           </div>
         </form>
+        </div>
+
+        <div id="tab-upload" class="tab-panel hidden">
+          <div class="space-y-3">
+            <label class="block text-sm font-medium text-gray-700">Chọn file (.xlsx)</label>
+            <input type="file" id="bulkFileInput" accept=".xlsx" class="border border-gray-300 rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green">
+            <div class="flex justify-end">
+              <button type="button" id="bulkProcessBtn" class="px-4 py-2 bg-f88green text-white rounded hover:bg-f88dark text-sm">Xử lý</button>
+            </div>
+            <div id="bulkStatus" class="text-sm text-gray-600"></div>
+            <div id="bulkResults" class="text-sm text-gray-700 bg-green-50 border border-green-100 rounded p-3 hidden"></div>
+            <div id="bulkErrors" class="text-sm text-red-700 bg-red-50 border border-red-100 rounded p-3 hidden"></div>
+            <div class="flex justify-end gap-2">
+              <button type="button" data-modal-hide="paperModal" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 text-sm">Đóng</button>
+              <button type="button" id="bulkSaveBtn" class="px-4 py-2 bg-f88green text-white rounded hover:bg-f88dark text-sm" disabled>Lưu</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -330,5 +355,108 @@
       },
     };
   }
+
+  // Tabs
+  const tabButtons = document.querySelectorAll('#paperModal .tab-btn');
+  const tabPanels = document.querySelectorAll('#paperModal .tab-panel');
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.tab;
+      tabButtons.forEach(b => b.classList.remove('border-f88green','text-f88green','border-b-2'));
+      tabButtons.forEach(b => b.classList.add('text-gray-500'));
+      btn.classList.add('border-f88green','text-f88green','border-b-2');
+      tabPanels.forEach(p => p.classList.toggle('hidden', p.id !== target));
+    });
+  });
+
+  const csrfToken = "{{ csrf_token }}";
+  const bulkFileInput = document.getElementById('bulkFileInput');
+  const bulkProcessBtn = document.getElementById('bulkProcessBtn');
+  const bulkStatus = document.getElementById('bulkStatus');
+  const bulkResults = document.getElementById('bulkResults');
+  const bulkErrors = document.getElementById('bulkErrors');
+  const bulkSaveBtn = document.getElementById('bulkSaveBtn');
+  let bulkToken = null;
+
+  async function processBulk() {
+    const file = bulkFileInput.files[0];
+    if (!file) {
+      bulkStatus.textContent = "Vui lòng chọn file .xlsx";
+      bulkStatus.classList.remove("text-green-700");
+      bulkStatus.classList.add("text-red-700");
+      return;
+    }
+    bulkStatus.textContent = "Đang xử lý...";
+    bulkStatus.classList.remove("text-red-700");
+    bulkStatus.classList.add("text-gray-700");
+    bulkResults.classList.add("hidden");
+    bulkErrors.classList.add("hidden");
+    bulkSaveBtn.disabled = true;
+    bulkToken = null;
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("csrfmiddlewaretoken", csrfToken);
+      const resp = await fetch("{% url 'admindocuments:paper_document_import_url' %}", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        const details = data && data.details ? "\n" + data.details.join("\n") : "";
+        throw new Error((data && (data.error || data.details)) || "Lỗi xử lý" + details);
+      }
+      bulkToken = data.token;
+      bulkStatus.textContent = "Chuẩn bị file thành công.";
+      bulkStatus.classList.remove("text-red-700");
+      bulkStatus.classList.add("text-green-700");
+      bulkResults.textContent = `Số dòng hợp lệ: ${data.rows}`;
+      bulkResults.classList.remove("hidden");
+      bulkErrors.classList.add("hidden");
+      bulkSaveBtn.disabled = false;
+    } catch (err) {
+      bulkStatus.textContent = "Xử lý thất bại.";
+      bulkStatus.classList.remove("text-green-700");
+      bulkStatus.classList.add("text-red-700");
+      bulkResults.classList.add("hidden");
+      bulkErrors.textContent = err.message || "Có lỗi xảy ra";
+      bulkErrors.classList.remove("hidden");
+      bulkSaveBtn.disabled = true;
+    }
+  }
+
+  async function commitBulk() {
+    if (!bulkToken) return;
+    bulkStatus.textContent = "Đang lưu...";
+    bulkResults.classList.add("hidden");
+    bulkErrors.classList.add("hidden");
+    bulkSaveBtn.disabled = true;
+    try {
+      const formData = new FormData();
+      formData.append("token", bulkToken);
+      formData.append("csrfmiddlewaretoken", csrfToken);
+      const resp = await fetch("{% url 'admindocuments:paper_document_import_commit' %}", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error((data && data.error) || "Lưu thất bại");
+      }
+      bulkStatus.textContent = `Đã lưu ${data.created} dòng. Đang tải lại...`;
+      bulkStatus.classList.add("text-green-700");
+      setTimeout(() => window.location.reload(), 800);
+    } catch (err) {
+      bulkStatus.textContent = "Lưu thất bại.";
+      bulkStatus.classList.remove("text-green-700");
+      bulkStatus.classList.add("text-red-700");
+      bulkErrors.textContent = err.message || "Có lỗi xảy ra";
+      bulkErrors.classList.remove("hidden");
+      bulkSaveBtn.disabled = false;
+    }
+  }
+
+  if (bulkProcessBtn) bulkProcessBtn.addEventListener("click", processBulk);
+  if (bulkSaveBtn) bulkSaveBtn.addEventListener("click", commitBulk);
 </script>
 {% endblock %}

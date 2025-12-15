@@ -438,6 +438,8 @@ class AdmPaperDocument(models.Model):
         blank=True,
         related_name="adm_paperdoc_updated_by",
     )
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "adm_paper_document"

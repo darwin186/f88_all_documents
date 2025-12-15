@@ -106,6 +106,12 @@
         <button type="submit" class="px-4 py-2 bg-f88green text-white rounded hover:bg-f88dark text-sm">Cập nhật</button>
       </div>
     </form>
+    <div class="mt-4 flex justify-end">
+      <form method="post" action="{% url 'admindocuments:paper_document_hide' doc.id %}" onsubmit="return confirm('Ẩn giấy này và thu hồi số hiệu?');">
+        {% csrf_token %}
+        <button type="submit" class="px-4 py-2 text-sm rounded border border-red-200 text-red-700 hover:bg-red-50">Ẩn & thu hồi số hiệu</button>
+      </form>
+    </div>
   </div>
 </div>
 <script>
