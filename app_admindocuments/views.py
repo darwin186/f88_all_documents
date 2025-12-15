@@ -19,7 +19,6 @@ from django.urls import reverse
 from django.utils import timezone
 from django.conf import settings
 from django.http import JsonResponse
-from django.core.cache import cache
 
 from openpyxl import Workbook
 from openpyxl import load_workbook
@@ -1107,7 +1106,13 @@ def paper_document_import_url(request):
         return JsonResponse({"error": "Lỗi dữ liệu", "details": errors}, status=400)
 
     token = uuid.uuid4().hex
-    cache.set(f"paper_import:{token}", rows_data, timeout=3600)
+    serialized = []
+    for item in rows_data:
+        s = item.copy()
+        s["created_date"] = s["created_date"].isoformat()
+        serialized.append(s)
+    request.session[f"paper_import_{token}"] = serialized
+    request.session.modified = True
     return JsonResponse({"status": "ok", "token": token, "rows": len(rows_data)})
 
 
@@ -1119,14 +1124,15 @@ def paper_document_import_commit(request):
     token = request.POST.get("token")
     if not token:
         return JsonResponse({"error": "Thiếu token"}, status=400)
-    rows_data = cache.get(f"paper_import:{token}")
+    rows_data = request.session.get(f"paper_import_{token}")
     if not rows_data:
         return JsonResponse({"error": "Token không hợp lệ hoặc đã hết hạn"}, status=400)
 
     created_count = 0
     with transaction.atomic():
         for item in rows_data:
-            year_now = item["created_date"].year
+            created_date = datetime.fromisoformat(item["created_date"]).date()
+            year_now = created_date.year
             running_number, document_number_full = allocate_paper_running_number(
                 item["paper_type_id"], item["paper_type_code"], year_now
             )
@@ -1144,13 +1150,17 @@ def paper_document_import_commit(request):
                 status=item["status"],
                 note=item["note"],
                 created_by=request.user,
-                created_at=datetime.combine(item["created_date"], datetime.min.time()).replace(
+                created_at=datetime.combine(created_date, datetime.min.time()).replace(
                     tzinfo=timezone.get_current_timezone()
                 ),
             )
             obj.save()
             created_count += 1
-    cache.delete(f"paper_import:{token}")
+    try:
+        del request.session[f"paper_import_{token}"]
+        request.session.modified = True
+    except KeyError:
+        pass
     return JsonResponse({"status": "ok", "created": created_count})
 
 
