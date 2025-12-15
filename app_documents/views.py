@@ -648,7 +648,7 @@ def additional_management_view(request):
 #-------------------FOLDER TRANSACTION -------------------
 # Folder transaction view
 @login_required
-def receive_folder_view(request): 
+def receive_folder_view(request, template_name="app_documents/app_receivingtransaction.html", redirect_name="receiving_transaction"): 
     user = request.user 
     user_context = get_user_context(user)
     folder_detail = Folder.objects.none()  # Khởi tạo folder_detail là None 
@@ -848,7 +848,7 @@ def receive_folder_view(request):
                     'page': request.POST.get('filter_page'),
                 }
                 # Chuyển về trang hiển thị dữ liệu với các thông số lọc đã thiết lập
-                redirect_url = f"{reverse('receiving_transaction')}?{urlencode(filter_params)}"
+                redirect_url = f"{reverse(redirect_name)}?{urlencode(filter_params)}"
                 return HttpResponseRedirect(redirect_url)  
         user_by_role = AccessControls.get_users_based_on_role(user)
         query_string = '&'.join(f"{key}={value}" for key, value in request.GET.items() if key != 'page')
@@ -871,7 +871,18 @@ def receive_folder_view(request):
             'change_request':change_requests_map,
         }
         context['query_string'] = query_string
-        return render( request, "app_documents/app_receivingtransaction.html" , context)
+        return render(request, template_name, context)
+
+
+def receive_folder_view_flowbite(request):
+    """
+    Trang nhận chứng từ mới sử dụng Flowbite (UI song song với trang hiện tại).
+    """
+    return receive_folder_view(
+        request,
+        template_name="app_documents/app_receivingtransaction_flowbite.html",
+        redirect_name="receiving_transaction_flowbite",
+    )
 
 # Lịch sử nhận quyển chứng từ
 @login_required
@@ -975,6 +986,7 @@ def receiving_additional_view(request, folder_id):
             filter_params = {
                 'choice_shop': request.POST.get('filter_choice_shop', ''),
             }
+            redirect_name = request.POST.get('redirect_name', 'receiving_transaction')
             if not choice_additional_package_code or not choice_additional_folder_status:
                 messages.error(request, 'Vui lòng chọn thùng và trạng thái cho quyển bổ sung.')
                 return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
@@ -1022,7 +1034,7 @@ def receiving_additional_view(request, folder_id):
                     trans_created_by = user)
                 
                 messages.success(request, message_of_success_additional)  
-                redirect_url = f"{reverse('receiving_transaction')}?{urlencode(filter_params)}"
+                redirect_url = f"{reverse(redirect_name)}?{urlencode(filter_params)}"
                 return HttpResponseRedirect(redirect_url)  
             except IntegrityError:
                 # Redirect về trang trước đó
