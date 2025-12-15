@@ -404,7 +404,9 @@ class AdmPaperDocument(models.Model):
     region = models.CharField(max_length=50, blank=True, null=True)
     responsible_person = models.CharField(max_length=255)
     document_number_full = models.CharField(max_length=255, unique=True, editable=False)
-    requested_department = models.ForeignKey(Shop, on_delete=models.PROTECT)
+    requested_department = models.ForeignKey(
+        Shop, on_delete=models.PROTECT, null=True, blank=True
+    )
     department = models.ForeignKey(
         AdmDepartment,
         on_delete=models.SET_NULL,

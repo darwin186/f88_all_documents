@@ -8,7 +8,14 @@ from .models import AdmAdministrativeDocument, AdmDocumentCounter
 def allocate_running_number(
     doc_type_id: int, company_id: int, year: int | None = None
 ) -> int:
-    """Allocate the next running number for a given doc_type, company, and year."""
+    """
+    Allocate the next running number for a given doc_type, company, and year.
+
+    The counter row is locked (select_for_update) so concurrent requests do not
+    reuse the same number. We also check existing AdmAdministrativeDocument
+    records to skip over any number that was already taken (e.g. manual insert
+    or backfill) before bumping the counter forward.
+    """
     if year is None:
         year = timezone.now().year
     counter, _created = (

@@ -34,18 +34,18 @@
   <input type="hidden" name="sort" value="{{ sort }}" />
   <input type="hidden" name="dir" value="{{ dir }}" />
   <button type="submit" class="bg-f88green hover:bg-f88dark text-white px-4 py-2 rounded-lg">Tìm kiếm</button>
-  <a href="{% url 'admindocuments:admindocuments_list_export' %}?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&sort={{ sort }}&dir={{ dir }}&start_date={{ start_date }}&end_date={{ end_date }}" class="bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 px-4 py-2 rounded-lg">Xuất Excel</a>
+  <a href="{% url 'admindocuments:admindocuments_list_export' %}?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&sort={{ sort }}&dir={{ dir }}&start_date={{ start_date }}&end_date={{ end_date }}" class="bg-green-50 text-f88green border border-green-200 hover:bg-green-100 px-4 py-2 rounded-lg">Xuất Excel</a>
 </form>
 
 <div class="mb-2">
-  <ul class="flex justify-center text-sm font-medium text-gray-600 border-b border-blue-100 bg-blue-50/70 rounded-lg overflow-hidden">
+  <ul class="flex justify-center text-sm font-medium text-gray-600 border-b border-green-100 bg-green-50/70 rounded-lg overflow-hidden">
     <li class="flex-1 text-center">
-      <a href="?q={{ q }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}" class="block px-4 py-2 {% if not active_company_id %}text-blue-600 bg-blue-100{% else %}hover:bg-blue-100{% endif %}">Tất cả</a>
+      <a href="?q={{ q }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}" class="block px-4 py-2 {% if not active_company_id %}text-f88green bg-green-100{% else %}hover:bg-green-50{% endif %}">Tất cả</a>
     </li>
     {% for c in companies %}
     <li class="flex-1 text-center">
       {% with cid=c.id|stringformat:'s' %}
-      <a href="?q={{ q }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}&company={{ c.id }}" title="{{ c.name }}" class="block px-4 py-2 {% if active_company_id == cid %}text-blue-600 bg-blue-100{% else %}hover:bg-blue-100{% endif %}">{{ c.code }}</a>
+      <a href="?q={{ q }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}&company={{ c.id }}" title="{{ c.name }}" class="block px-4 py-2 {% if active_company_id == cid %}text-f88green bg-green-100{% else %}hover:bg-green-50{% endif %}">{{ c.code }}</a>
       {% endwith %}
     </li>
     {% endfor %}
@@ -56,10 +56,10 @@
   <div class="flex-1 border-b border-gray-200 pb-1">
     <div class="text-xs uppercase text-gray-400 mb-1">Loại nội dung</div>
     <div class="flex flex-wrap gap-2 text-sm font-medium text-gray-600">
-      <a href="?q={{ q }}&company={{ active_company_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}" class="inline-block px-4 py-2 rounded-lg {% if not active_content_type_id %}text-blue-600 bg-blue-100{% else %}hover:bg-gray-50{% endif %}">Tất cả</a>
+      <a href="?q={{ q }}&company={{ active_company_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}" class="inline-block px-4 py-2 rounded-lg {% if not active_content_type_id %}text-f88green bg-green-100{% else %}hover:bg-gray-50{% endif %}">Tất cả</a>
       {% for ct in content_types %}
       {% with ctid=ct.id|stringformat:'s' %}
-      <a href="?q={{ q }}&company={{ active_company_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}&ctype={{ ct.id }}" title="{{ ct.name }}" class="inline-block px-4 py-2 rounded-lg {% if active_content_type_id == ctid %}text-blue-600 bg-blue-100{% else %}hover:bg-gray-50{% endif %}">{{ ct.name }}</a>
+      <a href="?q={{ q }}&company={{ active_company_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}&ctype={{ ct.id }}" title="{{ ct.name }}" class="inline-block px-4 py-2 rounded-lg {% if active_content_type_id == ctid %}text-f88green bg-green-100{% else %}hover:bg-gray-50{% endif %}">{{ ct.name }}</a>
       {% endwith %}
       {% endfor %}
     </div>
@@ -67,10 +67,10 @@
   <div class="flex-1 border-b border-gray-200 pb-1">
     <div class="text-xs uppercase text-gray-400 mb-1">Loại văn bản</div>
     <div class="flex flex-wrap gap-2 text-sm font-medium text-gray-600">
-      <a href="?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}" class="inline-block px-4 py-2 rounded-lg {% if not active_doc_type_id %}text-blue-600 bg-blue-100{% else %}hover:bg-gray-50{% endif %}">Tất cả</a>
+      <a href="?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}" class="inline-block px-4 py-2 rounded-lg {% if not active_doc_type_id %}text-f88green bg-green-100{% else %}hover:bg-gray-50{% endif %}">Tất cả</a>
       {% for dt in doc_types %}
       {% with dtid=dt.id|stringformat:'s' %}
-      <a href="?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}&dtype={{ dt.id }}" title="{{ dt.name }}" class="inline-block px-4 py-2 rounded-lg {% if active_doc_type_id == dtid %}text-blue-600 bg-blue-100{% else %}hover:bg-gray-50{% endif %}">{{ dt.name }}</a>
+      <a href="?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}&dtype={{ dt.id }}" title="{{ dt.name }}" class="inline-block px-4 py-2 rounded-lg {% if active_doc_type_id == dtid %}text-f88green bg-green-100{% else %}hover:bg-gray-50{% endif %}">{{ dt.name }}</a>
       {% endwith %}
       {% endfor %}
     </div>
@@ -109,7 +109,7 @@
         {% for num in paginator.page_range %}
           {% if num == page_obj.number %}
           <li>
-            <a href="#" aria-current="page" class="z-10 flex items-center justify-center px-3 h-8 leading-tight text-blue-600 border border-blue-300 bg-blue-50 hover:bg-blue-100 hover:text-blue-700">{{ num }}</a>
+            <a href="#" aria-current="page" class="z-10 flex items-center justify-center px-3 h-8 leading-tight text-f88green border border-green-300 bg-green-50 hover:bg-green-100 hover:text-f88green">{{ num }}</a>
           </li>
           {% else %}
           <li>
@@ -163,7 +163,7 @@
         </td>
         <td class="px-4 py-3">{{ forloop.counter }}</td>
         <td class="px-4 py-3">
-          <span class="px-2 py-1 text-xs font-semibold rounded
+          <span class="inline-flex px-2 py-1 text-xs font-semibold rounded max-w-xs truncate align-middle
               {% if doc.status.code == STATUS_ISSUED %} bg-green-100 text-green-800
               {% elif doc.status.code == STATUS_DRAFT %} bg-yellow-100 text-yellow-800
               {% elif doc.status.code == STATUS_EXPIRED %} bg-gray-100 text-gray-700
@@ -171,7 +171,11 @@
               {{ doc.status.name }}
           </span>
         </td>
-        <td class="px-4 py-3 font-mono">{{ doc.document_number_full }}</td>
+        <td class="px-4 py-3 font-mono">
+          <span class="inline-block max-w-xs truncate align-middle" title="{{ doc.document_number_full }}">
+            {{ doc.document_number_full }}
+          </span>
+        </td>
         <td class="px-4 py-3">{{ doc.title }}</td>
         <td class="px-4 py-3">{{ doc.doc_type.name }}</td>
         <td class="px-4 py-3">{{ doc.issuing_company.name }}</td>
@@ -251,11 +255,11 @@
           </strong>
         </div>
         {% endif %}
-        <form method="post" action="{% url 'admindocuments:admindocuments_create' %}" enctype="multipart/form-data" class="grid grid-cols-2 gap-4" x-data="{ attachmentMode: 'text' }">
+        <form method="post" action="{% url 'admindocuments:admindocuments_create' %}" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-2 gap-5 text-sm" x-data="{ attachmentMode: 'text' }">
           {% csrf_token %}
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Công ty ban hành</label>
-            <select name="issuing_company" id="issuingCompanySelect" required class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green">
+            <select name="issuing_company" id="issuingCompanySelect" required class="block w-full rounded-lg border border-gray-300 px-3.5 py-2.5 h-11 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-f88green">
               <option value="">-- Chọn công ty--</option>
               {% for it in companies %}
               <option value="{{ it.id }}">{{ it.name }}</option>
@@ -264,7 +268,7 @@
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Loại văn bản</label>
-            <select name="doc_type" required class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green">
+            <select name="doc_type" required class="block w-full rounded-lg border border-gray-300 px-3.5 py-2.5 h-11 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-f88green">
               <option value="">-- Chọn loại văn bản--</option>
               {% for it in doc_types %}
               <option value="{{ it.id }}">{{ it.name }}</option>
@@ -273,7 +277,7 @@
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Loại nội dung</label>
-            <select name="content_type" required class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green">
+            <select name="content_type" required class="block w-full rounded-lg border border-gray-300 px-3.5 py-2.5 h-11 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-f88green">
               <option value="">-- Chọn loại nội dung --</option>
               {% for it in content_types %}
               <option value="{{ it.id }}">{{ it.name }}</option>
@@ -282,16 +286,16 @@
           </div>
           <div class="col-span-2">
             <label class="block text-sm font-medium text-gray-700 mb-1">Tên văn bản</label>
-            <input type="text" name="title" required placeholder="Nhập tên văn bản" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green" />
+            <input type="text" name="title" required placeholder="Nhập tên văn bản" class="block w-full rounded-lg border border-gray-300 px-3.5 py-2.5 h-11 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-f88green" />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Số hiệu tham chiếu</label>
-            <input type="text" name="reference_number" id="referenceNumberInput" placeholder="Nhập số hiệu muốn tham chiếu" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green" />
+            <input type="text" name="reference_number" id="referenceNumberInput" placeholder="Nhập số hiệu muốn tham chiếu" class="block w-full rounded-lg border border-gray-300 px-3.5 py-2.5 h-11 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-f88green" />
           </div>
           <div x-data="admReferenceDropdown('{{ ref_prefill_id }}')" x-init="init()" class="relative">
             <label class="block text-sm font-medium text-gray-700 mb-1">Tham chiếu tới văn bản</label>
             <input type="hidden" name="reference_document" x-model="selectedValue">
-            <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-lg border border-gray-300 px-3 py-2 text-left focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green bg-white">
+            <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-lg border border-gray-300 px-3.5 py-2.5 h-11 text-left focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-f88green bg-white">
               <span class="truncate" x-text="selectedLabel || '-- Chọn văn bản --'"></span>
               <svg class="w-4 h-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6"/></svg>
             </button>
@@ -319,7 +323,7 @@
           <div x-data="admSignerDropdown('')" x-init="init()" class="relative">
             <label class="block text-sm font-medium text-gray-700 mb-1">Người ký</label>
             <input type="hidden" name="signer_role" x-model="selectedValue" required>
-            <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-lg border border-gray-300 px-3 py-2 text-left focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green bg-white">
+            <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-lg border border-gray-300 px-3.5 py-2.5 h-11 text-left focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-f88green bg-white">
               <span class="truncate" x-text="selectedLabel || '-- Chọn người ký --'"></span>
               <svg class="w-4 h-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6"/></svg>
             </button>
@@ -346,7 +350,7 @@
           <div x-data="admDepartmentDropdown()" x-init="init()" class="relative">
             <label class="block text-sm font-medium text-gray-700 mb-1">Phòng ban</label>
             <input type="hidden" name="issuing_department" x-model="selectedValue">
-            <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-lg border border-gray-300 px-3 py-2 text-left focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green bg-white">
+            <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-lg border border-gray-300 px-3.5 py-2.5 h-11 text-left focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-f88green bg-white">
               <span class="truncate" x-text="selectedLabel || '-- Chọn phòng ban --'"></span>
               <svg class="w-4 h-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6"/></svg>
             </button>
@@ -376,7 +380,7 @@
               <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                 <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
               </div>
-              <input name="issue_date" datepicker datepicker-buttons datepicker-autoselect-today datepicker-format="dd/mm/yyyy" type="text" class="block w-full pl-9 pr-3 py-2.5 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-f88green focus:border-f88green placeholder:text-gray-500" placeholder="dd/mm/yyyy" />
+              <input name="issue_date" datepicker datepicker-buttons datepicker-autoselect-today datepicker-format="dd/mm/yyyy" type="text" class="block w-full pl-9 pr-3 py-2.5 h-11 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-emerald-100 focus:border-f88green placeholder:text-gray-500" placeholder="dd/mm/yyyy" />
             </div>
           </div>
           <div>
@@ -385,7 +389,7 @@
               <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                 <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
               </div>
-              <input name="effective_date" datepicker datepicker-buttons datepicker-format="dd/mm/yyyy" type="text" class="block w-full pl-9 pr-3 py-2.5 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-f88green focus:border-f88green placeholder:text-gray-500" placeholder="dd/mm/yyyy" />
+              <input name="effective_date" datepicker datepicker-buttons datepicker-format="dd/mm/yyyy" type="text" class="block w-full pl-9 pr-3 py-2.5 h-11 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-emerald-100 focus:border-f88green placeholder:text-gray-500" placeholder="dd/mm/yyyy" />
             </div>
           </div>
           <div class="col-span-2 flex items-center gap-3">
@@ -396,7 +400,7 @@
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Trạng thái</label>
-            <select name="status" id="statusSelect" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green">
+            <select name="status" id="statusSelect" class="block w-full rounded-lg border border-gray-300 px-3.5 py-2.5 h-11 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-f88green">
               {% for s in statuses %}
               <option value="{{ s.id }}" data-code="{{ s.code }}" data-color="{% if s.code|lower == 'issued' or s.code|lower == 'banhhanh' %}#15803d{% elif s.code|lower == 'draft' or s.code|lower == 'nhap' %}#d97706{% elif s.code|lower == 'expired' or s.code|lower == 'hethieuluc' %}#4b5563{% else %}#0ea5e9{% endif %}" {% if default_status and s.id == default_status.id %}selected{% endif %}>{{ s.name }} ({{ s.code }})</option>
               {% endfor %}
@@ -408,7 +412,7 @@
               <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                 <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
               </div>
-              <input name="expiry_date" datepicker datepicker-buttons datepicker-format="dd/mm/yyyy" type="text" class="block w-full pl-9 pr-3 py-2.5 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-f88green focus:border-f88green placeholder:text-gray-500" placeholder="dd/mm/yyyy" />
+              <input name="expiry_date" datepicker datepicker-buttons datepicker-format="dd/mm/yyyy" type="text" class="block w-full pl-9 pr-3 py-2.5 h-11 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-emerald-100 focus:border-f88green placeholder:text-gray-500" placeholder="dd/mm/yyyy" />
             </div>
           </div>
           <div class="col-span-2">

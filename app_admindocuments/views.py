@@ -4,7 +4,6 @@ from datetime import datetime, date
 from io import BytesIO
 from functools import wraps
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
@@ -17,6 +16,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.conf import settings
 
 from openpyxl import Workbook
 from openpyxl import load_workbook
@@ -226,6 +226,54 @@ def dashboard(request):
     daily_labels = [row["day"].strftime("%d/%m") for row in issued_daily]
     daily_counts = [row["total"] for row in issued_daily]
 
+    # Ban hành theo tháng / công ty (12 tháng gần nhất)
+    if settings.USE_TZ:
+        today = timezone.localtime(timezone.now()).date()
+    else:
+        today = date.today()
+    months = []
+    for offset in range(11, -1, -1):
+        y = today.year
+        m = today.month - offset
+        while m <= 0:
+            m += 12
+            y -= 1
+        months.append(date(y, m, 1))
+
+    from django.db.models.functions import TruncMonth
+
+    issued_last_year = AdmAdministrativeDocument.objects.filter(
+        status__code=AdmDocumentStatus.CODE_ISSUED,
+        created_at__gte=months[0],
+        created_at__lt=(
+            date(months[-1].year + (1 if months[-1].month == 12 else 0),
+                 1 if months[-1].month == 12 else months[-1].month + 1,
+                 1)
+        ),
+    )
+    monthly_rows = (
+        issued_last_year.annotate(period=TruncMonth("created_at"))
+        .values("period", "issuing_company__name")
+        .annotate(total=Count("id"))
+    )
+    month_index = {dt: idx for idx, dt in enumerate(months)}
+    company_names = sorted(
+        {row["issuing_company__name"] or "(Unknown)" for row in monthly_rows}
+    )
+    monthly_series = {name: [0] * len(months) for name in company_names}
+    for row in monthly_rows:
+        period_date = row["period"].date()
+        idx = month_index.get(period_date)
+        if idx is not None:
+            monthly_series[row["issuing_company__name"] or "(Unknown)"][idx] = row[
+                "total"
+            ]
+
+    monthly_company_series = [
+        {"label": name, "data": monthly_series[name]} for name in company_names
+    ]
+    monthly_company_labels = [f"{m.month:02d}/{m.year}" for m in months]
+
     companies = AdmCompany.objects.all().order_by("name")
     doc_types = AdmDocumentType.objects.all().order_by("name")
     departments = (
@@ -261,6 +309,8 @@ def dashboard(request):
         "issued_total": issued_total,
         "daily_labels": daily_labels,
         "daily_counts": daily_counts,
+        "monthly_company_labels": monthly_company_labels,
+        "monthly_company_series": monthly_company_series,
         "month_label": sel["period_label"],
         "companies": companies,
         "doc_types": doc_types,
@@ -1102,6 +1152,16 @@ def master_data(request):
         "paper_type": (AdmPaperTypeForm, "Loại giấy (paper)"),
         "courier": (AdmCourierCompanyForm, "Đơn vị chuyển phát"),
     }
+    perm_map = {
+        "doc_type": "app_admindocuments.add_admdocumenttype",
+        "content_type": "app_admindocuments.add_admcontenttype",
+        "signer_role": "app_admindocuments.add_admsignerrole",
+        "status": "app_admindocuments.add_admdocumentstatus",
+        "company": "app_admindocuments.add_admcompany",
+        "department": "app_admindocuments.add_admdepartment",
+        "paper_type": "app_admindocuments.add_admpapertype",
+        "courier": "app_admindocuments.add_admcouriercompany",
+    }
     forms_map = {key: cls() for key, (cls, _) in form_classes.items()}
 
     if request.method == "POST":
@@ -1111,6 +1171,10 @@ def master_data(request):
             messages.error(request, "Form không hợp lệ.")
             return redirect("admindocuments:master_data")
         form_cls, label = form_entry
+        required_perm = perm_map.get(form_key)
+        if required_perm and not request.user.has_perm(required_perm):
+            messages.error(request, "Bạn không có quyền thêm %s." % label.lower())
+            return redirect(f"{reverse('admindocuments:master_data')}#{form_key}")
         bound_form = form_cls(request.POST)
         forms_map[form_key] = bound_form
         if bound_form.is_valid():
@@ -1141,6 +1205,10 @@ def master_data(request):
         "couriers": AdmCourierCompany.objects.all().order_by("name"),
         "forms": forms_map,
         "has_admin_docs_access": _has_admin_docs_access(request.user),
+        "form_permissions": {
+            key: (not perm_map.get(key) or request.user.has_perm(perm_map[key]))
+            for key in form_classes.keys()
+        },
     }
     return render(request, "admindocuments/master_data.html", context)
 

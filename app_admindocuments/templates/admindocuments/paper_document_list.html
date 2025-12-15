@@ -30,7 +30,7 @@
   <input type="hidden" name="dir" value="{{ dir }}" />
   <button type="submit" class="bg-f88green hover:bg-f88dark text-white px-4 py-2 rounded-lg">Tìm kiếm</button>
   <a href="{% url 'admindocuments:paper_document_template' %}"
-     class="bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 px-3 py-2 rounded-lg">Tải file mẫu</a>
+     class="bg-green-50 text-f88green border border-green-200 hover:bg-green-100 px-3 py-2 rounded-lg">Tải file mẫu</a>
   <form method="post" action="{% url 'admindocuments:paper_document_import' %}" enctype="multipart/form-data" class="flex items-center gap-2">
     {% csrf_token %}
     <input type="hidden" name="paper_type" value="{{ selected_type }}">
@@ -43,12 +43,12 @@
 
 <ul class="flex flex-wrap text-sm font-medium text-center text-gray-600 border-b border-gray-200 mb-4">
   <li class="mr-2">
-    <a href="{% url 'admindocuments:paper_document_list' %}" class="inline-block px-4 py-2 rounded-t-lg {% if not selected_type %}text-blue-600 bg-blue-100{% else %}hover:bg-gray-50{% endif %}">Tất cả</a>
+    <a href="{% url 'admindocuments:paper_document_list' %}" class="inline-block px-4 py-2 rounded-t-lg {% if not selected_type %}text-f88green bg-green-100{% else %}hover:bg-gray-50{% endif %}">Tất cả</a>
   </li>
   {% for tab in paper_types %}
   <li class="mr-2">
     <a href="{% url 'admindocuments:paper_document_list' %}?paper_type={{ tab.id }}"
-       class="inline-flex items-center gap-2 px-4 py-2 rounded-t-lg {% if selected_type|stringformat:'s' == tab.id|stringformat:'s' %}text-blue-600 bg-blue-100{% else %}hover:bg-gray-50{% endif %}">
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-t-lg {% if selected_type|stringformat:'s' == tab.id|stringformat:'s' %}text-f88green bg-green-100{% else %}hover:bg-gray-50{% endif %}">
       <span>{{ tab.name }}</span>
       <span class="text-xs text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">{{ tab.total }}</span>
     </a>

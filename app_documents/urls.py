@@ -19,6 +19,7 @@ urlpatterns = [
     path('additional-management/',views.additional_management_view, name='additional_management'),
     #Receiving transaction
     path('nhan-chung-tu', views.receive_folder_view, name = "receiving_transaction"), 
+    path('nhan-chung-tu-v2', views.receive_folder_view_flowbite, name="receiving_transaction_flowbite"),
     path('fetch-history-receiving/<int:folder_id>/', views.fetch_history_receiving, name='fetch_history_receiving'), 
     path('receiving_additional_view/<int:folder_id>/', views.receiving_additional_view, name='receiving_additional_view'),
     path('bulk-receiving', views.bulk_receive_folder_view, name='bulk_receiving'),

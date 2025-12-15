@@ -7,18 +7,41 @@
   <title>Chứng từ F88</title>
   <link rel="stylesheet" href="{% static 'css/style.css' %}">
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
-    .wrap { max-width: 1100px; margin: 4rem auto; padding: 0 1.25rem; }
-    .header { text-align: center; margin-bottom: 2.5rem; }
-    .header h1 { color: #3A5C31; font-size: 2.25rem; font-weight: 700; letter-spacing: 0.5px; margin-bottom: .35rem; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 320px)); gap: 3rem; justify-content: center; justify-items: center; }
-    .card { border: 1px solid #e2e8f0; border-radius: 14px; padding: 1.75rem; background: #fff; width: 100%; max-width: 300px; text-align: center; box-shadow: 0 10px 24px rgba(0,0,0,0.06); }
-    .card h3 { margin: 0 0 .6rem; font-size: 1.15rem; }
-    .cta { display: inline-flex; justify-content: center; align-items: center; width: 100%; max-width: 180px; margin: .9rem auto 0; padding: .65rem 1rem; border-radius: 9px; background: #16a34a; color: #fff; text-decoration: none; font-weight: 600; }
-    .cta.secondary { background: #2563eb; }
-    .muted { color: #6b7280; font-size: .98rem; }
-    .topnav { display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding: 1rem; }
-    .topnav a { color: #2563eb; text-decoration: none; }
+    :root {
+      --f88-green: #00844a;
+      --f88-green-dark: #006837;
+      --card-bg: #0d1f16;
+    }
+    body { font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: radial-gradient(circle at 20% 20%, rgba(0,132,74,0.08), transparent 35%), radial-gradient(circle at 80% 0%, rgba(0,132,74,0.08), transparent 32%), #f4f6f8; color: #0f172a; }
+    .wrap { max-width: 1100px; margin: 3.5rem auto 4rem; padding: 0 1.25rem; }
+    .topnav { display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding: 1.25rem 1rem; border-bottom: 1px solid #e5e7eb; }
+    .topnav a { color: var(--f88-green); text-decoration: none; font-weight: 600; }
+    .header { text-align: center; margin: 0 auto 2.75rem; max-width: 780px; }
+    .eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: #eaf7f0; color: var(--f88-green); font-weight: 600; letter-spacing: 0.3px; }
+    .header h1 { color: #0b1f17; font-size: 2.4rem; font-weight: 800; letter-spacing: -0.4px; margin: 0.75rem 0 0.4rem; }
+    .header p { color: #4b5563; font-size: 1.02rem; margin: 0; }
+    .hero-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; margin-bottom: 2rem; }
+    .hero-card { position: relative; padding: 1.6rem; border-radius: 22px; background: linear-gradient(135deg, #f8fbf9, #eaf7f0); color: #0f172a; box-shadow: 0 16px 34px rgba(0,0,0,0.08); overflow: hidden; min-height: 210px; border: 1px solid #d7efe2; display: flex; flex-direction: column; text-decoration: none; transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease; }
+    .hero-card:hover { transform: translateY(-4px); box-shadow: 0 18px 38px rgba(0,0,0,0.1); border-color: rgba(0,132,74,0.4); }
+    .hero-card.light { background: linear-gradient(135deg, #f8fbf9, #eaf7f0); color: #0f172a; border-color: #d7efe2; }
+    .hero-card.disabled { cursor: not-allowed; opacity: 0.7; }
+    .hero-card:after { content: ""; position: absolute; inset: auto -10% -50% auto; width: 220px; height: 220px; background: radial-gradient(circle, rgba(0,132,74,0.18), transparent 60%); transform: rotate(-12deg); opacity: 0.8; pointer-events: none; }
+    .hero-card h2, .hero-card h3 { margin: 0 0 .4rem; font-size: 1.4rem; font-weight: 800; }
+    .hero-card p { margin: 0; color: inherit; opacity: 0.9; line-height: 1.5; }
+    .hero-card .pill { margin-bottom: .5rem; background: rgba(0,132,74,0.12); color: var(--f88-green); }
+    .hero-card.light .pill { background: rgba(0,132,74,0.12); color: var(--f88-green); }
+    .muted { color: #6b7280; font-size: .98rem; line-height: 1.5; }
+    .cta { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0.55rem 1rem; border-radius: 12px; background: #fff; color: var(--f88-green); border: 1px solid var(--f88-green); font-weight: 700; width: max-content; }
+    .pill { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: rgba(0,132,74,0.08); color: var(--f88-green); font-weight: 600; font-size: 0.95rem; line-height: 1.2; white-space: nowrap; align-self: flex-start; width: max-content; min-width: 0; }
+    .pill-disabled { background: rgba(107,114,128,0.12); color: #6b7280; border: 1px dashed #cbd5e1; }
+    .auth { display: inline-flex; align-items: center; gap: 12px; }
+    .auth .cta { padding: 0.6rem 1rem; box-shadow: none; }
+    @media (max-width: 1100px) {
+      .hero-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 760px) {
+      .hero-grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -33,7 +56,7 @@
       <span class="muted">Xin chào, {% if user.last_name or user.first_name %}{{ user.last_name }} {{ user.first_name }}{% else %}{{ user.username }}{% endif %}</span>
       <form action="{% url 'logout' %}" method="post" style="display:inline; margin:0;">
         {% csrf_token %}
-        <button type="submit" class="cta" style="background:#ef4444;">Đăng xuất</button>
+        <button type="submit" class="cta danger">Đăng xuất</button>
       </form>
     {% else %}
       <a href="{% url 'login' %}">Đăng nhập</a>
@@ -42,21 +65,40 @@
   </div>
   <div class="wrap">
     <div class="header">
-      <h1>HỆ THỐNG QUẢN LÝ CHỨNG TỪ</h1>
-      
+      <h1>Hệ thống quản lý văn bản và chứng từ</h1>
     </div>
 
-    <div class="grid">
-      <div class="card">
-        <h3>Quản lý chứng từ bản cứng</h3>
-        <p class="muted">Nhận, duyệt, kiểm tra thùng chứng từ</p>
-        <a class="cta secondary" href="{% url 'receiving_transaction' %}">Vào hệ thống</a>
+    <div class="hero-grid">
+      <a class="hero-card" href="{% url 'receiving_transaction' %}">
+        <div class="pill">Vận hành</div>
+        <h2>Chứng từ bản cứng</h2>
+        <p>Nhận, duyệt, quản lý thùng lữu trữ chứng từ bản cứng</p>
+      </a>
+
+      <a class="hero-card light" href="{% url 'admindocuments:admindocuments_list' %}">
+        <div class="pill">Hành chính</div>
+        <h2>Quản lý văn bản hiện hành</h2>
+        <p>Quản lý văn bản hiện hành, theo dõi trạng thái ban hành và hiệu lực.</p>
+      </a>
+
+      <a class="hero-card" href="{% url 'receiving_transaction_flowbite' %}">
+        <div class="pill">Vận hành</div>
+        <h2>Chứng từ bản cứng ver 2</h2>
+        <p>Giao diện Flowbite mới cho nhận, gán thùng, lịch sử và thao tác nhanh.</p>
+      </a>
+
+      <div class="hero-card disabled">
+        <div class="pill">Vận hành</div>
+        <h2>Chứng từ bản mềm</h2>
+        <p>Quản lý, duyệt chứng từ bản mềm</p>
+        <div class="pill pill-disabled" style="margin-top:1rem;">Đang phát triển</div>
       </div>
 
-      <div class="card">
-        <h3>Quản lý văn bản hiện hành</h3>
-        <p class="muted">Quản lý văn bản hiện hành đến và đi</p>
-        <a class="cta" href="{% url 'admindocuments:admindocuments_list' %}">Vào hệ thống</a>
+      <div class="hero-card disabled">
+        <div class="pill">Vận hành</div>
+        <h2>Đăng ký giao dịch đảm bảo</h2>
+        <p>Quản lý thông tin đăng kí giao dịch đảm bảo</p>
+        <div class="pill pill-disabled" style="margin-top:1rem;">Đang phát triển</div>
       </div>
     </div>
   </div>
