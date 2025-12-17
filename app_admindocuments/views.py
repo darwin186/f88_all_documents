@@ -201,7 +201,7 @@ def _parse_paper_rows(ws, request_user):
                 "paper_type_id": paper_type.id,
                 "paper_type_code": paper_type.code,
                 "region": region_val,
-                "requested_dept_id": requested_dept.id if requested_dept else None,
+                "requested_dept_id": requested_dept.pk if requested_dept else None,
                 "internal_dept_id": internal_dept.id if internal_dept else None,
                 "responsible": str(responsible).strip()
                 if responsible
@@ -1192,6 +1192,7 @@ def document_counter_manage(request):
             doc_type_id=doc_type_id,
             issuing_company_id=company_id,
             created_at__year=year,
+            is_void=False,
         )
         max_used = used_qs.aggregate(mx=Max("running_number"))["mx"] or 0
         exists_number = used_qs.filter(running_number=next_number).exists()
@@ -1217,9 +1218,9 @@ def document_counter_manage(request):
             "used_max": row["used_max"],
             "total": row["total"],
         }
-        for row in AdmAdministrativeDocument.objects.values(
-            "doc_type_id", "issuing_company_id", created_year=ExtractYear("created_at")
-        ).annotate(used_max=Max("running_number"), total=Count("id"))
+        for row in AdmAdministrativeDocument.objects.filter(is_void=False)
+        .values("doc_type_id", "issuing_company_id", created_year=ExtractYear("created_at"))
+        .annotate(used_max=Max("running_number"), total=Count("id"))
     }
 
     counters = AdmDocumentCounter.objects.select_related("doc_type", "company").order_by(
@@ -1362,7 +1363,7 @@ def document_create(request):
         try:
             with transaction.atomic():
                 current_year = timezone.now().year
-                doc.running_number = allocate_running_number(
+                doc.running_number, void_conflicts = allocate_running_number(
                     doc.doc_type_id, doc.issuing_company_id, current_year
                 )
                 doc.save()
@@ -1388,7 +1389,17 @@ def document_create(request):
 
     messages.success(
         request,
-        f"Văn bản {doc.document_number_full} đã tạo thành công.",
+        f"Văn bản {doc.document_number_full} đã tạo thành công."
+        + (
+            f" (Cảnh báo: số này trùng số của {len(void_conflicts)} văn bản đã vô hiệu: "
+            + ", ".join(
+                f"{c.document_number_full} - {c.title}" for c in void_conflicts[:3]
+            )
+            + ("..." if len(void_conflicts) > 3 else "")
+            + ")"
+            if void_conflicts
+            else ""
+        ),
     )
     redirect_url = f"{reverse('admindocuments:admindocuments_list')}?new={doc.id}"
     return redirect(redirect_url)

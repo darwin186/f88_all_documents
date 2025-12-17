@@ -26,6 +26,7 @@ urlpatterns = [
     #Create Package 
     path('quan-ly-thung-chung-tu', views.package_management_view, name='package_management'),
     path('package-list-management', views.package_list_management_view, name='package_list_management'),
+    path('package-list-management/detail/<int:package_id>/', views.package_list_detail_view, name='package_list_management_detail'),
     path('tao-thung-chung-tu/<int:user_id>', views.create_package_view, name = "create_package"),
     path('package/delete/<int:folder_id>/', views.clear_package_view, name='clear_package'),
     path('package/checkexists/', views.check_package_view, name='check_package_exists'), 

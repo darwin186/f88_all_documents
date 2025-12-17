@@ -94,6 +94,7 @@ class FolderType(models.Model):
     folder_type_code = models.CharField(max_length= 3, null= True, blank= True, unique= True)
     folder_type_name = models.CharField(max_length= 255, null= True, blank= True, default= None) 
     package_type = models.CharField(max_length= 255, null= True, blank= True, default= None)
+    badge_color = models.CharField(max_length=50, null=True, blank=True)
     valid_from = models.DateField(auto_now_add=True, null= False)
     valid_to =  models.DateField(auto_now_add = False, null= True, blank= True)
     is_valid = models.BooleanField(default= True)
@@ -298,6 +299,7 @@ class Partner(models.Model):
     is_active = models.BooleanField(default=True)
     require_partner_code = models.BooleanField(default=False)
     require_partner_selection = models.BooleanField(default=True)
+    badge_color = models.CharField(max_length=50, null=True, blank=True)
 
     class Meta:
         db_table = 'd_Partner'

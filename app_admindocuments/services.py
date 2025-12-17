@@ -7,7 +7,7 @@ from .models import AdmAdministrativeDocument, AdmDocumentCounter, AdmPaperDocum
 @transaction.atomic
 def allocate_running_number(
     doc_type_id: int, company_id: int, year: int | None = None
-) -> int:
+) -> tuple[int, list]:
     """
     Allocate the next running number for a given doc_type, company, and year.
 
@@ -15,6 +15,9 @@ def allocate_running_number(
     reuse the same number. We also check existing AdmAdministrativeDocument
     records to skip over any number that was already taken (e.g. manual insert
     or backfill) before bumping the counter forward.
+
+    Returns (number, void_conflicts) where void_conflicts holds voided documents
+    that occupied skipped numbers (for warning UX).
     """
     if year is None:
         year = timezone.now().year
@@ -28,15 +31,17 @@ def allocate_running_number(
     )
     candidate = counter.next_number or 1
     attempts = 0
+    void_conflicts = []
     while True:
-        exists = AdmAdministrativeDocument.objects.filter(
+        conflict = AdmAdministrativeDocument.objects.filter(
             doc_type_id=doc_type_id,
             issuing_company_id=company_id,
             created_at__year=year,
             running_number=candidate,
-        ).exists()
-        if not exists:
+        ).first()
+        if conflict is None or conflict.is_void is False:
             break
+        void_conflicts.append(conflict)
         candidate += 1
         attempts += 1
         if attempts > 1000:
@@ -44,7 +49,7 @@ def allocate_running_number(
 
     counter.next_number = candidate + 1
     counter.save(update_fields=["next_number", "updated_at"])
-    return candidate
+    return candidate, void_conflicts
 
 
 @transaction.atomic
