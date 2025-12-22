@@ -61,6 +61,7 @@ from .models import (
     Package,
     PartnerPackage,
     PartnerPackageStatus,
+    PartnerPackageHistory,
     Partner,
     Region,
     HistoricalFolder,
@@ -1193,16 +1194,56 @@ def package_list_management_view(request):
         shop_count=Count('folder__shop_id', distinct=True)
     ).order_by('-created_date')
 
-    filtered_queryset = base_queryset.filter(filters) if filters else base_queryset
+    has_filters = bool(filters.children)
+    filtered_queryset = base_queryset.filter(filters) if has_filters else base_queryset
 
-    packages_queryset = filtered_queryset[:100]
+    packages_queryset = filtered_queryset
+
+    default_in_status = PartnerPackageStatus.objects.filter(is_in_warehouse=True).first()
+
+    def build_status_payload(status_obj):
+        if status_obj:
+            color = status_obj.badge_color
+            if not color:
+                if status_obj.is_released:
+                    color = '#DC2626'
+                elif status_obj.is_backed:
+                    color = '#D97706'
+                elif status_obj.is_in_warehouse:
+                    color = '#047857'
+                else:
+                    color = '#E5E7EB'
+            return {
+                'id': status_obj.status_id,
+                'name': status_obj.package_status_name,
+                'color': color,
+                'isReleased': status_obj.is_released,
+                'isBacked': status_obj.is_backed,
+                'isInWarehouse': status_obj.is_in_warehouse,
+            }
+        if default_in_status:
+            return {
+                'id': default_in_status.status_id,
+                'name': default_in_status.package_status_name,
+                'color': default_in_status.badge_color or '#047857',
+                'isReleased': default_in_status.is_released,
+                'isBacked': default_in_status.is_backed,
+                'isInWarehouse': default_in_status.is_in_warehouse,
+            }
+        return {
+            'id': None,
+            'name': 'Trong kho',
+            'color': '#047857',
+            'isReleased': False,
+            'isBacked': False,
+            'isInWarehouse': True,
+        }
 
     packages_data = []
     for package in packages_queryset:
         partner_package = getattr(package, 'partnerpackage', None)
         status = partner_package.status_id if partner_package else None
-        status_name = status.package_status_name if status else 'Chưa cập nhật'
-        status_color = status.badge_color if status and status.badge_color else '#E5E7EB'
+        status_payload = build_status_payload(status)
         region_name = package.region_id.region_name if package.region_id else 'Chưa cập nhật'
         package_type = package.package_type.folder_type_name if package.package_type else 'Loại thùng'
         partner_name_display = ''
@@ -1222,11 +1263,7 @@ def package_list_management_view(request):
             'partnerId': partner_package.partner.partner_id if partner_package and partner_package.partner else None,
             'partnerColor': partner_color,
             'createdDate': package.created_date.strftime('%Y-%m-%d') if package.created_date else '',
-            'status': {
-                'id': status.status_id if status else None,
-                'name': status_name,
-                'color': status_color,
-            },
+            'status': status_payload,
             'packageType': package_type,
             'packageTypeColor': package_type_color,
             'regionName': region_name,
@@ -1266,6 +1303,167 @@ def package_list_management_view(request):
 
 
 @login_required
+def api_package_partner(request, package_id):
+    user_context = get_user_context(request.user)
+    if not user_context['is_admin'] and not user_context['is_checker']:
+        return JsonResponse({'error': 'Unauthorized access.'}, status=403)
+    if request.method != "POST":
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    try:
+        payload = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+    partner_id = payload.get("partner_id")
+    partner_package_code_submit = (payload.get("partner_package_code") or "").strip()
+    status_id_submit = payload.get("status_id")
+    pkg = get_object_or_404(Package, pk=package_id)
+    partner_obj = None
+    if partner_id:
+        partner_obj = Partner.objects.filter(pk=partner_id).first()
+        if not partner_obj:
+            return JsonResponse({'error': 'Partner not found.'}, status=400)
+        if partner_obj.require_partner_code and not partner_package_code_submit:
+            return JsonResponse({'error': f'Đối tác {partner_obj.partner_name} yêu cầu nhập mã thùng đối tác.'}, status=400)
+
+    partner_package_code_value = partner_package_code_submit or None
+    if partner_package_code_value and PartnerPackage.objects.exclude(package_id=pkg).filter(partner_package_code=partner_package_code_value).exists():
+        return JsonResponse({'error': f'Mã thùng đối tác {partner_package_code_value} đã tồn tại.'}, status=400)
+
+    status_obj = None
+    if status_id_submit:
+        status_obj = PartnerPackageStatus.objects.filter(pk=status_id_submit).first()
+        if not status_obj:
+            return JsonResponse({'error': 'Trạng thái không hợp lệ.'}, status=400)
+
+    default_in_status = PartnerPackageStatus.objects.filter(is_in_warehouse=True).first()
+
+    def build_status_payload(status_obj):
+        if status_obj:
+            color = status_obj.badge_color
+            if not color:
+                if status_obj.is_released:
+                    color = '#DC2626'
+                elif status_obj.is_backed:
+                    color = '#D97706'
+                elif status_obj.is_in_warehouse:
+                    color = '#047857'
+                else:
+                    color = '#E5E7EB'
+            return {
+                'id': status_obj.status_id,
+                'name': status_obj.package_status_name,
+                'color': color,
+                'isReleased': status_obj.is_released,
+                'isBacked': status_obj.is_backed,
+                'isInWarehouse': status_obj.is_in_warehouse,
+            }
+        if default_in_status:
+            return {
+                'id': default_in_status.status_id,
+                'name': default_in_status.package_status_name,
+                'color': default_in_status.badge_color or '#047857',
+                'isReleased': default_in_status.is_released,
+                'isBacked': default_in_status.is_backed,
+                'isInWarehouse': default_in_status.is_in_warehouse,
+            }
+        return {
+            'id': None,
+            'name': 'Trong kho',
+            'color': '#047857',
+            'isReleased': False,
+            'isBacked': False,
+            'isInWarehouse': True,
+        }
+
+    partner_pkg, _ = PartnerPackage.objects.get_or_create(
+        package_id=pkg,
+        defaults={
+            "created_date": timezone.now(),
+            "created_by": request.user,
+        },
+    )
+    old_partner = partner_pkg.partner
+    old_partner_name = partner_pkg.partner_name
+    old_code = partner_pkg.partner_package_code
+    old_status = partner_pkg.status_id
+
+    # Chặn cập nhật mã đối tác nếu đã release
+    if old_status and old_status.is_released:
+        if partner_package_code_value and partner_package_code_value != old_code:
+            return JsonResponse({'error': 'Thùng đã ở trạng thái released, không được cập nhật mã thùng đối tác.'}, status=400)
+
+    # Kiểm tra quyền đổi trạng thái nếu đã release/backed
+    if status_obj and old_status and (old_status.is_released or old_status.is_backed) and not user_context['is_admin']:
+        if old_status.status_id != status_obj.status_id:
+            return JsonResponse({'error': 'Chỉ Admin được đổi trạng thái khi thùng đã ở trạng thái released/backed.'}, status=403)
+
+    # Kiểm tra flow trạng thái hợp lệ
+    def allow_transition(current, new):
+        if not new:
+            return True
+        if not current or current.is_in_warehouse:
+            return new.is_released or new.is_in_warehouse
+        if current.is_released:
+            return new.is_released or new.is_backed
+        if current.is_backed:
+            return new.is_backed or new.is_released
+        return True
+
+    if status_obj and not allow_transition(old_status, status_obj):
+        return JsonResponse({'error': 'Không hợp lệ: chỉ cho phép luồng in_warehouse -> released -> backed -> released.'}, status=400)
+
+    partner_pkg.partner = partner_obj
+    partner_pkg.partner_name = partner_obj.partner_name if partner_obj else None
+    partner_pkg.partner_package_code = partner_package_code_value
+    if status_obj:
+        partner_pkg.status_id = status_obj
+    elif not partner_pkg.status_id and default_in_status:
+        partner_pkg.status_id = default_in_status
+    if not partner_pkg.created_date:
+        partner_pkg.created_date = timezone.now()
+    partner_pkg.updated_date = timezone.now()
+    partner_pkg.save()
+
+    def log_history(action, old_val, new_val):
+        if (old_val or '') == (new_val or ''):
+            return None
+        return PartnerPackageHistory.objects.create(
+            package=pkg,
+            action=action,
+            old_value=old_val or '',
+            new_value=new_val or '',
+            created_by=request.user,
+        )
+
+    log_history('partner_change', old_partner_name or getattr(old_partner, 'partner_name', None), partner_pkg.partner_name)
+    log_history('partner_code_change', old_code, partner_pkg.partner_package_code)
+    log_history('status_change', old_status.package_status_name if old_status else None, partner_pkg.status_id.package_status_name if partner_pkg.status_id else None)
+
+    current_status = partner_pkg.status_id
+    status_payload = build_status_payload(current_status)
+
+    history_qs = PartnerPackageHistory.objects.filter(package=pkg).select_related('created_by').order_by('-created_at')[:20]
+    history_payload = []
+    for h in history_qs:
+        history_payload.append({
+            'action': h.action,
+            'oldValue': h.old_value or '',
+            'newValue': h.new_value or '',
+            'user': h.created_by.get_full_name() or h.created_by.username if h.created_by else '',
+            'date': h.created_at.strftime('%Y-%m-%d %H:%M'),
+        })
+
+    return JsonResponse({
+        'status': 'ok',
+        'partner_id': partner_obj.partner_id if partner_obj else None,
+        'partner_name': partner_obj.partner_name if partner_obj else '',
+        'partner_package_code': partner_pkg.partner_package_code or '',
+        'status_obj': status_payload,
+        'history': history_payload,
+    })
+
+
+@login_required
 def package_list_detail_view(request, package_id):
     user = request.user
     user_context = get_user_context(user)
@@ -1289,8 +1487,46 @@ def package_list_detail_view(request, package_id):
 
     partner_package = getattr(package, 'partnerpackage', None)
     status = partner_package.status_id if partner_package else None
-    status_name = status.package_status_name if status else 'Chưa cập nhật'
-    status_color = status.badge_color if status and status.badge_color else '#E5E7EB'
+    default_in_status = PartnerPackageStatus.objects.filter(is_in_warehouse=True).first()
+
+    def build_status_payload(status_obj):
+        if status_obj:
+            color = status_obj.badge_color
+            if not color:
+                if status_obj.is_released:
+                    color = '#DC2626'
+                elif status_obj.is_backed:
+                    color = '#D97706'
+                elif status_obj.is_in_warehouse:
+                    color = '#047857'
+                else:
+                    color = '#E5E7EB'
+            return {
+                'name': status_obj.package_status_name,
+                'color': color,
+                'id': status_obj.status_id,
+                'isReleased': status_obj.is_released,
+                'isBacked': status_obj.is_backed,
+                'isInWarehouse': status_obj.is_in_warehouse,
+            }
+        if default_in_status:
+            return {
+                'name': default_in_status.package_status_name,
+                'color': default_in_status.badge_color or '#047857',
+                'id': default_in_status.status_id,
+                'isReleased': default_in_status.is_released,
+                'isBacked': default_in_status.is_backed,
+                'isInWarehouse': default_in_status.is_in_warehouse,
+            }
+        return {
+            'name': 'Trong kho',
+            'color': '#047857',
+            'id': None,
+            'isReleased': False,
+            'isBacked': False,
+            'isInWarehouse': True,
+        }
+    status_payload = build_status_payload(status)
     region_name = package.region_id.region_name if package.region_id else 'Chưa cập nhật'
     package_type = package.package_type.folder_type_name if package.package_type else 'Loại thùng'
     partner_name_display = ''
@@ -1345,14 +1581,11 @@ def package_list_detail_view(request, package_id):
         'packageCodeOld': package.package_code_old or '',
         'partnerPackageCode': partner_package.partner_package_code if partner_package else '',
         'partnerName': partner_name_display,
+        'partnerId': partner_package.partner.partner_id if partner_package and partner_package.partner else None,
         'partnerColor': partner_color,
         'createdDate': package.created_date.strftime('%Y-%m-%d') if package.created_date else '',
         'createdBy': created_by_name,
-        'status': {
-            'name': status_name,
-            'color': status_color,
-            'id': status.status_id if status else None,
-        },
+        'status': status_payload,
         'packageType': package_type,
         'packageTypeColor': package_type_color,
         'regionName': region_name,
@@ -1361,6 +1594,17 @@ def package_list_detail_view(request, package_id):
         'foldersByShop': list(shop_groups.values()),
         'history': [],
     }
+    history_qs = PartnerPackageHistory.objects.filter(package=package).select_related('created_by').order_by('-created_at')[:20]
+    detail_payload['history'] = [
+        {
+            'action': h.action,
+            'oldValue': h.old_value or '',
+            'newValue': h.new_value or '',
+            'user': h.created_by.get_full_name() or h.created_by.username if h.created_by else '',
+            'date': h.created_at.strftime('%Y-%m-%d %H:%M'),
+        }
+        for h in history_qs
+    ]
     return JsonResponse(detail_payload, safe=False)
 
 # Package management edit view

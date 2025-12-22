@@ -8,6 +8,88 @@
   .fixed.top-0.left-0.h-full.w-2.z-40 { display: none !important; }
   main.flex-1 { margin-left: 0 !important; padding-left: 0 !important; padding-right: 0 !important; }
   body { font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size:10px; }
+  .search-controls, .search-controls * { font-size: 10px !important; }
+  .search-controls ::placeholder { font-size: 10px !important; }
+  .search-controls option { font-size: 10px !important; }
+  .datepicker-dropdown { z-index: 60 !important; }
+  .datepicker { z-index: 60 !important; }
+  /* Datepicker restyle */
+  .datepicker-dropdown {
+    padding: 6px;
+  }
+  .datepicker-picker {
+    font-size: 11px;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 14px !important;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.12) !important;
+    background: #fff !important;
+    min-width: 280px;
+  }
+  .datepicker-header {
+    background: #fff !important;
+    border-bottom: 1px solid #eef2f7 !important;
+    padding: 10px 12px !important;
+  }
+  .datepicker-controls {
+    gap: 8px !important;
+  }
+  .datepicker-controls .button {
+    background: #f3f4f6 !important;
+    color: #111827 !important;
+    border-radius: 10px !important;
+    border: 1px solid #e5e7eb !important;
+    width: 34px !important;
+    height: 32px !important;
+  }
+  .datepicker-controls .button:hover {
+    background: #e5f7ef !important;
+    color: #047857 !important;
+    border-color: #a7f3d0 !important;
+  }
+  .datepicker-title {
+    font-weight: 700 !important;
+    color: #0f172a !important;
+  }
+  .datepicker-main {
+    padding: 12px !important;
+  }
+  .datepicker-grid {
+    gap: 2px !important;
+  }
+  .datepicker-view .dow {
+    color: #6b7280 !important;
+    font-weight: 600 !important;
+  }
+  .datepicker-cell {
+    border-radius: 10px !important;
+    color: #111827 !important;
+    padding: 8px 0 !important;
+  }
+  .datepicker-cell:hover {
+    background: #f3f4f6 !important;
+  }
+  .datepicker-cell.today:not(.selected) {
+    border: 1px solid #34d399 !important;
+  }
+  .datepicker-cell.selected,
+  .datepicker-cell.focused,
+  .datepicker-cell.active {
+    background: #10b981 !important;
+    color: #fff !important;
+    border: 1px solid #0f9f77 !important;
+  }
+  .datepicker-cell.range {
+    background: #ecfdf3 !important;
+    color: #047857 !important;
+  }
+  .datepicker-cell.range-start,
+  .datepicker-cell.range-end {
+    background: #10b981 !important;
+    color: #fff !important;
+  }
+  .datepicker-footer {
+    display: none !important;
+  }
 </style>
 <nav class="fixed top-0 inset-x-0 z-30 px-2 lg:px-4">
   <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto rounded-2xl bg-white/95 backdrop-blur border border-gray-200 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
@@ -46,11 +128,14 @@
 <script type="application/json" id="package-filters">{{ filters_json|safe }}</script>
 <script type="application/json" id="status-options">{{ status_options_json|safe }}</script>
 <script type="application/json" id="partners-options">{{ partners_options_json|safe }}</script>
+<script>
+  window.CSRF_TOKEN = "{{ csrf_token }}";
+</script>
 
 <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script crossorigin src="https://unpkg.com/lucide-react@latest/dist/lucide-react.umd.js"></script>
+<script crossorigin src="https://unpkg.com/lucide-react@0.561.0/dist/lucide-react.umd.js"></script>
 
 {% verbatim %}
 <script type="text/babel">
@@ -62,7 +147,6 @@
     Calendar,
     MapPin,
     Layers,
-    PanelRightOpen,
     X,
     FolderOpen,
     Building2,
@@ -104,102 +188,95 @@
     }
   };
 
-  const PackageCard = ({ pkg, active, onSelect }) => (
-    <button
-      id={`package-card-${pkg.id}`}
-      onClick={() => onSelect(pkg.id)}
-      className={`package-card relative text-left rounded-xl border border-gray-100 bg-white p-2.5 md:p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md w-full ${active ? 'ring-2 ring-emerald-500/60 shadow-lg' : ''}`}
-    >
-      {Copy ? (
-        <button
-          type="button"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCopy(pkg.packageCode); }}
-          className="absolute top-2 right-2 text-gray-400 hover:text-emerald-600"
-          title="Copy mã thùng"
-        >
-          <Copy size={16} />
-        </button>
-      ) : null}
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 pr-6">
-            <p className="text-sm font-semibold text-gray-900 leading-tight">{pkg.packageCode}</p>
-          </div>
-          <div className="min-h-[22px]">
-            <span
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold border"
-              style={{
-                backgroundColor: badgeStyleFromColor(pkg.partnerColor).backgroundColor,
-                borderColor: badgeStyleFromColor(pkg.partnerColor).borderColor,
-                color: badgeStyleFromColor(pkg.partnerColor).color,
-              }}
-            >
-              {pkg.partnerName || 'Chưa có đối tác'}
-            </span>
-          </div>
-          <div className="min-h-[18px] text-[11px] text-gray-700 font-semibold">
-            {pkg.partnerPackageCode || 'Chưa có đối tác'}
-          </div>
-          {pkg.packageCodeOld ? <p className="text-[11px] text-gray-500">Mã cũ: {pkg.packageCodeOld}</p> : <p className="text-[11px] text-transparent">placeholder</p>}
+  const PackageCard = ({ pkg, active, onSelect }) => {
+    const statusName = (pkg.status && pkg.status.name && pkg.status.name !== 'Chưa cập nhật') ? pkg.status.name : 'Chưa gửi';
+    const statusColor = pkg.status && pkg.status.color ? pkg.status.color : '#e5e7eb';
+    return (
+      <button
+        id={`package-card-${pkg.id}`}
+        onClick={() => onSelect(pkg.id)}
+        className={`package-card relative text-left rounded-lg border border-gray-200 bg-white p-2.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md w-full ${active ? 'ring-2 ring-emerald-500/60 shadow-lg' : ''}`}
+      >
+        {Copy ? (
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCopy(pkg.packageCode); }}
+            className="absolute top-2 right-2 text-gray-400 hover:text-emerald-600"
+            title="Copy mã thùng"
+          >
+            <Copy size={14} />
+          </button>
+        ) : null}
+        <div className="flex items-start justify-between gap-2 pr-5">
+          <p className="text-[10px] font-semibold text-gray-900 whitespace-nowrap">{pkg.packageCode}</p>
+          <span
+            className="text-[10px] font-semibold whitespace-nowrap"
+            style={{ color: statusColor || '#111827' }}
+          >
+            {statusName}
+          </span>
         </div>
-        <div className="flex flex-col items-end justify-start min-w-[120px] gap-1">
-          <StatusBadge name={pkg.status.name} color={pkg.status.color} />
-          <div className="text-[11px] font-semibold text-gray-700 min-h-[18px]">{pkg.partnerPackageCode || 'Chưa có đối tác'}</div>
-        </div>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-gray-700">
-        <div className="flex items-center gap-2">
-          {Calendar ? <Calendar size={14} className="text-emerald-600" /> : null}
-          <div>
-            <p className="text-[11px] text-gray-500">Ngày tạo</p>
-            <p className="text-sm font-semibold">{pkg.createdDate || '---'}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {MapPin ? <MapPin size={14} className="text-amber-600" /> : null}
-          <div>
-            <p className="text-[11px] text-gray-500">Khu vực</p>
-            <p className="text-sm font-semibold">{pkg.regionName}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {Layers ? <Layers size={14} className="text-emerald-600" /> : null}
-          <div>
-            <p className="text-[11px] text-gray-500">Quyển</p>
-            <p className="text-sm font-semibold">{pkg.folderCount}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {Building2 ? <Building2 size={14} className="text-blue-600" /> : null}
-          <div>
-            <p className="text-[11px] text-gray-500">PGD</p>
-            <p className="text-sm font-semibold">{pkg.shopCount}</p>
-          </div>
-        </div>
-      </div>
-      <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-gray-600">
-        <span
-          className="inline-flex items-center gap-1 rounded-full px-2 py-1 border"
-          style={{
-            backgroundColor: badgeStyleFromColor(pkg.packageTypeColor).backgroundColor,
-            borderColor: badgeStyleFromColor(pkg.packageTypeColor).borderColor,
-            color: badgeStyleFromColor(pkg.packageTypeColor).color,
-          }}
-        >
-          {Box ? <Box size={12} /> : null}
-          {pkg.packageType}
-        </span>
-      </div>
-    </button>
-  );
 
-  const Drawer = ({ pkg, onClose, open, loading }) => {
+        <div className="mt-2 flex items-center gap-2 text-[10px] text-gray-700 whitespace-nowrap">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 font-semibold whitespace-nowrap">CROWN</span>
+          <span className="text-[9px] text-gray-600 whitespace-nowrap">{pkg.partnerPackageCode || '---'}</span>
+        </div>
+
+        <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[9px]">
+          <div>
+            <p className="text-gray-500">Ngày tạo</p>
+            <p className="text-gray-800 font-semibold whitespace-nowrap">{pkg.createdDate || '---'}</p>
+          </div>
+          <div>
+            <p className="text-gray-500">Khu vực</p>
+            <p className="text-gray-800 font-semibold whitespace-nowrap">{pkg.regionName}</p>
+          </div>
+          <div>
+            <p className="text-gray-500">Quyển</p>
+            <p className="text-gray-800 font-semibold whitespace-nowrap">{pkg.folderCount}</p>
+          </div>
+          <div>
+            <p className="text-gray-500">PGD</p>
+            <p className="text-gray-800 font-semibold whitespace-nowrap">{pkg.shopCount}</p>
+          </div>
+        </div>
+
+        <div className="mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 border border-gray-200 bg-gray-50 text-[9px] text-gray-700 whitespace-nowrap">
+          {pkg.packageType}
+        </div>
+      </button>
+    );
+  };
+
+  const Drawer = ({ pkg, onClose, open, loading, onPackageUpdate }) => {
     const [expandedShops, setExpandedShops] = useState({});
     const [expandedFolders, setExpandedFolders] = useState({});
+    const [partnerId, setPartnerId] = useState(pkg?.partnerId || '');
+    const [statusId, setStatusId] = useState(pkg?.status?.id ? String(pkg.status.id) : '');
+    const [partnerPackageCode, setPartnerPackageCode] = useState(pkg?.partnerPackageCode || '');
+    const [saving, setSaving] = useState(false);
+    const [saveMsg, setSaveMsg] = useState('');
+    const [activeTab, setActiveTab] = useState('info');
+    const [statusFlags, setStatusFlags] = useState({
+      isReleased: pkg?.status?.isReleased || false,
+      isBacked: pkg?.status?.isBacked || false,
+      isInWarehouse: pkg?.status?.isInWarehouse || false,
+    });
 
     useEffect(() => {
       setExpandedShops({});
       setExpandedFolders({});
+      setPartnerId(pkg?.partnerId || '');
+      setSaving(false);
+      setSaveMsg('');
+      setStatusId(pkg?.status?.id ? String(pkg.status.id) : '');
+      setPartnerPackageCode(pkg?.partnerPackageCode || '');
+      setActiveTab('info');
+      setStatusFlags({
+        isReleased: pkg?.status?.isReleased || false,
+        isBacked: pkg?.status?.isBacked || false,
+        isInWarehouse: pkg?.status?.isInWarehouse || false,
+      });
     }, [pkg?.id]);
 
     const toggleShop = (key) => setExpandedShops(prev => ({ ...prev, [key]: !prev[key] }));
@@ -226,7 +303,7 @@
             <div className="space-y-2 flex-1">
               <p className="uppercase text-gray-400">Thùng</p>
               <div className="flex items-center gap-2 pr-6">
-                <h3 className="text-sm font-bold text-gray-900">{pkg.packageCode}</h3>
+                <h3 className="text-[10px] font-bold text-gray-900">{pkg.packageCode}</h3>
                 <button
                   type="button"
                   onClick={() => handleCopy(pkg.packageCode)}
@@ -241,18 +318,27 @@
               </div>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <p
-                    className="text-[11px] font-semibold"
-                    style={{
-                      color: badgeStyleFromColor(pkg.partnerColor).color,
-                    }}
-                  >
-                    {pkg.partnerName || 'Chưa có đối tác'}
-                  </p>
-                  <p className="text-[11px] text-gray-600">{pkg.partnerPackageCode || '—'}</p>
+                  {pkg.partnerName ? (
+                    <>
+                      <p
+                        className="text-[11px] font-semibold"
+                        style={{
+                          color: badgeStyleFromColor(pkg.partnerColor).color,
+                        }}
+                      >
+                        {pkg.partnerName}
+                      </p>
+                      <p className="text-[11px] text-gray-600">{pkg.partnerPackageCode || '—'}</p>
+                    </>
+                  ) : (
+                    <p className="text-[9px] italic text-gray-500">Chưa có đối tác</p>
+                  )}
                 </div>
                 <div className="flex items-center">
-                  <StatusBadge name={pkg.status.name} color={pkg.status.color} />
+                <StatusBadge
+                  name={(pkg.status && pkg.status.name && pkg.status.name !== 'Chưa cập nhật') ? pkg.status.name : 'Chưa gửi'}
+                  color={pkg.status && pkg.status.color ? pkg.status.color : '#e5e7eb'}
+                />
                 </div>
               </div>
               {pkg.packageCodeOld ? <p className="text-gray-500 mt-1">Mã cũ: {pkg.packageCodeOld}</p> : null}
@@ -261,160 +347,243 @@
               {X ? <X size={18} /> : 'Đóng'}
             </button>
           </div>
+          <div className="px-4 pb-2 flex items-center gap-2 text-[10px]">
+            <button
+              className={`px-3 py-1 rounded-lg border text-[10px] font-semibold ${activeTab === 'info' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-gray-200 text-gray-700'}`}
+              onClick={() => setActiveTab('info')}
+            >
+              Thông tin
+            </button>
+            <button
+              className={`px-3 py-1 rounded-lg border text-[10px] font-semibold ${activeTab === 'history' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-white border-gray-200 text-gray-700'}`}
+              onClick={() => setActiveTab('history')}
+            >
+              Lịch sử
+            </button>
+          </div>
 
           <div className="p-4 space-y-4 overflow-y-auto text-[10px] flex-1">
-            {loading ? (
-              <div className="text-center text-gray-500">Đang tải...</div>
-            ) : null}
-            <div className="space-y-3">
-              <p className="text-[10px] font-semibold text-gray-900">Cập nhật thùng</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[10px] text-gray-500 mb-1">Trạng thái thùng</label>
-                  <select className="w-full rounded-lg border border-gray-200 px-3 py-2 text-[10px] focus:border-emerald-500 focus:ring-0">
-                    <option value="">Chọn trạng thái</option>
-                    {statusOptions.map((st) => (
-                      <option key={st.status_id} value={st.status_id} selected={String(pkg.status.id || '') === String(st.status_id)}>{st.package_status_name}</option>
-                    ))}
-                  </select>
+            {activeTab === 'info' ? (
+              <>
+                {loading ? (
+                  <div className="text-center text-gray-500">Đang tải...</div>
+                ) : null}
+                <div className="space-y-3">
+                  <p className="text-[10px] font-semibold text-gray-900">Cập nhật thùng</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-1">Trạng thái thùng</label>
+                      <select
+                        value={statusId}
+                        onChange={(e) => setStatusId(e.target.value)}
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-[10px] focus:border-emerald-500 focus:ring-0"
+                      >
+                        <option value="">Chọn trạng thái</option>
+                        {statusOptions.map((st) => (
+                          <option key={st.status_id} value={st.status_id}>{st.package_status_name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-1">Tên đối tác</label>
+                      <select value={partnerId} onChange={(e) => setPartnerId(e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-[10px] focus:border-emerald-500 focus:ring-0">
+                        <option value="">Chưa có đối tác</option>
+                        {partnersOptions.map((p) => (
+                          <option key={p.partner_id} value={p.partner_id}>{p.partner_name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-1">Mã thùng đối tác</label>
+                      <input
+                        type="text"
+                        value={partnerPackageCode}
+                        onChange={(e) => setPartnerPackageCode(e.target.value)}
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-[10px] focus:border-emerald-500 focus:ring-0 disabled:bg-gray-100"
+                        placeholder="Nhập mã thùng đối tác"
+                        disabled={statusFlags.isReleased}
+                      />
+                      {statusFlags.isReleased ? <p className="text-[9px] text-red-500 mt-1">Thùng đã chuyển đi đối tác, không điều chỉnh mã đối tác.</p> : null}
+                    </div>
+                  </div>
+                  <div className="flex items-end justify-end">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!pkg) return;
+                        setSaving(true);
+                        setSaveMsg('');
+                        try {
+                          const res = await fetch(`/api/package/${pkg.id}/partner/`, {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'X-CSRFToken': window.CSRF_TOKEN || '',
+                            },
+                            body: JSON.stringify({
+                              partner_id: partnerId || null,
+                              partner_package_code: partnerPackageCode || null,
+                              status_id: statusId || null,
+                            }),
+                          });
+                          const data = await res.json();
+                          if (!res.ok || data.error) {
+                            throw new Error(data.error || 'Lưu thất bại');
+                          }
+                          const statusPayload = data.status_obj || pkg.status || {};
+                          setSaveMsg('Đã lưu thay đổi thùng.');
+                          setPartnerPackageCode(data.partner_package_code || '');
+                          setStatusId(statusPayload.id ? String(statusPayload.id) : '');
+                          setPartnerId(data.partner_id ? String(data.partner_id) : '');
+                          setStatusFlags({
+                            isReleased: !!statusPayload.isReleased,
+                            isBacked: !!statusPayload.isBacked,
+                            isInWarehouse: !!statusPayload.isInWarehouse,
+                          });
+                          if (onPackageUpdate) {
+                            onPackageUpdate(pkg.id, {
+                              partnerId: data.partner_id || null,
+                              partnerName: data.partner_name || '',
+                              partnerPackageCode: data.partner_package_code || '',
+                              status: statusPayload,
+                              history: data.history || [],
+                            });
+                          }
+                        } catch (e) {
+                          console.error(e);
+                          setSaveMsg(e.message || 'Lưu thất bại.');
+                        } finally {
+                          setSaving(false);
+                        }
+                      }}
+                      className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700 disabled:opacity-60"
+                      disabled={saving}
+                    >
+                      {saving ? 'Đang lưu...' : 'Lưu'}
+                    </button>
+                  </div>
+                  {saveMsg ? <p className="text-[10px] text-gray-700">{saveMsg}</p> : null}
                 </div>
-                <div>
-                  <label className="block text-[10px] text-gray-500 mb-1">Tên đối tác</label>
-                  <select defaultValue={pkg.partnerId || ''} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-[10px] focus:border-emerald-500 focus:ring-0">
-                    <option value="">Chưa có đối tác</option>
-                    {partnersOptions.map((p) => (
-                      <option key={p.partner_id} value={p.partner_id}>{p.partner_name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[10px] text-gray-500 mb-1">Mã thùng đối tác</label>
-                  <input type="text" disabled={!!pkg.partnerPackageCode} defaultValue={pkg.partnerPackageCode || ''} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-[10px] focus:border-emerald-500 focus:ring-0 disabled:bg-gray-50" placeholder="Chưa có đối tác" />
-                </div>
-                <div className="flex items-end justify-end">
-                  <button type="button" className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700">Lưu</button>
-                </div>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                <p className="text-gray-500 text-[10px]">Khu vực tạo thùng</p>
-                <p className="font-semibold text-gray-900 text-[10px]">{pkg.regionName}</p>
-              </div>
-              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                <p className="text-gray-500 text-[10px]">Ngày tạo</p>
-                <p className="font-semibold text-gray-900 text-[10px]">{pkg.createdDate || '---'}</p>
-              </div>
-              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                <p className="text-gray-500 text-[10px]">Người tạo</p>
-                <p className="font-semibold text-gray-900 text-[10px]">{pkg.createdBy || '---'}</p>
-              </div>
-              <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                <p className="text-gray-500 text-[10px]">Loại thùng</p>
-                <p className="font-semibold text-gray-900 text-[10px]">{pkg.packageType}</p>
-              </div>
-            </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                    <p className="text-gray-500 text-[10px]">Khu vực tạo thùng</p>
+                    <p className="font-semibold text-gray-900 text-[10px]">{pkg.regionName}</p>
+                  </div>
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                    <p className="text-gray-500 text-[10px]">Ngày tạo</p>
+                    <p className="font-semibold text-gray-900 text-[10px]">{pkg.createdDate || '---'}</p>
+                  </div>
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                    <p className="text-gray-500 text-[10px]">Người tạo</p>
+                    <p className="font-semibold text-gray-900 text-[10px]">{pkg.createdBy || '---'}</p>
+                  </div>
+                  <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                    <p className="text-gray-500 text-[10px]">Loại thùng</p>
+                    <p className="font-semibold text-gray-900 text-[10px]">{pkg.packageType}</p>
+                  </div>
+                </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                {FolderOpen ? <FolderOpen size={18} className="text-emerald-600" /> : null}
-                <p className="text-[10px] font-semibold text-gray-900">Danh sách PGD & Quyển</p>
-              </div>
-              {pkg.foldersByShop && pkg.foldersByShop.length > 0 ? (
-                pkg.foldersByShop.map((group, idx) => {
-                  const shopKey = `${group.shopName}-${idx}`;
-                  const shopOpen = !!expandedShops[shopKey];
-                  return (
-                    <div key={shopKey} className="rounded-xl border border-gray-100 bg-white shadow-sm">
-                      <button onClick={() => toggleShop(shopKey)} className="w-full flex items-center justify-between px-4 py-3 border-b border-gray-100 text-left">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${shopOpen ? 'bg-emerald-600' : 'bg-gray-300'}`}></span>
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900">{group.shopName}</p>
-                            {group.shopCode ? <p className="text-gray-500">Mã PGD: {group.shopCode}</p> : null}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-3 py-1">
-                            {group.count} quyển
-                          </span>
-                          <span className="text-gray-400">{shopOpen ? '−' : '+'}</span>
-                        </div>
-                      </button>
-                      {shopOpen ? (
-                        <div className="divide-y divide-gray-100">
-                          {group.folders.map((folder, i) => {
-                            const folderKey = `${shopKey}-${folder.folderCode}-${i}`;
-                            const folderOpen = !!expandedFolders[folderKey];
-                            return (
-                              <div key={folderKey} className="px-4 py-3 space-y-2">
-                                <button onClick={() => toggleFolder(folderKey)} className="w-full flex items-center justify-between text-sm">
-                                  <div>
-                                    <p className="font-semibold text-gray-900">{folder.createdDate || '---'}</p>
-                                    <p className="text-gray-500">{folder.folderStatus || '---'}</p>
-                                    <p className="text-xs text-gray-400">{folder.folderCode}</p>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${folder.typeLabel === 'Gốc' ? 'bg-sky-50 text-sky-700 border border-sky-100' : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>
-                                      {folder.typeLabel}
-                                    </span>
-                                    <span className="text-gray-400">{folderOpen ? '−' : '+'}</span>
-                                  </div>
-                                </button>
-                                {folderOpen && folder.documents && folder.documents.length > 0 ? (
-                                  <div className="rounded-lg border border-gray-100 bg-gray-50 divide-y divide-gray-100">
-                                    {folder.documents.map((doc, di) => (
-                                      <div key={`${folderKey}-doc-${di}`} className="px-3 py-2 flex items-center justify-between">
-                                        <div>
-                                          <p className="font-semibold text-gray-900">{doc.type || 'Chứng từ'}</p>
-                                          <p className="text-xs text-gray-500">{doc.refCode || doc.code}</p>
-                                        </div>
-                                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-200 text-gray-800">
-                                          {doc.status || '---'}
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : null}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    {FolderOpen ? <FolderOpen size={18} className="text-emerald-600" /> : null}
+                    <p className="text-[10px] font-semibold text-gray-900">Danh sách PGD & Quyển</p>
+                  </div>
+                  {pkg.foldersByShop && pkg.foldersByShop.length > 0 ? (
+                    pkg.foldersByShop.map((group, idx) => {
+                      const shopKey = `${group.shopName}-${idx}`;
+                      const shopOpen = !!expandedShops[shopKey];
+                      return (
+                        <div key={shopKey} className="rounded-xl border border-gray-100 bg-white shadow-sm">
+                          <button onClick={() => toggleShop(shopKey)} className="w-full flex items-center justify-between px-4 py-3 border-b border-gray-100 text-left">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2 h-2 rounded-full ${shopOpen ? 'bg-emerald-600' : 'bg-gray-300'}`}></span>
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">{group.shopName}</p>
+                                {group.shopCode ? <p className="text-gray-500">Mã PGD: {group.shopCode}</p> : null}
                               </div>
-                            );
-                          })}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-3 py-1">
+                                {group.count} quyển
+                              </span>
+                              <span className="text-gray-400">{shopOpen ? '−' : '+'}</span>
+                            </div>
+                          </button>
+                          {shopOpen ? (
+                            <div className="divide-y divide-gray-100">
+                              {group.folders.map((folder, i) => {
+                                const folderKey = `${shopKey}-${folder.folderCode}-${i}`;
+                                const folderOpen = !!expandedFolders[folderKey];
+                                return (
+                                  <div key={folderKey} className="px-4 py-3 space-y-2">
+                                    <button onClick={() => toggleFolder(folderKey)} className="w-full flex items-center justify-between text-sm">
+                                      <div>
+                                        <p className="font-semibold text-gray-900">{folder.createdDate || '---'}</p>
+                                        <p className="text-gray-500">{folder.folderStatus || '---'}</p>
+                                        <p className="text-xs text-gray-400">{folder.folderCode}</p>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${folder.typeLabel === 'Gốc' ? 'bg-sky-50 text-sky-700 border border-sky-100' : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>
+                                          {folder.typeLabel}
+                                        </span>
+                                        <span className="text-gray-400">{folderOpen ? '−' : '+'}</span>
+                                      </div>
+                                    </button>
+                                    {folderOpen && folder.documents && folder.documents.length > 0 ? (
+                                      <div className="rounded-lg border border-gray-100 bg-gray-50 divide-y divide-gray-100">
+                                        {folder.documents.map((doc, di) => (
+                                          <div key={`${folderKey}-doc-${di}`} className="px-3 py-2 flex items-center justify-between">
+                                            <div>
+                                              <p className="font-semibold text-gray-900">{doc.type || 'Chứng từ'}</p>
+                                              <p className="text-xs text-gray-500">{doc.refCode || doc.code}</p>
+                                            </div>
+                                            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-200 text-gray-800">
+                                              {doc.status || '---'}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : null}
                         </div>
-                      ) : null}
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-sm text-gray-500">Thùng chưa có quyển nào.</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-sm font-semibold text-gray-900">Lịch sử thay đổi</p>
-              {pkg.history && pkg.history.length ? (
-                <div className="rounded-lg border border-gray-100 bg-gray-50 divide-y divide-gray-100">
-                  {pkg.history.map((h, i) => (
-                    <div key={i} className="px-3 py-2 text-xs text-gray-700">
-                      <p className="font-semibold">{h.action}</p>
-                      <p className="text-gray-500">{h.date}</p>
-                    </div>
-                  ))}
+                      );
+                    })
+                  ) : (
+                    <p className="text-sm text-gray-500">Thùng chưa có quyển nào.</p>
+                  )}
                 </div>
-              ) : (
-                <p className="text-xs text-gray-500">Chưa có lịch sử thay đổi.</p>
-              )}
-            </div>
+              </>
+            ) : (
+              <div className="space-y-3">
+                {loading ? <div className="text-center text-gray-500">Đang tải...</div> : null}
+                {pkg.history && pkg.history.length ? (
+                  pkg.history.map((h, i) => (
+                    <div key={i} className="rounded-lg border border-gray-100 bg-white shadow-sm p-3 text-[10px] space-y-1">
+                      <div className="flex items-center justify-between">
+                        <p className="font-semibold text-gray-900">{h.action}</p>
+                        <p className="text-gray-500">{h.date}</p>
+                      </div>
+                      <p className="text-gray-700"><span className="text-gray-500">Từ:</span> {h.oldValue || '—'}</p>
+                      <p className="text-gray-700"><span className="text-gray-500">Đến:</span> {h.newValue || '—'}</p>
+                      <p className="text-gray-500">Người thao tác: {h.user || '—'}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-gray-500">Chưa có lịch sử thay đổi.</p>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="p-4 border-t border-gray-100 flex flex-wrap gap-3 flex-shrink-0">
             <button type="button" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 font-semibold cursor-not-allowed">
               {Warehouse ? <Warehouse size={16} /> : null}
               In nhãn thùng (sắp có)
-            </button>
-            <button type="button" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-900 text-white font-semibold hover:bg-gray-800">
-              {PanelRightOpen ? <PanelRightOpen size={16} /> : null}
-              Cập nhật trạng thái
             </button>
           </div>
         </aside>
@@ -423,23 +592,28 @@
   };
 
   const PackageListApp = () => {
+    const [packageList, setPackageList] = useState(packagesData);
     const [searchPackage, setSearchPackage] = useState(filterDefaults.package_search || '');
     const [statusFilter, setStatusFilter] = useState(filterDefaults.status_id || '');
-    const [createdFrom, setCreatedFrom] = useState(filterDefaults.created_from || '');
-    const [createdTo, setCreatedTo] = useState(filterDefaults.created_to || '');
     const [selectedId, setSelectedId] = useState(null);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [visibleCount, setVisibleCount] = useState(10);
     const [detailsCache, setDetailsCache] = useState({});
     const [drawerLoading, setDrawerLoading] = useState(false);
-    const fromRef = React.useRef(null);
-    const toRef = React.useRef(null);
     const [viewMode, setViewMode] = useState('card');
     const [sortKey, setSortKey] = useState('createdDate');
     const [sortDir, setSortDir] = useState('desc');
 
+    const handlePackageUpdate = (pkgId, updates) => {
+      setPackageList((prev) => prev.map((p) => p.id === pkgId ? { ...p, ...updates } : p));
+      setDetailsCache((prev) => {
+        const existing = prev[pkgId] || {};
+        return { ...prev, [pkgId]: { ...existing, ...updates } };
+      });
+    };
+
     const filtered = useMemo(() => {
-      return packagesData.filter(pkg => {
+      return packageList.filter(pkg => {
         const q = searchPackage ? searchPackage.toLowerCase() : '';
         const matchesSearch = q
           ? (pkg.packageCode || '').toLowerCase().includes(q)
@@ -449,7 +623,7 @@
         const matchesStatus = statusFilter ? String(pkg.status?.id || '') === String(statusFilter) : true;
         return matchesSearch && matchesStatus;
       });
-    }, [searchPackage, statusFilter]);
+    }, [packageList, searchPackage, statusFilter]);
 
     const sortedPackages = useMemo(() => {
       const arr = [...filtered];
@@ -481,22 +655,9 @@
         setDrawerOpen(false);
       }
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchPackage, statusFilter, createdFrom, createdTo]);
+    }, [searchPackage, statusFilter]);
 
-    useEffect(() => {
-      // Init Flowbite datepickers after React renders inputs
-      const Datepicker = window.Datepicker;
-      if (Datepicker && fromRef.current && !fromRef.current.dataset.datepickerAttached) {
-        new Datepicker(fromRef.current, { format: 'dd/mm/yyyy', autohide: true });
-        fromRef.current.dataset.datepickerAttached = '1';
-        fromRef.current.addEventListener('change', (e) => setCreatedFrom(e.target.value));
-      }
-      if (Datepicker && toRef.current && !toRef.current.dataset.datepickerAttached) {
-        new Datepicker(toRef.current, { format: 'dd/mm/yyyy', autohide: true });
-        toRef.current.dataset.datepickerAttached = '1';
-        toRef.current.addEventListener('change', (e) => setCreatedTo(e.target.value));
-      }
-    }, []);
+    // Bỏ filter ngày tạo: không khởi tạo datepicker
 
     useEffect(() => {
       if (selectedId && !filtered.find(p => p.id === selectedId)) {
@@ -562,27 +723,27 @@
 
     return (
       <div className={`space-y-4 ${drawerOpen ? 'lg:pr-[500px]' : ''}`}>
-        <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm flex flex-col gap-3">
+            <div className="search-controls rounded-2xl border border-gray-100 bg-white p-3 shadow-sm flex flex-col gap-3 text-[10px]">
           <form method="get" action="" className="grid lg:grid-cols-[2fr,1fr,auto,auto,auto] gap-3 items-center">
-            <label className="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
-              {Search ? <Search size={16} className="text-gray-500" /> : null}
+            <label className="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500 text-[10px]">
+              {Search ? <Search size={14} className="text-gray-500" /> : null}
               <input
                 name="package_search"
                 value={searchPackage}
                 onChange={(e) => setSearchPackage(e.target.value)}
                 placeholder="Tìm mã thùng / mã cũ / mã đối tác"
-                className="w-full bg-transparent text-sm focus:outline-none"
+                className="w-full bg-transparent text-[10px] focus:outline-none"
               />
               {searchPackage ? (
-                <button type="button" onClick={(e) => { e.preventDefault(); clearSearch(); }} className="absolute right-3 text-gray-400 hover:text-gray-600">×</button>
+                <button type="button" onClick={(e) => { e.preventDefault(); clearSearch(); }} className="absolute right-3 text-gray-400 hover:text-gray-600 text-[12px]">×</button>
               ) : null}
             </label>
-            <label className="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+            <label className="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500 text-[10px]">
               <select
                 name="status_id"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="block w-full bg-transparent text-sm text-gray-700 focus:outline-none focus:ring-0 appearance-none border-0 pr-6"
+                className="block w-full bg-transparent text-[10px] text-gray-700 focus:outline-none focus:ring-0 appearance-none border-0 pr-6"
               >
                 <option value="">Trạng thái thùng</option>
                 {statusOptions.map((st) => (
@@ -590,62 +751,25 @@
                 ))}
               </select>
               {statusFilter ? (
-                <button type="button" onClick={(e) => { e.preventDefault(); clearStatus(); }} className="absolute right-3 text-gray-400 hover:text-gray-600">×</button>
+                <button type="button" onClick={(e) => { e.preventDefault(); clearStatus(); }} className="absolute right-3 text-gray-400 hover:text-gray-600 text-[12px]">×</button>
               ) : null}
             </label>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                  <svg className="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
-                </div>
-                <input
-                  ref={fromRef}
-                  name="created_from"
-                  value={createdFrom}
-                  onChange={(e) => setCreatedFrom(e.target.value)}
-                  datepicker
-                  datepicker-buttons
-                  datepicker-format="dd/mm/yyyy"
-                  type="text"
-                  placeholder="Từ ngày tạo"
-                  className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring focus:ring-green-300 w-40 text-sm bg-white"
-                />
-              </div>
-              <span className="text-gray-500">→</span>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                  <svg className="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
-                </div>
-                <input
-                  ref={toRef}
-                  name="created_to"
-                  value={createdTo}
-                  onChange={(e) => setCreatedTo(e.target.value)}
-                  datepicker
-                  datepicker-buttons
-                  datepicker-format="dd/mm/yyyy"
-                  type="text"
-                  placeholder="Đến ngày tạo"
-                  className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring focus:ring-green-300 w-40 text-sm bg-white"
-                />
-              </div>
-              <button type="submit" className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700">Lọc</button>
+            <div className="flex justify-start">
+              <button type="submit" className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700">Lọc</button>
             </div>
-            <div className="flex justify-end">
+            <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
                 data-modal-target="createPackageModal"
                 data-modal-toggle="createPackageModal"
-                className="inline-flex items-center gap-2 rounded-lg bg-gray-700 text-white px-3 py-2 text-sm font-semibold border border-gray-700 hover:bg-gray-800"
+                className="inline-flex items-center gap-2 rounded-lg bg-gray-700 text-white px-3 py-2 text-[10px] font-semibold border border-gray-700 hover:bg-gray-800"
               >
                 {Plus ? <Plus size={16} /> : '+'}
                 <span>Tạo thùng</span>
               </button>
-            </div>
-            <div className="flex justify-end">
               <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
-                <button type="button" onClick={() => setViewMode('card')} className={`px-3 py-2 text-sm font-semibold ${viewMode === 'card' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700'}`}>Card</button>
-                <button type="button" onClick={() => setViewMode('table')} className={`px-3 py-2 text-sm font-semibold ${viewMode === 'table' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700'}`}>Bảng</button>
+                <button type="button" onClick={() => setViewMode('card')} className={`px-3 py-2 text-[10px] font-semibold ${viewMode === 'card' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700'}`}>Card</button>
+                <button type="button" onClick={() => setViewMode('table')} className={`px-3 py-2 text-[10px] font-semibold ${viewMode === 'table' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-700'}`}>Bảng</button>
               </div>
             </div>
           </form>
@@ -677,9 +801,13 @@
             </>
           ) : (
             <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 text-left text-xs font-semibold text-gray-600">
+              <div className="flex justify-between items-center px-3 py-2 text-[10px] text-gray-600">
+                <span>Tổng thùng: {filtered.length}</span>
+              </div>
+              <table className="min-w-full text-[10px]">
+                <thead className="bg-gray-50 text-left text-[10px] font-semibold text-gray-600">
                   <tr>
+                    <th className="px-3 py-2">#</th>
                     <th className="px-3 py-2 cursor-pointer select-none" onClick={() => handleSort('packageCode')}>Mã thùng</th>
                     <th className="px-3 py-2 cursor-pointer select-none" onClick={() => handleSort('partnerName')}>Đối tác</th>
                     <th className="px-3 py-2">Trạng thái</th>
@@ -691,19 +819,22 @@
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {visiblePackages.length ? visiblePackages.map(pkg => (
+                  {visiblePackages.length ? visiblePackages.map((pkg, idx) => (
                     <tr key={pkg.id} className={`cursor-pointer hover:bg-gray-50 ${selectedId === pkg.id ? 'bg-emerald-50' : ''}`} onClick={() => handleSelectCard(pkg.id)}>
-                      <td className="px-3 py-2 font-semibold text-gray-900">{pkg.packageCode}</td>
-                      <td className="px-3 py-2 text-sm text-gray-700">{pkg.partnerName || 'Chưa có đối tác'}</td>
-                      <td className="px-3 py-2"><StatusBadge name={pkg.status.name} color={pkg.status.color} /></td>
-                      <td className="px-3 py-2 text-sm text-gray-700">{pkg.packageType}</td>
-                      <td className="px-3 py-2 text-sm text-gray-700">{pkg.regionName}</td>
-                      <td className="px-3 py-2 text-sm text-gray-700">{pkg.folderCount}</td>
-                      <td className="px-3 py-2 text-sm text-gray-700">{pkg.shopCount}</td>
-                      <td className="px-3 py-2 text-sm text-gray-700">{pkg.createdDate}</td>
+                      <td className="px-3 py-2 text-[10px] text-gray-700">{idx + 1}</td>
+                      <td className="px-3 py-2 font-semibold text-gray-900 text-[10px]">{pkg.packageCode}</td>
+                      <td className="px-3 py-2 text-[10px] text-gray-700">{pkg.partnerName || 'Chưa có đối tác'}</td>
+                      <td className="px-3 py-2 text-[10px] font-semibold whitespace-nowrap" style={{ color: pkg.status && pkg.status.color ? pkg.status.color : '#e5e7eb' }}>
+                        {(pkg.status && pkg.status.name && pkg.status.name !== 'Chưa cập nhật') ? pkg.status.name : 'Chưa gửi'}
+                      </td>
+                      <td className="px-3 py-2 text-[10px] text-gray-700">{pkg.packageType}</td>
+                      <td className="px-3 py-2 text-[10px] text-gray-700">{pkg.regionName}</td>
+                      <td className="px-3 py-2 text-[10px] text-gray-700">{pkg.folderCount}</td>
+                      <td className="px-3 py-2 text-[10px] text-gray-700">{pkg.shopCount}</td>
+                      <td className="px-3 py-2 text-[10px] text-gray-700">{pkg.createdDate}</td>
                     </tr>
                   )) : (
-                    <tr><td colSpan="8" className="px-3 py-6 text-center text-gray-500">Không tìm thấy thùng phù hợp với bộ lọc.</td></tr>
+                    <tr><td colSpan="9" className="px-3 py-6 text-center text-gray-500 text-[10px]">Không tìm thấy thùng phù hợp với bộ lọc.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -718,7 +849,13 @@
           )}
         </div>
 
-        <Drawer pkg={selectedPkg} open={drawerOpen} onClose={() => setDrawerOpen(false)} loading={drawerLoading} />
+        <Drawer
+          pkg={selectedPkg}
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          loading={drawerLoading}
+          onPackageUpdate={handlePackageUpdate}
+        />
       </div>
     );
   };

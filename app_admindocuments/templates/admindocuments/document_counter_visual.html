@@ -1,0 +1,93 @@
+{% extends "admindocuments/base.html" %}
+{% block title %}Bản đồ số hiệu{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-semibold text-gray-800">Bản đồ số hiệu</h1>
+    <p class="text-sm text-gray-500">Hiển thị tình trạng số hiệu như sơ đồ ghế.</p>
+  </div>
+  <div class="flex gap-2">
+    <a href="{% url 'admindocuments:admindocuments_counters' %}" class="text-sm text-gray-600 hover:underline">↩ Quản lý counter</a>
+  </div>
+</div>
+
+<div class="bg-white shadow-sm rounded-lg p-4 mb-6">
+  <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+    <div>
+      <label class="block text-xs font-semibold text-gray-600 mb-1">Loại văn bản</label>
+      <select name="doc_type" class="w-full rounded border px-3 py-2">
+        <option value="">-- Chọn --</option>
+        {% for dt in doc_types %}
+        <option value="{{ dt.id }}" {% if dt.id|stringformat:'s' == selected_doc_type|stringformat:'s' %}selected{% endif %}>{{ dt.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs font-semibold text-gray-600 mb-1">Công ty</label>
+      <select name="company" class="w-full rounded border px-3 py-2">
+        <option value="">-- Chọn --</option>
+        {% for c in companies %}
+        <option value="{{ c.id }}" {% if c.id|stringformat:'s' == selected_company|stringformat:'s' %}selected{% endif %}>{{ c.code }} - {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs font-semibold text-gray-600 mb-1">Năm</label>
+      <select name="year" class="w-full rounded border px-3 py-2">
+        {% for y in years %}
+        <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="flex items-end">
+      <button type="submit" class="w-full px-4 py-2 bg-f88green text-white rounded hover:bg-f88dark">Xem</button>
+    </div>
+  </form>
+</div>
+
+{% if not selected_doc_type or not selected_company %}
+  <div class="bg-white rounded-lg border border-dashed border-gray-200 p-6 text-center text-gray-500">
+    Chọn đủ Loại văn bản, Công ty, Năm để xem sơ đồ số hiệu.
+  </div>
+{% elif max_number|default:0 <= 0 %}
+  <div class="bg-white rounded-lg border border-dashed border-gray-200 p-6 text-center text-gray-500">
+    Chưa có dữ liệu số hiệu cho bộ lọc này.
+  </div>
+{% else %}
+  <div class="bg-white shadow-sm rounded-lg p-4">
+    <div class="flex items-center justify-between mb-3 text-sm text-gray-700">
+      <div class="flex items-center gap-3">
+        <span>Đang hiển thị từ 1 → {{ max_number }}</span>
+        {% if counter_next %}
+        <span class="text-gray-500">Số tiếp theo (counter): <strong>{{ counter_next }}</strong></span>
+        {% endif %}
+      </div>
+      <div class="flex items-center gap-3 text-xs">
+        <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-emerald-200 border border-emerald-500"></span> Chưa dùng</span>
+        <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-gray-200 border border-gray-400"></span> Đã dùng</span>
+        <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-100 border border-amber-400"></span> Đã thu hồi (VOID)</span>
+      </div>
+    </div>
+
+    <div class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));">
+      {% for num in numbers %}
+        {% if num in used_numbers %}
+          {% with "num-cell num-used" as cls %}
+          <div class="{{ cls }}">{{ num }}</div>
+          {% endwith %}
+        {% elif num in void_numbers %}
+          {% with "num-cell num-void" as cls %}
+          <div class="{{ cls }}">{{ num }}</div>
+          {% endwith %}
+        {% else %}
+          {% with "num-cell num-free" as cls %}
+          <div class="{{ cls }}">{{ num }}</div>
+          {% endwith %}
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}
+
+{% endblock %}

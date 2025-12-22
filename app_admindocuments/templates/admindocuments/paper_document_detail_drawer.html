@@ -1,0 +1,69 @@
+<div class="p-4 space-y-4">
+  <div class="flex items-start justify-between gap-3">
+    <div class="space-y-1">
+      <p class="text-xs text-gray-500">Số hiệu</p>
+      <div class="text-lg font-semibold text-gray-900 font-mono">{{ doc.document_number_full }}</div>
+      <div class="text-sm text-gray-700">{{ doc.summary|default:"Chứng từ giấy hành chính" }}</div>
+    </div>
+    <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-semibold bg-emerald-50 border-emerald-300 text-emerald-700">
+      <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+      {{ doc.paper_type.name }}
+    </span>
+  </div>
+
+  <div class="grid grid-cols-2 gap-3 text-sm text-gray-700">
+    <div>
+      <p class="text-xs text-gray-500">Loại giấy</p>
+      <p class="font-semibold">{{ doc.paper_type.name }}</p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500">Miền</p>
+      <p class="font-semibold">{{ doc.region|default:"-" }}</p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500">Người phụ trách</p>
+      <p class="font-semibold">{{ doc.responsible_person|default:"-" }}</p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500">Đơn vị yêu cầu</p>
+      <p class="font-semibold">{% if doc.requested_department %}{{ doc.requested_department.shop_name }}{% else %}-{% endif %}</p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500">Phòng ban</p>
+      <p class="font-semibold">{% if doc.department %}{{ doc.department.name }}{% else %}-{% endif %}</p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500">Đơn vị CPN</p>
+      <p class="font-semibold">{{ doc.courier_company.name|default:"-" }}</p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500">Mã vận đơn</p>
+      <p class="font-semibold">{{ doc.courier_tracking_code|default:"-" }}</p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500">Ngày tạo</p>
+      <p class="font-semibold">{{ doc.created_at|date:"d/m/Y" }}</p>
+    </div>
+  </div>
+
+  <div class="space-y-2">
+    <p class="text-xs text-gray-500">Nội dung</p>
+    <p class="text-sm text-gray-800 whitespace-pre-line">{{ doc.summary|default:"-" }}</p>
+  </div>
+
+  <div class="space-y-2">
+    <p class="text-xs text-gray-500">Ghi chú</p>
+    <p class="text-sm text-gray-800 whitespace-pre-line">{{ doc.note|default:"Không có ghi chú" }}</p>
+  </div>
+
+  <div class="space-y-2">
+    <p class="text-xs text-gray-500">File đính kèm</p>
+    <p class="text-sm text-gray-500">Chưa hỗ trợ file đính kèm cho giấy tờ.</p>
+  </div>
+
+  <div class="flex gap-2 flex-wrap">
+    <a href="{% url 'admindocuments:paper_document_detail' doc.id %}" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-f88green text-f88green text-sm font-semibold hover:bg-green-50">
+      Mở trang chi tiết
+    </a>
+  </div>
+</div>

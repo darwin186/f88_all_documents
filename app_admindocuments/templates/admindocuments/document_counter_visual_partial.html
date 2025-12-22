@@ -1,0 +1,37 @@
+{% if not selected_doc_type or not selected_company %}
+  <div class="bg-white rounded-lg border border-dashed border-gray-200 p-4 text-center text-gray-500">
+    Chọn đủ Loại văn bản, Công ty, Năm để xem sơ đồ số hiệu.
+  </div>
+{% elif max_number|default:0 <= 0 %}
+  <div class="bg-white rounded-lg border border-dashed border-gray-200 p-4 text-center text-gray-500">
+    Chưa có dữ liệu số hiệu cho bộ lọc này.
+  </div>
+{% else %}
+  <div class="bg-white shadow-sm rounded-lg p-4">
+    <div class="flex items-center justify-between mb-3 text-sm text-gray-700">
+      <div class="flex items-center gap-3">
+        <span>Đang hiển thị từ 1 → {{ max_number }}</span>
+        {% if counter_next %}
+        <span class="text-gray-500">Số tiếp theo (counter): <strong>{{ counter_next }}</strong></span>
+        {% endif %}
+      </div>
+      <div class="flex items-center gap-3 text-xs">
+        <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-emerald-200 border border-emerald-500"></span> Chưa dùng</span>
+        <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-gray-200 border border-gray-400"></span> Đã dùng</span>
+        <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-100 border border-amber-400"></span> Đã thu hồi (VOID)</span>
+      </div>
+    </div>
+
+    <div class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));">
+      {% for num in numbers %}
+        {% if num in used_numbers %}
+          <div class="num-cell num-used">{{ num }}</div>
+        {% elif num in void_numbers %}
+          <div class="num-cell num-void">{{ num }}</div>
+        {% else %}
+          <div class="num-cell num-free">{{ num }}</div>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+{% endif %}

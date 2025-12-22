@@ -36,6 +36,7 @@ urlpatterns = [
     path('package/change-partnerpackage-status/<int:package_id>/', views.change_partnerpackage_status, name ='change_partnerpackage_status'),
     path('import-packages/', views.import_packages_view, name='import_packages_view'),
     path('export-packages/', views.export_packages_view, name='export_packages_views'),
+    path('api/package/<int:package_id>/partner/', views.api_package_partner, name='api_package_partner'),
     #Historical Data
     path('historical/folders/', views.historical_folder_view, name='historical_folder_view'),
     path('historical/documents/', views.historical_documents_view, name='historical_documents_view'),

@@ -5,11 +5,12 @@
 {% if messages %}
 <div class="fixed bottom-4 right-4 space-y-2 z-50">
   {% for message in messages %}
-    <div class="px-4 py-3 rounded-lg shadow text-sm
+    <div class="toast-msg px-4 py-3 rounded-lg shadow text-sm relative
       {% if message.tags == 'error' %}bg-red-50 text-red-700 border border-red-200
       {% elif message.tags == 'warning' %}bg-amber-50 text-amber-700 border border-amber-200
       {% else %}bg-emerald-50 text-emerald-700 border border-emerald-200{% endif %}">
-      {{ message }}
+      <span>{{ message }}</span>
+      <button type="button" class="toast-close absolute top-2 right-2 text-xs text-gray-500 hover:text-gray-700">×</button>
     </div>
   {% endfor %}
 </div>
@@ -48,28 +49,71 @@
   {% endfor %}
 </ul>
 
-<div class="bg-white rounded-lg shadow overflow-hidden">
-  <table class="min-w-full text-sm">
-    <thead class="bg-gray-100 text-gray-700 uppercase text-xs font-semibold">
+<div class="bg-white rounded-lg shadow overflow-hidden relative">
+  <div class="absolute top-3 right-3">
+    {% if paginator %}
+    <nav aria-label="Pagination">
+      <ul class="inline-flex items-center -space-x-px text-sm">
+        {% with q=request.GET.q|default:'' pt=selected_type s=sort d=dir %}
+        <li>
+          <a href="?q={{ q }}&paper_type={{ pt }}&sort={{ s }}&dir={{ d }}&page=1"
+             class="px-3 py-2 leading-tight text-gray-500 bg-white border border-gray-300 rounded-l-lg hover:bg-gray-100 hover:text-gray-700">« First</a>
+        </li>
+        {% if documents.has_previous %}
+        <li>
+          <a href="?q={{ q }}&paper_type={{ pt }}&sort={{ s }}&dir={{ d }}&page={{ documents.previous_page_number }}"
+             class="px-3 py-2 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">‹</a>
+        </li>
+        {% else %}
+        <li><span class="px-3 py-2 leading-tight text-gray-400 bg-white border border-gray-200">‹</span></li>
+        {% endif %}
+        {% for num in paginator.page_range %}
+          {% if num >= documents.number|add:'-2' and num <= documents.number|add:'2' %}
+            {% if documents.number == num %}
+              <li><span class="px-3 py-2 leading-tight text-white bg-f88green border border-f88green">{{ num }}</span></li>
+            {% else %}
+              <li><a href="?q={{ q }}&paper_type={{ pt }}&sort={{ s }}&dir={{ d }}&page={{ num }}" class="px-3 py-2 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">{{ num }}</a></li>
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+        {% if documents.has_next %}
+        <li>
+          <a href="?q={{ q }}&paper_type={{ pt }}&sort={{ s }}&dir={{ d }}&page={{ documents.next_page_number }}"
+             class="px-3 py-2 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">›</a>
+        </li>
+        {% else %}
+        <li><span class="px-3 py-2 leading-tight text-gray-400 bg-white border border-gray-200">›</span></li>
+        {% endif %}
+        <li>
+          <a href="?q={{ q }}&paper_type={{ pt }}&sort={{ s }}&dir={{ d }}&page={{ paginator.num_pages }}"
+             class="px-3 py-2 leading-tight text-gray-500 bg-white border border-gray-300 rounded-r-lg hover:bg-gray-100 hover:text-gray-700">Last »</a>
+        </li>
+        {% endwith %}
+      </ul>
+    </nav>
+    {% endif %}
+  </div>
+  <table class="min-w-full text-sm mt-10">
+    <thead class="bg-gray-100 text-gray-700 uppercase text-xs font-semibold sticky top-0 z-10">
       <tr>
-        <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=running&dir={% if sort == 'running' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Số thứ tự</a></th>
-        <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=code&dir={% if sort == 'code' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Số hiệu</a></th>
-        <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=type&dir={% if sort == 'type' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Loại giấy</a></th>
-        <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=region&dir={% if sort == 'region' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Miền</a></th>
-        <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=responsible&dir={% if sort == 'responsible' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Người phụ trách</a></th>
-        <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=department&dir={% if sort == 'department' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Đơn vị yêu cầu</a></th>
+        <th class="px-4 py-3 text-left"><a href="?q={{ request.GET.q|default:'' }}&paper_type={{ selected_type }}&page={{ documents.number }}&sort=running&dir={% if sort == 'running' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Số thứ tự</a></th>
+        <th class="px-4 py-3 text-left"><a href="?q={{ request.GET.q|default:'' }}&paper_type={{ selected_type }}&page={{ documents.number }}&sort=code&dir={% if sort == 'code' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Số hiệu</a></th>
+        <th class="px-4 py-3 text-left"><a href="?q={{ request.GET.q|default:'' }}&paper_type={{ selected_type }}&page={{ documents.number }}&sort=type&dir={% if sort == 'type' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Loại giấy</a></th>
+        <th class="px-4 py-3 text-left"><a href="?q={{ request.GET.q|default:'' }}&paper_type={{ selected_type }}&page={{ documents.number }}&sort=region&dir={% if sort == 'region' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Miền</a></th>
+        <th class="px-4 py-3 text-left"><a href="?q={{ request.GET.q|default:'' }}&paper_type={{ selected_type }}&page={{ documents.number }}&sort=responsible&dir={% if sort == 'responsible' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Người phụ trách</a></th>
+        <th class="px-4 py-3 text-left"><a href="?q={{ request.GET.q|default:'' }}&paper_type={{ selected_type }}&page={{ documents.number }}&sort=department&dir={% if sort == 'department' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Đơn vị yêu cầu</a></th>
         <th class="px-4 py-3 text-left">Phòng ban</th>
         <th class="px-4 py-3 text-left">Nội dung</th>
         <th class="px-4 py-3 text-left">Đơn vị CPN</th>
         <th class="px-4 py-3 text-left">Mã vận đơn</th>
-        <th class="px-4 py-3 text-left"><a href="?paper_type={{ selected_type }}&sort=created&dir={% if sort == 'created' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Ngày tạo</a></th>
+        <th class="px-4 py-3 text-left"><a href="?q={{ request.GET.q|default:'' }}&paper_type={{ selected_type }}&page={{ documents.number }}&sort=created&dir={% if sort == 'created' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Ngày tạo</a></th>
         <th class="px-4 py-3 text-left">Ghi chú</th>
         <th class="px-4 py-3 text-left">Thao tác</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-gray-200">
       {% for doc in documents %}
-      <tr class="hover:bg-gray-50">
+      <tr class="hover:bg-gray-50 {% if doc.id in new_ids %}ring-2 ring-amber-300 bg-amber-50{% endif %}" id="paper-row-{{ doc.id }}">
         <td class="px-4 py-3">{{ forloop.counter }}</td>
         <td class="px-4 py-3 font-mono">{{ doc.document_number_full }}</td>
         <td class="px-4 py-3">{{ doc.paper_type.name }}</td>
@@ -83,19 +127,11 @@
         <td class="px-4 py-3">{{ doc.created_at|date:"d/m/Y" }}</td>
         <td class="px-4 py-3">{{ doc.note|default:'-' }}</td>
         <td class="px-4 py-3 text-right">
-          <button id="dropdownPaperActionsButton-{{ doc.id }}" data-dropdown-toggle="dropdownPaperActions-{{ doc.id }}" data-dropdown-placement="bottom-end" type="button" class="inline-flex items-center justify-center w-9 h-9 text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-f88green">
-            <span class="sr-only">Mở thao tác</span>
-            <svg class="w-4 h-4" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 4 15">
-              <path d="M2 .75a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Zm0 5.5a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Zm0 5.5a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Z"/>
+          <a href="#" data-paper="{{ doc.id }}" class="open-paper-drawer inline-flex items-center justify-center w-9 h-9 text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-f88green" title="Mở chi tiết">
+            <svg class="w-4 h-4" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M5 5h14v2H5zm0 6h14v2H5zm0 6h14v2H5z"/>
             </svg>
-          </button>
-          <div id="dropdownPaperActions-{{ doc.id }}" class="z-20 hidden bg-white divide-y divide-gray-100 rounded-lg shadow-sm w-48">
-            <ul class="py-2 text-sm text-gray-700" aria-labelledby="dropdownPaperActionsButton-{{ doc.id }}">
-              <li>
-                <a href="{% url 'admindocuments:paper_document_detail' doc.id %}" class="block w-full text-left px-4 py-2 hover:bg-gray-100">Chi tiết</a>
-              </li>
-            </ul>
-          </div>
+          </a>
         </td>
       </tr>
       {% empty %}
@@ -105,30 +141,8 @@
   </table>
 </div>
 
-{% if paginator %}
-<div class="flex justify-end mt-4">
-  <nav aria-label="Pagination">
-    <ul class="inline-flex items-center -space-x-px text-sm">
-      {% if documents.has_previous %}
-      <li>
-        <a href="?paper_type={{ selected_type }}&sort={{ sort }}&dir={{ dir }}&page={{ documents.previous_page_number }}"
-           class="px-3 py-2 ml-0 leading-tight text-gray-500 bg-white border border-gray-300 rounded-l-lg hover:bg-gray-100 hover:text-gray-700">Trước</a>
-      </li>
-      {% else %}
-      <li><span class="px-3 py-2 ml-0 leading-tight text-gray-400 bg-white border border-gray-200 rounded-l-lg">Trước</span></li>
-      {% endif %}
-      <li><span class="px-3 py-2 leading-tight text-gray-700 bg-gray-100 border border-gray-300">{{ documents.number }} / {{ paginator.num_pages }}</span></li>
-      {% if documents.has_next %}
-      <li>
-        <a href="?paper_type={{ selected_type }}&sort={{ sort }}&dir={{ dir }}&page={{ documents.next_page_number }}"
-           class="px-3 py-2 leading-tight text-gray-500 bg-white border border-gray-300 rounded-r-lg hover:bg-gray-100 hover:text-gray-700">Sau</a>
-      </li>
-      {% else %}
-      <li><span class="px-3 py-2 leading-tight text-gray-400 bg-white border border-gray-200 rounded-r-lg">Sau</span></li>
-      {% endif %}
-    </ul>
-  </nav>
-</div>
+{% if new_ids %}
+{{ new_ids|json_script:"newPaperIds" }}
 {% endif %}
 
 <div id="paperModal" tabindex="-1" aria-hidden="true"
@@ -454,5 +468,73 @@
 
   if (bulkProcessBtn) bulkProcessBtn.addEventListener("click", processBulk);
   if (bulkSaveBtn) bulkSaveBtn.addEventListener("click", commitBulk);
+
+  // Scroll to newly created items
+  try {
+    const newIdsEl = document.getElementById('newPaperIds');
+    if (newIdsEl) {
+      const newIds = JSON.parse(newIdsEl.textContent || '[]');
+      if (Array.isArray(newIds) && newIds.length) {
+        const firstId = newIds[0];
+        const row = document.getElementById(`paper-row-${firstId}`);
+        if (row) {
+          row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Cannot scroll to new paper rows", e);
+  }
+
+  // Toast close & auto hide
+  document.querySelectorAll('.toast-close').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      const wrap = e.target.closest('.toast-msg');
+      if (wrap) wrap.remove();
+    });
+  });
+  document.querySelectorAll('.toast-msg').forEach((toast) => {
+    setTimeout(() => {
+      toast.classList.add('opacity-0', 'transition', 'duration-300');
+      setTimeout(() => toast.remove(), 300);
+    }, 5000);
+  });
+
+  // Drawer for paper
+  const paperDrawer = document.createElement('div');
+  paperDrawer.id = 'paperDrawer';
+  paperDrawer.className = 'fixed inset-0 z-50 hidden';
+  paperDrawer.innerHTML = `
+    <div class="absolute inset-0 bg-black/30" id="paperDrawerOverlay"></div>
+    <div class="absolute top-0 right-0 h-full w-full sm:w-[520px] bg-white shadow-2xl border-l border-gray-200 overflow-y-auto">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <h3 class="text-base font-semibold text-gray-900">Chi tiết giấy</h3>
+        <button type="button" id="paperDrawerClose" class="text-gray-500 hover:text-gray-700">×</button>
+      </div>
+      <div id="paperDrawerBody" class="p-2 text-sm text-gray-700">Đang tải...</div>
+    </div>
+  `;
+  document.body.appendChild(paperDrawer);
+  const closePaperDrawer = () => paperDrawer.classList.add('hidden');
+  document.getElementById('paperDrawerOverlay').addEventListener('click', closePaperDrawer);
+  document.getElementById('paperDrawerClose').addEventListener('click', closePaperDrawer);
+
+  const openPaperDrawer = (url) => {
+    paperDrawer.classList.remove('hidden');
+    const body = document.getElementById('paperDrawerBody');
+    body.innerHTML = '<div class="p-4 text-sm text-gray-600">Đang tải...</div>';
+    fetch(url + (url.includes('?') ? '&' : '?') + 'drawer=1')
+      .then((res) => res.text())
+      .then((html) => { body.innerHTML = html; })
+      .catch(() => { body.innerHTML = '<div class="p-4 text-sm text-red-600">Không tải được chi tiết.</div>'; });
+  };
+  document.querySelectorAll('.open-paper-drawer').forEach((link) => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const id = link.dataset.paper;
+      if (!id) return;
+      openPaperDrawer(`/admindocuments/paper-documents/${id}/`);
+    });
+  });
 </script>
 {% endblock %}

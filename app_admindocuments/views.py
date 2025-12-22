@@ -19,6 +19,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.conf import settings
 from django.http import JsonResponse
+from django.core.files.base import ContentFile
 
 from openpyxl import Workbook
 from openpyxl import load_workbook
@@ -48,6 +49,7 @@ from .models import (
     AdmDocumentType,
     AdmDocumentAttachment,
     AdmDocumentCounter,
+    AdmPaperCounter,
     AdmPaperDocument,
     AdmPaperType,
     AdmSignerRole,
@@ -72,6 +74,28 @@ def _create_attachment_version(document, user, uploaded_file=None, link=None, no
     """Create a new attachment version (file or link) for a document."""
     if not uploaded_file and not link:
         return None
+
+    def _clone_upload(file_obj):
+        if not file_obj:
+            return None
+        try:
+            # If temp file disappeared (e.g., container cleanup), clone into memory
+            if hasattr(file_obj, "temporary_file_path"):
+                path = file_obj.temporary_file_path()
+                if not os.path.exists(path):
+                    data = file_obj.read()
+                    return ContentFile(data, name=getattr(file_obj, "name", "upload"))
+            file_obj.seek(0)
+            return file_obj
+        except Exception:
+            try:
+                data = file_obj.read()
+                return ContentFile(data, name=getattr(file_obj, "name", "upload"))
+            except Exception:
+                return file_obj
+
+    uploaded_file = _clone_upload(uploaded_file)
+
     current_max = (
         document.attachments.aggregate(max_version=Max("version")).get("max_version")
         or 0
@@ -577,7 +601,7 @@ def document_list(request):
     documents_qs = documents_qs.order_by(order_field)
 
     page = request.GET.get("page", "1")
-    paginator = Paginator(documents_qs, 10)
+    paginator = Paginator(documents_qs, 25)
     try:
         documents = paginator.page(page)
     except PageNotAnInteger:
@@ -846,7 +870,18 @@ def paper_document_list(request):
                             )
                             return redirect("admindocuments:paper_document_list")
                         continue
-                messages.success(request, "Tạo phiếu giấy tờ thành công.")
+                # Spotlight newly created paper
+                new_ids = request.session.get("paper_new_ids", [])
+                new_nums = request.session.get("paper_new_numbers", [])
+                new_ids.append(paper_doc.id)
+                new_nums.append(paper_doc.document_number_full)
+                request.session["paper_new_ids"] = new_ids
+                request.session["paper_new_numbers"] = new_nums
+                request.session.modified = True
+                messages.success(
+                    request,
+                    f"Tạo giấy tờ thành công: {paper_doc.document_number_full}",
+                )
             params = request.GET.copy()
             redirect_url = reverse("admindocuments:paper_document_list")
             if params:
@@ -872,7 +907,7 @@ def paper_document_list(request):
     paper_type_tabs = [
         {"id": p.pk, "name": p.name, "total": total_by_type.get(p.pk, 0)} for p in paper_types
     ]
-    paginator = Paginator(documents_qs, 50)
+    paginator = Paginator(documents_qs, 25)
     page_number = request.GET.get("page", "1")
     try:
         documents = paginator.page(page_number)
@@ -889,6 +924,9 @@ def paper_document_list(request):
     if edit_instance and getattr(edit_instance, "department_id", None):
         edit_department_initial = str(edit_instance.department_id)
 
+    new_ids = request.session.pop("paper_new_ids", [])
+    new_numbers = request.session.pop("paper_new_numbers", [])
+
     context = {
         "documents": documents,
         "form": form,
@@ -902,6 +940,8 @@ def paper_document_list(request):
         "edit_requested_department_id": requested_department_initial,
         "edit_department_id": edit_department_initial,
         "internal_departments": AdmDepartment.objects.select_related("company").all().order_by("name"),
+        "new_ids": new_ids,
+        "new_numbers": new_numbers,
     }
     return render(request, "admindocuments/paper_document_list.html", context)
 
@@ -916,6 +956,7 @@ def paper_document_detail(request, doc_id: int):
         pk=doc_id,
         is_deleted=False,
     )
+    as_drawer = request.GET.get("drawer") == "1"
     if request.method == "POST":
         form = AdmPaperDocumentForm(request.POST, instance=paper_doc)
         if form.is_valid():
@@ -935,9 +976,14 @@ def paper_document_detail(request, doc_id: int):
     else:
         form = AdmPaperDocumentForm(instance=paper_doc)
 
+    template_name = (
+        "admindocuments/paper_document_detail_drawer.html"
+        if as_drawer
+        else "admindocuments/paper_document_detail.html"
+    )
     return render(
         request,
-        "admindocuments/paper_document_detail.html",
+        template_name,
         {
             "doc": paper_doc,
             "form": form,
@@ -1129,6 +1175,8 @@ def paper_document_import_commit(request):
         return JsonResponse({"error": "Token không hợp lệ hoặc đã hết hạn"}, status=400)
 
     created_count = 0
+    created_ids = []
+    created_numbers = []
     with transaction.atomic():
         for item in rows_data:
             created_date = datetime.fromisoformat(item["created_date"]).date()
@@ -1156,11 +1204,17 @@ def paper_document_import_commit(request):
             )
             obj.save()
             created_count += 1
+            created_ids.append(obj.id)
+            created_numbers.append(document_number_full)
     try:
         del request.session[f"paper_import_{token}"]
         request.session.modified = True
     except KeyError:
         pass
+    if created_ids:
+        request.session["paper_new_ids"] = created_ids
+        request.session["paper_new_numbers"] = created_numbers
+        request.session.modified = True
     return JsonResponse({"status": "ok", "created": created_count})
 
 
@@ -1169,9 +1223,11 @@ def paper_document_import_commit(request):
 def document_counter_manage(request):
     doc_types = AdmDocumentType.objects.all().order_by("name")
     companies = AdmCompany.objects.all().order_by("name")
+    paper_types = AdmPaperType.objects.all().order_by("name")
     year_now = timezone.now().year
+    active_tab = request.GET.get("tab", "admin")
 
-    if request.method == "POST":
+    if request.method == "POST" and request.POST.get("target", "admin") == "admin":
         doc_type_id = request.POST.get("doc_type")
         company_id = request.POST.get("company")
         year = request.POST.get("year") or year_now
@@ -1209,7 +1265,11 @@ def document_counter_manage(request):
         if not _:
             counter.next_number = next_number
             counter.save(update_fields=["next_number", "updated_at"])
-        messages.success(request, "Cập nhật counter thành công.")
+        dt_name = doc_types.filter(pk=doc_type_id).first()
+        dt_name = dt_name.name if dt_name else doc_type_id
+        comp_name = companies.filter(pk=company_id).first()
+        comp_code = comp_name.code if comp_name else company_id
+        messages.success(request, f"Cập nhật số tiếp theo cho '{dt_name}' - {comp_code} năm {year} -> {next_number}.")
         return redirect("admindocuments:admindocuments_counters")
 
     # prepare tracking
@@ -1228,11 +1288,11 @@ def document_counter_manage(request):
     )
     counter_rows = []
     for c in counters:
-        key = (c.doc_type_id, c.company_id, c.year)
-        used_info = used_map.get(key, {"used_max": 0, "total": 0})
-        gap_from = (used_info["used_max"] or 0) + 1
-        counter_rows.append(
-            {
+            key = (c.doc_type_id, c.company_id, c.year)
+            used_info = used_map.get(key, {"used_max": 0, "total": 0})
+            gap_from = (used_info["used_max"] or 0) + 1
+            counter_rows.append(
+                {
                 "doc_type": c.doc_type,
                 "doc_type_id": c.doc_type_id,
                 "company": c.company,
@@ -1242,18 +1302,229 @@ def document_counter_manage(request):
                 "used_max": used_info["used_max"] or 0,
                 "total": used_info["total"] or 0,
                 "gap_from": gap_from,
-            }
+                }
+            )
+    # Paper counter update
+    if request.method == "POST" and request.POST.get("target") == "paper":
+        paper_type_id = request.POST.get("paper_type")
+        year = request.POST.get("year") or year_now
+        next_number = request.POST.get("next_number")
+        try:
+            year = int(year)
+            next_number = int(next_number)
+        except (TypeError, ValueError):
+            messages.error(request, "Năm và số tiếp theo phải là số.")
+            return redirect("admindocuments:admindocuments_counters")
+        if not paper_type_id:
+            messages.error(request, "Vui lòng chọn loại giấy.")
+            return redirect("admindocuments:admindocuments_counters")
+        exists_active = AdmPaperDocument.objects.filter(
+            paper_type_id=paper_type_id,
+            created_at__year=year,
+            is_deleted=False,
+            running_number=next_number,
+        ).exists()
+        if exists_active:
+            messages.error(request, f"Số {next_number} đã được sử dụng cho giấy này.")
+            return redirect("admindocuments:admindocuments_counters")
+        counter, created = AdmPaperCounter.objects.get_or_create(
+            paper_type_id=paper_type_id,
+            year=year,
+            defaults={"next_number": next_number},
         )
+        if not created:
+            counter.next_number = next_number
+            counter.save(update_fields=["next_number", "updated_at"])
+        pt_name = paper_types.filter(pk=paper_type_id).first()
+        pt_name = pt_name.name if pt_name else paper_type_id
+        messages.success(request, f"Cập nhật số tiếp theo cho giấy '{pt_name}' năm {year} -> {next_number}.")
+        return redirect(f"{reverse('admindocuments:admindocuments_counters')}?tab=paper")
+
+    # Paper counters display
+    paper_rows = []
+    paper_years = (
+        AdmPaperDocument.objects.values_list("created_at__year", flat=True).distinct()
+    )
+    years_set = set(y for y in paper_years if y)
+    years_set.add(year_now)
+    for pt in paper_types:
+        for y in sorted(years_set):
+            active_qs = AdmPaperDocument.objects.filter(
+                paper_type_id=pt.id, created_at__year=y, is_deleted=False
+            )
+            void_qs = AdmPaperDocument.objects.filter(
+                paper_type_id=pt.id, created_at__year=y, is_deleted=True
+            )
+            active_numbers = list(active_qs.values_list("running_number", flat=True))
+            void_numbers = list(void_qs.values_list("running_number", flat=True))
+            if not active_numbers and not void_numbers:
+                continue
+            active_numbers_sorted = sorted([n for n in active_numbers if n])
+            candidate = 1
+            for n in active_numbers_sorted:
+                if n and n > candidate:
+                    break
+                candidate = (n or candidate) + 1
+            counter = AdmPaperCounter.objects.filter(paper_type_id=pt.id, year=y).first()
+            if counter and counter.next_number and counter.next_number > candidate:
+                candidate = counter.next_number
+            used_max = active_numbers_sorted[-1] if active_numbers_sorted else 0
+            paper_rows.append(
+                {
+                    "paper_type": pt,
+                    "paper_type_id": pt.id,
+                    "year": y,
+                    "used_max": used_max,
+                    "next_number": candidate,
+                    "gap_from": candidate,
+                    "total": len(active_numbers_sorted),
+                    "void_count": len([n for n in void_numbers if n]),
+                    "counter": counter,
+                }
+            )
 
     return render(
         request,
         "admindocuments/document_counters.html",
         {
+            "doc_types": doc_types,
+            "companies": companies,
+            "paper_types": paper_types,
+            "year_now": year_now,
+            "counters": counter_rows,
+            "paper_counters": paper_rows,
+            "active_tab": active_tab,
+        },
+    )
+
+
+@login_required
+@admin_staff_required
+def document_counter_visual(request):
+    doc_types = AdmDocumentType.objects.all().order_by("name")
+    companies = AdmCompany.objects.all().order_by("name")
+    year_now = timezone.now().year
+
+    def _safe_int(val, default=None):
+        try:
+            return int(val)
+        except (TypeError, ValueError):
+            return default
+
+    doc_type_id = _safe_int(request.GET.get("doc_type"))
+    company_id = _safe_int(request.GET.get("company"))
+    year = _safe_int(request.GET.get("year"), year_now)
+
+    used_numbers = set()
+    void_numbers = set()
+    counter_next = None
+    max_number = 0
+
+    if doc_type_id and company_id:
+        docs = AdmAdministrativeDocument.objects.filter(
+            doc_type_id=doc_type_id,
+            issuing_company_id=company_id,
+            created_at__year=year,
+        ).values_list("running_number", "is_void")
+        for rn, is_void in docs:
+            if rn is None:
+                continue
+            if is_void:
+                void_numbers.add(rn)
+            else:
+                used_numbers.add(rn)
+        counter = AdmDocumentCounter.objects.filter(
+            doc_type_id=doc_type_id, company_id=company_id, year=year
+        ).first()
+        if counter:
+            counter_next = counter.next_number or 1
+            max_number = max(max_number, (counter_next or 1) - 1)
+        if used_numbers or void_numbers:
+            max_number = max(max_number, max(used_numbers | void_numbers))
+        if max_number == 0 and counter_next:
+            max_number = (counter_next or 1) - 1
+
+    years_set = {year_now}
+    years_set.update(
+        AdmDocumentCounter.objects.values_list("year", flat=True).distinct()
+    )
+    years_set.update(
+        AdmAdministrativeDocument.objects.annotate(y=ExtractYear("created_at")).values_list("y", flat=True).distinct()
+    )
+    years = sorted({y for y in years_set if y}, reverse=True)
+    context = {
         "doc_types": doc_types,
         "companies": companies,
         "year_now": year_now,
-        "counters": counter_rows,
-    },
+        "selected_doc_type": doc_type_id or "",
+        "selected_company": company_id or "",
+        "selected_year": year,
+        "used_numbers": sorted(list(used_numbers)),
+        "void_numbers": sorted(list(void_numbers)),
+        "max_number": max_number,
+        "counter_next": counter_next,
+        "years": years,
+        "numbers": list(range(1, max_number + 1)) if max_number else [],
+    }
+    if request.GET.get("partial") == "1":
+        return render(request, "admindocuments/document_counter_visual_partial.html", context)
+    return render(request, "admindocuments/document_counter_visual.html", context)
+
+
+@login_required
+@admin_staff_required
+def paper_counter_visual(request):
+    paper_type_id = request.GET.get("paper_type")
+    year_now = timezone.now().year
+    try:
+        year = int(request.GET.get("year", year_now))
+    except (TypeError, ValueError):
+        year = year_now
+
+    used_numbers = set()
+    void_numbers = set()
+    max_number = 0
+    next_number = 1
+
+    if paper_type_id:
+        active_qs = AdmPaperDocument.objects.filter(
+            paper_type_id=paper_type_id, created_at__year=year, is_deleted=False
+        )
+        void_qs = AdmPaperDocument.objects.filter(
+            paper_type_id=paper_type_id, created_at__year=year, is_deleted=True
+        )
+        used_numbers.update([n for n in active_qs.values_list("running_number", flat=True) if n])
+        void_numbers.update([n for n in void_qs.values_list("running_number", flat=True) if n])
+        if used_numbers or void_numbers:
+            max_number = max(used_numbers | void_numbers)
+        if max_number == 0:
+            max_number = len(used_numbers)
+
+        # compute next_number (gap fill)
+        existing = sorted(list(used_numbers))
+        candidate = 1
+        for n in existing:
+            if n > candidate:
+                break
+            candidate = n + 1
+        counter = AdmPaperCounter.objects.filter(paper_type_id=paper_type_id, year=year).first()
+        if counter and counter.next_number and counter.next_number > candidate:
+            candidate = counter.next_number
+        next_number = candidate
+        if max_number:
+            max_number = max(max_number, next_number)
+
+    numbers = list(range(1, max_number + 1)) if max_number else []
+    return render(
+        request,
+        "admindocuments/paper_counter_visual_partial.html",
+        {
+            "used_numbers": used_numbers,
+            "void_numbers": void_numbers,
+            "max_number": max_number,
+            "next_number": next_number,
+            "numbers": numbers,
+        },
     )
 
 
@@ -1358,7 +1629,8 @@ def document_create(request):
     doc.issue_date = issue_date
 
     attempts = 0
-    while attempts < 3:
+    max_attempts = 30
+    while attempts < max_attempts:
         attempts += 1
         try:
             with transaction.atomic():
@@ -1380,7 +1652,7 @@ def document_create(request):
                 company_id=doc.issuing_company_id,
                 year=current_year,
             ).update(next_number=F("next_number") + 1)
-            if attempts >= 3:
+            if attempts >= max_attempts:
                 messages.error(
                     request, "Could not allocate unique number. Please try again."
                 )
@@ -1390,16 +1662,7 @@ def document_create(request):
     messages.success(
         request,
         f"Văn bản {doc.document_number_full} đã tạo thành công."
-        + (
-            f" (Cảnh báo: số này trùng số của {len(void_conflicts)} văn bản đã vô hiệu: "
-            + ", ".join(
-                f"{c.document_number_full} - {c.title}" for c in void_conflicts[:3]
-            )
-            + ("..." if len(void_conflicts) > 3 else "")
-            + ")"
-            if void_conflicts
-            else ""
-        ),
+        + ("" if not void_conflicts else f" (Sử dụng lại số đã thu hồi từ {len(void_conflicts)} văn bản)"),
     )
     redirect_url = f"{reverse('admindocuments:admindocuments_list')}?new={doc.id}"
     return redirect(redirect_url)
@@ -1455,6 +1718,7 @@ def document_detail(request, doc_id: int):
         messages.error(request, "Document not found.")
         return redirect("admindocuments:admindocuments_list")
 
+    as_drawer = request.GET.get("drawer") == "1"
     form = AdmAdministrativeDocumentUpdateForm(instance=doc)
     doc_types = AdmDocumentType.objects.all().order_by("name")
     content_types = AdmContentType.objects.all().order_by("name")
@@ -1512,7 +1776,12 @@ def document_detail(request, doc_id: int):
         "STATUS_ISSUED": AdmDocumentStatus.CODE_ISSUED,
         "STATUS_EXPIRED": AdmDocumentStatus.CODE_EXPIRED,
     }
-    return render(request, "admindocuments/document_detail.html", context)
+    template_name = (
+        "admindocuments/document_detail_drawer.html"
+        if as_drawer
+        else "admindocuments/document_detail.html"
+    )
+    return render(request, template_name, context)
 
 
 @login_required

@@ -343,6 +343,24 @@ class PartnerPackage(models.Model):
 
     def __str__(self):
         return self.partner_package_code or f"{self.package_id.package_code if self.package_id else 'PartnerPackage'}"
+
+
+class PartnerPackageHistory(models.Model):
+    history_id = models.AutoField(primary_key=True)
+    package = models.ForeignKey(Package, db_column='package_id', on_delete=models.CASCADE, related_name='partnerpackage_history')
+    action = models.CharField(max_length=50)  # status_change, partner_change, partner_code_change
+    old_value = models.CharField(max_length=255, null=True, blank=True)
+    new_value = models.CharField(max_length=255, null=True, blank=True)
+    note = models.CharField(max_length=255, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(User, db_column='created_by', on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        db_table = 'd_PartnerPackageHistory'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.package.package_code if self.package else 'Package'} - {self.action}"
     
 # Rule áp dụng cho gửi chứng từ đúng hạn
 class FolderDeadlineRule(models.Model):

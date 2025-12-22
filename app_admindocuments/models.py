@@ -515,6 +515,24 @@ class AdmDocumentCounter(models.Model):
         return f"{self.doc_type.code}-{self.company.code}-{self.year}: next={self.next_number}"
 
 
+class AdmPaperCounter(models.Model):
+    """Counter quản lý số hiệu cho giấy hành chính theo loại giấy/năm."""
+
+    paper_type = models.ForeignKey(AdmPaperType, on_delete=models.CASCADE)
+    year = models.PositiveIntegerField()
+    next_number = models.PositiveIntegerField(default=1)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "adm_paper_counter"
+        unique_together = ("paper_type", "year")
+        verbose_name = "Paper Counter"
+        verbose_name_plural = "Paper Counters"
+
+    def __str__(self):
+        return f"{self.paper_type.code if hasattr(self.paper_type, 'code') else self.paper_type}-{self.year}: next={self.next_number}"
+
+
 class AdmAdministrativeDocumentHistory(models.Model):
     CHANGE_CREATED = "created"
     CHANGE_UPDATED = "updated"

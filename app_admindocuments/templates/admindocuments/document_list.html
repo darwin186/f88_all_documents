@@ -40,7 +40,7 @@
 <div class="mb-2">
   <ul class="flex justify-center text-sm font-medium text-gray-600 border-b border-green-100 bg-green-50/70 rounded-lg overflow-hidden">
     <li class="flex-1 text-center">
-      <a href="?q={{ q }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}" class="block px-4 py-2 {% if not active_company_id %}text-f88green bg-green-100{% else %}hover:bg-green-50{% endif %}">Tất cả</a>
+      <a href="?q={{ q }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}" class="block px-4 py-2 {% if not active_company_id %}text-f88green bg-green-100{% else %}hover:bg-green-50{% endif %}">Tất cả</a>
     </li>
     {% for c in companies %}
     <li class="flex-1 text-center">
@@ -96,7 +96,7 @@
       <ul class="flex items-center -space-x-px h-8 text-sm">
         <li>
           {% if page_obj.has_previous %}
-          <a href="?q={{ q }}&company={{ active_company_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}&page={{ page_obj.previous_page_number }}" class="flex items-center justify-center px-3 h-8 ms-0 leading-tight text-gray-500 bg-white border border-e-0 border-gray-300 rounded-s-lg hover:bg-gray-100 hover:text-gray-700">
+          <a href="?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}&page={{ page_obj.previous_page_number }}" class="flex items-center justify-center px-3 h-8 ms-0 leading-tight text-gray-500 bg-white border border-e-0 border-gray-300 rounded-s-lg hover:bg-gray-100 hover:text-gray-700">
           {% else %}
           <span class="flex items-center justify-center px-3 h-8 ms-0 leading-tight text-gray-400 bg-white border border-e-0 border-gray-200 rounded-s-lg cursor-not-allowed">
           {% endif %}
@@ -113,13 +113,13 @@
           </li>
           {% else %}
           <li>
-            <a href="?q={{ q }}&company={{ active_company_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}&page={{ num }}" class="flex items-center justify-center px-3 h-8 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">{{ num }}</a>
+            <a href="?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}&page={{ num }}" class="flex items-center justify-center px-3 h-8 leading-tight text-gray-500 bg-white border border-gray-300 hover:bg-gray-100 hover:text-gray-700">{{ num }}</a>
           </li>
           {% endif %}
         {% endfor %}
         <li>
           {% if page_obj.has_next %}
-          <a href="?q={{ q }}&company={{ active_company_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}&page={{ page_obj.next_page_number }}" class="flex items-center justify-center px-3 h-8 leading-tight text-gray-500 bg-white border border-gray-300 rounded-e-lg hover:bg-gray-100 hover:text-gray-700">
+          <a href="?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}&page={{ page_obj.next_page_number }}" class="flex items-center justify-center px-3 h-8 leading-tight text-gray-500 bg-white border border-gray-300 rounded-e-lg hover:bg-gray-100 hover:text-gray-700">
           {% else %}
           <span class="flex items-center justify-center px-3 h-8 leading-tight text-gray-400 bg-white border border-gray-200 rounded-e-lg cursor-not-allowed">
           {% endif %}
@@ -135,19 +135,19 @@
   {% endif %}
 
   <table class="min-w-full text-sm">
-    <thead class="bg-gray-100 text-gray-700 uppercase text-xs font-semibold">
+    <thead class="bg-gray-100 text-gray-700 uppercase text-xs font-semibold sticky top-0 z-10">
       <tr>
         <th class="px-0 py-3 w-3"></th>
         <th class="px-4 py-3 text-left w-12">STT</th>
-        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&sort=status&dir={% if sort == 'status' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Trạng thái</a></th>
-        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort=number&dir={% if sort == 'number' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Số hiệu</a></th>
-        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort=title&dir={% if sort == 'title' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Tên văn bản</a></th>
-        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort=type&dir={% if sort == 'type' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Loại văn bản</a></th>
-        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort=company&dir={% if sort == 'company' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Công ty</a></th>
-        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort=created&dir={% if sort == 'created' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Người tạo</a></th>
-        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort=issue&dir={% if sort == 'issue' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Ngày ban hành</a></th>
-        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort=effective&dir={% if sort == 'effective' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Ngày hiệu lực</a></th>
-        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort=expiry&dir={% if sort == 'expiry' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Ngày hết hiệu lực</a></th>
+        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&page={{ documents.number }}&sort=status&dir={% if sort == 'status' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Trạng thái</a></th>
+        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&page={{ documents.number }}&sort=number&dir={% if sort == 'number' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Số hiệu</a></th>
+        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&page={{ documents.number }}&sort=title&dir={% if sort == 'title' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Tên văn bản</a></th>
+        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&page={{ documents.number }}&sort=type&dir={% if sort == 'type' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Loại văn bản</a></th>
+        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&page={{ documents.number }}&sort=company&dir={% if sort == 'company' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Công ty</a></th>
+        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&page={{ documents.number }}&sort=created&dir={% if sort == 'created' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Người tạo</a></th>
+        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&page={{ documents.number }}&sort=issue&dir={% if sort == 'issue' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Ngày ban hành</a></th>
+        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&page={{ documents.number }}&sort=effective&dir={% if sort == 'effective' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Ngày hiệu lực</a></th>
+        <th class="px-4 py-3 text-left"><a href="?q={{ q }}&company={{ active_company_id }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&page={{ documents.number }}&sort=expiry&dir={% if sort == 'expiry' and dir == 'asc' %}desc{% else %}asc{% endif %}" class="hover:underline">Ngày hết hiệu lực</a></th>
         <th class="px-4 py-3"></th>
       </tr>
     </thead>
@@ -184,47 +184,11 @@
         <td class="px-4 py-3">{{ doc.effective_date|date:"d/m/Y"|default:'-' }}</td>
         <td class="px-4 py-3">{{ doc.expiry_date|date:"d/m/Y"|default:'-' }}</td>
         <td class="px-4 py-3 text-right flex gap-2 justify-end">
-          <button id="dropdownStatusButton-{{ doc.id }}" data-dropdown-toggle="dropdownStatus-{{ doc.id }}" data-dropdown-trigger="click" data-dropdown-placement="bottom-end" type="button" class="inline-flex items-center justify-center w-9 h-9 text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-f88green">
-            <span class="sr-only">Mở menu trạng thái</span>
-            <svg class="w-4 h-4" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 4 15">
-              <path d="M2 .75a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Zm0 5.5a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Zm0 5.5a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Z"/>
+          <a href="#" data-doc="{{ doc.id }}" class="open-drawer inline-flex items-center justify-center w-9 h-9 text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-f88green" title="Mở chi tiết">
+            <svg class="w-4 h-4" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M5 5h14v2H5zm0 6h14v2H5zm0 6h14v2H5z"/>
             </svg>
-          </button>
-          <div id="dropdownStatus-{{ doc.id }}" class="z-20 hidden bg-white divide-y divide-gray-100 rounded-lg shadow-sm w-56">
-            <ul class="py-2 text-sm text-gray-700" aria-labelledby="dropdownStatusButton-{{ doc.id }}">
-              <li>
-                <a href="{% url 'admindocuments:admindocuments_detail' doc.id %}" class="block w-full text-left px-4 py-2 hover:bg-gray-100 text-f88green">Chi tiết</a>
-              </li>
-              <li><hr class="my-1 border-gray-200"></li>
-              {% if doc.status.code != STATUS_ISSUED %}
-              <li>
-                <form method="post" action="{% url 'admindocuments:admindocuments_change_status' doc.id %}">
-                  {% csrf_token %}
-                  <input type="hidden" name="status_code" value="{{ STATUS_ISSUED }}" />
-                  <button type="submit" class="block w-full text-left px-4 py-2 hover:bg-gray-100">Đã ban hành</button>
-                </form>
-              </li>
-              {% endif %}
-              {% if doc.status.code != STATUS_EXPIRED %}
-              <li>
-                <form method="post" action="{% url 'admindocuments:admindocuments_change_status' doc.id %}">
-                  {% csrf_token %}
-                  <input type="hidden" name="status_code" value="{{ STATUS_EXPIRED }}" />
-                  <button type="submit" class="block w-full text-left px-4 py-2 hover:bg-gray-100">Hết hiệu lực</button>
-                </form>
-              </li>
-              {% endif %}
-              {% if doc.status.code != STATUS_DRAFT %}
-              <li>
-                <form method="post" action="{% url 'admindocuments:admindocuments_change_status' doc.id %}">
-                  {% csrf_token %}
-                  <input type="hidden" name="status_code" value="{{ STATUS_DRAFT }}" />
-                  <button type="submit" class="block w-full text-left px-4 py-2 hover:bg-gray-100">Về nháp</button>
-                </form>
-              </li>
-              {% endif %}
-            </ul>
-          </div>
+          </a>
         </td>
       </tr>
       {% endwith %}
@@ -233,6 +197,17 @@
       {% endfor %}
     </tbody>
   </table>
+</div>
+
+<div id="docDrawer" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/30" onclick="closeDocDrawer()"></div>
+  <div class="absolute top-0 right-0 h-full w-full sm:w-[520px] bg-white shadow-2xl border-l border-gray-200 overflow-y-auto">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+      <h3 class="text-base font-semibold text-gray-900">Chi tiết văn bản</h3>
+      <button type="button" onclick="closeDocDrawer()" class="text-gray-500 hover:text-gray-700">×</button>
+    </div>
+    <div id="docDrawerBody" class="p-2 text-sm text-gray-700">Đang tải...</div>
+  </div>
 </div>
 
 <div id="docModal" tabindex="-1" aria-hidden="true"
@@ -389,7 +364,7 @@
               <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                 <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
               </div>
-              <input name="effective_date" datepicker datepicker-buttons datepicker-format="dd/mm/yyyy" type="text" class="block w-full pl-9 pr-3 py-2.5 h-11 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-emerald-100 focus:border-f88green placeholder:text-gray-500" placeholder="dd/mm/yyyy" />
+              <input name="effective_date" datepicker datepicker-buttons datepicker-autoselect-today datepicker-format="dd/mm/yyyy" type="text" class="block w-full pl-9 pr-3 py-2.5 h-11 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-emerald-100 focus:border-f88green placeholder:text-gray-500" placeholder="dd/mm/yyyy" />
             </div>
           </div>
           <div class="col-span-2 flex items-center gap-3">
@@ -412,7 +387,7 @@
               <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                 <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
               </div>
-              <input name="expiry_date" datepicker datepicker-buttons datepicker-format="dd/mm/yyyy" type="text" class="block w-full pl-9 pr-3 py-2.5 h-11 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-emerald-100 focus:border-f88green placeholder:text-gray-500" placeholder="dd/mm/yyyy" />
+              <input name="expiry_date" datepicker datepicker-format="dd/mm/yyyy" type="text" class="block w-full pl-9 pr-3 py-2.5 h-11 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-emerald-100 focus:border-f88green placeholder:text-gray-500" placeholder="dd/mm/yyyy" />
             </div>
           </div>
           <div class="col-span-2">
@@ -608,6 +583,50 @@
       statusSelect.addEventListener('change', applyColor);
       applyColor();
     }
+
+    const initPicker = (input) => {
+      if (!window.Datepicker || !input || input.dataset.dpAttached) return;
+      new window.Datepicker(input, {
+        format: 'dd/mm/yyyy',
+        autohide: true,
+        todayBtn: true,
+        todayBtnMode: 1,
+      });
+      input.dataset.dpAttached = '1';
+    };
+    const runInitDatepickers = () => document.querySelectorAll('input[datepicker]').forEach(initPicker);
+    runInitDatepickers();
+    document.querySelectorAll('[data-modal-target="docModal"], [data-modal-toggle="docModal"]').forEach((btn) => {
+      btn.addEventListener('click', () => setTimeout(runInitDatepickers, 150));
+    });
+
+    // Drawer detail
+    const drawer = document.getElementById('docDrawer');
+    const drawerBody = document.getElementById('docDrawerBody');
+    window.closeDocDrawer = () => drawer.classList.add('hidden');
+    const openDocDrawer = (url) => {
+      if (!drawer || !drawerBody) return;
+      drawer.classList.remove('hidden');
+      drawerBody.innerHTML = '<div class="p-4 text-sm text-gray-600">Đang tải...</div>';
+      fetch(url + (url.includes('?') ? '&' : '?') + 'drawer=1')
+        .then((res) => res.text())
+        .then((html) => { drawerBody.innerHTML = html; })
+        .catch(() => { drawerBody.innerHTML = '<div class="p-4 text-sm text-red-600">Không tải được chi tiết.</div>'; });
+    };
+    document.querySelectorAll('.doc-detail-link').forEach((link) => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        openDocDrawer(link.href);
+      });
+    });
+    document.querySelectorAll('.open-drawer').forEach((link) => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const docId = link.dataset.doc;
+        if (!docId) return;
+        openDocDrawer(`/admindocuments/documents/${docId}/`);
+      });
+    });
   });
 </script>
 {% endblock %}

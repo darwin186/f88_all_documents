@@ -1,7 +1,7 @@
 from django.db import transaction
 from django.utils import timezone
 
-from .models import AdmAdministrativeDocument, AdmDocumentCounter, AdmPaperDocument
+from .models import AdmAdministrativeDocument, AdmDocumentCounter, AdmPaperDocument, AdmPaperCounter
 
 
 @transaction.atomic
@@ -9,15 +9,12 @@ def allocate_running_number(
     doc_type_id: int, company_id: int, year: int | None = None
 ) -> tuple[int, list]:
     """
-    Allocate the next running number for a given doc_type, company, and year.
+    Allocate the next running number cho văn bản hành chính, dựa trên bộ đếm.
 
-    The counter row is locked (select_for_update) so concurrent requests do not
-    reuse the same number. We also check existing AdmAdministrativeDocument
-    records to skip over any number that was already taken (e.g. manual insert
-    or backfill) before bumping the counter forward.
-
-    Returns (number, void_conflicts) where void_conflicts holds voided documents
-    that occupied skipped numbers (for warning UX).
+    - Khóa row counter (select_for_update) theo doc_type/company/năm.
+    - Ưu tiên dùng giá trị next_number của counter. Nếu số đó trùng văn bản đang hoạt động thì tăng tiếp; nếu trùng văn bản đã VOID thì được phép dùng lại (ghi nhận void_conflicts).
+    - Không backfill các gap thấp hơn next_number.
+    - Counter luôn tiến lên candidate + 1.
     """
     if year is None:
         year = timezone.now().year
@@ -39,9 +36,13 @@ def allocate_running_number(
             created_at__year=year,
             running_number=candidate,
         ).first()
-        if conflict is None or conflict.is_void is False:
+        if conflict is None:
             break
-        void_conflicts.append(conflict)
+        is_void = getattr(conflict, "is_void", False)
+        is_void = is_void or str(conflict.document_number_full or "").endswith("-VOID")
+        if is_void:
+            void_conflicts.append(conflict)
+            break  # allow reuse this number
         candidate += 1
         attempts += 1
         if attempts > 1000:
@@ -61,6 +62,7 @@ def allocate_paper_running_number(
 
     - Locks existing rows of that paper_type/year (select_for_update).
     - Fills vào khoảng trống nhỏ nhất (gap) nếu có, không chỉ +1.
+    - Nếu có counter (AdmPaperCounter) và next_number lớn hơn gap, ưu tiên next_number.
     - Trả về (running_number, document_number_full).
     """
     existing = (
@@ -73,11 +75,22 @@ def allocate_paper_running_number(
         if doc.running_number > candidate:
             break
         candidate = doc.running_number + 1
+    counter = (
+        AdmPaperCounter.objects.select_for_update()
+        .filter(paper_type_id=paper_type_id, year=year)
+        .first()
+    )
+    if counter and counter.next_number and counter.next_number > candidate:
+        candidate = counter.next_number
 
     while True:
         doc_num = f"{candidate:05d}/{year}/{paper_type_code}-F88"
         if not AdmPaperDocument.objects.filter(document_number_full=doc_num).exists():
             break
         candidate += 1
+
+    if counter:
+        counter.next_number = candidate + 1
+        counter.save(update_fields=["next_number", "updated_at"])
     return candidate, doc_num
 

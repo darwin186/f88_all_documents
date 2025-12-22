@@ -1,0 +1,131 @@
+<div class="p-4 space-y-4">
+  <div class="flex items-start justify-between gap-3">
+    <div class="space-y-1">
+      <p class="text-xs text-gray-500">Số hiệu</p>
+      <div class="text-lg font-semibold text-gray-900 font-mono">{{ doc.document_number_full }}</div>
+      <div class="text-sm text-gray-700">{{ doc.title }}</div>
+    </div>
+    <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-semibold"
+          style="background-color: {{ doc.status.badge_color|default:'#e5f3ff' }}22; border-color: {{ doc.status.badge_color|default:'#0ea5e9' }}; color: {{ doc.status.badge_color|default:'#0ea5e9' }};">
+      <span class="w-2 h-2 rounded-full" style="background-color: {{ doc.status.badge_color|default:'#0ea5e9' }};"></span>
+      {{ doc.status.name }}
+    </span>
+  </div>
+
+  <div class="grid grid-cols-2 gap-3 text-sm text-gray-700">
+    <div>
+      <p class="text-xs text-gray-500">Loại văn bản</p>
+      <p class="font-semibold">{{ doc.doc_type.name }}</p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500">Loại nội dung</p>
+      <p class="font-semibold">{{ doc.content_type.name }}</p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500">Công ty ban hành</p>
+      <p class="font-semibold">{{ doc.issuing_company.name }}</p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500">Phòng ban</p>
+      <p class="font-semibold">{{ doc.issuing_department.name }}</p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500">Ngày ban hành</p>
+      <p class="font-semibold">{{ doc.issue_date|date:"d/m/Y"|default:"-" }}</p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500">Ngày hiệu lực</p>
+      <p class="font-semibold">{{ doc.effective_date|date:"d/m/Y"|default:"-" }}</p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500">Ngày hết hiệu lực</p>
+      <p class="font-semibold">{{ doc.expiry_date|date:"d/m/Y"|default:"-" }}</p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500">Trạng thái</p>
+      <p class="font-semibold">{{ doc.status.name }}</p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500">Số hiệu tham chiếu</p>
+      <p class="font-semibold">{{ doc.reference_number|default:"-" }}</p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-500">Văn bản tham chiếu?</p>
+      <p class="font-semibold">{{ doc.is_reference_document|yesno:"Có,Không" }}</p>
+    </div>
+    <div class="col-span-2">
+      <p class="text-xs text-gray-500">Tham chiếu tới văn bản</p>
+      {% if doc.reference_document %}
+        <p class="font-semibold">{{ doc.reference_document.document_number_full }} - {{ doc.reference_document.title }}</p>
+      {% else %}
+        <p class="text-gray-500">Không</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="space-y-2">
+    <p class="text-xs text-gray-500">Ghi chú</p>
+    <p class="text-sm text-gray-800 whitespace-pre-line">{{ doc.note|default:"Không có ghi chú" }}</p>
+  </div>
+
+  <div class="space-y-2">
+    <p class="text-xs text-gray-500">File đính kèm</p>
+    {% if doc.attachments.all %}
+    <ul class="space-y-2">
+      {% for att in doc.attachments.all %}
+      <li class="flex items-center justify-between text-sm">
+        <div class="flex items-center gap-2">
+          <svg class="w-4 h-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828L18 9.828"/></svg>
+          <span class="text-gray-800">{{ att.original_name|default:att.file.name }}</span>
+        </div>
+        {% if att.file %}
+        <a href="{{ att.file.url }}" target="_blank" class="text-f88green text-xs hover:underline">Xem</a>
+        {% elif att.link %}
+        <a href="{{ att.link }}" target="_blank" class="text-f88green text-xs hover:underline">Link</a>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-gray-500">Không có file đính kèm.</p>
+    {% endif %}
+  </div>
+
+  <div class="space-y-3">
+    <div class="flex gap-2 flex-wrap">
+      <a href="{% url 'admindocuments:admindocuments_detail' doc.id %}" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-f88green text-f88green text-sm font-semibold hover:bg-green-50">
+        Chỉnh sửa / trang chi tiết
+      </a>
+    </div>
+    <div class="bg-gray-50 rounded-lg p-3 border border-gray-200 space-y-2">
+      <p class="text-xs font-semibold text-gray-600">Chuyển trạng thái</p>
+      <div class="flex flex-wrap gap-2 text-xs">
+        {% if doc.status.code != STATUS_ISSUED %}
+        <form method="post" action="{% url 'admindocuments:admindocuments_change_status' doc.id %}" class="inline">
+          {% csrf_token %}
+          <input type="hidden" name="status_code" value="{{ STATUS_ISSUED }}">
+          <button type="submit" class="px-3 py-1.5 rounded-lg border border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50">Đã ban hành</button>
+        </form>
+        {% endif %}
+        {% if doc.status.code != STATUS_EXPIRED %}
+        <form method="post" action="{% url 'admindocuments:admindocuments_change_status' doc.id %}" class="inline">
+          {% csrf_token %}
+          <input type="hidden" name="status_code" value="{{ STATUS_EXPIRED }}">
+          <button type="submit" class="px-3 py-1.5 rounded-lg border border-amber-200 bg-white text-amber-700 hover:bg-amber-50">Hết hiệu lực</button>
+        </form>
+        {% endif %}
+        {% if doc.status.code != STATUS_DRAFT %}
+        <form method="post" action="{% url 'admindocuments:admindocuments_change_status' doc.id %}" class="inline">
+          {% csrf_token %}
+          <input type="hidden" name="status_code" value="{{ STATUS_DRAFT }}">
+          <button type="submit" class="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-100">Về nháp</button>
+        </form>
+        {% endif %}
+        <form method="post" action="{% url 'admindocuments:admindocuments_delete' doc.id %}" onsubmit="return confirm('Vô hiệu văn bản này?');" class="inline">
+          {% csrf_token %}
+          <button type="submit" class="px-3 py-1.5 rounded-lg border border-red-200 bg-white text-red-700 hover:bg-red-50">Vô hiệu</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
