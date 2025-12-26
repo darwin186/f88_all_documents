@@ -1805,6 +1805,7 @@ def document_update(request, doc_id: int):
 
     doc = form.save(commit=False)
     attachment_link = form.cleaned_data.get("attachment_link")
+    uploaded_file = request.FILES.get("attachment")
     issue_date = form.cleaned_data.get("issue_date") or doc.issue_date
     if not issue_date:
         issue_date = timezone.localdate() if settings.USE_TZ else date.today()
@@ -1818,14 +1819,18 @@ def document_update(request, doc_id: int):
 
     with transaction.atomic():
         doc.save()
-        _create_attachment_version(
-            document=doc,
-            user=request.user,
-            uploaded_file=request.FILES.get("attachment"),
-            link=attachment_link,
-        )
+        if uploaded_file or attachment_link:
+            _create_attachment_version(
+                document=doc,
+                user=request.user,
+                uploaded_file=uploaded_file,
+                link=attachment_link,
+            )
 
-    messages.success(request, "Document updated successfully!")
+    if uploaded_file or attachment_link:
+        messages.success(request, "Document updated successfully!")
+    else:
+        messages.success(request, "Document updated (không có file/link mới).")
     return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
 
 

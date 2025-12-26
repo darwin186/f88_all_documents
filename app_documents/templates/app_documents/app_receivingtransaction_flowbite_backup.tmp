@@ -1,5 +1,9 @@
 {% extends 'app_documents/base_flowbite.html' %}
 {% block title %}Nhận chứng từ (mới){% endblock %}
+{% block top_nav %}
+  {% include 'app_documents/components/top_nav_flowbite.html' %}
+{% endblock %}
+{% block main_extra_class %}pt-24{% endblock %}
 
 {% block content %}
 <div id="drawer-hover-zone" class="fixed top-0 left-0 z-40 h-screen w-3 bg-transparent"></div>
@@ -18,7 +22,7 @@
       </button>
     </div>
     <div class="space-y-2">
-      <a href="{% url 'receiving_transaction_flowbite' %}" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-f88dark bg-green-50">
+      <a href="{% url 'receiving_transaction_v2' %}" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-f88dark bg-green-50">
         <span>Nhận quyển (ver 2)</span>
       </a>
       <a href="{% url 'receiving_transaction' %}" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
@@ -42,7 +46,7 @@
   </div>
 
   <div class="space-y-4">
-    <form id="filter-form-v2" method="get" action="{% url 'receiving_transaction_flowbite' %}" class="bg-white border border-gray-100 shadow-sm rounded-xl p-4 space-y-4">
+    <form id="filter-form-v2" method="get" action="{% url 'receiving_transaction_v2' %}" class="bg-white border border-gray-100 shadow-sm rounded-xl p-4 space-y-4">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div class="flex flex-col"></div>
         <div class="flex flex-wrap gap-2 justify-end">
@@ -327,7 +331,7 @@
       <svg class="h-5 w-5" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4.5 4.5l11 11m0-11-11 11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     </button>
   </div>
-  <form method="post" action="{% url 'receiving_transaction_flowbite' %}" class="space-y-4">
+  <form method="post" action="{% url 'receiving_transaction_v2' %}" class="space-y-4">
     {% csrf_token %}
     <input type="hidden" name="folder_id_submit" value="{{ folder_dtl.folder_id }}">
     <input type="hidden" name="folder_status_previous" value="{{ folder_dtl.folder_status_id.folder_status_id }}">
@@ -407,7 +411,7 @@
     {% csrf_token %}
     <input type="hidden" name="filter_choice_shop" value="{{ request.GET.choice_shop }}">
     <input type="hidden" name="filter_choice_folder_code" value="{{ folder_dtl.folder_code }}">
-    <input type="hidden" name="redirect_name" value="receiving_transaction_flowbite">
+    <input type="hidden" name="redirect_name" value="receiving_transaction_v2">
     <div class="space-y-3">
       <div class="grid grid-cols-2 gap-3 text-sm text-gray-600">
         <p><span class="font-semibold text-gray-800">Loại:</span> {{ folder_dtl.folder_type_id.folder_type_name }}</p>

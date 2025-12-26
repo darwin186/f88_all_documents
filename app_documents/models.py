@@ -321,6 +321,7 @@ class Package(models.Model):
     created_by = models.ForeignKey(User, db_column = 'created_by', on_delete=models.CASCADE, null= True) # Người tạo thùng hàng
     package_code_old = models.CharField(max_length= 30, null= True, blank= True, unique= True, default= None) # Mã thùng hàng cũ
     region_id = models.ForeignKey( Region, db_column='region_id', null= True, blank= True, on_delete=models.CASCADE ) # Vùng của thùng tại thời điểm tạo
+    note = models.TextField(null=True, blank=True)
     
     class Meta:
         db_table = 'd_Package'     

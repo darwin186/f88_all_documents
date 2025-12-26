@@ -1,5 +1,9 @@
 {% extends 'app_documents/base_flowbite.html' %}
 {% block title %}Quản lý thùng lưu trữ{% endblock %}
+{% block top_nav %}
+  {% include 'app_documents/components/top_nav_flowbite.html' %}
+{% endblock %}
+{% block main_extra_class %}pt-14{% endblock %}
 
 {% block content %}
 <style>
@@ -91,36 +95,8 @@
     display: none !important;
   }
 </style>
-<nav class="fixed top-0 inset-x-0 z-30 px-2 lg:px-4">
-  <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto rounded-2xl bg-white/95 backdrop-blur border border-gray-200 shadow-sm px-4 py-3 flex items-center justify-between gap-3">
-    <div class="flex items-center gap-3">
-      <a href="{% url 'home' %}" class="flex items-center gap-2">
-        <img src="https://f88.vn/images/root/logo-f88-primary.svg" alt="F88" class="h-8">
-      </a>
-      <div class="hidden md:flex items-center gap-2 text-sm text-gray-600">
-        <a href="{% url 'package_list_management' %}" class="font-semibold text-f88green">PackageList</a>
-        <span class="text-gray-300">•</span>
-        <a href="{% url 'package_management' %}" class="hover:text-f88green">Quản lý thùng cũ</a>
-        <span class="text-gray-300">•</span>
-        <a href="{% url 'receiving_transaction_flowbite' %}" class="hover:text-f88green">Nhận chứng từ</a>
-      </div>
-    </div>
-    <div class="flex items-center gap-3 text-sm text-gray-700">
-      <div class="hidden sm:flex flex-col leading-tight text-right">
-        <span class="font-semibold text-gray-900">{{ request.user.get_full_name|default:request.user.username }}</span>
-        <span class="text-xs text-gray-500">{{ request.user }}</span>
-      </div>
-      <a href="{% url 'logout' %}" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6A2.25 2.25 0 005.25 5.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l3 3-3 3m6-3H9"/>
-        </svg>
-        <span>Đăng xuất</span>
-      </a>
-    </div>
-  </div>
-</nav>
 
-<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto space-y-6 px-2 lg:px-3 pt-12">
+<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl-max-w-[1600px] mx-auto space-y-6 px-2 lg:px-3 pt-8">
   <div id="package-list-app" class="space-y-6"></div>
 </div>
 
@@ -128,6 +104,8 @@
 <script type="application/json" id="package-filters">{{ filters_json|safe }}</script>
 <script type="application/json" id="status-options">{{ status_options_json|safe }}</script>
 <script type="application/json" id="partners-options">{{ partners_options_json|safe }}</script>
+<script type="application/json" id="regions-options">{{ region_options_json|safe }}</script>
+<script type="application/json" id="folder-type-options">{{ folder_type_options_json|safe }}</script>
 <script>
   window.CSRF_TOKEN = "{{ csrf_token }}";
 </script>
@@ -136,10 +114,11 @@
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script crossorigin src="https://unpkg.com/lucide-react@0.561.0/dist/lucide-react.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 {% verbatim %}
 <script type="text/babel">
-  const { useEffect, useMemo, useState } = React;
+  const { useEffect, useMemo, useState, useRef } = React;
   const icons = window.LucideReact || {};
   const {
     Search,
@@ -160,6 +139,8 @@
   const filterDefaults = JSON.parse(document.getElementById('package-filters')?.textContent || '{}');
   const statusOptions = JSON.parse(document.getElementById('status-options')?.textContent || '[]');
   const partnersOptions = JSON.parse(document.getElementById('partners-options')?.textContent || '[]');
+  const regionsOptions = JSON.parse(document.getElementById('regions-options')?.textContent || '[]');
+  const folderTypeOptions = JSON.parse(document.getElementById('folder-type-options')?.textContent || '[]');
 
   const badgeStyleFromColor = (color) => {
     const safeColor = color || '#0ea5e9';
@@ -257,6 +238,10 @@
     const [saving, setSaving] = useState(false);
     const [saveMsg, setSaveMsg] = useState('');
     const [activeTab, setActiveTab] = useState('info');
+    const [noteText, setNoteText] = useState(pkg?.note || '');
+    const [noteSaving, setNoteSaving] = useState(false);
+    const [noteMsg, setNoteMsg] = useState('');
+    const noteTimerRef = useRef(null);
     const [statusFlags, setStatusFlags] = useState({
       isReleased: pkg?.status?.isReleased || false,
       isBacked: pkg?.status?.isBacked || false,
@@ -272,6 +257,13 @@
       setStatusId(pkg?.status?.id ? String(pkg.status.id) : '');
       setPartnerPackageCode(pkg?.partnerPackageCode || '');
       setActiveTab('info');
+      setNoteText(pkg?.note || '');
+      setNoteSaving(false);
+      setNoteMsg('');
+      if (noteTimerRef.current) {
+        clearTimeout(noteTimerRef.current);
+        noteTimerRef.current = null;
+      }
       setStatusFlags({
         isReleased: pkg?.status?.isReleased || false,
         isBacked: pkg?.status?.isBacked || false,
@@ -463,6 +455,83 @@
                     </button>
                   </div>
                   {saveMsg ? <p className="text-[10px] text-gray-700">{saveMsg}</p> : null}
+                  <div className="space-y-2">
+                    <label className="block text-[10px] text-gray-500 mb-1">Ghi chú thùng</label>
+                    <textarea
+                      value={noteText}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setNoteText(val);
+                        setNoteMsg('');
+                        if (noteTimerRef.current) clearTimeout(noteTimerRef.current);
+                        noteTimerRef.current = setTimeout(async () => {
+                          if (!pkg) return;
+                          setNoteSaving(true);
+                          try {
+                            const res = await fetch(`/api/package/${pkg.id}/note/`, {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': window.CSRF_TOKEN || '',
+                              },
+                              body: JSON.stringify({ note: val }),
+                            });
+                            const data = await res.json();
+                            if (!res.ok || data.error) {
+                              throw new Error(data.error || 'Lưu ghi chú thất bại');
+                            }
+                            setNoteText(data.note || '');
+                            setNoteMsg('Đã lưu ghi chú.');
+                            if (onPackageUpdate) {
+                              onPackageUpdate(pkg.id, { note: data.note || '' });
+                            }
+                          } catch (e) {
+                            console.error(e);
+                            setNoteMsg(e.message || 'Lưu ghi chú thất bại.');
+                          } finally {
+                            setNoteSaving(false);
+                          }
+                        }, 600);
+                      }}
+                      onBlur={async () => {
+                        if (!pkg) return;
+                        if (noteTimerRef.current) {
+                          clearTimeout(noteTimerRef.current);
+                          noteTimerRef.current = null;
+                        }
+                        setNoteSaving(true);
+                        setNoteMsg('');
+                        try {
+                          const res = await fetch(`/api/package/${pkg.id}/note/`, {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'X-CSRFToken': window.CSRF_TOKEN || '',
+                            },
+                            body: JSON.stringify({ note: noteText }),
+                          });
+                          const data = await res.json();
+                          if (!res.ok || data.error) {
+                            throw new Error(data.error || 'Lưu ghi chú thất bại');
+                          }
+                          setNoteText(data.note || '');
+                          setNoteMsg('Đã lưu ghi chú.');
+                          if (onPackageUpdate) {
+                            onPackageUpdate(pkg.id, { note: data.note || '' });
+                          }
+                        } catch (e) {
+                          console.error(e);
+                          setNoteMsg(e.message || 'Lưu ghi chú thất bại.');
+                        } finally {
+                          setNoteSaving(false);
+                        }
+                      }}
+                      rows={3}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-[10px] focus:border-emerald-500 focus:ring-0"
+                      placeholder="Nhập ghi chú thùng"
+                    />
+                    {noteMsg ? <p className={`text-[10px] ${noteSaving ? 'text-gray-500' : 'text-emerald-700'}`}>{noteMsg}</p> : null}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -487,7 +556,7 @@
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     {FolderOpen ? <FolderOpen size={18} className="text-emerald-600" /> : null}
-                    <p className="text-[10px] font-semibold text-gray-900">Danh sách PGD & Quyển</p>
+                    <p className="text-[9px] font-semibold text-gray-900">Danh sách PGD & Quyển</p>
                   </div>
                   {pkg.foldersByShop && pkg.foldersByShop.length > 0 ? (
                     pkg.foldersByShop.map((group, idx) => {
@@ -495,16 +564,16 @@
                       const shopOpen = !!expandedShops[shopKey];
                       return (
                         <div key={shopKey} className="rounded-xl border border-gray-100 bg-white shadow-sm">
-                          <button onClick={() => toggleShop(shopKey)} className="w-full flex items-center justify-between px-4 py-3 border-b border-gray-100 text-left">
+                          <button onClick={() => toggleShop(shopKey)} className="w-full flex items-center justify-between px-4 py-3 border-b border-gray-100 text-left text-[9px]">
                             <div className="flex items-center gap-2">
                               <span className={`w-2 h-2 rounded-full ${shopOpen ? 'bg-emerald-600' : 'bg-gray-300'}`}></span>
                               <div>
-                                <p className="text-sm font-semibold text-gray-900">{group.shopName}</p>
-                                {group.shopCode ? <p className="text-gray-500">Mã PGD: {group.shopCode}</p> : null}
+                                <p className="text-[9px] font-semibold text-gray-900">{group.shopName}</p>
+                                {group.shopCode ? <p className="text-[9px] text-gray-500">Mã PGD: {group.shopCode}</p> : null}
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-3 py-1">
+                              <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-3 py-1">
                                 {group.count} quyển
                               </span>
                               <span className="text-gray-400">{shopOpen ? '−' : '+'}</span>
@@ -516,29 +585,29 @@
                                 const folderKey = `${shopKey}-${folder.folderCode}-${i}`;
                                 const folderOpen = !!expandedFolders[folderKey];
                                 return (
-                                  <div key={folderKey} className="px-4 py-3 space-y-2">
-                                    <button onClick={() => toggleFolder(folderKey)} className="w-full flex items-center justify-between text-sm">
+                                  <div key={folderKey} className="px-4 py-3 space-y-2 text-[9px]">
+                                    <button onClick={() => toggleFolder(folderKey)} className="w-full flex items-center justify-between text-[9px]">
                                       <div>
                                         <p className="font-semibold text-gray-900">{folder.createdDate || '---'}</p>
                                         <p className="text-gray-500">{folder.folderStatus || '---'}</p>
-                                        <p className="text-xs text-gray-400">{folder.folderCode}</p>
+                                        <p className="text-[9px] text-gray-400">{folder.folderCode}</p>
                                       </div>
                                       <div className="flex items-center gap-2">
-                                        <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${folder.typeLabel === 'Gốc' ? 'bg-sky-50 text-sky-700 border border-sky-100' : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>
+                                        <span className={`px-2.5 py-1 rounded-full text-[9px] font-semibold ${folder.typeLabel === 'Gốc' ? 'bg-sky-50 text-sky-700 border border-sky-100' : 'bg-amber-50 text-amber-700 border border-amber-100'}`}>
                                           {folder.typeLabel}
                                         </span>
                                         <span className="text-gray-400">{folderOpen ? '−' : '+'}</span>
                                       </div>
                                     </button>
                                     {folderOpen && folder.documents && folder.documents.length > 0 ? (
-                                      <div className="rounded-lg border border-gray-100 bg-gray-50 divide-y divide-gray-100">
+                                      <div className="rounded-lg border border-gray-100 bg-gray-50 divide-y divide-gray-100 text-[9px]">
                                         {folder.documents.map((doc, di) => (
                                           <div key={`${folderKey}-doc-${di}`} className="px-3 py-2 flex items-center justify-between">
                                             <div>
                                               <p className="font-semibold text-gray-900">{doc.type || 'Chứng từ'}</p>
-                                              <p className="text-xs text-gray-500">{doc.refCode || doc.code}</p>
+                                              <p className="text-[9px] text-gray-500">{doc.refCode || doc.code}</p>
                                             </div>
-                                            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-200 text-gray-800">
+                                            <span className="px-2.5 py-1 rounded-full text-[9px] font-semibold bg-gray-200 text-gray-800">
                                               {doc.status || '---'}
                                             </span>
                                           </div>
@@ -554,7 +623,7 @@
                       );
                     })
                   ) : (
-                    <p className="text-sm text-gray-500">Thùng chưa có quyển nào.</p>
+                    <p className="text-[9px] text-gray-500">Thùng chưa có quyển nào.</p>
                   )}
                 </div>
               </>
@@ -878,6 +947,7 @@
       <div class="flex gap-2 border-b border-gray-200">
         <button type="button" class="tab-btn active px-3 py-2 text-sm font-semibold text-emerald-700 border-b-2 border-emerald-600" data-tab-target="tab-create-package">Tạo thùng mới</button>
         <button type="button" class="tab-btn px-3 py-2 text-sm font-semibold text-gray-600 hover:text-emerald-700" data-tab-target="tab-update-partner">Cập nhật thùng đối tác</button>
+        <button type="button" class="tab-btn px-3 py-2 text-sm font-semibold text-gray-600 hover:text-emerald-700" data-tab-target="tab-bulk-create">Tạo thùng hàng loạt</button>
       </div>
     </div>
     <div class="p-4 space-y-4">
@@ -919,6 +989,47 @@
         </div>
         <div class="text-xs text-gray-500">
           Ghi chú: tối ưu file < 5MB, mẫu cột sẽ cung cấp sau.
+        </div>
+      </div>
+      <div id="tab-bulk-create" class="tab-panel space-y-3 hidden">
+        <div class="p-3 rounded-lg border border-dashed border-emerald-300 bg-emerald-50 text-sm text-emerald-800">
+          Các cột cần người dùng điền đầy đủ:<br>
+          - Mã thùng F88 (package_code): lưu ý điền giống yêu cầu của tạo thùng<br>
+          - Loại thùng (package_type): điền đúng package_type như trong sheet Loại thùng<br>
+          - Vùng lưu trữ thùng (region_code): điền code 1 ký tự (số hoặc chữ) như trong sheet Vùng<br>
+          - Mã đối tác (partner_code): điền mã thùng, không có thì để trống<br>
+          - Mã thùng của đối tác (partner_package_code): điền theo partner_code của sheet Đối tác lưu trữ<br>
+          - Ngày tạo thùng (created_date, yyyy-mm-dd): nếu để trống sẽ dùng ngày hiện tại<br>
+          - Ghi chú (note): nhập tự do nếu cần<br>
+          - Người tạo (username): nếu để trống sẽ dùng người đang upload (trừ khi admin nhập thay)<br>
+          (Upload chỉ đọc sheet Template; các sheet Region/Partner/FolderType để tra cứu mã.)
+        </div>
+        <div class="grid gap-4">
+          <div class="flex flex-col gap-2">
+            <button id="download-bulk-template" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 w-fit">
+              Tải template (.xlsx)
+            </button>
+            <p class="text-xs text-gray-600">
+              File .xlsx đã sẵn mẫu cột; không cần đổi định dạng. Có thể mở và điền trực tiếp trên Excel.
+            </p>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Upload file đã điền</label>
+            <input id="bulk-package-file" type="file" class="block w-full text-sm text-gray-700 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer" accept=".xlsx,.xls">
+            <p class="text-xs text-gray-500 mt-2">Hỗ trợ file nhỏ hơn 30MB (~30720 KB). Sau khi tải template và điền, upload lại để tạo nhiều thùng.</p>
+          </div>
+          <div class="text-xs text-gray-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+            Bước xử lý: hệ thống sẽ kiểm tra trước khi tạo — đếm số thùng hợp lệ, liệt kê các mã thùng F88 sai/không hợp lệ. Chỉ khi bạn xác nhận, thùng mới được lưu vào DB.
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button id="bulk-validate-btn" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+              Kiểm tra
+            </button>
+            <button id="bulk-save-btn" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+              Lưu (nếu file sạch)
+            </button>
+            <span id="bulk-result-message" class="text-sm text-gray-700"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -966,6 +1077,111 @@
     });
     // default active first tab
     if (tabButtons.length) tabButtons[0].click();
+
+    // Bulk template download (.xlsx)
+    const downloadBtn = document.getElementById('download-bulk-template');
+    if (downloadBtn) {
+      downloadBtn.addEventListener('click', () => {
+        if (!window.XLSX) {
+          alert('Không tải được thư viện XLSX. Vui lòng thử lại.');
+          return;
+        }
+        const rows = [
+          ['package_code','package_type','region_code','partner_code','partner_package_code','created_date','note','username'],
+          ['VH-240101-301','VH','3','CRN','TEST1','2024-10-01','Ghi chú mẫu','admin.user']
+        ];
+        const wsTemplate = XLSX.utils.aoa_to_sheet(rows);
+
+        const regionRows = [['region_code','region_name']];
+        regionsOptions.forEach(r => regionRows.push([r.region_code || '', r.region_name || '']));
+        const wsRegion = XLSX.utils.aoa_to_sheet(regionRows);
+
+        const partnerRows = [['partner_code','partner_name']];
+        partnersOptions.forEach(p => partnerRows.push([p.partner_code || '', p.partner_name || '']));
+        const wsPartner = XLSX.utils.aoa_to_sheet(partnerRows);
+
+        const ftRows = [['folder_type_code','folder_type_name','package_type']];
+        folderTypeOptions.forEach(f => ftRows.push([f.folder_type_code || '', f.folder_type_name || '', f.package_type || '']));
+        const wsFolderType = XLSX.utils.aoa_to_sheet(ftRows);
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, wsTemplate, 'Template');
+        XLSX.utils.book_append_sheet(wb, wsRegion, 'Region');
+        XLSX.utils.book_append_sheet(wb, wsPartner, 'Partner');
+        XLSX.utils.book_append_sheet(wb, wsFolderType, 'FolderType');
+        XLSX.writeFile(wb, 'bulk_package_template.xlsx');
+      });
+    }
+
+    const fileInput = document.getElementById('bulk-package-file');
+    const resultMsg = document.getElementById('bulk-result-message');
+    const setResult = (text, isError = false) => {
+      if (!resultMsg) return;
+      resultMsg.textContent = text;
+      resultMsg.className = `text-sm ${isError ? 'text-red-600' : 'text-emerald-700'}`;
+    };
+
+    const downloadBlob = (blob, filename) => {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    };
+
+    const handleBulkAction = async (endpoint, okMessage) => {
+      if (!fileInput || !fileInput.files.length) {
+        setResult('Vui lòng chọn file trước.', true);
+        return;
+      }
+      setResult('Đang xử lý...', false);
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      try {
+        const resp = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': window.CSRF_TOKEN },
+          body: formData,
+        });
+        const contentType = resp.headers.get('Content-Type') || '';
+        if (!resp.ok) {
+          if (contentType.includes('application/json')) {
+            const data = await resp.json();
+            setResult(data.error || 'Có lỗi xảy ra.', true);
+          } else {
+            setResult('Có lỗi xảy ra.', true);
+          }
+          return;
+        }
+        if (contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
+          const blob = await resp.blob();
+          const filename = resp.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'result.xlsx';
+          downloadBlob(blob, filename);
+          setResult('Đã tải file kết quả. Vui lòng kiểm tra.', false);
+          return;
+        }
+        const data = await resp.json();
+        setResult(okMessage.replace('{count}', data.created_packages || 0), false);
+      } catch (err) {
+        setResult('Lỗi kết nối hoặc máy chủ.', true);
+      }
+    };
+
+    const validateBtn = document.getElementById('bulk-validate-btn');
+    if (validateBtn) {
+      validateBtn.addEventListener('click', () => {
+        handleBulkAction('{% url "package_bulk_validate" %}', 'Đã kiểm tra file.');
+      });
+    }
+    const saveBtn = document.getElementById('bulk-save-btn');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => {
+        handleBulkAction('{% url "package_bulk_save" %}', 'Tạo thành công {count} thùng.');
+      });
+    }
   });
 </script>
 {% endblock %}

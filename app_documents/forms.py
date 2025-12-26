@@ -9,9 +9,19 @@ import re
 
 
 def validate_package_code(value):
-    if not re.match(r"VH-\d{6}-\d{2}", value):
+    """
+    Định dạng: {FOLDER_TYPE}-{yyMMdd}-{region_code}{bb}
+    - FOLDER_TYPE: CIMB | NH | VH
+    - yyMMdd: 6 chữ số (ngày tạo, dạng năm-tháng-ngày)
+    - region_code: 1 ký tự (chữ hoặc số) theo mã vùng
+    - bb: số thứ tự 2 chữ số (01-99)
+    """
+    pattern = r"^(CIMB|NH|VH)-(\d{6})-([A-Za-z0-9]{1})(\d{2})$"
+    match = re.match(pattern, value)
+    if not match:
         raise ValidationError(
-            "Tên thùng phải tuân thủ đúng định dạng 'VH-yymmdd-xx'. Với yymmdd: là năm tháng ngày hiện tại, xx phải là chữ số thứ tự từ 01 - 99"
+            "Tên thùng phải tuân thủ định dạng '{FOLDER_TYPE}-{yyMMdd}-{region_code}{bb}' "
+            "ví dụ: VH-241001-301. FOLDER_TYPE: CIMB/NH/VH; region_code: 1 ký tự (chữ/số); bb: 01-99."
         )
     if Package.objects.filter(package_code=value).exists():
         raise ValidationError("Thùng đã tồn tại trong hệ thống. Vui lòng nhập lại")

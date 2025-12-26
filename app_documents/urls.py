@@ -19,7 +19,7 @@ urlpatterns = [
     path('additional-management/',views.additional_management_view, name='additional_management'),
     #Receiving transaction
     path('nhan-chung-tu', views.receive_folder_view, name = "receiving_transaction"), 
-    path('nhan-chung-tu-v2', views.receive_folder_view_flowbite, name="receiving_transaction_flowbite"),
+    path('nhan-chung-tu-v2', views.receive_folder_view_v2, name="receiving_transaction_v2"),
     path('fetch-history-receiving/<int:folder_id>/', views.fetch_history_receiving, name='fetch_history_receiving'), 
     path('receiving_additional_view/<int:folder_id>/', views.receiving_additional_view, name='receiving_additional_view'),
     path('bulk-receiving', views.bulk_receive_folder_view, name='bulk_receiving'),
@@ -37,6 +37,9 @@ urlpatterns = [
     path('import-packages/', views.import_packages_view, name='import_packages_view'),
     path('export-packages/', views.export_packages_view, name='export_packages_views'),
     path('api/package/<int:package_id>/partner/', views.api_package_partner, name='api_package_partner'),
+    path('api/package/<int:package_id>/note/', views.api_package_note, name='api_package_note'),
+    path('package/bulk-validate/', views.package_bulk_validate, name='package_bulk_validate'),
+    path('package/bulk-save/', views.package_bulk_save, name='package_bulk_save'),
     #Historical Data
     path('historical/folders/', views.historical_folder_view, name='historical_folder_view'),
     path('historical/documents/', views.historical_documents_view, name='historical_documents_view'),

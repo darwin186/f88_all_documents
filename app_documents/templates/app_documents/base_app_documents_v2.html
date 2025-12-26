@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>{% block title %}F88 Documents v2{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <script src="https://cdn.tailwindcss.com/3.4.10"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            f88green: '#00844A',
+            f88dark: '#006837',
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Flowbite core -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.3.0/flowbite.min.css" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/flowbite/2.3.0/flowbite.min.js"></script>
+
+  <!-- ✅ Flowbite Datepicker (ĐÚNG PACKAGE) -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/flowbite-datepicker/1.3.0/datepicker.min.css" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/flowbite-datepicker/1.3.0/datepicker.min.js"></script>
+
+  <!-- Alpine -->
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+
+  <style>
+    body {
+      background-color: #f5f6f8;
+      font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    }
+  
+    .datepicker {
+      z-index: 9999 !important;
+    }
+
+  </style>
+</head>
+<body class="min-h-screen flex flex-col text-gray-800">
+  {% block top_nav %}{% endblock %}
+  <main class="flex-1 overflow-y-auto p-8 {% block main_extra_class %}{% endblock %}">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

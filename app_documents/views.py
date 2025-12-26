@@ -36,6 +36,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.table import Table, TableStyleInfo
+from io import BytesIO
 # Import các model
 from .models import ( 
     Manager,
@@ -875,15 +876,178 @@ def receive_folder_view(request, template_name="app_documents/app_receivingtrans
         return render(request, template_name, context)
 
 
-def receive_folder_view_flowbite(request):
+def receive_folder_view_v2(request):
     """
-    Trang nhận chứng từ mới sử dụng Flowbite (UI song song với trang hiện tại).
+    Trang nhận chứng từ ver2 (UI mới, layout giống package-list).
     """
-    return receive_folder_view(
-        request,
-        template_name="app_documents/app_receivingtransaction_flowbite.html",
-        redirect_name="receiving_transaction_flowbite",
-    )
+    user = request.user
+    user_context = get_user_context(user)
+    if not user_context['is_admin'] and not user_context['is_checker']:
+        messages.error(request, "Unauthorized access.")
+        return redirect('home')
+
+    filters = {}
+    choice_shop = request.GET.get('choice_shop', '').strip()
+    choice_folder_code = request.GET.get('choice_folder_code', '').strip()
+    choice_folder_status = request.GET.get('choice_folder_status', '').strip()
+    choice_folder_type = request.GET.get('choice_folder_type', '').strip()
+    choice_lastest_receiver = request.GET.get('choice_lastest_receiver', '').strip()
+    choice_receive_date = request.GET.get('filter_receive_date', '').strip()
+    choice_folder_date = request.GET.get('filter_folder_date', '').strip()
+    sort_raw = request.GET.get('sort', '-folder_created_date').strip()
+
+    range_date = 30  # giới hạn 30 ngày
+
+    region_shop_filter = AccessControls.filter_shop_region_based_on_role(user)
+    drop_list_shops = Shop.objects.filter(is_shop_active=True, for_borrow_only=False, **region_shop_filter).order_by('shop_name')
+    drop_list_folder_status = FolderStatus.objects.filter(is_valid=True).order_by('folder_status_name')
+    drop_list_folder_type = FolderType.objects.filter(is_valid=True).order_by('folder_type_name')
+    drop_list_users = User.objects.filter(is_active=True).order_by('username')
+
+    if choice_shop:
+        if choice_shop.isdigit():
+            filters['shop_id__shop_id'] = choice_shop
+        else:
+            filters['shop_id__shop_name__icontains'] = choice_shop
+    if choice_folder_code:
+        filters['folder_code__icontains'] = choice_folder_code
+    if choice_folder_status:
+        filters['folder_status_id'] = choice_folder_status
+    if choice_folder_type:
+        filters['folder_type_id'] = choice_folder_type
+    if choice_lastest_receiver:
+        filters['lastest_received_by__username__icontains'] = choice_lastest_receiver
+
+    def _apply_date_range(input_str, field_lookup):
+        if not input_str:
+            return
+        date_parts = input_str.split(' to ')
+        if len(date_parts) == 2:
+            start = datetime.strptime(date_parts[0], "%Y-%m-%d").date()
+            end = datetime.strptime(date_parts[1], "%Y-%m-%d").date()
+            if (end - start).days > range_date:
+                messages.info(request, f"Chỉ cho phép tìm trong tối đa {range_date} ngày.")
+                end = start + timedelta(days=range_date)
+            filters[field_lookup] = [start, end]
+        elif len(date_parts) == 1 and date_parts[0]:
+            single = datetime.strptime(date_parts[0], "%Y-%m-%d").date()
+            filters[field_lookup] = [single, single]
+
+    _apply_date_range(choice_receive_date, 'lastest_received_date__date__range')
+    _apply_date_range(choice_folder_date, 'folder_created_date__range')
+
+    if len(filters) == 0:
+        folder_detail_qs = Folder.objects.none()
+    else:
+        filters.update(region_shop_filter)
+
+        sort_map = {
+            'folder_code': 'folder_code',
+            '-folder_code': '-folder_code',
+            'shop': 'shop_id__shop_name',
+            '-shop': '-shop_id__shop_name',
+            'folder_type': 'folder_type_id__folder_type_name',
+            '-folder_type': '-folder_type_id__folder_type_name',
+            'folder_created_date': 'folder_created_date',
+            '-folder_created_date': '-folder_created_date',
+            'lastest_received_date': 'lastest_received_date',
+            '-lastest_received_date': '-lastest_received_date',
+            'folder_status': 'folder_status_id__folder_status_name',
+            '-folder_status': '-folder_status_id__folder_status_name',
+            'is_original': 'is_original',
+            '-is_original': '-is_original',
+        }
+        sort_fields_map = {
+            'folder_code': 'folder_code',
+            '-folder_code': '-folder_code',
+            'shop': 'shop_id__shop_name',
+            '-shop': '-shop_id__shop_name',
+            'folder_type': 'folder_type_id__folder_type_name',
+            '-folder_type': '-folder_type_id__folder_type_name',
+            'folder_created_date': 'folder_created_date',
+            '-folder_created_date': '-folder_created_date',
+            'lastest_received_date': 'lastest_received_date',
+            '-lastest_received_date': '-lastest_received_date',
+            'folder_status': 'folder_status_id__folder_status_name',
+            '-folder_status': '-folder_status_id__folder_status_name',
+            'is_original': 'is_original',
+            '-is_original': '-is_original',
+        }
+
+        sort_parts = [p for p in sort_raw.split(',') if p]
+        resolved_sorts = [sort_fields_map.get(p) for p in sort_parts if sort_fields_map.get(p)]
+        if not resolved_sorts:
+            resolved_sorts = ['-folder_created_date']
+
+        folder_detail_qs = Folder.objects.filter(**filters).select_related(
+            'shop_id', 'folder_type_id', 'folder_status_id', 'lastest_received_by'
+        ).order_by(*resolved_sorts)
+
+    paginator = Paginator(folder_detail_qs, 25)
+    page_number = request.GET.get('page')
+    folder_detail = paginator.get_page(page_number)
+
+    current = folder_detail.number if folder_detail else 1
+    total_pages = paginator.num_pages if paginator else 1
+    start_range = max(current - 2, 1)
+    end_range = min(current + 2, total_pages)
+    page_range_custom = list(range(1, min(2, total_pages) + 1))
+    page_range_custom += list(range(start_range, end_range + 1))
+    page_range_custom += list(range(max(total_pages - 1, 1), total_pages + 1))
+    page_range_custom = sorted(set([p for p in page_range_custom if 1 <= p <= total_pages]))
+
+    # sort toggle map for template
+    def base_field(part):
+        return part.lstrip('-')
+
+    sort_fields = ['folder_code', 'shop', 'folder_type', 'folder_created_date', 'lastest_received_date', 'folder_status', 'is_original']
+    sort_toggle = {}
+    current_sort_parts = [p for p in sort_raw.split(',') if p]
+    for f in sort_fields:
+        current_dir = None
+        for p in current_sort_parts:
+            if base_field(p) == f:
+                current_dir = p.startswith('-')
+                break
+        if current_dir is None:
+            toggled = f
+        elif current_dir is False:
+            toggled = f'-{f}'
+        else:
+            toggled = f
+        remaining = [p for p in current_sort_parts if base_field(p) != f]
+        new_parts = [toggled] + remaining
+        sort_toggle[f] = ','.join(new_parts)
+
+    qs_no_page = request.GET.copy()
+    qs_no_page.pop('page', None)
+    qs_no_page.pop('sort', None)
+    base_qs = qs_no_page.urlencode()
+
+    context = {
+        **user_context,
+        'user': user,
+        'folder_detail': folder_detail,
+        'drop_list_shops': drop_list_shops,
+        'drop_list_folder_status': drop_list_folder_status,
+        'drop_list_folder_type': drop_list_folder_type,
+        'drop_list_users': drop_list_users,
+        'paginator': paginator,
+        'page_range_custom': page_range_custom,
+        'sort_param': sort_raw,
+        'sort_toggle': sort_toggle,
+        'base_qs': base_qs,
+        'filters': {
+            'choice_shop': choice_shop,
+            'choice_folder_code': choice_folder_code,
+            'choice_folder_status': choice_folder_status,
+            'choice_folder_type': choice_folder_type,
+            'choice_lastest_receiver': choice_lastest_receiver,
+            'filter_receive_date': choice_receive_date,
+            'filter_folder_date': choice_folder_date,
+        }
+    }
+    return render(request, "app_documents/app_document_receiving_v2.html", context)
 
 # Lịch sử nhận quyển chứng từ
 @login_required
@@ -1269,6 +1433,8 @@ def package_list_management_view(request):
             'regionName': region_name,
             'folderCount': getattr(package, 'folder_count', 0),
             'shopCount': getattr(package, 'shop_count', 0),
+            'note': package.note or '',
+            'createdBy': package.created_by.get_full_name() or package.created_by.username if package.created_by else '',
         })
 
     statuses = PartnerPackageStatus.objects.all().order_by('package_status_name')
@@ -1280,7 +1446,17 @@ def package_list_management_view(request):
     package_types = FolderType.objects.filter(is_valid=True).order_by('package_type', 'folder_type_name')
     partners_active = Partner.objects.filter(is_active=True).order_by('partner_name')
     partners_options_json = json.dumps(
-        list(partners_active.values('partner_id', 'partner_name')),
+        list(partners_active.values('partner_id', 'partner_name', 'partner_code')),
+        cls=DjangoJSONEncoder,
+        ensure_ascii=False,
+    )
+    region_options_json = json.dumps(
+        list(Region.objects.values('region_code', 'region_name')),
+        cls=DjangoJSONEncoder,
+        ensure_ascii=False,
+    )
+    folder_type_options_json = json.dumps(
+        list(package_types.values('folder_type_code', 'folder_type_name', 'package_type')),
         cls=DjangoJSONEncoder,
         ensure_ascii=False,
     )
@@ -1298,6 +1474,8 @@ def package_list_management_view(request):
         'package_types': package_types,
         'partners_active': partners_active,
         'partners_options_json': partners_options_json,
+        'region_options_json': region_options_json,
+        'folder_type_options_json': folder_type_options_json,
     }
     return render(request, 'app_documents/app_package_list.html', context)
 
@@ -1464,6 +1642,26 @@ def api_package_partner(request, package_id):
 
 
 @login_required
+def api_package_note(request, package_id):
+    user_context = get_user_context(request.user)
+    if not user_context['is_admin'] and not user_context['is_checker']:
+        return JsonResponse({'error': 'Unauthorized access.'}, status=403)
+    if request.method != "POST":
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    pkg = get_object_or_404(Package, pk=package_id)
+    try:
+        payload = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+    note_val = payload.get("note")
+    note_clean = note_val.strip() if isinstance(note_val, str) else ""
+    pkg.note = note_clean or None
+    pkg.updated_date = timezone.now()
+    pkg.save(update_fields=["note", "updated_date"])
+    return JsonResponse({"success": True, "note": pkg.note or ""})
+
+
+@login_required
 def package_list_detail_view(request, package_id):
     user = request.user
     user_context = get_user_context(user)
@@ -1592,6 +1790,7 @@ def package_list_detail_view(request, package_id):
         'folderCount': getattr(package, 'folder_set', []).count(),
         'shopCount': len(shop_groups.keys()),
         'foldersByShop': list(shop_groups.values()),
+        'note': package.note or '',
         'history': [],
     }
     history_qs = PartnerPackageHistory.objects.filter(package=package).select_related('created_by').order_by('-created_at')[:20]
@@ -1681,35 +1880,29 @@ def edit_package_view(request, package_id):
 
 # Function điều kiện validate định dạng mã thùng
 def validate_package_code(value, user):
-    package_pattern = r'^(CIMB|VH)-(\d{6})-(\d)(\d{2})$'
+    package_pattern = r'^(CIMB|NH|VH)-(\d{6})-([A-Za-z0-9]{1})(\d{2})$'
     match = re.match(package_pattern, value)
-    profile = UserProfile.objects.get(user=user) 
-    region = profile.region.region_code
+    profile = UserProfile.objects.get(user=user)
+    region_code_user = (profile.region.region_code or "").upper()
     if not match:
-        return {'is_valid': False, 
-                'error': "Tên thùng phải tuân thủ đúng định dạng 'TYPE-yymmdd-axx'. Với TYPE là loại thùng.\nyymmdd: là năm-tháng-ngày-hiện tại.\na sẽ là mã vùng của bạn\nxx phải là chữ số thứ tự từ 01-99"}
-    # Extract components from the package code
-    prefix_part, date_part, region_sequence_part, sequence_part = match.groups()
-    region_code_part = region_sequence_part[0]
-    sequence_part = sequence_part[:]
-   # Check if sequence is numeric and in the proper range
-    if not sequence_part.isdigit() or not (1 <= int(sequence_part) <= 99):
-        return {    'is_valid': False, 
-                    'error': "xx phải là số thứ tự từ 01 đến 99."}
-    package_type_list = list(FolderType.objects.values_list('package_type', flat=True))
-    if prefix_part not in package_type_list:
-        return {  'is_valid': False, 
-                    'error': "Bạn phải chọn loại thùng."}
-    if region_code_part != region:
-        return {    'is_valid': False, 
-                    'error': f"Bạn tạo sai thùng của miền! Bạn là CTV miền {profile.region.region_name}. Vui lòng tạo thùng với code {region}."}
-    existing_codes = Package.objects.filter(package_code__startswith=f'{prefix_part}-{date_part}-{region_code_part}')
+        return {
+            'is_valid': False,
+            'error': "Tên thùng phải tuân thủ định dạng '{FOLDER_TYPE}-{yyMMdd}-{region_code}{bb}' (ví dụ: VH-241001-M01)."
+        }
+    prefix_part, date_part, region_part, sequence_part = match.groups()
+    if not (1 <= int(sequence_part) <= 99):
+        return {'is_valid': False, 'error': "Số thứ tự bb phải từ 01-99."}
+    if prefix_part.upper() not in ['CIMB', 'NH', 'VH']:
+        return {'is_valid': False, 'error': "FOLDER_TYPE phải là CIMB/NH/VH."}
+    if region_code_user and region_part.upper() != region_code_user[:1]:
+        return {'is_valid': False, 'error': f"Bạn là vùng {region_code_user}, vui lòng dùng mã vùng {region_code_user[:1]} trong package_code."}
+    existing_codes = Package.objects.filter(package_code__startswith=f'{prefix_part}-{date_part}-{region_part}')
     if existing_codes.exists():
         last_sequence = max(int(code.package_code.split('-')[-1][1:]) for code in existing_codes)
         if int(sequence_part) <= last_sequence:
-            return {'is_valid': False, 'error': "Thùng với số thứ tự này đã tồn tại. Vui lòng tạo thùng với số thứ tự cao hơn."}
+            return {'is_valid': False, 'error': "Thùng với số thứ tự này đã tồn tại. Vui lòng tạo số thứ tự cao hơn."}
     if Package.objects.filter(package_code=value).exists():
-        return {'is_valid': False, 'error': "Thùng đã tồn tại trong hệ thống. Vui lòng nhập lại"}
+        return {'is_valid': False, 'error': "Thùng đã tồn tại trong hệ thống. Vui lòng nhập lại."}
     return {'is_valid': True}
     
 # View cho phép tạo thùng mới
@@ -1913,7 +2106,304 @@ def change_partnerpackage_status(request, package_id):
             return JsonResponse({'success': False, 'error': str(e)}, status=500)
     else:
         return JsonResponse({'success': False, 'error': 'Yêu cầu không hợp lệ.'}, status=400)
-    
+# ----------------- BULK PACKAGE (validate + save) -----------------
+def _parse_date_safe(val):
+    if pd.isna(val):
+        return None
+    parsed = pd.to_datetime(val, errors="coerce")
+    if pd.isna(parsed):
+        return None
+    return parsed.date()
+
+
+def _validate_bulk_packages(df, user, user_context, upload_filename=""):
+    def _clean_str(val):
+        if pd.isna(val):
+            return ""
+        return str(val).strip()
+
+    required_cols = [
+        "package_code",
+        "package_type",
+        "region_code",
+        "partner_code",
+        "partner_package_code",
+        "created_date",
+        "note",
+        "username",
+    ]
+    df = df.rename(columns={c: c.strip().lower() for c in df.columns})
+    rename_map = {
+        "folder_type": "package_type",
+        "folder_typeid": "package_type",
+        "package_type_code": "package_type",
+        "region": "region_code",
+        "partner": "partner_code",
+        "partner_code": "partner_code",
+        "partner_package": "partner_package_code",
+        "partner_packagecode": "partner_package_code",
+        "created": "created_date",
+        "created_at": "created_date",
+        "creator": "username",
+    }
+    for src, dst in rename_map.items():
+        if src in df.columns and dst not in df.columns:
+            df = df.rename(columns={src: dst})
+    missing = [col for col in required_cols if col not in df.columns]
+    if missing:
+        raise ValidationError(f"Thiếu cột: {', '.join(missing)}")
+
+    pattern = re.compile(r"^(CIMB|NH|VH)-(\d{6})-([A-Za-z0-9]{1})(\d{2})$")
+    region_map = {r.region_code.upper(): r for r in Region.objects.all()}
+    folder_types = list(FolderType.objects.filter(is_valid=True))
+    folder_type_by_package = {}
+    for ft in folder_types:
+        key = (ft.package_type or "").upper()
+        if key not in folder_type_by_package:
+            folder_type_by_package[key] = []
+        folder_type_by_package[key].append(ft)
+    partner_map = {p.partner_code.upper(): p for p in Partner.objects.filter(is_active=True)}
+
+    seen_package = set()
+    seen_partner_pkg = set()
+
+    result_rows = []
+    valid_rows = []
+
+    for idx, row in df.iterrows():
+        errors = []
+        raw_code = _clean_str(row.get("package_code"))
+        package_type_val = _clean_str(row.get("package_type"))
+        region_code = _clean_str(row.get("region_code"))
+        partner_code = _clean_str(row.get("partner_code"))
+        partner_pkg_code = _clean_str(row.get("partner_package_code"))
+        created_date_val = _parse_date_safe(row.get("created_date"))
+        note_val_raw = row.get("note")
+        username_val = _clean_str(row.get("username"))
+
+        match = pattern.match(raw_code)
+        if not raw_code:
+            errors.append("Thiếu package_code.")
+        elif not match:
+            errors.append("package_code không đúng format {FOLDER_TYPE}-{yyMMdd}-{region}{bb}.")
+        else:
+            prefix, ymd, region_in_code, seq = match.groups()
+            if package_type_val and prefix.upper() != package_type_val.upper():
+                errors.append("package_code không khớp package_type.")
+            if region_code and region_in_code.upper() != region_code.upper():
+                errors.append("package_code không khớp region_code.")
+            if seq == "00":
+                errors.append("Số thứ tự bb phải từ 01-99.")
+
+        folder_type_obj = None
+        resolved_folder_type_code = ""
+        if package_type_val:
+            ft_list = folder_type_by_package.get(package_type_val.upper(), [])
+            if not ft_list:
+                errors.append(f"package_type '{package_type_val}' không tồn tại.")
+            elif len(ft_list) > 1:
+                errors.append(
+                    f"package_type '{package_type_val}' mapping nhiều folder_type_code: "
+                    f"{', '.join([ft.folder_type_code for ft in ft_list if ft.folder_type_code])}. "
+                    "Vui lòng cấu hình/chuẩn hóa để duy nhất."
+                )
+            else:
+                folder_type_obj = ft_list[0]
+                resolved_folder_type_code = folder_type_obj.folder_type_code or ""
+
+        region_obj = None
+        if region_code:
+            region_obj = region_map.get(region_code.upper())
+            if not region_obj:
+                errors.append(f"region_code '{region_code}' không tồn tại.")
+
+        partner_obj = None
+        if partner_code:
+            partner_obj = partner_map.get(partner_code.upper())
+            if not partner_obj:
+                errors.append(f"partner_code '{partner_code}' không tồn tại.")
+
+        if partner_pkg_code:
+            if partner_pkg_code in seen_partner_pkg:
+                errors.append(f"partner_package_code '{partner_pkg_code}' trùng trong file.")
+            if PartnerPackage.objects.filter(partner_package_code=partner_pkg_code).exists():
+                errors.append(f"partner_package_code '{partner_pkg_code}' đã tồn tại.")
+
+        if raw_code:
+            if raw_code in seen_package:
+                errors.append(f"package_code '{raw_code}' trùng trong file.")
+            if Package.objects.filter(package_code=raw_code).exists():
+                errors.append(f"package_code '{raw_code}' đã tồn tại.")
+
+        if partner_obj and partner_obj.require_partner_code and not partner_pkg_code:
+            errors.append(f"Đối tác {partner_obj.partner_name} yêu cầu partner_package_code.")
+
+        creator = user
+        used_creator = user.username
+        if user_context.get("is_admin"):
+            if username_val:
+                creator = User.objects.filter(username=username_val).first()
+                if not creator:
+                    errors.append(f"username '{username_val}' không tồn tại.")
+                else:
+                    used_creator = creator.username
+            else:
+                creator = user
+                used_creator = user.username
+        else:
+            # Non-admin: ignore provided username, always use uploader
+            creator = user
+            used_creator = user.username
+
+        if created_date_val:
+            try:
+                created_dt = datetime.combine(created_date_val, datetime.min.time())
+                if timezone.is_naive(created_dt):
+                    created_dt = timezone.make_aware(created_dt, timezone.get_current_timezone())
+            except Exception:
+                errors.append("created_date không hợp lệ.")
+        else:
+            created_dt = timezone.now()
+
+        if pd.isna(note_val_raw) or str(note_val_raw).strip() == "":
+            note_val = f"Dữ liệu được bởi file {upload_filename}, được upload bởi {user.username}."
+        else:
+            note_val = str(note_val_raw).strip()
+
+        status = "valid" if not errors else "invalid"
+        if not errors:
+            seen_package.add(raw_code)
+            if partner_pkg_code:
+                seen_partner_pkg.add(partner_pkg_code)
+            valid_rows.append(
+                {
+                    "package_code": raw_code,
+                    "folder_type": folder_type_obj,
+                    "region": region_obj,
+                    "partner": partner_obj,
+                    "partner_package_code": partner_pkg_code or None,
+                    "created_dt": created_dt,
+                    "note": note_val,
+                    "creator": creator,
+                }
+            )
+
+        result_rows.append(
+            {
+                "package_code": raw_code,
+                "package_type": package_type_val,
+                "resolved_folder_type_code": resolved_folder_type_code,
+                "region_code": region_code,
+                "partner_code": partner_code,
+                "partner_package_code": partner_pkg_code,
+                "created_date": created_date_val.strftime("%Y-%m-%d") if created_date_val else "",
+                "note": note_val,
+                "username": username_val,
+                "used_username": used_creator,
+                "status": status,
+                "error": "; ".join(errors),
+            }
+        )
+
+    return result_rows, valid_rows
+
+
+@login_required
+@require_http_methods(["POST"])
+def package_bulk_validate(request):
+    file = request.FILES.get("file")
+    if not file:
+        return JsonResponse({"error": "Thiếu file upload."}, status=400)
+    if file.size > 30 * 1024 * 1024:
+        return JsonResponse({"error": "File vượt quá 30MB."}, status=400)
+    try:
+        df = pd.read_excel(file, sheet_name="Template")
+    except Exception as exc:
+        return JsonResponse({"error": f"Lỗi đọc file: {exc}"}, status=400)
+
+    try:
+        user_context = get_user_context(request.user)
+        result_rows, _ = _validate_bulk_packages(df, request.user, user_context, upload_filename=file.name)
+    except Exception as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        pd.DataFrame(result_rows).to_excel(writer, sheet_name="Result", index=False)
+    output.seek(0)
+    resp = HttpResponse(
+        output.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    resp["Content-Disposition"] = 'attachment; filename="bulk_package_validate_result.xlsx"'
+    return resp
+
+
+@login_required
+@require_http_methods(["POST"])
+def package_bulk_save(request):
+    file = request.FILES.get("file")
+    if not file:
+        return JsonResponse({"error": "Thiếu file upload."}, status=400)
+    if file.size > 30 * 1024 * 1024:
+        return JsonResponse({"error": "File vượt quá 30MB."}, status=400)
+    try:
+        df = pd.read_excel(file, sheet_name="Template")
+    except Exception as exc:
+        return JsonResponse({"error": f"Lỗi đọc file: {exc}"}, status=400)
+
+    user_context = get_user_context(request.user)
+    try:
+        result_rows, valid_rows = _validate_bulk_packages(df, request.user, user_context, upload_filename=file.name)
+    except Exception as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    invalid_count = len([r for r in result_rows if r["status"] == "invalid"])
+    if invalid_count > 0:
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            pd.DataFrame(result_rows).to_excel(writer, sheet_name="Result", index=False)
+        output.seek(0)
+        resp = HttpResponse(
+            output.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        resp["Content-Disposition"] = 'attachment; filename="bulk_package_save_errors.xlsx"'
+        return resp
+
+    created = 0
+    partner_created = 0
+    default_status = PartnerPackageStatus.objects.filter(is_in_warehouse=True).first() or PartnerPackageStatus.objects.first()
+    with transaction.atomic():
+        for entry in valid_rows:
+            package = Package.objects.create(
+                package_code=entry["package_code"],
+                package_type=entry["folder_type"],
+                created_by=entry["creator"],
+                region_id=entry["region"],
+                created_date=entry["created_dt"],
+            )
+            created += 1
+            if entry["partner"] or entry["partner_package_code"]:
+                PartnerPackage.objects.create(
+                    package_id=package,
+                    partner_package_code=entry["partner_package_code"],
+                    partner=entry["partner"],
+                    partner_name=entry["partner"].partner_code if entry["partner"] else None,
+                    created_date=entry["created_dt"],
+                    updated_date=entry["created_dt"],
+                    status_id=default_status,
+                    created_by=entry["creator"],
+                )
+                partner_created += 1
+    return JsonResponse(
+        {
+            "success": True,
+            "created_packages": created,
+            "created_partnerpackages": partner_created,
+        }
+    )
+
 # Tạo thùng nhiều từ file Excel
 @login_required
 def import_packages_view(request):

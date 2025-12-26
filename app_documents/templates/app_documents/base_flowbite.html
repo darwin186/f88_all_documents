@@ -137,7 +137,8 @@
       </div>
     </div>
   </aside>
-  <main :class="(sidebarOpen || sidebarPinned) ? 'ml-64' : 'ml-4'" class="flex-1 overflow-y-auto p-8 transition-all duration-300"
+  {% block top_nav %}{% endblock %}
+  <main :class="(sidebarOpen || sidebarPinned) ? 'ml-64' : 'ml-4'" class="flex-1 overflow-y-auto p-8 transition-all duration-300 {% block main_extra_class %}{% endblock %}"
         @click="if(sidebarPinned) return; if(!sidebarOpen) return; const sidebar = document.getElementById('sidebar'); if(!sidebar.contains($event.target)){ sidebarOpen = false; }">
     {% block content %}{% endblock %}
   </main>

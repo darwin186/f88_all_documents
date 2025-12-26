@@ -2,6 +2,19 @@
 {% block title %}Chi tiết văn bản{% endblock %}
 
 {% block content %}
+{% if messages %}
+  <div class="space-y-2 mb-4">
+    {% for message in messages %}
+      <div class="px-4 py-3 rounded-lg text-sm
+        {% if message.tags == 'error' %}bg-red-50 text-red-700 border border-red-200
+        {% elif message.tags == 'warning' %}bg-amber-50 text-amber-700 border border-amber-200
+        {% else %}bg-emerald-50 text-emerald-700 border border-emerald-200{% endif %}">
+        {{ message }}
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
 <div class="flex items-center justify-between mb-6">
   <h1 class="text-2xl font-semibold text-gray-700">Chi tiết văn bản</h1>
   <div class="flex gap-2">

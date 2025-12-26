@@ -1,0 +1,28 @@
+<nav class="fixed top-0 inset-x-0 z-30 px-2 lg:px-4 bg-white/95 backdrop-blur border-b border-gray-200 shadow-sm">
+  <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-3">
+      <a href="{% url 'home' %}" class="flex items-center gap-2">
+        <img src="https://f88.vn/images/root/logo-f88-primary.svg" alt="F88" class="h-8">
+      </a>
+      <div class="hidden md:flex items-center gap-2 text-[10px] text-gray-600">
+        <a href="{% url 'package_list_management' %}" class="{% if request.resolver_match.url_name == 'package_list_management' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">PackageList</a>
+        <span class="text-gray-300">•</span>
+        <a href="{% url 'package_management' %}" class="{% if request.resolver_match.url_name == 'package_management' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Quản lý thùng cũ</a>
+        <span class="text-gray-300">•</span>
+        <a href="{% url 'receiving_transaction_v2' %}" class="{% if request.resolver_match.url_name == 'receiving_transaction_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Nhận chứng từ</a>
+      </div>
+    </div>
+    <div class="flex items-center gap-3 text-[9px] text-gray-700">
+      <div class="hidden sm:flex flex-col leading-tight text-right">
+        <span class="font-semibold text-gray-900 text-[9px]">{{ request.user.get_full_name|default:request.user.username }}</span>
+        <span class="text-[9px] text-gray-500">{{ request.user }}</span>
+      </div>
+      <a href="{% url 'logout' %}" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50 text-[9px]">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6A2.25 2.25 0 005.25 5.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l3 3-3 3m6-3H9"/>
+        </svg>
+        <span>Đăng xuất</span>
+      </a>
+    </div>
+  </div>
+</nav>
