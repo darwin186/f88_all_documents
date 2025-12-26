@@ -1796,9 +1796,13 @@ def document_update(request, doc_id: int):
     if request.method != "POST":
         return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
 
-    form = AdmAdministrativeDocumentUpdateForm(
-        request.POST, request.FILES, instance=doc
-    )
+    post_data = request.POST.copy()
+    if post_data.get("reference_document") in {"None", "none", "null"}:
+        post_data["reference_document"] = ""
+    if post_data.get("reference_number") in {"None", "none", "null"}:
+        post_data["reference_number"] = ""
+
+    form = AdmAdministrativeDocumentUpdateForm(post_data, request.FILES, instance=doc)
     if not form.is_valid():
         messages.error(request, "Invalid data. Please check required fields.")
         return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)

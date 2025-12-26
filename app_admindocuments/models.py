@@ -273,6 +273,8 @@ class AdmAdministrativeDocument(models.Model):
         """Auto increment per document type + generate official number and log history."""
         is_create = self.pk is None
         previous = None
+        update_fields = kwargs.get("update_fields")
+        preserve_number = update_fields is not None and "document_number_full" in update_fields
         if not is_create:
             try:
                 previous = AdmAdministrativeDocument.objects.get(pk=self.pk)
@@ -296,9 +298,10 @@ class AdmAdministrativeDocument(models.Model):
         company_code = self.issuing_company.code if self.issuing_company else "UNK"
         signer_code = self.signer_role.code if self.signer_role else "NA"
         doc_type_code = self.doc_type.code if self.doc_type else "NA"
-        self.document_number_full = (
-            f"{self.running_number:03d}/{year_now}/{doc_type_code}-{company_code}/{signer_code}"
-        )
+        if not preserve_number:
+            self.document_number_full = (
+                f"{self.running_number:03d}/{year_now}/{doc_type_code}-{company_code}/{signer_code}"
+            )
 
         super().save(*args, **kwargs)
 
