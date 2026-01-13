@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "app_documents.apps.AppDocumentsConfig",
     "app_admindocuments.apps.AdmindocumentsConfig",
+    "app_notification.apps.AppNotificationConfig",
 ]
 
 MIDDLEWARE = [

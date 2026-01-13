@@ -182,7 +182,7 @@ def handle_500(request):
 #---------------------CHECKING TRANSACTION---------------------
 # view danh sách chứng từ
 @login_required
-def checking_transaction_view(request):
+def checking_transaction_view(request, template_name="app_documents/app_checkingtransaction.html", redirect_name="checking_transaction"):
     user = request.user
     user_context = get_user_context(user)
     documents_detail = DocumentsDetail.objects.none()  # Khởi tạo documents_detail là None 
@@ -363,7 +363,7 @@ def checking_transaction_view(request):
                     'page': request.POST.get('filter_page'),
                 }
                 # Chuyển về trang hiển thị dữ liệu với các thông số lọc đã thiết lập
-                redirect_url = f"{reverse('checking_transaction')}?{urlencode(filter_params)}"
+                redirect_url = f"{reverse(redirect_name)}?{urlencode(filter_params)}"
                 return HttpResponseRedirect(redirect_url)  
         # Build the query string without 'page' parameter
         query_string = '&'.join(f"{key}={value}" for key, value in request.GET.items() if key != 'page')
@@ -397,7 +397,7 @@ def checking_transaction_view(request):
             'drop_list_shops_borrow':drop_list_shops_borrow
         }
         context['query_string'] = query_string
-        return render(request, "app_documents/app_checkingtransaction.html",context)
+        return render(request, template_name, context)
 
 # Lịch sử duyệt chứng từ
 @login_required
@@ -892,6 +892,7 @@ def receive_folder_view_v2(request):
     choice_folder_status = request.GET.get('choice_folder_status', '').strip()
     choice_folder_type = request.GET.get('choice_folder_type', '').strip()
     choice_lastest_receiver = request.GET.get('choice_lastest_receiver', '').strip()
+    choice_package_code = request.GET.get('filter_package', '').strip()
     choice_receive_date = request.GET.get('filter_receive_date', '').strip()
     choice_folder_date = request.GET.get('filter_folder_date', '').strip()
     sort_raw = request.GET.get('sort', '-folder_created_date').strip()
@@ -901,8 +902,21 @@ def receive_folder_view_v2(request):
     region_shop_filter = AccessControls.filter_shop_region_based_on_role(user)
     drop_list_shops = Shop.objects.filter(is_shop_active=True, for_borrow_only=False, **region_shop_filter).order_by('shop_name')
     drop_list_folder_status = FolderStatus.objects.filter(is_valid=True).order_by('folder_status_name')
+    drop_list_folder_status_received = FolderStatus.objects.filter(is_received=True, is_valid=True).order_by('folder_status_name')
     drop_list_folder_type = FolderType.objects.filter(is_valid=True).order_by('folder_type_name')
     drop_list_users = User.objects.filter(is_active=True).order_by('username')
+    package_types = FolderType.objects.filter(is_valid=True).order_by('package_type', 'folder_type_name')
+    partners_active = Partner.objects.filter(is_active=True).order_by('partner_name')
+    partners_options_json = json.dumps(
+        list(partners_active.values('partner_id', 'partner_name', 'partner_code', 'require_partner_selection', 'require_partner_code')),
+        cls=DjangoJSONEncoder,
+        ensure_ascii=False,
+    )
+    region_options_json = json.dumps(
+        list(Region.objects.values('region_code', 'region_name')),
+        cls=DjangoJSONEncoder,
+        ensure_ascii=False,
+    )
 
     if choice_shop:
         if choice_shop.isdigit():
@@ -917,6 +931,8 @@ def receive_folder_view_v2(request):
         filters['folder_type_id'] = choice_folder_type
     if choice_lastest_receiver:
         filters['lastest_received_by__username__icontains'] = choice_lastest_receiver
+    if choice_package_code:
+        filters['package_id__package_code__icontains'] = choice_package_code
 
     def _apply_date_range(input_str, field_lookup):
         if not input_str:
@@ -980,7 +996,7 @@ def receive_folder_view_v2(request):
             resolved_sorts = ['-folder_created_date']
 
         folder_detail_qs = Folder.objects.filter(**filters).select_related(
-            'shop_id', 'folder_type_id', 'folder_status_id', 'lastest_received_by'
+            'shop_id', 'folder_type_id', 'folder_status_id', 'lastest_received_by', 'package_id'
         ).order_by(*resolved_sorts)
 
     paginator = Paginator(folder_detail_qs, 25)
@@ -1030,6 +1046,7 @@ def receive_folder_view_v2(request):
         'folder_detail': folder_detail,
         'drop_list_shops': drop_list_shops,
         'drop_list_folder_status': drop_list_folder_status,
+        'drop_list_folder_status_received': drop_list_folder_status_received,
         'drop_list_folder_type': drop_list_folder_type,
         'drop_list_users': drop_list_users,
         'paginator': paginator,
@@ -1037,6 +1054,10 @@ def receive_folder_view_v2(request):
         'sort_param': sort_raw,
         'sort_toggle': sort_toggle,
         'base_qs': base_qs,
+        'package_types': package_types,
+        'partners_active': partners_active,
+        'partners_options_json': partners_options_json,
+        'region_options_json': region_options_json,
         'filters': {
             'choice_shop': choice_shop,
             'choice_folder_code': choice_folder_code,
@@ -1045,9 +1066,147 @@ def receive_folder_view_v2(request):
             'choice_lastest_receiver': choice_lastest_receiver,
             'filter_receive_date': choice_receive_date,
             'filter_folder_date': choice_folder_date,
+            'filter_package': choice_package_code,
         }
     }
     return render(request, "app_documents/app_document_receiving_v2.html", context)
+
+
+@login_required
+def api_receive_folder_update_v2(request):
+    user_context = get_user_context(request.user)
+    if not user_context['is_admin'] and not user_context['is_checker']:
+        return JsonResponse({'error': 'Unauthorized access.'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+
+    folder_id = payload.get('folder_id')
+    folder_status_id = payload.get('folder_status_id')
+    package_code = (payload.get('package_code') or "").strip()
+    received_date_raw = (payload.get('received_date') or "").strip()
+    redirect_url = payload.get('redirect_url') or request.META.get('HTTP_REFERER') or reverse('receiving_transaction_v2')
+
+    if not folder_id or not folder_status_id:
+        return JsonResponse({'error': 'Thiếu thông tin quyển hoặc trạng thái.'}, status=400)
+    if not package_code:
+        return JsonResponse({'error': 'Vui lòng nhập mã thùng nhận.'}, status=400)
+
+    received_dt = None
+    if received_date_raw:
+        received_dt = parse_datetime(received_date_raw)
+        if received_dt is None:
+            for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d"):
+                try:
+                    received_dt = datetime.strptime(received_date_raw, fmt)
+                    break
+                except ValueError:
+                    continue
+    if received_dt is None:
+        received_dt = timezone.now()
+    if timezone.is_naive(received_dt):
+        received_dt = timezone.make_aware(received_dt, timezone.get_current_timezone())
+
+    try:
+        with transaction.atomic():
+            folder = Folder.objects.select_for_update().get(folder_id=folder_id)
+            package = Package.objects.select_related('package_type').get(package_code=package_code)
+            folder_status = FolderStatus.objects.get(folder_status_id=folder_status_id)
+
+            folder_pkg_type = (folder.folder_type_id.package_type if folder.folder_type_id else None)
+            package_pkg_type = (package.package_type.package_type if package.package_type else None)
+            if not folder_pkg_type or not package_pkg_type:
+                return JsonResponse({'error': 'Thiếu thông tin loại thùng/loại quyển.'}, status=400)
+            if str(folder_pkg_type).strip().upper() != str(package_pkg_type).strip().upper():
+                return JsonResponse({'error': 'Mã thùng không khớp loại quyển.'}, status=400)
+
+            status_changed = folder.folder_status_id_id != folder_status.folder_status_id
+
+            folder.folder_status_id = folder_status
+            folder.lastest_received_date = received_dt
+            folder.lastest_received_by = request.user
+            folder.package_id = package
+            folder.save(update_fields=[
+                'folder_status_id',
+                'lastest_received_date',
+                'lastest_received_by',
+                'package_id',
+            ])
+
+            check_result = check_on_time(folder, received_dt)
+
+            if status_changed:
+                FoldersTransactionReceiving.objects.create(
+                    folder_id=folder,
+                    trans_updated_date=received_dt,
+                    trans_created_by=request.user,
+                    folder_status_id=folder_status,
+                )
+
+            receive_time = timezone.now()
+            PackageFolderHistory.objects.create(
+                folder_id=folder,
+                package_id=package,
+                trans_created_date=receive_time,
+                trans_created_by=request.user,
+            )
+
+            document_details = DocumentsDetail.objects.select_for_update().filter(folder_id=folder.folder_id)
+            for document in document_details:
+                if document.package_id_id != package.package_id:
+                    document.package_id = package
+                    document.save(update_fields=['package_id'])
+                PackageDocumentHistory.objects.create(
+                    document_id=document,
+                    package_id=package,
+                    trans_created_date=receive_time,
+                    trans_created_by=request.user,
+                )
+
+    except Folder.DoesNotExist:
+        return JsonResponse({'error': 'Không tìm thấy quyển chứng từ.'}, status=404)
+    except Package.DoesNotExist:
+        return JsonResponse({'error': 'Mã thùng không tồn tại.'}, status=404)
+    except FolderStatus.DoesNotExist:
+        return JsonResponse({'error': 'Trạng thái không tồn tại.'}, status=404)
+    except Exception as exc:
+        return JsonResponse({'error': f'Lỗi xử lý: {exc}'}, status=500)
+
+    message = f"Nhận quyển {folder.folder_code} thành công."
+    return JsonResponse({
+        'success': True,
+        'message': message,
+        'status_name': folder_status.folder_status_name,
+        'received_date': received_dt.strftime('%Y-%m-%d %H:%M'),
+        'user': request.user.username,
+        'is_on_time': folder.is_on_time,
+        'is_late': folder.is_late,
+        'check_message': check_result.get('message', ''),
+        'redirect_url': redirect_url,
+    })
+
+
+@login_required
+def api_folder_note_v2(request, folder_id):
+    user_context = get_user_context(request.user)
+    if not user_context['is_admin'] and not user_context['is_checker']:
+        return JsonResponse({'error': 'Unauthorized access.'}, status=403)
+    if request.method != "POST":
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    folder = get_object_or_404(Folder, pk=folder_id)
+    try:
+        payload = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+    note_val = payload.get("note")
+    note_clean = note_val.strip() if isinstance(note_val, str) else ""
+    folder.note = note_clean or None
+    folder.save(update_fields=["note"])
+    return JsonResponse({"success": True, "note": folder.note or ""})
 
 # Lịch sử nhận quyển chứng từ
 @login_required
@@ -1059,6 +1218,29 @@ def fetch_history_receiving(request, folder_id):
             'folder_status_id__folder_status_name'
         )
         return JsonResponse(list(history), safe=False)
+
+
+@login_required
+def fetch_history_receiving_v2(request, folder_id):
+    user_context = get_user_context(request.user)
+    if not user_context['is_admin'] and not user_context['is_checker']:
+        return JsonResponse({'error': 'Unauthorized access.'}, status=403)
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        folder_history = FoldersTransactionReceiving.objects.filter(folder_id=folder_id).values(
+            'trans_created_date',
+            'trans_created_by__username',
+            'folder_status_id__folder_status_name'
+        )
+        package_history = PackageFolderHistory.objects.filter(folder_id=folder_id).values(
+            'trans_created_date',
+            'trans_created_by__username',
+            'package_id__package_code'
+        )
+        return JsonResponse({
+            'folder_history': list(folder_history),
+            'package_history': list(package_history),
+        })
+    return JsonResponse({'error': 'Bad request'}, status=400)
 
 # Nhận nhiều quyển 1 lần Bulk Receive
 @login_required
@@ -1079,13 +1261,37 @@ def bulk_receive_folder_view(request):
         receive_time = timezone.now()
         user = request.user 
         try: 
+            if not selected_folder:
+                return JsonResponse({'success': False, 'error': 'Vui lòng chọn ít nhất một quyển.'})
+            if not package_choice:
+                return JsonResponse({'success': False, 'error': 'Vui lòng nhập mã thùng.'})
+            if not folder_status_choice:
+                return JsonResponse({'success': False, 'error': 'Vui lòng chọn trạng thái nhận.'})
+
+            package_id_instance = Package.objects.select_related('package_type').get(package_code=package_choice)
+            folder_status_instance = FolderStatus.objects.get(folder_status_id=folder_status_choice)
+            package_type_code = (package_id_instance.package_type.package_type if package_id_instance.package_type else None)
+            if not package_type_code:
+                return JsonResponse({'success': False, 'error': 'Không xác định được loại thùng của mã thùng.'})
+
+            folders = Folder.objects.select_related('folder_type_id').filter(folder_id__in=selected_folder)
+            if folders.count() != len(selected_folder):
+                return JsonResponse({'success': False, 'error': 'Có quyển không tồn tại, vui lòng tải lại.'})
+
+            mismatched = []
+            for folder in folders:
+                folder_pkg_type = folder.folder_type_id.package_type if folder.folder_type_id else None
+                if not folder_pkg_type or str(folder_pkg_type).strip().upper() != str(package_type_code).strip().upper():
+                    mismatched.append(folder.folder_code)
+
+            if mismatched:
+                preview = ', '.join(mismatched[:5])
+                suffix = '...' if len(mismatched) > 5 else ''
+                return JsonResponse({'success': False, 'error': f'Mã thùng không khớp loại quyển: {preview}{suffix}'})
+
             with transaction.atomic():
-                for folder_id in selected_folder:
-                    folder_id_instance = Folder.objects.get(folder_id=folder_id)
-                    package_id_instance = Package.objects.get(package_code=package_choice)
-                    folder_status_instance = FolderStatus.objects.get(folder_status_id=folder_status_choice)
+                for folder in folders:
                     # Cập nhật trạng thái quyển chứng từ
-                    folder = folder_id_instance
                     folder.folder_status_id = folder_status_instance
                     folder.package_id = package_id_instance
                     folder.lastest_received_date = lasted_received_date_submit
@@ -1107,18 +1313,21 @@ def bulk_receive_folder_view(request):
                         package_id=folder.package_id,
                         trans_created_date=receive_time,
                         trans_created_by=user)
-                    document_details = DocumentsDetail.objects.select_for_update().filter(folder_id = folder_id)
-                    with transaction.atomic(): 
-                        for document in document_details:
-                            document.package_id = package_id_instance
-                            document.save() 
-                            # Sau khi gán thùng cho chứng từ thì tạo log gán thùng cho chứng từ
-                            PackageDocumentHistory.objects.create(
-                                document_id = document,
-                                package_id = package_id_instance,
-                                trans_created_date=receive_time,
-                                trans_created_by=user )      
+                    document_details = DocumentsDetail.objects.select_for_update().filter(folder_id = folder.folder_id)
+                    for document in document_details:
+                        document.package_id = package_id_instance
+                        document.save() 
+                        # Sau khi gán thùng cho chứng từ thì tạo log gán thùng cho chứng từ
+                        PackageDocumentHistory.objects.create(
+                            document_id = document,
+                            package_id = package_id_instance,
+                            trans_created_date=receive_time,
+                            trans_created_by=user )      
                 messages.success(request, f'Nhận {len(selected_folder)} quyển chứng từ thành công')         
+        except Package.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Mã thùng không tồn tại.'})
+        except FolderStatus.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Trạng thái nhận không tồn tại.'})
         except IntegrityError:
             messages.error(request, 'sys001-Có lỗi xảy ra khi xử lý dữ liệu. Vui lòng thử lại sau!')
             return JsonResponse({'success': False, 'error': 'sys001-Có lỗi xảy ra khi xử lý dữ liệu. Vui lòng thử lại sau!'})           
@@ -1446,7 +1655,7 @@ def package_list_management_view(request):
     package_types = FolderType.objects.filter(is_valid=True).order_by('package_type', 'folder_type_name')
     partners_active = Partner.objects.filter(is_active=True).order_by('partner_name')
     partners_options_json = json.dumps(
-        list(partners_active.values('partner_id', 'partner_name', 'partner_code')),
+        list(partners_active.values('partner_id', 'partner_name', 'partner_code', 'require_partner_selection', 'require_partner_code')),
         cls=DjangoJSONEncoder,
         ensure_ascii=False,
     )
@@ -1477,7 +1686,7 @@ def package_list_management_view(request):
         'region_options_json': region_options_json,
         'folder_type_options_json': folder_type_options_json,
     }
-    return render(request, 'app_documents/app_package_list.html', context)
+    return render(request, 'app_documents/app_package_list_v2.html', context)
 
 
 @login_required
@@ -1904,14 +2113,90 @@ def validate_package_code(value, user):
     if Package.objects.filter(package_code=value).exists():
         return {'is_valid': False, 'error': "Thùng đã tồn tại trong hệ thống. Vui lòng nhập lại."}
     return {'is_valid': True}
-    
+
+
+def validate_package_code_v2(value, selected_region_code=None):
+    """
+    Cú pháp mới: {FolderType}-{yymmdd}-{a}{bb}
+    FolderType: lấy theo package_type của FolderType (VD: VH/NH/CIMB, mở rộng được).
+    yymmdd: ngày tạo thùng.
+    a: mã vùng/kho người dùng chọn.
+    bb: số thứ tự 2 chữ số, không trùng, max 99.
+    """
+    code = (value or "").strip().upper()
+    pattern = r'^([A-Z0-9]{2,10})-(\d{6})-([A-Z0-9]{1})(\d{2})$'
+    match = re.match(pattern, code)
+    if not match:
+        return {'is_valid': False, 'error': "Mã thùng phải theo định dạng {FolderType}-yymmdd-aBB (ví dụ: VH-241231-M01)."}
+
+    folder_type_part, date_part, region_part, seq_part = match.groups()
+
+    folder_type_obj = FolderType.objects.filter(package_type__iexact=folder_type_part, is_valid=True).first()
+    if not folder_type_obj:
+        return {'is_valid': False, 'error': "Loại thùng không hợp lệ. Vui lòng chọn loại trong danh sách."}
+
+    try:
+        created_date = datetime.strptime(date_part, "%y%m%d").date()
+    except ValueError:
+        return {'is_valid': False, 'error': "Ngày trong mã thùng không hợp lệ (yymmdd)."}
+
+    try:
+        seq_int = int(seq_part)
+    except ValueError:
+        return {'is_valid': False, 'error': "Số thứ tự BB phải là số."}
+    if not (1 <= seq_int <= 99):
+        return {'is_valid': False, 'error': "Số thứ tự BB phải từ 01-99."}
+
+    region_char = region_part.upper()
+    if selected_region_code:
+        selected_region_char = selected_region_code.strip().upper()[:1]
+        if region_char != selected_region_char:
+            return {'is_valid': False, 'error': f"Mã kho (a) phải khớp vùng đang chọn: {selected_region_char}."}
+
+    prefix = f"{folder_type_part.upper()}-{date_part}-{region_char}"
+    existing_qs = Package.objects.filter(package_code__istartswith=prefix)
+    if existing_qs.filter(package_code__iexact=code).exists():
+        return {'is_valid': False, 'error': "Mã thùng đã tồn tại."}
+
+    max_seq = 0
+    for pkg in existing_qs:
+        tail = pkg.package_code.rsplit('-', 1)[-1]
+        if not tail:
+            continue
+        tail_region = tail[:1].upper()
+        tail_seq = tail[1:]
+        if tail_region != region_char:
+            continue
+        try:
+            tail_seq_int = int(tail_seq)
+            if tail_seq_int > max_seq:
+                max_seq = tail_seq_int
+        except ValueError:
+            continue
+
+    next_suggested = max_seq + 1 if max_seq < 99 else None
+    if seq_int <= max_seq:
+        msg = f"Số thứ tự đã dùng đến {max_seq:02d} cho {prefix}."
+        if next_suggested and next_suggested <= 99:
+            msg += f" Gợi ý: dùng {next_suggested:02d}."
+        return {'is_valid': False, 'error': msg, 'next_suggested_sequence': next_suggested}
+
+    return {
+        'is_valid': True,
+        'normalized_code': code,
+        'folder_type': folder_type_obj,
+        'created_date': created_date,
+        'region_part': region_char,
+        'next_suggested_sequence': next_suggested,
+    }
+
 # View cho phép tạo thùng mới
 @login_required
 def create_package_view(request, user_id):
     user= User.objects.get(pk=user_id)
     user_context = get_user_context(request.user)
     user_profiles = UserProfile.objects.get(user=user)
-    package_type = FolderType.objects.all()
+    package_type = FolderType.objects.filter(is_valid=True)
     regions = Region.objects.all()
     partners_qs = Partner.objects.filter(is_active=True).order_by('partner_name')
     partners_require_selection = partners_qs.filter(require_partner_selection=True).exists()
@@ -2007,6 +2292,107 @@ def get_next_package_sequence(request):
     except Exception as e:
         logger.error("Failed to fetch package sequence", exc_info=True)
         return JsonResponse({'success': False, 'message': 'Server error when fetching sequence number.'})
+
+@login_required
+def api_package_create_v2(request):
+    """
+    Endpoint tạo thùng v2 qua JSON body, dùng validate_package_code_v2.
+    Body mẫu:
+    {
+      "package_code": "VH-241231-M01",
+      "region_code": "M",   # 1 ký tự vùng/kho người chọn
+      "partner_id": 123,    # optional
+      "partner_package_code": "CRN-001",  # optional
+      "folder_type_id": 5   # optional, để cross-check với package_code
+    }
+    """
+    user_context = get_user_context(request.user)
+    if not user_context['is_admin'] and not user_context['is_checker']:
+        return JsonResponse({'error': 'Unauthorized access.'}, status=403)
+    if request.method != "POST":
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON payload.'}, status=400)
+
+    package_code = (payload.get('package_code') or '').strip()
+    region_code = (payload.get('region_code') or '').strip()
+    partner_id = payload.get('partner_id')
+    partner_package_code = (payload.get('partner_package_code') or '').strip() or None
+    folder_type_id = payload.get('folder_type_id')
+
+    validation = validate_package_code_v2(package_code, selected_region_code=region_code)
+    if not validation.get('is_valid'):
+        resp = {'error': validation.get('error', 'Validation failed.')}
+        if validation.get('next_suggested_sequence'):
+            resp['next_suggested_sequence'] = validation['next_suggested_sequence']
+        return JsonResponse(resp, status=400)
+
+    folder_type_obj = validation['folder_type']
+    if folder_type_id and str(folder_type_id) != str(folder_type_obj.folder_type_id):
+        return JsonResponse({'error': 'Loại thùng ở mã và lựa chọn không khớp.'}, status=400)
+
+    region_obj = None
+    if region_code:
+        region_obj = Region.objects.filter(region_code__iexact=region_code[:1]).first()
+        if not region_obj:
+            return JsonResponse({'error': f"Mã vùng {region_code} không tồn tại."}, status=400)
+
+    partner_obj = None
+    if partner_id:
+        try:
+            partner_obj = Partner.objects.get(partner_id=partner_id, is_active=True)
+        except Partner.DoesNotExist:
+            return JsonResponse({'error': 'Đối tác không tồn tại hoặc đã bị vô hiệu.'}, status=400)
+
+    if partner_package_code and PartnerPackage.objects.filter(partner_package_code=partner_package_code).exists():
+        return JsonResponse({'error': f'Mã thùng đối tác {partner_package_code} đã tồn tại trong hệ thống.'}, status=400)
+
+    default_status = PartnerPackageStatus.objects.filter(is_in_warehouse=True).first() or PartnerPackageStatus.objects.filter(status_id=1).first()
+
+    try:
+        with transaction.atomic():
+            created_dt = timezone.make_aware(datetime.combine(validation['created_date'], datetime.min.time()))
+            package = Package.objects.create(
+                package_code=validation['normalized_code'],
+                package_type=folder_type_obj,
+                created_by=request.user,
+                region_id=region_obj,
+                created_date=created_dt,
+            )
+            partner_package = None
+            if partner_obj or partner_package_code:
+                partner_package = PartnerPackage.objects.create(
+                    package_id=package,
+                    partner_package_code=partner_package_code,
+                    partner_name=partner_obj.partner_code if partner_obj else None,
+                    partner=partner_obj,
+                    created_date=timezone.now(),
+                    status_id=default_status,
+                    created_by=request.user,
+                )
+    except Exception as e:
+        logger.error("api_package_create_v2 failed", exc_info=True)
+        return JsonResponse({'error': f'Lỗi hệ thống: {str(e)}'}, status=500)
+
+    return JsonResponse({
+        'success': True,
+        'package': {
+            'id': package.package_id,
+            'package_code': package.package_code,
+            'package_type': folder_type_obj.package_type,
+            'folder_type_id': folder_type_obj.folder_type_id,
+            'region': region_obj.region_code if region_obj else None,
+        },
+        'partner_package': {
+            'id': partner_package.pk,
+            'partner_package_code': partner_package.partner_package_code,
+            'partner_id': partner_obj.partner_id if partner_obj else None,
+        } if partner_package else None,
+        'next_suggested_sequence': validation.get('next_suggested_sequence'),
+    }, status=200)
 
 # View cho phép xóa thùng  
 @login_required
@@ -2853,6 +3239,69 @@ def request_change_document_view(request, document_id):
 
 
 #BORROW
+@login_required
+def borrow_document_management_v2(request):
+    user = request.user
+    user_context = get_user_context(user)
+    if not user_context['is_admin'] and not user_context['is_checker']:
+        return redirect('home')
+
+    filters = {}
+    choice_document_code = (request.GET.get('document_code') or '').strip()
+    choice_borrower = (request.GET.get('borrower') or '').strip()
+    choice_status = (request.GET.get('borrow_status') or '').strip()
+
+    if choice_document_code:
+        filters['documents_id__documents_code__icontains'] = choice_document_code
+    if choice_borrower:
+        if choice_borrower.isdigit():
+            filters['borrower__shop_id'] = choice_borrower
+        else:
+            filters['borrower__shop_name__icontains'] = choice_borrower
+    if choice_status:
+        filters['borrow_status_id'] = choice_status
+
+    borrow_qs = BorrowingDocument.objects.select_related(
+        'documents_id', 'borrower', 'borrow_status_id', 'lender'
+    ).order_by('-borrow_date', '-borrow_id')
+    if filters:
+        borrow_qs = borrow_qs.filter(**filters)
+
+    paginator = Paginator(borrow_qs, 25)
+    page_number = request.GET.get('page')
+    borrow_list = paginator.get_page(page_number)
+
+    current = borrow_list.number if borrow_list else 1
+    total_pages = paginator.num_pages if paginator else 1
+    start_range = max(current - 2, 1)
+    end_range = min(current + 2, total_pages)
+    page_range_custom = list(range(1, min(2, total_pages) + 1))
+    page_range_custom += list(range(start_range, end_range + 1))
+    page_range_custom += list(range(max(total_pages - 1, 1), total_pages + 1))
+    page_range_custom = sorted(set([p for p in page_range_custom if 1 <= p <= total_pages]))
+
+    qs_no_page = request.GET.copy()
+    qs_no_page.pop('page', None)
+    base_qs = qs_no_page.urlencode()
+
+    context = {
+        **user_context,
+        'user': user,
+        'borrow_list': borrow_list,
+        'page_range_custom': page_range_custom,
+        'paginator': paginator,
+        'base_qs': base_qs,
+        'drop_list_shops': Shop.objects.filter(for_borrow_only=True).order_by('shop_name'),
+        'drop_list_borrowing_status': BorrowingStatus.objects.all().order_by('borrow_status_name'),
+        'filters': {
+            'document_code': choice_document_code,
+            'borrower': choice_borrower,
+            'borrow_status': choice_status,
+        },
+    }
+    return render(request, 'app_documents/app_borrow_document_v2.html', context)
+
+
 @login_required
 def request_borrow_document_view(request):
     if request.method == 'POST':

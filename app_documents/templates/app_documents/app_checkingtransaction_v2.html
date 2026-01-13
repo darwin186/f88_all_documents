@@ -1,0 +1,164 @@
+{% extends 'app_documents/base_app_documents_v2.html' %}
+{% block title %}Duyệt chứng từ v2{% endblock %}
+{% block extra_head %}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+{% endblock %}
+{% block top_nav %}
+  {% include 'app_documents/components/top_nav_v2.html' %}
+{% endblock %}
+{% block main_extra_class %}pt-14{% endblock %}
+
+{% block content %}
+<style>
+  body { font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size:10px; }
+  .filter-bar, .filter-bar * { font-size: 10px !important; }
+  .table-wrap table { font-size: 10px; }
+  .filter-input { height: 34px; }
+  .flatpickr-calendar { font-size: 10px; }
+  .flatpickr-calendar .flatpickr-day { height: 26px; line-height: 26px; width: 32px; }
+  .flatpickr-months .flatpickr-month { height: 32px; }
+  .flatpickr-months .flatpickr-current-month { font-size: 12px; }
+  .flatpickr-weekdays { font-size: 10px; }
+  .flatpickr-input { border: 0 !important; box-shadow: none !important; outline: none !important; }
+  .flatpickr-input:focus { border: 0 !important; box-shadow: none !important; outline: none !important; }
+</style>
+
+<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
+  <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
+    <form id="filter-form-checking" method="get" action="{% url 'checking_transaction_v2' %}" x-data="{ showMore: false }" class="grid lg:grid-cols-[2fr,1fr,1fr,1fr,auto] gap-3 items-center">
+      <div class="relative">
+        <input name="choice_shop" value="{{ request.GET.choice_shop|default:'' }}" placeholder="Phòng giao dịch" class="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[10px] focus:border-emerald-500 focus:outline-none" />
+      </div>
+      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
+        <input id="filter-document-date" name="filterdocumentdate" value="{{ request.GET.filterdocumentdate|default:'' }}" placeholder="Ngày chứng từ" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" readonly />
+      </div>
+      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
+        <input id="filter-check-date" name="filtercheckdate" value="{{ request.GET.filtercheckdate|default:'' }}" placeholder="Ngày duyệt" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" readonly />
+      </div>
+      <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+        <select name="choicedocumentstatus" class="block w-full bg-transparent text-[10px] text-gray-700 focus:outline-none focus:ring-0 appearance-none border-0 pr-6">
+          <option value="">Trạng thái chứng từ</option>
+          {% for st in drop_list_document_status %}
+          <option value="{{ st.documents_status_id }}" {% if request.GET.choicedocumentstatus|stringformat:"s" == st.documents_status_id|stringformat:"s" %}selected{% endif %}>{{ st.documents_status_name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="flex items-center gap-2">
+        <button type="button" @click="showMore = !showMore" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50" x-text="showMore ? 'Thu gọn' : 'Mở rộng'"></button>
+        <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Lọc</button>
+        <a href="{% url 'checking_transaction_v2' %}" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50">Xóa</a>
+      </div>
+      <div class="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" x-show="showMore">
+        <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+          <input name="choice_loan_code" value="{{ request.GET.choice_loan_code|default:'' }}" placeholder="Mã GNN" class="w-full bg-transparent focus:outline-none text-[10px]" />
+        </label>
+        <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+          <input name="choice_contract_code" value="{{ request.GET.choice_contract_code|default:'' }}" placeholder="Mã HĐCC" class="w-full bg-transparent focus:outline-none text-[10px]" />
+        </label>
+        <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+          <input name="choice_user_duyet" value="{{ request.GET.choice_user_duyet|default:'' }}" placeholder="Người duyệt" class="w-full bg-transparent focus:outline-none text-[10px]" />
+        </label>
+        <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+          <select name="choicecheckstatus" class="block w-full bg-transparent text-[10px] text-gray-700 focus:outline-none focus:ring-0 appearance-none border-0 pr-6">
+            <option value="">Trạng thái duyệt</option>
+            {% for st in drop_list_checking_status %}
+            <option value="{{ st.status_id }}" {% if request.GET.choicecheckstatus|stringformat:"s" == st.status_id|stringformat:"s" %}selected{% endif %}>{{ st.checking_status_name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+          <select name="choicebusinesstype" class="block w-full bg-transparent text-[10px] text-gray-700 focus:outline-none focus:ring-0 appearance-none border-0 pr-6">
+            <option value="">Nghiệp vụ</option>
+            {% for bt in drop_list_business_type %}
+            <option value="{{ bt.business_type_id }}" {% if request.GET.choicebusinesstype|stringformat:"s" == bt.business_type_id|stringformat:"s" %}selected{% endif %}>{{ bt.business_type_name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+    </form>
+  </div>
+
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden table-wrap">
+    <div class="flex justify-between items-center px-3 py-2 text-[10px] text-gray-600">
+      <span>Tổng chứng từ: {{ documents_detail.paginator.count }}</span>
+      <div class="flex items-center gap-1">
+        {% if documents_detail.has_previous %}
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page=1&{{ query_string }}">«</a>
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ documents_detail.previous_page_number }}&{{ query_string }}">‹</a>
+        {% endif %}
+        {% for p in documents_detail.paginator.page_range %}
+          {% if p == documents_detail.number %}
+          <span class="px-2 py-1 rounded border border-emerald-500 text-emerald-700 font-semibold">{{ p }}</span>
+          {% else %}
+          <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ p }}&{{ query_string }}">{{ p }}</a>
+          {% endif %}
+        {% endfor %}
+        {% if documents_detail.has_next %}
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ documents_detail.next_page_number }}&{{ query_string }}">›</a>
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ documents_detail.paginator.num_pages }}&{{ query_string }}">»</a>
+        {% endif %}
+      </div>
+    </div>
+    <table class="min-w-full text-left">
+      <thead class="bg-gray-50 text-gray-600 uppercase">
+        <tr>
+          <th class="px-3 py-2">#</th>
+          <th class="px-3 py-2">PGD</th>
+          <th class="px-3 py-2">Quyển ngày</th>
+          <th class="px-3 py-2">Thông tin</th>
+          <th class="px-3 py-2">Loại chứng từ</th>
+          <th class="px-3 py-2">Nghiệp vụ</th>
+          <th class="px-3 py-2">Trạng thái</th>
+          <th class="px-3 py-2">Duyệt</th>
+          <th class="px-3 py-2">Ngày duyệt</th>
+          <th class="px-3 py-2">Người duyệt</th>
+          <th class="px-3 py-2">Mã thùng</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for document_dtl in documents_detail %}
+        <tr class="hover:bg-gray-50">
+          <td class="px-3 py-2 text-gray-700">{{ forloop.counter|add:documents_detail.start_index|add:-1 }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ document_dtl.shop_id.shop_name }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ document_dtl.documents_created_date|date:"Y-m-d" }}</td>
+          <td class="px-3 py-2 text-gray-700">
+            {% if document_dtl.loan_id %}
+              Mã GNN: {{ document_dtl.loan_id.loan_code }}<br>
+              KH: {{ document_dtl.loan_id.customer_name|capfirst }}
+            {% elif document_dtl.contract_id %}
+              Mã HĐCC: {{ document_dtl.contract_id.contract_code }}<br>
+              KH: {{ document_dtl.contract_id.customer_id.customer_name|capfirst }}
+            {% endif %}
+          </td>
+          <td class="px-3 py-2 text-gray-700">{{ document_dtl.document_type_id.document_type_name }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ document_dtl.business_type_id.business_type_name }}</td>
+          <td class="px-3 py-2 text-gray-700">
+            <span class="px-2 py-1 rounded-full text-[9px] font-semibold" style="background-color: {{ document_dtl.document_status_id.badge_color|default:'#e5e7eb' }}; color: #0f172a;">
+              {{ document_dtl.document_status_id.documents_status_name }}
+            </span>
+          </td>
+          <td class="px-3 py-2 text-gray-700">{{ document_dtl.status_id.checking_status_name|default_if_none:"Chưa duyệt" }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ document_dtl.lastest_checked_date|date:"Y-m-d H:i" }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ document_dtl.lastest_checked_by|default_if_none:"" }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ document_dtl.package_id.package_code }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="11" class="px-3 py-4 text-center text-gray-500">Không có chứng từ phù hợp</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script>
+  const docDateInput = document.getElementById('filter-document-date');
+  const checkDateInput = document.getElementById('filter-check-date');
+  const initRange = (el) => {
+    if (!el || !window.flatpickr) return;
+    flatpickr(el, { mode: 'range', dateFormat: 'Y-m-d', allowInput: false });
+  };
+  initRange(docDateInput);
+  initRange(checkDateInput);
+</script>
+{% endblock %}

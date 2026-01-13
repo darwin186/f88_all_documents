@@ -5,16 +5,24 @@
         <img src="https://f88.vn/images/root/logo-f88-primary.svg" alt="F88" class="h-8">
       </a>
       <div class="hidden md:flex items-center gap-2 text-[10px] text-gray-600">
-        <a href="{% url 'package_list_management' %}" class="{% if request.resolver_match.url_name == 'package_list_management' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">PackageList</a>
-        <span class="text-gray-300">•</span>
-        <a href="{% url 'package_management' %}" class="{% if request.resolver_match.url_name == 'package_management' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Quản lý thùng cũ</a>
-        <span class="text-gray-300">•</span>
         <a href="{% url 'receiving_transaction_v2' %}" class="{% if request.resolver_match.url_name == 'receiving_transaction_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Nhận chứng từ</a>
+        <span class="text-gray-300">•</span>
+        <a href="{% url 'checking_transaction_v2' %}" class="{% if request.resolver_match.url_name == 'checking_transaction_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Duyệt chứng từ</a>
+        <span class="text-gray-300">•</span>
+        <a href="{% url 'package_list_management' %}" class="{% if request.resolver_match.url_name == 'package_list_management' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Quản lý thùng</a>
+        <span class="text-gray-300">•</span>
+        <a href="{% url 'borrow_management_v2' %}" class="{% if request.resolver_match.url_name == 'borrow_management_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Quản lý mượn chứng từ</a>
       </div>
     </div>
     <div class="flex items-center gap-3 text-[9px] text-gray-700">
       <div class="hidden sm:flex flex-col leading-tight text-right">
-        <span class="font-semibold text-gray-900 text-[9px]">{{ request.user.get_full_name|default:request.user.username }}</span>
+        <span class="font-semibold text-gray-900 text-[9px]">
+          {% if request.user.last_name or request.user.first_name %}
+            {{ request.user.last_name }} {{ request.user.first_name }}
+          {% else %}
+            {{ request.user.username }}
+          {% endif %}
+        </span>
         <span class="text-[9px] text-gray-500">{{ request.user }}</span>
       </div>
       <a href="{% url 'logout' %}" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50 text-[9px]">

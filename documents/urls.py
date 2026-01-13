@@ -23,9 +23,13 @@ from app_documents.views import CustomPasswordResetView
 
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    path("", include("app_documents.urls")),
-    path("admindocuments/", include("app_admindocuments.urls")),
+path('admin/', admin.site.urls),
+path("", include("app_documents.urls")),
+path("admindocuments/", include("app_admindocuments.urls")),
+path(
+    "notifications/",
+    include(("app_notification.urls", "app_notification"), namespace="app_notification"),
+),
     path("accounts/password_reset/", CustomPasswordResetView.as_view(), name="password_reset"),
     path("accounts/", include("django.contrib.auth.urls")),
 

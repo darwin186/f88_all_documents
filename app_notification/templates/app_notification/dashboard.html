@@ -1,0 +1,100 @@
+{% extends "app_notification/base_notification.html" %}
+
+{% block hero_title %}Notification Hub{% endblock %}
+{% block hero_subtitle %}Tự đăng ký kênh nhận báo cáo, hẹn giờ gửi tin qua Gapo và sẵn sàng mở rộng Email/Teams. Celery xử lý hậu trường, webhook nhận tín hiệu báo cáo hoàn tất.{% endblock %}
+
+{% block content %}
+  <div class="grid">
+    <div class="card">
+      <h3>Đăng ký nhận báo cáo</h3>
+      <p class="muted">Chọn báo cáo, kênh và địa chỉ nhận. Mặc định lấy Gapo user id từ profile nếu có.</p>
+      {% if form.errors %}
+        <div class="alert alert-error">Vui lòng kiểm tra lại các trường bắt buộc.</div>
+      {% endif %}
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <div class="field">
+          <label>Báo cáo</label>
+          {{ form.report }}
+        </div>
+        <div class="field">
+          <label>Kênh</label>
+          {{ form.channel }}
+        </div>
+        <div class="field">
+          <label>Địa chỉ nhận</label>
+          {{ form.target }}
+          <span class="muted">Ví dụ: Gapo user id, email hoặc webhook URL.</span>
+        </div>
+        <div class="field" style="flex-direction:row;align-items:center;gap:8px;">
+          {{ form.is_active }}
+          <label>Kích hoạt</label>
+        </div>
+        <button type="submit" class="btn" style="width:100%;">Lưu đăng ký</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <h3>Đăng ký của bạn</h3>
+        <span class="pill">{{ subscriptions|length }} kênh</span>
+      </div>
+      {% if subscriptions %}
+        <div class="list">
+          {% for sub in subscriptions %}
+            <div class="list-item">
+              <div>
+                <div style="font-weight:700;">{{ sub.report.name }}</div>
+                <div class="muted">Nhận tại: {{ sub.target }}</div>
+                <div class="muted">Cập nhật: {{ sub.updated_at|date:"d/m H:i" }}</div>
+              </div>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+                <span class="badge badge-soft">{{ sub.get_channel_display }}</span>
+                <a class="btn" style="padding:8px 12px;" href="{% url 'app_notification:notification_subscription_toggle' sub.id %}">
+                  {{ sub.is_active|yesno:'Đang bật,Tạm tắt' }}
+                </a>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="muted">Bạn chưa đăng ký báo cáo nào.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <h3>Lịch gửi gần nhất</h3>
+    </div>
+    {% if recent_schedules %}
+      <div class="list">
+        {% for schedule in recent_schedules %}
+          <div class="list-item">
+            <div>
+              <div style="font-weight:700;">
+                {% if schedule.report %}{{ schedule.report.name }}{% else %}<span class="muted">Ad-hoc</span>{% endif %}
+              </div>
+              <div class="muted">Đến: {{ schedule.target }}</div>
+              <div class="muted">Hẹn: {{ schedule.schedule_at|date:"d/m H:i" }}{% if schedule.sent_at %} · Đã gửi: {{ schedule.sent_at|date:"d/m H:i" }}{% endif %}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+              <span class="badge badge-soft">{{ schedule.get_channel_display }}</span>
+              {% if schedule.status == 'sent' %}
+                <span class="badge badge-sent">Đã gửi</span>
+              {% elif schedule.status == 'pending' %}
+                <span class="badge badge-pending">Chờ gửi</span>
+              {% elif schedule.status == 'failed' %}
+                <span class="badge badge-failed">Lỗi</span>
+              {% else %}
+                <span class="badge badge-soft">{{ schedule.status }}</span>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">Chưa có lịch gửi nào.</p>
+    {% endif %}
+  </div>
+{% endblock %}

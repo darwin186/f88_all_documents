@@ -50,6 +50,39 @@
   </div>
 </div>
 
+<div class="container mt-4">
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="card shadow-sm border-0" style="border-radius: 16px; background: linear-gradient(120deg, #0f172a, #111827 45%, #1e293b); color: #f8fafc;">
+        <div class="card-body d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+          <div>
+            <div class="text-uppercase fw-semibold small text-info mb-1">New</div>
+            <h4 class="mb-2">Notification Hub</h4>
+            <p class="mb-0 text-light">Đăng ký nhận báo cáo và hẹn giờ gửi tin qua Gapo (sẵn sàng mở rộng Email/Teams).</p>
+          </div>
+          <div>
+            <a class="btn btn-light text-dark px-4" href="{% url 'app_notification:notification_dashboard' %}">Mở app</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card shadow-sm border-0" style="border-radius: 16px; background: linear-gradient(135deg, #22c55e, #16a34a); color: #0b2a16;">
+        <div class="card-body d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+          <div>
+            <div class="text-uppercase fw-semibold small mb-1" style="color:#064e3b;">Vận hành</div>
+            <h4 class="mb-2" style="color:#022c16;">Nhận thông báo tin nhắn</h4>
+            <p class="mb-0" style="color:#0b2a16;">Đăng ký nhận thông báo tin nhắn từ hệ thống, theo dõi trạng thái gửi.</p>
+          </div>
+          <div>
+            <a class="btn btn-light px-4" href="{% url 'app_notification:notification_dashboard' %}">Đăng ký</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
   function countdownTimer() {
       const targetDate = new Date('2025-01-29T00:00:00'); // Lunar New Year 2025

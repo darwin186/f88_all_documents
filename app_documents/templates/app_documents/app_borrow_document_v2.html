@@ -1,0 +1,95 @@
+{% extends 'app_documents/base_app_documents_v2.html' %}
+{% block title %}Quản lý mượn chứng từ v2{% endblock %}
+{% block top_nav %}
+  {% include 'app_documents/components/top_nav_v2.html' %}
+{% endblock %}
+{% block main_extra_class %}pt-14{% endblock %}
+
+{% block content %}
+<style>
+  body { font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size:10px; }
+  .filter-bar, .filter-bar * { font-size: 10px !important; }
+  .table-wrap table { font-size: 10px; }
+  .filter-input { height: 34px; }
+</style>
+
+<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
+  <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
+    <form method="get" action="{% url 'borrow_management_v2' %}" class="grid lg:grid-cols-[2fr,1fr,1fr,auto] gap-3 items-center">
+      <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+        <input name="document_code" value="{{ filters.document_code }}" placeholder="Tìm mã chứng từ" class="w-full bg-transparent focus:outline-none text-[10px]" />
+      </label>
+      <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+        <input name="borrower" value="{{ filters.borrower }}" placeholder="Phòng ban mượn" class="w-full bg-transparent focus:outline-none text-[10px]" />
+      </label>
+      <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+        <select name="borrow_status" class="block w-full bg-transparent text-[10px] text-gray-700 focus:outline-none focus:ring-0 appearance-none border-0 pr-6">
+          <option value="">Trạng thái mượn</option>
+          {% for st in drop_list_borrowing_status %}
+          <option value="{{ st.borrow_status_id }}" {% if filters.borrow_status|stringformat:"s" == st.borrow_status_id|stringformat:"s" %}selected{% endif %}>{{ st.borrow_status_name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Lọc</button>
+        <a href="{% url 'borrow_management_v2' %}" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50">Xóa</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden table-wrap">
+    <div class="flex justify-between items-center px-3 py-2 text-[10px] text-gray-600">
+      <span>Tổng lượt mượn: {{ borrow_list.paginator.count }}</span>
+      <div class="flex items-center gap-1">
+        {% if borrow_list.has_previous %}
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page=1{% if base_qs %}&{{ base_qs }}{% endif %}">«</a>
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ borrow_list.previous_page_number }}{% if base_qs %}&{{ base_qs }}{% endif %}">‹</a>
+        {% endif %}
+        {% for p in page_range_custom %}
+        {% if p == borrow_list.number %}
+        <span class="px-2 py-1 rounded border border-emerald-500 text-emerald-700 font-semibold">{{ p }}</span>
+        {% else %}
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ p }}{% if base_qs %}&{{ base_qs }}{% endif %}">{{ p }}</a>
+        {% endif %}
+        {% endfor %}
+        {% if borrow_list.has_next %}
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ borrow_list.next_page_number }}{% if base_qs %}&{{ base_qs }}{% endif %}">›</a>
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ borrow_list.paginator.num_pages }}{% if base_qs %}&{{ base_qs }}{% endif %}">»</a>
+        {% endif %}
+      </div>
+    </div>
+    <table class="min-w-full text-left">
+      <thead class="bg-gray-50 text-gray-600 uppercase">
+        <tr>
+          <th class="px-3 py-2">Mã chứng từ</th>
+          <th class="px-3 py-2">Phòng ban mượn</th>
+          <th class="px-3 py-2">Người mượn</th>
+          <th class="px-3 py-2">Ngày mượn</th>
+          <th class="px-3 py-2">Hẹn trả</th>
+          <th class="px-3 py-2">Ngày trả</th>
+          <th class="px-3 py-2">Trạng thái</th>
+          <th class="px-3 py-2">Người cho mượn</th>
+          <th class="px-3 py-2">Mã phiếu</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for b in borrow_list %}
+        <tr class="hover:bg-gray-50">
+          <td class="px-3 py-2 font-semibold text-gray-900">{{ b.documents_id.documents_code }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ b.borrower.shop_name }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ b.borrower_detail|default:"" }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ b.borrow_date|date:"Y-m-d" }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ b.appointment_date|date:"Y-m-d" }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ b.return_date|date:"Y-m-d" }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ b.borrow_status_id.borrow_status_name }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ b.lender.get_full_name|default:b.lender.username }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ b.ticket_code|default:"" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" class="px-3 py-4 text-center text-gray-500">Không có dữ liệu mượn chứng từ</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

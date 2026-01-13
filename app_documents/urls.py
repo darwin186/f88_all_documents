@@ -10,6 +10,7 @@ urlpatterns = [
     path('switch-region/<int:region_id>/', views.switch_region, name='switch_region'),
     #Checking transaction
     path("duyet-chung-tu", views.checking_transaction_view, name="checking_transaction"),
+    path("duyet-chung-tu-v2", views.checking_transaction_view, {"template_name": "app_documents/app_checkingtransaction_v2.html", "redirect_name": "checking_transaction_v2"}, name="checking_transaction_v2"),
     path('fetch-history/<int:document_id>/', views.fetch_history, name='fetch_history'),
     path('checking_additional_view/<int:document_id>/', views.checking_additional_view, name='checking_additional_view'),
     path("bulk-checking", views.bulk_checking_document_view, name="bulk_checking"),
@@ -21,6 +22,7 @@ urlpatterns = [
     path('nhan-chung-tu', views.receive_folder_view, name = "receiving_transaction"), 
     path('nhan-chung-tu-v2', views.receive_folder_view_v2, name="receiving_transaction_v2"),
     path('fetch-history-receiving/<int:folder_id>/', views.fetch_history_receiving, name='fetch_history_receiving'), 
+    path('fetch-history-receiving-v2/<int:folder_id>/', views.fetch_history_receiving_v2, name='fetch_history_receiving_v2'),
     path('receiving_additional_view/<int:folder_id>/', views.receiving_additional_view, name='receiving_additional_view'),
     path('bulk-receiving', views.bulk_receive_folder_view, name='bulk_receiving'),
     #Create Package 
@@ -36,6 +38,9 @@ urlpatterns = [
     path('package/change-partnerpackage-status/<int:package_id>/', views.change_partnerpackage_status, name ='change_partnerpackage_status'),
     path('import-packages/', views.import_packages_view, name='import_packages_view'),
     path('export-packages/', views.export_packages_view, name='export_packages_views'),
+    path('api/packages/create-v2/', views.api_package_create_v2, name='api_package_create_v2'),
+    path('api/folder/receive-v2/', views.api_receive_folder_update_v2, name='api_receive_folder_update_v2'),
+    path('api/folder/<int:folder_id>/note/', views.api_folder_note_v2, name='api_folder_note_v2'),
     path('api/package/<int:package_id>/partner/', views.api_package_partner, name='api_package_partner'),
     path('api/package/<int:package_id>/note/', views.api_package_note, name='api_package_note'),
     path('package/bulk-validate/', views.package_bulk_validate, name='package_bulk_validate'),
@@ -52,6 +57,7 @@ urlpatterns = [
     path('request-change-document/<int:document_id>/', views.request_change_document_view, name='request_change_document'),
     # Mượn chứng từ
     path('request-borrow-document/', views.request_borrow_document_view, name='request_borrow_document'),
+    path('quan-ly-muon-chung-tu-v2/', views.borrow_document_management_v2, name='borrow_management_v2'),
     path('manage-borrow/return-or-report-lost/<int:document_id>/<str:action>/', views.manage_borrow_document, name='manage_borrow_document'),
     path('gapo/schedule/', views.gapo_schedule_view, name='gapo_schedule'),
     path('gapo/schedule/ai-draft/', views.gapo_ai_generate_view, name='gapo_ai_generate'),

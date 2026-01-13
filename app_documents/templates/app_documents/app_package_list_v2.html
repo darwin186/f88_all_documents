@@ -1,16 +1,14 @@
-{% extends 'app_documents/base_flowbite.html' %}
+{% extends 'app_documents/base_app_documents_v2.html' %}
 {% block title %}Quản lý thùng lưu trữ{% endblock %}
 {% block top_nav %}
-  {% include 'app_documents/components/top_nav_flowbite.html' %}
+  {% include 'app_documents/components/top_nav_v2.html' %}
 {% endblock %}
 {% block main_extra_class %}pt-14{% endblock %}
 
 {% block content %}
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-  #sidebar,
-  .fixed.top-0.left-0.h-full.w-2.z-40 { display: none !important; }
-  main.flex-1 { margin-left: 0 !important; padding-left: 0 !important; padding-right: 0 !important; }
+  @import url('https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css');
   body { font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size:10px; }
   .search-controls, .search-controls * { font-size: 10px !important; }
   .search-controls ::placeholder { font-size: 10px !important; }
@@ -94,6 +92,24 @@
   .datepicker-footer {
     display: none !important;
   }
+  /* Flatpickr size for modal */
+  .flatpickr-calendar {
+    font-size: 9px;
+  }
+  .flatpickr-months .flatpickr-month {
+    height: 28px;
+  }
+  .flatpickr-months .flatpickr-current-month {
+    font-size: 10px;
+  }
+  .flatpickr-weekdays {
+    font-size: 9px;
+  }
+  .flatpickr-day {
+    height: 26px;
+    line-height: 26px;
+    max-width: 26px;
+  }
 </style>
 
 <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl-max-w-[1600px] mx-auto space-y-6 px-2 lg:px-3 pt-8">
@@ -110,11 +126,12 @@
   window.CSRF_TOKEN = "{{ csrf_token }}";
 </script>
 
-<script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script crossorigin src="https://unpkg.com/lucide-react@0.561.0/dist/lucide-react.umd.js"></script>
+<script crossorigin src="https://unpkg.com/lucide-react@0.344.0/dist/lucide-react.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
 {% verbatim %}
 <script type="text/babel">
@@ -936,63 +953,85 @@
 
 <!-- Modal tạo thùng -->
 <div id="createPackageModal" tabindex="-1" aria-hidden="true" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-  <div class="bg-white rounded-2xl shadow-xl w-full max-w-xl">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-xl text-[9px]">
     <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-      <h3 class="text-lg font-semibold text-gray-900">Quản lý thùng</h3>
+      <h3 class="text-[10px] font-semibold text-gray-900">Quản lý thùng</h3>
       <button type="button" class="text-gray-500 hover:text-gray-700" data-modal-hide="createPackageModal">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
       </button>
     </div>
     <div class="px-4 pt-3">
       <div class="flex gap-2 border-b border-gray-200">
-        <button type="button" class="tab-btn active px-3 py-2 text-sm font-semibold text-emerald-700 border-b-2 border-emerald-600" data-tab-target="tab-create-package">Tạo thùng mới</button>
-        <button type="button" class="tab-btn px-3 py-2 text-sm font-semibold text-gray-600 hover:text-emerald-700" data-tab-target="tab-update-partner">Cập nhật thùng đối tác</button>
-        <button type="button" class="tab-btn px-3 py-2 text-sm font-semibold text-gray-600 hover:text-emerald-700" data-tab-target="tab-bulk-create">Tạo thùng hàng loạt</button>
+        <button type="button" class="tab-btn active px-3 py-2 text-[10px] font-semibold text-emerald-700 border-b-2 border-emerald-600" data-tab-target="tab-create-package">Tạo thùng mới</button>
+        <button type="button" class="tab-btn px-3 py-2 text-[10px] font-semibold text-gray-600 hover:text-emerald-700" data-tab-target="tab-update-partner">Cập nhật thùng đối tác</button>
+        <button type="button" class="tab-btn px-3 py-2 text-[10px] font-semibold text-gray-600 hover:text-emerald-700" data-tab-target="tab-bulk-create">Tạo thùng hàng loạt</button>
       </div>
     </div>
     <div class="p-4 space-y-4">
-      <div id="tab-create-package" class="tab-panel space-y-4">
+      <div id="tab-create-package" class="tab-panel space-y-4 text-[9px]">
         <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Loại thùng</label>
-          <select class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-0">
+          <label class="block text-[10px] font-semibold text-gray-700 mb-1">Loại thùng</label>
+          <select id="create-package-type" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0">
             <option value="">Chọn loại thùng</option>
             {% for pt in package_types %}
-            <option value="{{ pt.folder_type_id }}">{{ pt.folder_type_name }} ({{ pt.package_type }})</option>
+            <option value="{{ pt.folder_type_id }}" data-package-type="{{ pt.package_type }}">{{ pt.folder_type_name }} ({{ pt.package_type }})</option>
             {% endfor %}
           </select>
         </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Mã thùng</label>
-          <input type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-0" placeholder="Nhập mã thùng">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-[10px] font-semibold text-gray-700 mb-1">Mã kho (vùng)</label>
+            <select id="create-package-region" class="w-full h-[34px] rounded-lg border border-gray-200 px-3 py-2 text-[9px] leading-[18px] focus:border-emerald-500 focus:ring-0" disabled>
+              <option value="">Chọn mã kho</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-semibold text-gray-700 mb-1">Ngày tạo thùng</label>
+            <input id="create-package-date" type="text" class="w-full h-[34px] rounded-lg border border-gray-200 px-3 py-2 text-[9px] leading-[18px] focus:border-emerald-500 focus:ring-0 bg-white" placeholder="Chọn ngày" value="{% now 'Y-m-d' %}" disabled>
+          </div>
         </div>
         <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Mã thùng đối tác</label>
-          <input type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-0" placeholder="Nhập mã thùng đối tác">
+          <label class="flex items-center gap-2 text-[10px] font-semibold text-gray-700 mb-1">
+            <span>Mã thùng</span>
+            <button type="button" id="copy-package-code-btn" class="p-1 rounded hover:bg-gray-100 text-gray-500" title="Copy mã thùng">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+            <span id="copy-package-code-msg" class="text-[9px] text-emerald-600 hidden">Copied</span>
+          </label>
+          <input id="create-package-code" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0" placeholder="Nhập mã thùng">
         </div>
         <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Đối tác</label>
-          <select class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-0">
+          <label class="block text-[10px] font-semibold text-gray-700 mb-1">Đối tác</label>
+          <select id="create-partner" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0">
             <option value="">Chọn đối tác</option>
             {% for partner in partners_active %}
             <option value="{{ partner.partner_id }}">{{ partner.partner_name }}</option>
             {% endfor %}
           </select>
         </div>
+        <div>
+          <label class="block text-[10px] font-semibold text-gray-700 mb-1">Mã thùng đối tác</label>
+          <input id="create-partner-package-code" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0" placeholder="Nhập mã thùng đối tác" disabled>
+        </div>
+        <div id="create-package-message" class="text-[9px] text-red-600 hidden"></div>
       </div>
-      <div id="tab-update-partner" class="tab-panel space-y-4 hidden">
-        <div class="p-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 text-sm text-gray-600">
+      <div id="tab-update-partner" class="tab-panel space-y-4 hidden text-[9px]">
+        <div class="p-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 text-gray-600">
           Upload file để cập nhật thùng đối tác. Hỗ trợ định dạng Excel.
         </div>
         <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Chọn file</label>
-          <input type="file" class="block w-full text-sm text-gray-700 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer" accept=".xlsx,.xls">
+          <label class="block text-[10px] font-semibold text-gray-700 mb-1">Chọn file</label>
+          <input type="file" class="block w-full text-[9px] text-gray-700 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-emerald-600 file:text-[10px] file:text-white hover:file:bg-emerald-700 cursor-pointer" accept=".xlsx,.xls">
         </div>
-        <div class="text-xs text-gray-500">
+        <div class="text-[9px] text-gray-500">
           Ghi chú: tối ưu file < 5MB, mẫu cột sẽ cung cấp sau.
         </div>
       </div>
-      <div id="tab-bulk-create" class="tab-panel space-y-3 hidden">
-        <div class="p-3 rounded-lg border border-dashed border-emerald-300 bg-emerald-50 text-sm text-emerald-800">
+      <div id="tab-bulk-create" class="tab-panel space-y-3 hidden text-[9px]">
+        <div class="p-3 rounded-lg border border-dashed border-emerald-300 bg-emerald-50 text-emerald-800">
           Các cột cần người dùng điền đầy đủ:<br>
           - Mã thùng F88 (package_code): lưu ý điền giống yêu cầu của tạo thùng<br>
           - Loại thùng (package_type): điền đúng package_type như trong sheet Loại thùng<br>
@@ -1006,36 +1045,36 @@
         </div>
         <div class="grid gap-4">
           <div class="flex flex-col gap-2">
-            <button id="download-bulk-template" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 w-fit">
+            <button id="download-bulk-template" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-[9px] font-semibold text-white hover:bg-emerald-700 w-fit">
               Tải template (.xlsx)
             </button>
-            <p class="text-xs text-gray-600">
+            <p class="text-[9px] text-gray-600">
               File .xlsx đã sẵn mẫu cột; không cần đổi định dạng. Có thể mở và điền trực tiếp trên Excel.
             </p>
           </div>
           <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-1">Upload file đã điền</label>
-            <input id="bulk-package-file" type="file" class="block w-full text-sm text-gray-700 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer" accept=".xlsx,.xls">
-            <p class="text-xs text-gray-500 mt-2">Hỗ trợ file nhỏ hơn 30MB (~30720 KB). Sau khi tải template và điền, upload lại để tạo nhiều thùng.</p>
+            <label class="block text-[10px] font-semibold text-gray-700 mb-1">Upload file đã điền</label>
+            <input id="bulk-package-file" type="file" class="block w-full text-[9px] text-gray-700 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-emerald-600 file:text-[10px] file:text-white hover:file:bg-emerald-700 cursor-pointer" accept=".xlsx,.xls">
+            <p class="text-[9px] text-gray-500 mt-2">Hỗ trợ file nhỏ hơn 30MB (~30720 KB). Sau khi tải template và điền, upload lại để tạo nhiều thùng.</p>
           </div>
-          <div class="text-xs text-gray-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+          <div class="text-[9px] text-gray-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
             Bước xử lý: hệ thống sẽ kiểm tra trước khi tạo — đếm số thùng hợp lệ, liệt kê các mã thùng F88 sai/không hợp lệ. Chỉ khi bạn xác nhận, thùng mới được lưu vào DB.
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <button id="bulk-validate-btn" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+            <button id="bulk-validate-btn" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-[9px] font-semibold text-white hover:bg-indigo-700">
               Kiểm tra
             </button>
-            <button id="bulk-save-btn" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+            <button id="bulk-save-btn" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-[9px] font-semibold text-white hover:bg-emerald-700">
               Lưu (nếu file sạch)
             </button>
-            <span id="bulk-result-message" class="text-sm text-gray-700"></span>
+            <span id="bulk-result-message" class="text-[9px] text-gray-700"></span>
           </div>
         </div>
       </div>
     </div>
     <div class="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200">
-      <button type="button" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-sm font-semibold hover:bg-gray-50" data-modal-hide="createPackageModal">Hủy</button>
-      <button type="button" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700">Lưu</button>
+      <button type="button" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-[9px] font-semibold hover:bg-gray-50" data-modal-hide="createPackageModal">Hủy</button>
+      <button type="button" id="create-package-submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[9px] font-semibold hover:bg-emerald-700">Tạo thùng</button>
     </div>
   </div>
 </div>
@@ -1078,6 +1117,224 @@
     // default active first tab
     if (tabButtons.length) tabButtons[0].click();
 
+    // Auto suggest mã thùng theo Loại thùng + Ngày + Mã kho
+    const typeSelect = modalEl.querySelector('#create-package-type');
+    const dateInput = modalEl.querySelector('#create-package-date');
+    const regionSelect = modalEl.querySelector('#create-package-region');
+    const codeInput = modalEl.querySelector('#create-package-code');
+    const partnerSelect = modalEl.querySelector('#create-partner');
+    const partnerCodeInput = modalEl.querySelector('#create-partner-package-code');
+    const submitBtn = modalEl.querySelector('#create-package-submit');
+    const messageEl = modalEl.querySelector('#create-package-message');
+    const copyBtn = modalEl.querySelector('#copy-package-code-btn');
+    const copyMsg = modalEl.querySelector('#copy-package-code-msg');
+    const regionOptions = JSON.parse(document.getElementById('regions-options')?.textContent || '[]');
+    const partnersOptions = JSON.parse(document.getElementById('partners-options')?.textContent || '[]');
+
+    // Populate region options
+    if (regionSelect && regionOptions.length) {
+      regionOptions.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = (r.region_code || '').toString().toUpperCase();
+        opt.textContent = `${r.region_code || ''} - ${r.region_name || ''}`;
+        regionSelect.appendChild(opt);
+      });
+      if (!regionSelect.value && regionSelect.options.length > 1) {
+        regionSelect.selectedIndex = 1;
+      }
+    }
+
+    const formatDateYYMMDD = (val) => {
+      if (!val) return '';
+      const d = new Date(val);
+      if (isNaN(d)) return '';
+      const yy = String(d.getFullYear()).slice(-2);
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yy}${mm}${dd}`;
+    };
+
+    const updateCode = async () => {
+      if (!typeSelect || !dateInput || !regionSelect || !codeInput) return;
+      const opt = typeSelect.options[typeSelect.selectedIndex];
+      const typeCode = (opt?.dataset?.packageType || '').toUpperCase();
+      const datePart = formatDateYYMMDD(dateInput.value);
+      const regionCode = (regionSelect.value || '').trim().toUpperCase();
+      if (!typeCode || !datePart || !regionCode) return;
+      const base = `${typeCode}-${datePart}-${regionCode}`;
+      let seq = '01';
+      try {
+        const resp = await fetch(`/package/get-next-package-sequence/?baseCode=${encodeURIComponent(base)}`);
+        const data = await resp.json();
+        if (resp.ok && data.success && data.nextSequence) {
+          seq = data.nextSequence;
+        }
+      } catch (e) {
+        // ignore fetch errors, fallback to 01
+      }
+      codeInput.value = `${base}${seq}`;
+    };
+
+    // Init flatpickr for create date
+    let createDatePicker = null;
+    if (dateInput && window.flatpickr) {
+      createDatePicker = flatpickr(dateInput, {
+        dateFormat: 'Y-m-d',
+        defaultDate: dateInput.value || undefined,
+        disableMobile: true,
+        locale: { firstDayOfWeek: 1 },
+        static: true,
+        monthSelectorType: 'static',
+        onChange: updateCode,
+      });
+    }
+
+    typeSelect?.addEventListener('change', () => {
+      regionSelect.disabled = !typeSelect.value;
+      if (!typeSelect.value) {
+        dateInput.disabled = true;
+        codeInput.value = '';
+        if (createDatePicker) createDatePicker.clear();
+      } else if (regionSelect.value) {
+        dateInput.disabled = false;
+        if (createDatePicker && !createDatePicker.selectedDates.length) {
+          createDatePicker.setDate(new Date());
+        }
+      }
+      updateCode();
+    });
+    regionSelect?.addEventListener('change', () => {
+      dateInput.disabled = !regionSelect.value;
+      if (!typeSelect.value) {
+        codeInput.value = '';
+      }
+      if (regionSelect.value && typeSelect.value) {
+        dateInput.disabled = false;
+        if (createDatePicker && !createDatePicker.selectedDates.length) {
+          createDatePicker.setDate(new Date());
+        }
+      }
+      updateCode();
+    });
+    dateInput?.addEventListener('change', updateCode);
+
+    const setMessage = (text, isError = true) => {
+      if (!messageEl) return;
+      if (!text) {
+        messageEl.classList.add('hidden');
+        messageEl.textContent = '';
+        return;
+      }
+      messageEl.textContent = text;
+      messageEl.className = `text-[9px] ${isError ? 'text-red-600' : 'text-emerald-700'}`;
+      messageEl.classList.remove('hidden');
+    };
+
+    const showCopyMsg = () => {
+      if (!copyMsg) return;
+      copyMsg.classList.remove('hidden');
+      clearTimeout(copyMsg._timer);
+      copyMsg._timer = setTimeout(() => copyMsg.classList.add('hidden'), 1200);
+    };
+
+    copyBtn?.addEventListener('click', async () => {
+      const val = codeInput?.value?.trim();
+      if (!val) return;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(val);
+        } else {
+          const temp = document.createElement('textarea');
+          temp.value = val;
+          temp.setAttribute('readonly', '');
+          temp.style.position = 'absolute';
+          temp.style.left = '-9999px';
+          document.body.appendChild(temp);
+          temp.select();
+          document.execCommand('copy');
+          document.body.removeChild(temp);
+        }
+        showCopyMsg();
+      } catch (e) {
+        // ignore copy errors
+      }
+    });
+
+    const partnerMap = {};
+    partnersOptions.forEach(p => {
+      partnerMap[p.partner_id] = p;
+    });
+
+    partnerSelect?.addEventListener('change', () => {
+      const val = partnerSelect.value;
+      const partner = partnerMap[val];
+      const requireCode = partner?.require_partner_code;
+      partnerCodeInput.disabled = !requireCode;
+      partnerCodeInput.required = !!requireCode;
+      if (!requireCode) {
+        partnerCodeInput.value = '';
+      }
+    });
+
+    submitBtn?.addEventListener('click', async () => {
+      setMessage('');
+      if (!typeSelect.value) {
+        setMessage('Vui lòng chọn loại thùng.');
+        return;
+      }
+      if (!dateInput.value) {
+        setMessage('Vui lòng chọn ngày tạo thùng.');
+        return;
+      }
+      if (!regionSelect.value) {
+        setMessage('Vui lòng chọn mã kho/vùng.');
+        return;
+      }
+      if (!partnerSelect.value) {
+        setMessage('Vui lòng chọn đối tác lưu trữ.');
+        return;
+      }
+      const partner = partnerMap[partnerSelect.value];
+      if (partner?.require_partner_code && !partnerCodeInput.value.trim()) {
+        setMessage('Đối tác yêu cầu nhập mã thùng đối tác.');
+        return;
+      }
+      await updateCode();
+      if (!codeInput.value) {
+        setMessage('Không tạo được mã thùng. Vui lòng thử lại.');
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Đang tạo...';
+      try {
+        const resp = await fetch('{% url "api_package_create_v2" %}', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': window.CSRF_TOKEN || '',
+          },
+          body: JSON.stringify({
+            package_code: codeInput.value,
+            region_code: regionSelect.value,
+            partner_id: partnerSelect.value || null,
+            partner_package_code: partnerCodeInput.value || null,
+            folder_type_id: typeSelect.value || null,
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.error) {
+          throw new Error(data.error || 'Tạo thùng thất bại.');
+        }
+        setMessage('Tạo thùng thành công.', false);
+        setTimeout(() => window.location.reload(), 500);
+      } catch (err) {
+        setMessage(err.message || 'Tạo thùng thất bại.');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Tạo thùng';
+      }
+    });
+
     // Bulk template download (.xlsx)
     const downloadBtn = document.getElementById('download-bulk-template');
     if (downloadBtn) {
@@ -1118,7 +1375,7 @@
     const setResult = (text, isError = false) => {
       if (!resultMsg) return;
       resultMsg.textContent = text;
-      resultMsg.className = `text-sm ${isError ? 'text-red-600' : 'text-emerald-700'}`;
+      resultMsg.className = `text-[9px] ${isError ? 'text-red-600' : 'text-emerald-700'}`;
     };
 
     const downloadBlob = (blob, filename) => {

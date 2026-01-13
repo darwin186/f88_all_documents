@@ -1,7 +1,7 @@
 {% extends 'app_documents/base_app_documents_v2.html' %}
 {% block title %}Nhận chứng từ v2{% endblock %}
 {% block top_nav %}
-  {% include 'app_documents/components/top_nav_flowbite.html' %}
+  {% include 'app_documents/components/top_nav_v2.html' %}
 {% endblock %}
 {% block main_extra_class %}pt-14{% endblock %}
 
@@ -19,15 +19,15 @@
   .flatpickr-months .flatpickr-current-month { font-size: 12px; }
   .flatpickr-weekdays { font-size: 10px; }
   /* Remove blue focus outline on flatpickr inputs */
-  .flatpickr-input { border: 0 !important; box-shadow: none !important; outline: none !important; }
-  .flatpickr-input:focus { border: 0 !important; box-shadow: none !important; outline: none !important; }
+  .filter-bar .flatpickr-input { border: 0 !important; box-shadow: none !important; outline: none !important; }
+  .filter-bar .flatpickr-input:focus { border: 0 !important; box-shadow: none !important; outline: none !important; }
   /* Active row highlight */
   .row-active { box-shadow: inset 0 -1px 0 #f59e0b, inset 0 1px 0 #f59e0b; }
 </style>
 
 <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
   <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
-    <form id="filter-form" method="get" action="{% url 'receiving_transaction_v2' %}" x-data="{ showMore: false }" class="grid lg:grid-cols-[2fr,1fr,1fr,1fr,auto] gap-3 items-center">
+    <form id="filter-form" method="get" action="{% url 'receiving_transaction_v2' %}" x-data="{ showMore: false }" class="grid lg:grid-cols-[2fr,1fr,1fr,1fr,1fr,auto] gap-3 items-center">
       <input type="hidden" name="sort" value="{{ sort_param }}">
       <div class="relative">
         {% with filters.choice_shop|default_if_none:'' as shop_value %}
@@ -98,12 +98,29 @@
         </div>
       </div>
       {% endwith %}
+      {% with filters.choice_folder_type|default_if_none:'' as type_value %}
+      <div class="relative">
+        <select name="choice_folder_type" class="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[10px] text-gray-700 focus:border-emerald-500 focus:outline-none focus:ring-0">
+          <option value="">Tìm loại quyển</option>
+          {% for foldertype in drop_list_folder_type %}
+          <option value="{{ foldertype.folder_type_id }}" {% if type_value|stringformat:"s" == foldertype.folder_type_id|stringformat:"s" %}selected{% endif %}>
+            {{ foldertype.folder_type_name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endwith %}
       <div class="flex items-center gap-2">
         <button type="button" @click="showMore = !showMore" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50" x-text="showMore ? 'Thu gọn' : 'Mở rộng'"></button>
         <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Lọc</button>
         <a href="{% url 'receiving_transaction_v2' %}" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50">Xóa</a>
+        <button type="button" data-modal-toggle="createPackageModal" class="px-4 py-2 rounded-lg bg-gray-700 text-white font-semibold hover:bg-gray-800">Tạo thùng</button>
+        <button type="button" id="bulk-receive-btn" data-modal-toggle="bulkReceiveModal" class="hidden px-4 py-2 rounded-lg bg-emerald-700 text-white font-semibold hover:bg-emerald-800">
+          Nhận nhiều
+          <span id="bulk-receive-count" class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-white/20 text-[9px] font-semibold">0</span>
+        </button>
       </div>
-      <div class="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-3" x-show="showMore">
+      <div class="lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" x-show="showMore">
         <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
           <input name="choice_folder_code" value="{% if request.GET.choice_folder_code %}{{ request.GET.choice_folder_code }}{% endif %}" placeholder="Tìm theo mã quyển" class="w-full bg-transparent focus:outline-none text-[10px]" />
         </label>
@@ -125,13 +142,22 @@
             <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
               {% for u in drop_list_users %}
               <button type="button" @click="search='{{ u.username }}'; open=false" class="w-full text-left px-2 py-2 hover:bg-emerald-50">
-                <div class="font-semibold text-gray-900">{{ u.get_full_name|default:u.username }}</div>
+                <div class="font-semibold text-gray-900">
+                  {% if u.last_name or u.first_name %}
+                    {{ u.last_name }} {{ u.first_name }}
+                  {% else %}
+                    {{ u.username }}
+                  {% endif %}
+                </div>
                 <div class="text-gray-500 text-[9px]">{{ u.username }}</div>
               </button>
               {% endfor %}
             </div>
           </div>
         </div>
+        <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+          <input name="filter_package" value="{% if request.GET.filter_package %}{{ request.GET.filter_package }}{% endif %}" placeholder="Tìm theo mã thùng F88" class="w-full bg-transparent focus:outline-none text-[10px]" />
+        </label>
       </div>
     </form>
   </div>
@@ -161,17 +187,21 @@
       <table class="min-w-full text-left">
         <thead class="bg-gray-50 text-gray-600 uppercase">
           <tr>
+            <th class="px-3 py-2 text-center">
+              <input id="select-all" type="checkbox" class="h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+            </th>
+            <th class="px-3 py-2">STT</th>
             <th class="px-3 py-2">
               <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.folder_code }}" class="flex items-center gap-1">Mã quyển{% if sort_param == 'folder_code' %}▲{% elif sort_param == '-folder_code' %}▼{% endif %}</a>
             </th>
             <th class="px-3 py-2">
-              <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.shop }}" class="flex items-center gap-1">PGD{% if sort_param == 'shop' %}▲{% elif sort_param == '-shop' %}▼{% endif %}</a>
+              <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.shop }}" class="flex items-center gap-1">Phòng Giao Dịch{% if sort_param == 'shop' %}▲{% elif sort_param == '-shop' %}▼{% endif %}</a>
             </th>
             <th class="px-3 py-2">
               <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.folder_type }}" class="flex items-center gap-1">Loại quyển chứng từ{% if sort_param == 'folder_type' %}▲{% elif sort_param == '-folder_type' %}▼{% endif %}</a>
             </th>
             <th class="px-3 py-2">
-              <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.is_original }}" class="flex items-center gap-1">Bản gốc{% if sort_param == 'is_original' %}▲{% elif sort_param == '-is_original' %}▼{% endif %}</a>
+              <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.is_original }}" class="flex items-center gap-1">Phiên bản{% if sort_param == 'is_original' %}▲{% elif sort_param == '-is_original' %}▼{% endif %}</a>
             </th>
             <th class="px-3 py-2">
               <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.folder_created_date }}" class="flex items-center gap-1">Ngày phát sinh{% if sort_param == 'folder_created_date' %}▲{% elif sort_param == '-folder_created_date' %}▼{% endif %}</a>
@@ -182,13 +212,18 @@
             <th class="px-3 py-2">
               <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.folder_status }}" class="flex items-center gap-1">Trạng thái{% if sort_param == 'folder_status' %}▲{% elif sort_param == '-folder_status' %}▼{% endif %}</a>
             </th>
+            <th class="px-3 py-2">Trạng thái nhận</th>
             <th class="px-3 py-2">Người nhận</th>
           </tr>
         </thead>
         <tbody id="folder-table-body" class="divide-y divide-gray-100">
           {% for folder_dtl in folder_detail %}
           {% with st=folder_dtl.folder_status_id %}
-          <tr class="cursor-pointer hover:bg-gray-50" data-folder-id="{{ folder_dtl.folder_id }}" data-code="{{ folder_dtl.folder_code }}" data-shop="{{ folder_dtl.shop_id.shop_name }}" data-type="{{ folder_dtl.folder_type_id.folder_type_name }}" data-created="{{ folder_dtl.folder_created_date|date:'Y-m-d' }}" data-received="{{ folder_dtl.lastest_received_date|date:'Y-m-d H:i' }}" data-status="{{ st.folder_status_name }}" data-note="{{ folder_dtl.note|default:'' }}" data-user="{{ folder_dtl.lastest_received_by|default:'' }}">
+          <tr class="cursor-pointer hover:bg-gray-50" data-folder-id="{{ folder_dtl.folder_id }}" data-code="{{ folder_dtl.folder_code }}" data-shop="{{ folder_dtl.shop_id.shop_name }}" data-type="{{ folder_dtl.folder_type_id.folder_type_name }}" data-created="{{ folder_dtl.folder_created_date|date:'Y-m-d' }}" data-received="{{ folder_dtl.lastest_received_date|date:'Y-m-d H:i' }}" data-status="{{ st.folder_status_name }}" data-status-id="{{ st.folder_status_id }}" data-status-color="{{ st.badge_color|default:'' }}" data-status-received="{{ st.is_received|yesno:'true,false' }}" data-is-original="{{ folder_dtl.is_original|yesno:'true,false' }}" data-note="{{ folder_dtl.note|default:'' }}" data-user="{{ folder_dtl.lastest_received_by|default:'' }}" data-package-code="{{ folder_dtl.package_id.package_code|default:'' }}" data-package-id="{{ folder_dtl.package_id.package_id|default:'' }}" data-partner-released="{% if folder_dtl.package_id and folder_dtl.package_id.partnerpackage and folder_dtl.package_id.partnerpackage.status_id and folder_dtl.package_id.partnerpackage.status_id.is_released %}true{% else %}false{% endif %}" data-clear-url="{% url 'clear_package' folder_dtl.folder_id %}">
+            <td class="px-3 py-2 text-center">
+              <input type="checkbox" class="row-checkbox h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" value="checkingitem{{ folder_dtl.folder_id }}" data-folder-code="{{ folder_dtl.folder_code }}" data-folder-created-date="{{ folder_dtl.folder_created_date|date:'Y-m-d' }}" data-package-type="{{ folder_dtl.folder_type_id.package_type|default:'' }}" data-disabled-received="{{ st.is_received|yesno:'true,false' }}" {% if st.is_received %}disabled{% endif %}>
+            </td>
+            <td class="px-3 py-2 text-gray-700">{{ forloop.counter|add:folder_detail.start_index|add:-1 }}</td>
             <td class="px-3 py-2 font-semibold text-gray-900">{{ folder_dtl.folder_code }}</td>
             <td class="px-3 py-2 text-gray-700">{{ folder_dtl.shop_id.shop_name }}</td>
             <td class="px-3 py-2 text-gray-700">{{ folder_dtl.folder_type_id.folder_type_name }}</td>
@@ -202,11 +237,20 @@
                 {{ st.folder_status_name }}
               </span>
             </td>
+            <td class="px-3 py-2 text-gray-700">
+              {% if folder_dtl.is_late %}
+                <span class="px-2 py-1 rounded-full bg-red-100 text-red-700 text-[9px] font-semibold">Trễ hạn</span>
+              {% elif folder_dtl.is_on_time %}
+                <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-semibold">Đúng hạn</span>
+              {% else %}
+                <span class="text-gray-400">—</span>
+              {% endif %}
+            </td>
             <td class="px-3 py-2 text-gray-700">{{ folder_dtl.lastest_received_by|default:'' }}</td>
           </tr>
           {% endwith %}
           {% empty %}
-          <tr><td colspan="8" class="px-3 py-4 text-center text-gray-500">Không có quyển nào</td></tr>
+          <tr><td colspan="11" class="px-3 py-4 text-center text-gray-500">Không có quyển nào</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -215,17 +259,29 @@
 
 <!-- Drawer -->
 <div id="drawer" class="fixed top-14 right-0 z-40 h-[calc(100vh-56px)] w-full max-w-md translate-x-full bg-white shadow-2xl transition-transform duration-300 border-l border-gray-200">
-  <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+  <div class="flex items-start justify-between border-b border-gray-100 px-4 py-3">
     <div>
       <p class="text-[9px] uppercase text-gray-500">Chi tiết quyển</p>
       <h3 id="drawer-folder-code" class="text-sm font-semibold text-gray-900"></h3>
     </div>
-    <button id="drawer-close" class="p-2 rounded-full hover:bg-gray-100">
+    <div class="flex items-start gap-3">
+      <div class="text-right">
+        <p class="text-[9px] uppercase text-gray-500">Trạng thái</p>
+        <span id="drawer-status-badge" class="inline-flex items-center px-2 py-1 rounded-full text-[9px] font-semibold border border-gray-200 text-gray-700 bg-gray-100">—</span>
+      </div>
+      <button id="drawer-close" class="p-2 rounded-full hover:bg-gray-100">
       <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-gray-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
-    </button>
+      </button>
+    </div>
   </div>
-  <div class="p-4 space-y-3 text-[10px] overflow-y-auto h-[calc(100vh-56px-52px)]">
-    <div class="grid grid-cols-2 gap-3">
+  <div class="flex items-center gap-4 border-b border-gray-100 px-4 text-[10px]">
+    <button type="button" data-drawer-tab="info" class="py-2 font-semibold border-b-2 border-emerald-500 text-emerald-700">Thông tin</button>
+    <button type="button" data-drawer-tab="history" class="py-2 font-semibold border-b-2 border-transparent text-gray-500 hover:text-emerald-700">Lịch sử</button>
+    <button type="button" id="drawer-tab-additional-btn" data-drawer-tab="additional" class="py-2 font-semibold border-b-2 border-transparent text-gray-500 hover:text-emerald-700">Nhận bổ sung</button>
+  </div>
+  <div class="p-4 space-y-3 text-[10px] overflow-y-auto h-[calc(100vh-56px-92px)]">
+    <div id="drawer-tab-info" class="space-y-3">
+      <div class="grid grid-cols-2 gap-3">
       <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
         <p class="text-[9px] text-gray-500">PGD</p>
         <p id="drawer-shop" class="font-semibold text-gray-900"></p>
@@ -234,29 +290,102 @@
         <p class="text-[9px] text-gray-500">Loại</p>
         <p id="drawer-type" class="font-semibold text-gray-900"></p>
       </div>
-      <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
-        <p class="text-[9px] text-gray-500">Ngày phát sinh</p>
-        <p id="drawer-created" class="font-semibold text-gray-900"></p>
       </div>
-      <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
-        <p class="text-[9px] text-gray-500">Ngày nhận</p>
-        <p id="drawer-received" class="font-semibold text-gray-900"></p>
+      <div class="grid grid-cols-3 gap-3">
+        <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+          <p class="text-[9px] text-gray-500">Ngày phát sinh</p>
+          <p id="drawer-created" class="font-semibold text-gray-900"></p>
+        </div>
+        <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+          <p class="text-[9px] text-gray-500">Ngày nhận</p>
+          <p id="drawer-received" class="font-semibold text-gray-900"></p>
+        </div>
+        <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+          <p class="text-[9px] text-gray-500">Người nhận</p>
+          <p id="drawer-user" class="font-semibold text-gray-900"></p>
+        </div>
       </div>
-      <div class="rounded-lg border border-gray-100 bg-gray-50 p-3 col-span-2">
-        <p class="text-[9px] text-gray-500">Trạng thái</p>
-        <p id="drawer-status" class="font-semibold text-gray-900"></p>
+    <div class="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-2">
+      <p class="text-[9px] uppercase text-gray-500">Cập nhật nhận</p>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-[9px] text-gray-500 mb-1">Trạng thái nhận</label>
+          <select id="drawer-status-select" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-white focus:border-emerald-500 focus:outline-none">
+            <option value="">Chọn trạng thái</option>
+            {% for st in drop_list_folder_status_received %}
+            <option value="{{ st.folder_status_id }}">{{ st.folder_status_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-[9px] text-gray-500 mb-1">Ngày nhận</label>
+          <input id="drawer-receive-date" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-white focus:border-emerald-500 focus:ring-0" placeholder="Chọn ngày nhận" readonly>
+        </div>
       </div>
-      <div class="rounded-lg border border-gray-100 bg-gray-50 p-3 col-span-2">
-        <p class="text-[9px] text-gray-500">Người nhận</p>
-        <p id="drawer-user" class="font-semibold text-gray-900"></p>
+      <div>
+        <label class="block text-[9px] text-gray-500 mb-1">Mã thùng nhận</label>
+        <input id="drawer-package-code" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0" placeholder="Nhập mã thùng">
+      </div>
+      <div id="drawer-update-msg" class="text-[9px] text-red-600 hidden"></div>
+      <div class="flex justify-end gap-2">
+        <button id="drawer-clear-package-btn" class="px-3 py-2 rounded-lg border border-red-200 text-red-600 text-[10px] font-semibold hover:bg-red-50">Gỡ thùng</button>
+        <button id="drawer-save-btn" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700">Nhận</button>
       </div>
     </div>
     <div>
       <p class="text-[9px] text-gray-500 mb-1">Ghi chú</p>
       <textarea id="drawer-note" class="w-full rounded-lg border border-gray-200 text-[10px] px-3 py-2" rows="3" placeholder="Nhập ghi chú..."></textarea>
+      <p id="drawer-note-status" class="text-[9px] text-gray-500 mt-1"></p>
     </div>
-    <div class="flex justify-end gap-2">
-      <button class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700">Lưu</button>
+    </div>
+    <div id="drawer-tab-history" class="space-y-4 hidden">
+      <div>
+        <p class="text-[9px] font-semibold text-gray-600 mb-2">Lịch sử quyển</p>
+        <div id="drawer-history-folder-empty" class="text-[9px] text-gray-500">Chưa có lịch sử.</div>
+        <ul id="drawer-history-folder-list" class="space-y-2"></ul>
+      </div>
+      <div>
+        <p class="text-[9px] font-semibold text-gray-600 mb-2">Lịch sử gán thùng</p>
+        <div id="drawer-history-package-empty" class="text-[9px] text-gray-500">Chưa có lịch sử.</div>
+        <ul id="drawer-history-package-list" class="space-y-2"></ul>
+      </div>
+    </div>
+    <div id="drawer-tab-additional" class="space-y-3 hidden">
+      <form id="drawer-additional-form" method="post" novalidate data-action-template="{% url 'receiving_additional_view' 0 %}">
+        {% csrf_token %}
+        <input type="hidden" name="filter_choice_shop" id="drawer-additional-shop">
+        <input type="hidden" name="filter_choice_folder_code" id="drawer-additional-folder-code">
+        <input type="hidden" name="redirect_name" value="receiving_transaction_v2">
+        <div class="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-2">
+          <p class="text-[9px] uppercase text-gray-500">Cập nhật nhận</p>
+          <div>
+            <label class="block text-[9px] text-gray-500 mb-1">Trạng thái nhận bổ sung</label>
+            <select name="additional_folder_status_submit" id="drawer-additional-status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-white focus:border-emerald-500 focus:outline-none">
+              <option value="">Chọn trạng thái</option>
+              {% for st in drop_list_folder_status_received %}
+              <option value="{{ st.folder_status_id }}">{{ st.folder_status_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-[9px] text-gray-500 mb-1">Ngày nhận thực tế</label>
+            <input id="drawer-additional-receive-date" name="filter_True_Lastest_Receive_Date" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-white focus:border-emerald-500 focus:ring-0" placeholder="Chọn ngày nhận" readonly>
+          </div>
+          <div>
+            <label class="block text-[9px] text-gray-500 mb-1">Mã thùng</label>
+            <input id="drawer-additional-package" name="additional_package_code_submit" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0" placeholder="Nhập mã thùng mới">
+          </div>
+          <div>
+            <label class="block text-[9px] text-gray-500 mb-1">Ghi chú</label>
+            <textarea id="drawer-additional-note" name="additional_folder_note_submit" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]" rows="3" placeholder="Thêm ghi chú bổ sung nếu có"></textarea>
+          </div>
+          <div id="drawer-additional-msg" class="text-[9px] text-red-600 hidden"></div>
+          <div class="flex justify-end">
+            <button type="submit" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700">Nhận quyển bổ sung</button>
+          </div>
+        </div>
+      </form>
+      <p id="drawer-additional-hint" class="text-[9px] text-gray-500 hidden">Chỉ áp dụng cho quyển gốc đã nhận.</p>
     </div>
   </div>
 </div>
@@ -267,18 +396,248 @@
   const drawer = document.getElementById('drawer');
   const drawerClose = document.getElementById('drawer-close');
   const selectAll = document.getElementById('select-all');
+  const bulkButton = document.getElementById('bulk-receive-btn');
+  const bulkCount = document.getElementById('bulk-receive-count');
   const noteInput = document.getElementById('drawer-note');
+  const noteStatus = document.getElementById('drawer-note-status');
+  const statusSelect = document.getElementById('drawer-status-select');
+  const statusBadge = document.getElementById('drawer-status-badge');
+  const receiveInput = document.getElementById('drawer-receive-date');
+  const packageInput = document.getElementById('drawer-package-code');
+  const updateMsg = document.getElementById('drawer-update-msg');
+  const clearBtn = document.getElementById('drawer-clear-package-btn');
+  const saveBtn = document.getElementById('drawer-save-btn');
   const selectionTitle = document.getElementById('drawer-folder-code');
   const selectionList = document.getElementById('drawer-selection-list');
+  const tabButtons = drawer?.querySelectorAll('[data-drawer-tab]') || [];
+  const tabInfo = document.getElementById('drawer-tab-info');
+  const tabHistory = document.getElementById('drawer-tab-history');
+  const tabAdditional = document.getElementById('drawer-tab-additional');
+  const tabAdditionalBtn = document.getElementById('drawer-tab-additional-btn');
+  const additionalForm = document.getElementById('drawer-additional-form');
+  const additionalShop = document.getElementById('drawer-additional-shop');
+  const additionalFolderCode = document.getElementById('drawer-additional-folder-code');
+  const additionalReceiveDate = document.getElementById('drawer-additional-receive-date');
+  const additionalStatus = document.getElementById('drawer-additional-status');
+  const additionalPackage = document.getElementById('drawer-additional-package');
+  const additionalNote = document.getElementById('drawer-additional-note');
+  const additionalMsg = document.getElementById('drawer-additional-msg');
+  const additionalHint = document.getElementById('drawer-additional-hint');
+  const historyFolderList = document.getElementById('drawer-history-folder-list');
+  const historyFolderEmpty = document.getElementById('drawer-history-folder-empty');
+  const historyPackageList = document.getElementById('drawer-history-package-list');
+  const historyPackageEmpty = document.getElementById('drawer-history-package-empty');
+  let activeFolderId = null;
+  let activeRow = null;
+  let noteTimer = null;
+  let drawerReceivePicker = null;
+  let drawerAdditionalPicker = null;
+  let lastHistoryFolderId = null;
+
+  const setTabButtonState = (btn, isActive) => {
+    btn.classList.toggle('text-emerald-700', isActive);
+    btn.classList.toggle('border-emerald-500', isActive);
+    btn.classList.toggle('text-gray-500', !isActive);
+    btn.classList.toggle('border-transparent', !isActive);
+  };
+
+  const setDrawerTab = (tabName) => {
+    tabButtons.forEach(btn => setTabButtonState(btn, btn.dataset.drawerTab === tabName));
+    if (tabInfo) tabInfo.classList.toggle('hidden', tabName !== 'info');
+    if (tabHistory) tabHistory.classList.toggle('hidden', tabName !== 'history');
+    if (tabAdditional) tabAdditional.classList.toggle('hidden', tabName !== 'additional');
+    if (tabName === 'history') {
+      loadHistory(activeFolderId);
+    }
+    if (tabName === 'additional' && activeRow && additionalForm && activeFolderId) {
+      const tmpl = additionalForm.dataset.actionTemplate || '/receiving_additional_view/0/';
+      additionalForm.action = tmpl.replace('/0/', `/${activeFolderId}/`);
+      if (additionalShop) additionalShop.value = activeRow.dataset.shop || '';
+      if (additionalFolderCode) additionalFolderCode.value = activeRow.dataset.code || '';
+    }
+    if (tabName === 'additional' && drawerAdditionalPicker && !additionalReceiveDate.value) {
+      drawerAdditionalPicker.setDate(new Date(), true);
+    }
+  };
+
+  const formatDateTime = (val) => {
+    if (!val) return '';
+    const d = new Date(val);
+    if (Number.isNaN(d.getTime())) return val;
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const loadHistory = async (folderId) => {
+    if (!folderId || !historyFolderList || !historyFolderEmpty || !historyPackageList || !historyPackageEmpty) return;
+    if (lastHistoryFolderId === folderId && (historyFolderList.children.length || historyPackageList.children.length)) {
+      historyFolderEmpty.classList.add('hidden');
+      historyPackageEmpty.classList.add('hidden');
+      return;
+    }
+    historyFolderList.innerHTML = '';
+    historyPackageList.innerHTML = '';
+    historyFolderEmpty.textContent = 'Đang tải...';
+    historyPackageEmpty.textContent = 'Đang tải...';
+    historyFolderEmpty.classList.remove('hidden');
+    historyPackageEmpty.classList.remove('hidden');
+    try {
+      const resp = await fetch(`/fetch-history-receiving-v2/${folderId}/`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data || typeof data !== 'object') {
+        throw new Error('Không tải được lịch sử.');
+      }
+      const folderHistory = Array.isArray(data.folder_history) ? data.folder_history : [];
+      const packageHistory = Array.isArray(data.package_history) ? data.package_history : [];
+
+      historyFolderList.innerHTML = '';
+      if (!folderHistory.length) {
+        historyFolderEmpty.textContent = 'Chưa có lịch sử quyển.';
+        historyFolderEmpty.classList.remove('hidden');
+      } else {
+        historyFolderEmpty.classList.add('hidden');
+        folderHistory.forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[9px]';
+        const statusName = item.folder_status_id__folder_status_name || '';
+        const userName = item.trans_created_by__username || '';
+        const dateStr = formatDateTime(item.trans_created_date);
+        li.innerHTML = `<div class="font-semibold text-gray-900">${statusName}</div><div class="text-gray-500">${userName} • ${dateStr}</div>`;
+        historyFolderList.appendChild(li);
+        });
+      }
+
+      historyPackageList.innerHTML = '';
+      if (!packageHistory.length) {
+        historyPackageEmpty.textContent = 'Chưa có lịch sử gán thùng.';
+        historyPackageEmpty.classList.remove('hidden');
+      } else {
+        historyPackageEmpty.classList.add('hidden');
+        packageHistory.forEach(item => {
+          const li = document.createElement('li');
+          li.className = 'rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-[9px]';
+          const pkgCode = item.package_id__package_code || '';
+          const userName = item.trans_created_by__username || '';
+          const dateStr = formatDateTime(item.trans_created_date);
+          li.innerHTML = `<div class="font-semibold text-gray-900">${pkgCode}</div><div class="text-gray-500">${userName} • ${dateStr}</div>`;
+          historyPackageList.appendChild(li);
+        });
+      }
+      lastHistoryFolderId = folderId;
+    } catch (err) {
+      historyFolderEmpty.textContent = err.message || 'Không tải được lịch sử.';
+      historyPackageEmpty.textContent = err.message || 'Không tải được lịch sử.';
+    }
+  };
 
   const updateSingleDrawer = (tr) => {
+    activeFolderId = tr.dataset.folderId || null;
+    activeRow = tr;
     document.getElementById('drawer-shop').textContent = tr.dataset.shop || '';
     document.getElementById('drawer-type').textContent = tr.dataset.type || '';
     document.getElementById('drawer-created').textContent = tr.dataset.created || '';
     document.getElementById('drawer-received').textContent = tr.dataset.received || '—';
-    document.getElementById('drawer-status').textContent = tr.dataset.status || '';
     document.getElementById('drawer-user').textContent = tr.dataset.user || '';
     noteInput.value = tr.dataset.note || '';
+    if (statusBadge) {
+      const statusName = tr.dataset.status || '—';
+      const isReceived = (tr.dataset.statusReceived || '').toLowerCase() === 'true';
+      const statusColor = (tr.dataset.statusColor || '').trim();
+      statusBadge.textContent = statusName;
+      if (statusColor) {
+        statusBadge.style.backgroundColor = statusColor;
+        statusBadge.style.color = '#0f172a';
+        statusBadge.style.borderColor = '#d1d5db';
+      } else if (isReceived) {
+        statusBadge.style.backgroundColor = '#d1f4e0';
+        statusBadge.style.color = '#006837';
+        statusBadge.style.borderColor = '#9ee5bc';
+      } else {
+        statusBadge.style.backgroundColor = '#f3f4f6';
+        statusBadge.style.color = '#4b5563';
+        statusBadge.style.borderColor = '#e5e7eb';
+      }
+    }
+    if (statusSelect) {
+      statusSelect.value = tr.dataset.statusId || '';
+    }
+    if (additionalShop) {
+      additionalShop.value = tr.dataset.shop || '';
+    }
+    if (additionalFolderCode) {
+      additionalFolderCode.value = tr.dataset.code || '';
+    }
+    if (additionalForm && activeFolderId) {
+      const tmpl = additionalForm.dataset.actionTemplate || '/receiving_additional_view/0/';
+      additionalForm.action = tmpl.replace('/0/', `/${activeFolderId}/`);
+    }
+    if (additionalStatus) additionalStatus.value = '';
+    if (additionalPackage) additionalPackage.value = '';
+    if (additionalNote) additionalNote.value = '';
+    if (drawerAdditionalPicker) {
+      drawerAdditionalPicker.setDate(new Date(), true);
+    } else if (additionalReceiveDate) {
+      additionalReceiveDate.value = '';
+    }
+    if (tabAdditionalBtn) {
+      const isOriginal = (tr.dataset.isOriginal || '').toLowerCase() === 'true';
+      const isReceived = (tr.dataset.statusReceived || '').toLowerCase() === 'true';
+      const allowAdditional = isOriginal && isReceived;
+      tabAdditionalBtn.disabled = !allowAdditional;
+      tabAdditionalBtn.classList.toggle('opacity-50', !allowAdditional);
+      tabAdditionalBtn.classList.toggle('cursor-not-allowed', !allowAdditional);
+      if (!allowAdditional && additionalHint) {
+        additionalHint.classList.remove('hidden');
+      } else if (additionalHint) {
+        additionalHint.classList.add('hidden');
+      }
+      if (!allowAdditional && tabAdditional && !tabAdditional.classList.contains('hidden')) {
+        setDrawerTab('info');
+      }
+    }
+    if (packageInput) {
+      packageInput.value = tr.dataset.packageCode || '';
+    }
+    if (clearBtn) {
+      const hasPackage = !!(tr.dataset.packageId || '').trim();
+      const isReleased = (tr.dataset.partnerReleased || '').toLowerCase() === 'true';
+      clearBtn.disabled = !hasPackage || isReleased;
+      clearBtn.classList.toggle('opacity-50', clearBtn.disabled);
+      clearBtn.classList.toggle('cursor-not-allowed', clearBtn.disabled);
+    }
+    if (receiveInput) {
+      const receivedVal = tr.dataset.received || '';
+      if (drawerReceivePicker) {
+        if (receivedVal) {
+          drawerReceivePicker.setDate(receivedVal, true, 'Y-m-d H:i');
+        } else {
+          drawerReceivePicker.setDate(new Date(), true);
+        }
+      } else {
+        receiveInput.value = receivedVal || '';
+      }
+    }
+    if (updateMsg) {
+      updateMsg.classList.add('hidden');
+      updateMsg.textContent = '';
+    }
+    if (noteStatus) {
+      noteStatus.textContent = '';
+    }
+    if (historyFolderList) historyFolderList.innerHTML = '';
+    if (historyPackageList) historyPackageList.innerHTML = '';
+    if (historyFolderEmpty) {
+      historyFolderEmpty.textContent = 'Chưa có lịch sử.';
+      historyFolderEmpty.classList.remove('hidden');
+    }
+    if (historyPackageEmpty) {
+      historyPackageEmpty.textContent = 'Chưa có lịch sử.';
+      historyPackageEmpty.classList.remove('hidden');
+    }
+    lastHistoryFolderId = null;
+    setDrawerTab('info');
   };
 
   const openDrawerForSelection = (selected) => {
@@ -316,7 +675,6 @@
       document.getElementById('drawer-type').textContent = '';
       document.getElementById('drawer-created').textContent = '';
       document.getElementById('drawer-received').textContent = '';
-      document.getElementById('drawer-status').textContent = '';
       document.getElementById('drawer-user').textContent = '';
     }
   };
@@ -327,41 +685,93 @@
     return [];
   };
 
+  const updateSelectAllState = () => {
+    if (!selectAll || !tbody) return;
+    const allCbs = tbody.querySelectorAll('.row-checkbox:not(:disabled)');
+    const checkedCbs = tbody.querySelectorAll('.row-checkbox:not(:disabled):checked');
+    const total = allCbs.length;
+    const checkedCount = checkedCbs.length;
+    selectAll.checked = total > 0 && checkedCount === total;
+    selectAll.indeterminate = checkedCount > 0 && checkedCount < total;
+  };
+
+  const updateBulkButton = () => {
+    if (!bulkButton || !bulkCount) return;
+    const selected = getSelectedRows();
+    bulkCount.textContent = selected.length;
+    bulkButton.classList.toggle('hidden', selected.length === 0);
+    if (selected.length === 0) {
+      clearTypeLock();
+    }
+  };
+
+  const getSelectedPackageTypes = () => {
+    const types = new Set();
+    document.querySelectorAll('.row-checkbox:checked').forEach(cb => {
+      const val = (cb.dataset.packageType || '').trim().toUpperCase();
+      if (val) types.add(val);
+    });
+    return Array.from(types);
+  };
+
+  const applyTypeLock = () => {
+    const types = getSelectedPackageTypes();
+    const selectedType = types.length === 1 ? types[0] : null;
+    document.querySelectorAll('.row-checkbox').forEach(cb => {
+      const isReceivedDisabled = (cb.dataset.disabledReceived || '').toLowerCase() === 'true';
+      if (isReceivedDisabled) {
+        cb.disabled = true;
+        return;
+      }
+      if (!selectedType) {
+        cb.disabled = false;
+        return;
+      }
+      const cbType = (cb.dataset.packageType || '').trim().toUpperCase();
+      if (cb.checked) {
+        cb.disabled = false;
+        return;
+      }
+      cb.disabled = cbType && cbType !== selectedType;
+    });
+  };
+
+  const clearTypeLock = () => {
+    document.querySelectorAll('.row-checkbox').forEach(cb => {
+      const isReceivedDisabled = (cb.dataset.disabledReceived || '').toLowerCase() === 'true';
+      cb.disabled = !!isReceivedDisabled;
+    });
+    updateSelectAllState();
+  };
+
   tbody?.querySelectorAll('tr').forEach((tr) => {
     tr.addEventListener('click', (e) => {
-      if (e.target && e.target.classList.contains('row-checkbox')) return;
-      const cb = tr.querySelector('.row-checkbox');
-      if (cb) {
-        cb.checked = !cb.checked;
-        cb.dispatchEvent(new Event('change'));
-      } else {
-        openDrawerForSelection([tr]);
-      }
+      if (e.target && e.target.closest('.row-checkbox')) return;
+      openDrawerForSelection([tr]);
     });
     const cb = tr.querySelector('.row-checkbox');
     cb?.addEventListener('change', () => {
-      const selected = getSelectedRows();
-      if (selectAll) {
-        const total = tbody.querySelectorAll('.row-checkbox').length;
-        selectAll.checked = selected.length === total;
-        selectAll.indeterminate = selected.length > 0 && selected.length < total;
-      }
-      openDrawerForSelection(selected);
+      updateSelectAllState();
+      updateBulkButton();
+      applyTypeLock();
     });
   });
 
   selectAll?.addEventListener('change', (e) => {
     const checked = e.target.checked;
-    tbody.querySelectorAll('.row-checkbox').forEach(cb => {
+    tbody.querySelectorAll('.row-checkbox:not(:disabled)').forEach(cb => {
       cb.checked = checked;
     });
-    openDrawerForSelection(getSelectedRows());
+    updateSelectAllState();
+    updateBulkButton();
+    applyTypeLock();
   });
 
   drawerClose?.addEventListener('click', () => {
     drawer.classList.add('translate-x-full');
-    tbody.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
-    if (selectAll) { selectAll.checked = false; selectAll.indeterminate = false; }
+    activeFolderId = null;
+    activeRow = null;
+    lastHistoryFolderId = null;
   });
 
   // Validate shop required + date range <= 30 days for both date filters
@@ -413,6 +823,25 @@
   initFlatRange(folderDateInput);
   initFlatRange(receiveDateInput);
 
+  if (receiveInput && window.flatpickr) {
+    drawerReceivePicker = flatpickr(receiveInput, {
+      enableTime: true,
+      time_24hr: true,
+      dateFormat: 'Y-m-d H:i',
+      allowInput: false,
+      static: true,
+    });
+  }
+  if (additionalReceiveDate && window.flatpickr) {
+    drawerAdditionalPicker = flatpickr(additionalReceiveDate, {
+      enableTime: true,
+      time_24hr: true,
+      dateFormat: 'Y-m-d H:i',
+      allowInput: false,
+      static: true,
+    });
+  }
+
   // Close drawer when clicking outside
   document.addEventListener('click', (e) => {
     if (!drawer) return;
@@ -421,9 +850,708 @@
     const clickedRow = tbody?.contains(target);
     if (!clickedInsideDrawer && !clickedRow) {
       drawer.classList.add('translate-x-full');
-      tbody?.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
-      if (selectAll) { selectAll.checked = false; selectAll.indeterminate = false; }
+      activeFolderId = null;
+      activeRow = null;
+      lastHistoryFolderId = null;
     }
+  });
+
+  updateSelectAllState();
+  updateBulkButton();
+  applyTypeLock();
+
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      const target = btn.dataset.drawerTab;
+      setDrawerTab(target);
+    });
+  });
+
+  const setUpdateMsg = (text, isError = true) => {
+    if (!updateMsg) return;
+    if (!text) {
+      updateMsg.classList.add('hidden');
+      updateMsg.textContent = '';
+      return;
+    }
+    updateMsg.textContent = text;
+    updateMsg.className = `text-[9px] ${isError ? 'text-red-600' : 'text-emerald-700'}`;
+    updateMsg.classList.remove('hidden');
+  };
+
+  const setAdditionalMsg = (text) => {
+    if (!additionalMsg) return;
+    if (!text) {
+      additionalMsg.classList.add('hidden');
+      additionalMsg.textContent = '';
+      return;
+    }
+    additionalMsg.textContent = text;
+    additionalMsg.classList.remove('hidden');
+  };
+
+  additionalForm?.addEventListener('submit', (e) => {
+    setAdditionalMsg('');
+    if (!activeFolderId) {
+      e.preventDefault();
+      setAdditionalMsg('Vui lòng chọn quyển gốc.');
+      return;
+    }
+    if (!additionalStatus?.value) {
+      e.preventDefault();
+      setAdditionalMsg('Vui lòng chọn trạng thái nhận bổ sung.');
+      return;
+    }
+    if (!additionalPackage?.value?.trim()) {
+      e.preventDefault();
+      setAdditionalMsg('Vui lòng nhập mã thùng.');
+      return;
+    }
+  });
+
+  additionalStatus?.addEventListener('change', () => setAdditionalMsg(''));
+  additionalPackage?.addEventListener('input', () => setAdditionalMsg(''));
+
+  clearBtn?.addEventListener('click', async () => {
+    if (!activeFolderId || !activeRow) return;
+    const packageId = (activeRow.dataset.packageId || '').trim();
+    const packageCode = (activeRow.dataset.packageCode || '').trim();
+    if (!packageId) {
+      setUpdateMsg('Không tìm thấy thùng cần gỡ.');
+      return;
+    }
+    const confirmDelete = confirm(`Bạn có chắc chắn muốn gỡ chứng từ ra khỏi thùng này?: ${packageCode || packageId}`);
+    if (!confirmDelete) return;
+    setUpdateMsg('');
+    clearBtn.disabled = true;
+    try {
+      const url = activeRow.dataset.clearUrl || `/package/delete/${activeFolderId}/`;
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': window.CSRF_TOKEN || '',
+        },
+        body: JSON.stringify({
+          folder_id_submit: activeFolderId,
+          package_id_submit: packageId,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || data.success === false) {
+        throw new Error(data.message || 'Xóa thùng không thành công.');
+      }
+      setUpdateMsg('Xóa thùng thành công.', false);
+      setTimeout(() => window.location.reload(), 500);
+    } catch (err) {
+      setUpdateMsg(err.message || 'Xóa thùng không thành công.');
+      clearBtn.disabled = false;
+      clearBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+  });
+
+  saveBtn?.addEventListener('click', async () => {
+    if (!activeFolderId) return;
+    const statusVal = statusSelect?.value || '';
+    const pkgVal = packageInput?.value?.trim() || '';
+    if (!statusVal) {
+      setUpdateMsg('Vui lòng chọn trạng thái nhận.');
+      return;
+    }
+    if (!pkgVal) {
+      setUpdateMsg('Vui lòng nhập mã thùng nhận.');
+      return;
+    }
+    setUpdateMsg('');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Đang lưu...';
+    try {
+      const resp = await fetch('{% url "api_receive_folder_update_v2" %}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': window.CSRF_TOKEN || '',
+        },
+        body: JSON.stringify({
+          folder_id: activeFolderId,
+          folder_status_id: statusVal,
+          package_code: pkgVal,
+          received_date: receiveInput?.value || '',
+          redirect_url: window.location.href,
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || data.error) {
+        throw new Error(data.error || 'Cập nhật thất bại.');
+      }
+      const msg = [data.message, data.check_message].filter(Boolean).join(' ');
+      setUpdateMsg(msg || 'Cập nhật thành công.', false);
+      setTimeout(() => {
+        window.location.href = data.redirect_url || window.location.href;
+      }, 700);
+    } catch (err) {
+      setUpdateMsg(err.message || 'Cập nhật thất bại.');
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Nhận';
+    }
+  });
+
+  const saveNote = async (noteVal) => {
+    if (!activeFolderId) return;
+    if (!noteStatus) return;
+    noteStatus.textContent = 'Đang lưu...';
+    noteStatus.className = 'text-[9px] text-gray-500 mt-1';
+    try {
+      const resp = await fetch(`/api/folder/${activeFolderId}/note/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': window.CSRF_TOKEN || '',
+        },
+        body: JSON.stringify({ note: noteVal }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || data.error) {
+        throw new Error(data.error || 'Lưu ghi chú thất bại.');
+      }
+      noteStatus.textContent = 'Đã lưu ghi chú';
+      noteStatus.className = 'text-[9px] text-emerald-700 mt-1';
+      if (activeRow) {
+        activeRow.dataset.note = data.note || '';
+      }
+    } catch (err) {
+      noteStatus.textContent = err.message || 'Lưu ghi chú thất bại.';
+      noteStatus.className = 'text-[9px] text-red-600 mt-1';
+    }
+  };
+
+  noteInput?.addEventListener('input', () => {
+    if (!activeFolderId) return;
+    if (noteTimer) clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => {
+      saveNote(noteInput.value || '');
+    }, 600);
+  });
+
+  noteInput?.addEventListener('blur', () => {
+    if (!activeFolderId) return;
+    if (noteTimer) {
+      clearTimeout(noteTimer);
+      noteTimer = null;
+    }
+    saveNote(noteInput.value || '');
+  });
+</script>
+
+<script type="application/json" id="partners-options">{{ partners_options_json|safe }}</script>
+<script type="application/json" id="regions-options">{{ region_options_json|safe }}</script>
+<script>
+  window.CSRF_TOKEN = "{{ csrf_token }}";
+</script>
+
+<!-- Modal nhận nhiều (v2) -->
+<div id="bulkReceiveModal" tabindex="-1" aria-hidden="true" class="hidden fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-xl text-[9px]">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+      <h3 class="text-[10px] font-semibold text-gray-900">Nhận nhiều quyển chứng từ</h3>
+      <button type="button" class="text-gray-500 hover:text-gray-700" data-modal-hide="bulkReceiveModal">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+      </button>
+    </div>
+    <div class="p-4 space-y-3 text-[9px]">
+      <div>
+        <label class="block text-[10px] font-semibold text-gray-700 mb-1">Các quyển đã chọn</label>
+        <ul id="bulk-selected-list" class="max-h-32 overflow-y-auto space-y-1 rounded-lg border border-gray-200 bg-gray-50 p-2"></ul>
+      </div>
+      <div>
+        <label class="block text-[10px] font-semibold text-gray-700 mb-1">Trạng thái nhận</label>
+        <select id="bulk-status-select" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0">
+          <option value="">Chọn trạng thái nhận</option>
+          {% for st in drop_list_folder_status_received %}
+          <option value="{{ st.folder_status_id }}">{{ st.folder_status_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-semibold text-gray-700 mb-1">Ngày nhận thực tế</label>
+        <input id="bulk-receive-date" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-white focus:border-emerald-500 focus:ring-0" placeholder="Chọn ngày nhận" readonly>
+      </div>
+      <div>
+        <label class="block text-[10px] font-semibold text-gray-700 mb-1">Mã thùng</label>
+        <input id="bulk-package-code" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0" placeholder="Nhập mã thùng F88">
+      </div>
+      <div>
+        <label class="block text-[10px] font-semibold text-gray-700 mb-1">Ghi chú</label>
+        <textarea id="bulk-note" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]" rows="3" placeholder="Thêm ghi chú nếu có"></textarea>
+      </div>
+      <div id="bulk-receive-msg" class="text-[9px] text-red-600 hidden"></div>
+    </div>
+    <div class="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200">
+      <button type="button" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-[9px] font-semibold hover:bg-gray-50" data-modal-hide="bulkReceiveModal">Hủy</button>
+      <button type="button" data-modal-toggle="createPackageModal" class="px-3 py-2 rounded-lg border border-emerald-200 text-emerald-700 text-[9px] font-semibold hover:bg-emerald-50">Tạo thùng</button>
+      <button type="button" id="bulk-receive-submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[9px] font-semibold hover:bg-emerald-700">Nhận quyển</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const bulkModal = document.getElementById('bulkReceiveModal');
+    if (!bulkModal) return;
+    if (bulkModal.parentElement !== document.body) {
+      document.body.appendChild(bulkModal);
+    }
+    const showBulk = () => bulkModal.classList.remove('hidden');
+    const hideBulk = () => bulkModal.classList.add('hidden');
+    const listEl = document.getElementById('bulk-selected-list');
+    const statusEl = document.getElementById('bulk-status-select');
+    const dateEl = document.getElementById('bulk-receive-date');
+    const codeEl = document.getElementById('bulk-package-code');
+    const noteEl = document.getElementById('bulk-note');
+    const msgEl = document.getElementById('bulk-receive-msg');
+    const submitEl = document.getElementById('bulk-receive-submit');
+
+    const setBulkMsg = (text, isError = true) => {
+      if (!msgEl) return;
+      if (!text) {
+        msgEl.classList.add('hidden');
+        msgEl.textContent = '';
+        return;
+      }
+      msgEl.textContent = text;
+      msgEl.className = `text-[9px] ${isError ? 'text-red-600' : 'text-emerald-700'}`;
+      msgEl.classList.remove('hidden');
+    };
+
+    const refreshSelectedList = () => {
+      if (!listEl) return;
+      listEl.innerHTML = '';
+      const selected = Array.from(document.querySelectorAll('.row-checkbox:checked'));
+      if (!selected.length) {
+        const li = document.createElement('li');
+        li.className = 'text-gray-500 text-[9px]';
+        li.textContent = 'Chưa chọn quyển nào.';
+        listEl.appendChild(li);
+        return;
+      }
+      selected.forEach(cb => {
+        const li = document.createElement('li');
+        li.className = 'px-2 py-1 rounded border border-gray-200 bg-white text-[9px]';
+        const code = cb.dataset.folderCode || '';
+        const created = cb.dataset.folderCreatedDate || '';
+        li.textContent = `${code} • ${created}`;
+        listEl.appendChild(li);
+      });
+    };
+
+    const syncBulkValidation = () => {
+      if (bulkModal.classList.contains('hidden')) return;
+      const selectedTypes = Array.from(new Set(
+        Array.from(document.querySelectorAll('.row-checkbox:checked'))
+          .map(cb => (cb.dataset.packageType || '').trim().toUpperCase())
+          .filter(Boolean)
+      ));
+      if (selectedTypes.length > 1) {
+        setBulkMsg('Vui lòng chọn các quyển cùng loại thùng.');
+        if (submitEl) submitEl.disabled = true;
+        return;
+      }
+      const selectedType = selectedTypes[0] || '';
+      const codeVal = (codeEl?.value || '').trim().toUpperCase();
+      if (selectedType && codeVal.includes('-')) {
+        const prefix = codeVal.split('-')[0];
+        if (prefix && prefix !== selectedType) {
+          setBulkMsg(`Mã thùng không khớp loại ${selectedType}.`);
+          if (submitEl) submitEl.disabled = true;
+          return;
+        }
+      }
+      setBulkMsg('');
+      if (submitEl) submitEl.disabled = false;
+    };
+
+    let bulkReceivePicker = null;
+    if (dateEl && window.flatpickr) {
+      bulkReceivePicker = flatpickr(dateEl, {
+        enableTime: true,
+        time_24hr: true,
+        dateFormat: 'Y-m-d H:i',
+        allowInput: false,
+        static: true,
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      const openBtn = e.target.closest('[data-modal-toggle="bulkReceiveModal"]');
+      const closeBtn = e.target.closest('[data-modal-hide="bulkReceiveModal"]');
+      if (openBtn) {
+        e.preventDefault();
+        refreshSelectedList();
+        if (bulkReceivePicker && !dateEl.value) {
+          bulkReceivePicker.setDate(new Date(), true);
+        }
+        setBulkMsg('');
+        syncBulkValidation();
+        showBulk();
+      }
+      if (closeBtn) { e.preventDefault(); hideBulk(); }
+    });
+    bulkModal.addEventListener('click', (e) => { if (e.target === bulkModal) hideBulk(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideBulk(); });
+
+    document.addEventListener('change', (e) => {
+      if (!bulkModal.classList.contains('hidden') && e.target.classList.contains('row-checkbox')) {
+        refreshSelectedList();
+        syncBulkValidation();
+      }
+    });
+
+    codeEl?.addEventListener('input', () => {
+      syncBulkValidation();
+    });
+
+    submitEl?.addEventListener('click', async () => {
+      const statusVal = statusEl?.value || '';
+      const dateVal = dateEl?.value || '';
+      const codeVal = codeEl?.value?.trim() || '';
+      const noteVal = noteEl?.value || '';
+      const selectedItems = Array.from(document.querySelectorAll('.row-checkbox:checked')).map(cb => cb.value);
+      const selectedTypes = Array.from(new Set(
+        Array.from(document.querySelectorAll('.row-checkbox:checked'))
+          .map(cb => (cb.dataset.packageType || '').trim().toUpperCase())
+          .filter(Boolean)
+      ));
+      if (selectedTypes.length > 1) {
+        setBulkMsg('Vui lòng chọn các quyển cùng loại thùng.');
+        return;
+      }
+      if (selectedTypes.length === 1) {
+        const prefix = codeVal.toUpperCase().split('-')[0];
+        if (prefix && prefix !== selectedTypes[0]) {
+          setBulkMsg(`Mã thùng không khớp loại ${selectedTypes[0]}.`);
+          return;
+        }
+      }
+      if (!selectedItems.length) {
+        setBulkMsg('Vui lòng chọn ít nhất một quyển.');
+        return;
+      }
+      if (!statusVal) {
+        setBulkMsg('Vui lòng chọn trạng thái nhận.');
+        return;
+      }
+      if (!codeVal) {
+        setBulkMsg('Vui lòng nhập mã thùng.');
+        return;
+      }
+      setBulkMsg('');
+      submitEl.disabled = true;
+      submitEl.textContent = 'Đang nhận...';
+      try {
+        const resp = await fetch('{% url "bulk_receiving" %}', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': window.CSRF_TOKEN || '',
+          },
+          body: JSON.stringify({
+            selectedItems: selectedItems,
+            trueLastestReceiveDate: dateVal,
+            package_choice: codeVal,
+            folder_status_choice: statusVal,
+            folder_note_choice: noteVal,
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.success === false) {
+          throw new Error(data.error || 'Nhận nhiều thất bại.');
+        }
+        setBulkMsg('Nhận chứng từ thành công.', false);
+        setTimeout(() => window.location.reload(), 600);
+      } catch (err) {
+        setBulkMsg(err.message || 'Nhận nhiều thất bại.');
+      } finally {
+        submitEl.disabled = false;
+        submitEl.textContent = 'Nhận quyển';
+      }
+    });
+  });
+</script>
+
+<!-- Modal tạo thùng (v2) -->
+<div id="createPackageModal" tabindex="-1" aria-hidden="true" class="hidden fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-xl text-[9px]">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+      <h3 class="text-[10px] font-semibold text-gray-900">Tạo thùng mới</h3>
+      <button type="button" class="text-gray-500 hover:text-gray-700" data-modal-hide="createPackageModal">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+      </button>
+    </div>
+    <div class="p-4 space-y-4 text-[9px]">
+      <div>
+        <label class="block text-[10px] font-semibold text-gray-700 mb-1">Loại thùng</label>
+        <select id="create-package-type-v2" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0">
+          <option value="">Chọn loại thùng</option>
+          {% for pt in package_types %}
+          <option value="{{ pt.folder_type_id }}" data-package-type="{{ pt.package_type }}">{{ pt.folder_type_name }} ({{ pt.package_type }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-[10px] font-semibold text-gray-700 mb-1">Mã kho (vùng)</label>
+          <select id="create-package-region-v2" class="w-full h-[34px] rounded-lg border border-gray-200 px-3 py-2 text-[9px] leading-[18px] focus:border-emerald-500 focus:ring-0" disabled>
+            <option value="">Chọn mã kho</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[10px] font-semibold text-gray-700 mb-1">Ngày tạo thùng</label>
+          <input id="create-package-date-v2" type="text" class="w-full h-[34px] rounded-lg border border-gray-200 px-3 py-2 text-[9px] leading-[18px] focus:border-emerald-500 focus:ring-0 bg-white" placeholder="Chọn ngày" value="{% now 'Y-m-d' %}" disabled>
+        </div>
+      </div>
+      <div>
+        <label class="flex items-center gap-2 text-[10px] font-semibold text-gray-700 mb-1">
+          <span>Mã thùng</span>
+          <button type="button" id="copy-package-code-btn-v2" class="p-1 rounded hover:bg-gray-100 text-gray-500" title="Copy mã thùng">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+          <span id="copy-package-code-msg-v2" class="text-[9px] text-emerald-600 hidden">Copied</span>
+        </label>
+        <input id="create-package-code-v2" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0" placeholder="Nhập mã thùng">
+      </div>
+      <div>
+        <label class="block text-[10px] font-semibold text-gray-700 mb-1">Đối tác</label>
+        <select id="create-partner-v2" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0">
+          <option value="">Chọn đối tác</option>
+          {% for partner in partners_active %}
+          <option value="{{ partner.partner_id }}" data-require-code="{{ partner.require_partner_code|yesno:'1,0' }}">{{ partner.partner_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-semibold text-gray-700 mb-1">Mã thùng đối tác</label>
+        <input id="create-partner-package-code-v2" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0" placeholder="Nhập mã thùng đối tác" disabled>
+      </div>
+      <div id="create-package-message-v2" class="text-[9px] text-red-600 hidden"></div>
+    </div>
+    <div class="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200">
+      <button type="button" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-[9px] font-semibold hover:bg-gray-50" data-modal-hide="createPackageModal">Hủy</button>
+      <button type="button" id="create-package-submit-v2" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[9px] font-semibold hover:bg-emerald-700">Tạo thùng</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const modalEl = document.getElementById('createPackageModal');
+    if (!modalEl) return;
+    if (modalEl.parentElement !== document.body) {
+      document.body.appendChild(modalEl);
+    }
+    const showModal = () => modalEl.classList.remove('hidden');
+    const hideModal = () => modalEl.classList.add('hidden');
+
+    document.addEventListener('click', (e) => {
+      const openBtn = e.target.closest('[data-modal-toggle="createPackageModal"]');
+      const closeBtn = e.target.closest('[data-modal-hide="createPackageModal"]');
+      if (openBtn) { e.preventDefault(); showModal(); }
+      if (closeBtn) { e.preventDefault(); hideModal(); }
+    });
+    modalEl.addEventListener('click', (e) => { if (e.target === modalEl) hideModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideModal(); });
+
+    const typeSelect = modalEl.querySelector('#create-package-type-v2');
+    const dateInput = modalEl.querySelector('#create-package-date-v2');
+    const regionSelect = modalEl.querySelector('#create-package-region-v2');
+    const codeInput = modalEl.querySelector('#create-package-code-v2');
+    const partnerSelect = modalEl.querySelector('#create-partner-v2');
+    const partnerCodeInput = modalEl.querySelector('#create-partner-package-code-v2');
+    const submitBtn = modalEl.querySelector('#create-package-submit-v2');
+    const messageEl = modalEl.querySelector('#create-package-message-v2');
+    const copyBtn = modalEl.querySelector('#copy-package-code-btn-v2');
+    const copyMsg = modalEl.querySelector('#copy-package-code-msg-v2');
+    const regionOptions = JSON.parse(document.getElementById('regions-options')?.textContent || '[]');
+
+    if (regionSelect && regionOptions.length) {
+      regionOptions.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = (r.region_code || '').toString().toUpperCase();
+        opt.textContent = `${r.region_code || ''} - ${r.region_name || ''}`;
+        regionSelect.appendChild(opt);
+      });
+    }
+
+    const setMessage = (text, isError = true) => {
+      if (!messageEl) return;
+      if (!text) {
+        messageEl.classList.add('hidden');
+        messageEl.textContent = '';
+        return;
+      }
+      messageEl.textContent = text;
+      messageEl.className = `text-[9px] ${isError ? 'text-red-600' : 'text-emerald-700'}`;
+      messageEl.classList.remove('hidden');
+    };
+
+    const formatDateYYMMDD = (val) => {
+      if (!val) return '';
+      const d = new Date(val);
+      if (isNaN(d)) return '';
+      const yy = String(d.getFullYear()).slice(-2);
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yy}${mm}${dd}`;
+    };
+
+    const updateCode = async () => {
+      if (!typeSelect || !dateInput || !regionSelect || !codeInput) return;
+      const opt = typeSelect.options[typeSelect.selectedIndex];
+      const typeCode = (opt?.dataset?.packageType || '').toUpperCase();
+      const datePart = formatDateYYMMDD(dateInput.value);
+      const regionCode = (regionSelect.value || '').trim().toUpperCase();
+      if (!typeCode || !datePart || !regionCode) return;
+      const base = `${typeCode}-${datePart}-${regionCode}`;
+      let seq = '01';
+      try {
+        const resp = await fetch(`/package/get-next-package-sequence/?baseCode=${encodeURIComponent(base)}`);
+        const data = await resp.json();
+        if (resp.ok && data.success && data.nextSequence) {
+          seq = data.nextSequence;
+        }
+      } catch (e) {
+        // ignore
+      }
+      codeInput.value = `${base}${seq}`;
+    };
+
+    let createDatePicker = null;
+    if (dateInput && window.flatpickr) {
+      createDatePicker = flatpickr(dateInput, {
+        dateFormat: 'Y-m-d',
+        defaultDate: dateInput.value || undefined,
+        disableMobile: true,
+        locale: { firstDayOfWeek: 1 },
+        static: true,
+        monthSelectorType: 'static',
+        onChange: updateCode,
+      });
+    }
+
+    typeSelect?.addEventListener('change', () => {
+      regionSelect.disabled = !typeSelect.value;
+      if (!typeSelect.value) {
+        dateInput.disabled = true;
+        codeInput.value = '';
+        if (createDatePicker) createDatePicker.clear();
+      } else if (regionSelect.value) {
+        dateInput.disabled = false;
+        if (createDatePicker && !createDatePicker.selectedDates.length) {
+          createDatePicker.setDate(new Date());
+        }
+      }
+      updateCode();
+    });
+    regionSelect?.addEventListener('change', () => {
+      dateInput.disabled = !regionSelect.value;
+      if (!typeSelect.value) {
+        codeInput.value = '';
+      }
+      if (regionSelect.value && typeSelect.value) {
+        dateInput.disabled = false;
+        if (createDatePicker && !createDatePicker.selectedDates.length) {
+          createDatePicker.setDate(new Date());
+        }
+      }
+      updateCode();
+    });
+    dateInput?.addEventListener('change', updateCode);
+
+    partnerSelect?.addEventListener('change', () => {
+      const opt = partnerSelect.options[partnerSelect.selectedIndex];
+      const requireCode = opt?.dataset?.requireCode === '1';
+      partnerCodeInput.disabled = !requireCode;
+      partnerCodeInput.required = !!requireCode;
+      if (!requireCode) partnerCodeInput.value = '';
+    });
+
+    const showCopyMsg = () => {
+      if (!copyMsg) return;
+      copyMsg.classList.remove('hidden');
+      clearTimeout(copyMsg._timer);
+      copyMsg._timer = setTimeout(() => copyMsg.classList.add('hidden'), 1200);
+    };
+
+    copyBtn?.addEventListener('click', async () => {
+      const val = codeInput?.value?.trim();
+      if (!val) return;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(val);
+        } else {
+          const temp = document.createElement('textarea');
+          temp.value = val;
+          temp.setAttribute('readonly', '');
+          temp.style.position = 'absolute';
+          temp.style.left = '-9999px';
+          document.body.appendChild(temp);
+          temp.select();
+          document.execCommand('copy');
+          document.body.removeChild(temp);
+        }
+        showCopyMsg();
+      } catch (e) {
+        // ignore
+      }
+    });
+
+    submitBtn?.addEventListener('click', async () => {
+      setMessage('');
+      if (!typeSelect.value) { setMessage('Vui lòng chọn loại thùng.'); return; }
+      if (!regionSelect.value) { setMessage('Vui lòng chọn mã kho/vùng.'); return; }
+      if (!dateInput.value) { setMessage('Vui lòng chọn ngày tạo thùng.'); return; }
+      if (!partnerSelect.value) { setMessage('Vui lòng chọn đối tác lưu trữ.'); return; }
+      const opt = partnerSelect.options[partnerSelect.selectedIndex];
+      if (opt?.dataset?.requireCode === '1' && !partnerCodeInput.value.trim()) {
+        setMessage('Đối tác yêu cầu nhập mã thùng đối tác.');
+        return;
+      }
+      await updateCode();
+      if (!codeInput.value) { setMessage('Không tạo được mã thùng. Vui lòng thử lại.'); return; }
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Đang tạo...';
+      try {
+        const resp = await fetch('{% url "api_package_create_v2" %}', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': window.CSRF_TOKEN || '',
+          },
+          body: JSON.stringify({
+            package_code: codeInput.value,
+            region_code: regionSelect.value,
+            partner_id: partnerSelect.value || null,
+            partner_package_code: partnerCodeInput.value || null,
+            folder_type_id: typeSelect.value || null,
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.error) {
+          throw new Error(data.error || 'Tạo thùng thất bại.');
+        }
+        setMessage('Tạo thùng thành công.', false);
+        setTimeout(() => window.location.reload(), 500);
+      } catch (err) {
+        setMessage(err.message || 'Tạo thùng thất bại.');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Tạo thùng';
+      }
+    });
   });
 </script>
 
