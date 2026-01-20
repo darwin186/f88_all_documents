@@ -21,11 +21,29 @@
   /* Remove blue focus outline on flatpickr inputs */
   .filter-bar .flatpickr-input { border: 0 !important; box-shadow: none !important; outline: none !important; }
   .filter-bar .flatpickr-input:focus { border: 0 !important; box-shadow: none !important; outline: none !important; }
+  .drawer-input-sm { height: 32px; font-size: 9px; }
+  .drawer-input-sm.flatpickr-input { line-height: 32px; }
   /* Active row highlight */
   .row-active { box-shadow: inset 0 -1px 0 #f59e0b, inset 0 1px 0 #f59e0b; }
+  .toast-container { position: fixed; top: 76px; right: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
+  .toast { min-width: 220px; max-width: 320px; padding: 10px 12px; border-radius: 12px; border: 1px solid #e5e7eb; background: #ffffff; box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08); font-size: 10px; color: #111827; display: flex; align-items: flex-start; gap: 8px; }
+  .toast-dot { width: 8px; height: 8px; border-radius: 9999px; margin-top: 4px; }
+  .toast-success .toast-dot { background: #10b981; }
+  .toast-error .toast-dot { background: #ef4444; }
+  .toast-warning .toast-dot { background: #f59e0b; }
+  .toast-info .toast-dot { background: #3b82f6; }
 </style>
 
 <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
+  {% if messages %}
+  <script>
+    window.SERVER_TOASTS = [
+      {% for message in messages %}
+      { text: "{{ message|escapejs }}", level: "{{ message.tags }}" }{% if not forloop.last %},{% endif %}
+      {% endfor %}
+    ];
+  </script>
+  {% endif %}
   <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
     <form id="filter-form" method="get" action="{% url 'receiving_transaction_v2' %}" x-data="{ showMore: false }" class="grid lg:grid-cols-[2fr,1fr,1fr,1fr,1fr,auto] gap-3 items-center">
       <input type="hidden" name="sort" value="{{ sort_param }}">
@@ -141,7 +159,10 @@
             </div>
             <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
               {% for u in drop_list_users %}
-              <button type="button" @click="search='{{ u.username }}'; open=false" class="w-full text-left px-2 py-2 hover:bg-emerald-50">
+              <button type="button"
+                      x-show="!search || '{{ u.username|escapejs }}'.toLowerCase().includes(search.toLowerCase()) || '{{ u.last_name|default_if_none:''|escapejs }} {{ u.first_name|default_if_none:''|escapejs }}'.toLowerCase().includes(search.toLowerCase())"
+                      @click="search='{{ u.username }}'; open=false"
+                      class="w-full text-left px-2 py-2 hover:bg-emerald-50">
                 <div class="font-semibold text-gray-900">
                   {% if u.last_name or u.first_name %}
                     {{ u.last_name }} {{ u.first_name }}
@@ -257,6 +278,8 @@
   </div>
 </div>
 
+<div id="toast-container" class="toast-container"></div>
+
 <!-- Drawer -->
 <div id="drawer" class="fixed top-14 right-0 z-40 h-[calc(100vh-56px)] w-full max-w-md translate-x-full bg-white shadow-2xl transition-transform duration-300 border-l border-gray-200">
   <div class="flex items-start justify-between border-b border-gray-100 px-4 py-3">
@@ -309,17 +332,17 @@
       <p class="text-[9px] uppercase text-gray-500">Cập nhật nhận</p>
       <div class="grid grid-cols-2 gap-3">
         <div>
+          <label class="block text-[9px] text-gray-500 mb-1">Ngày nhận</label>
+          <input id="drawer-receive-date" type="text" class="drawer-input-sm w-full rounded-lg border border-gray-200 px-3 py-1 text-[9px] bg-white focus:border-emerald-500 focus:ring-0" placeholder="Chọn ngày nhận" readonly>
+        </div>
+        <div>
           <label class="block text-[9px] text-gray-500 mb-1">Trạng thái nhận</label>
-          <select id="drawer-status-select" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-white focus:border-emerald-500 focus:outline-none">
+          <select id="drawer-status-select" class="drawer-input-sm w-full rounded-lg border border-gray-200 px-3 py-1 text-[9px] bg-white focus:border-emerald-500 focus:outline-none">
             <option value="">Chọn trạng thái</option>
             {% for st in drop_list_folder_status_received %}
             <option value="{{ st.folder_status_id }}">{{ st.folder_status_name }}</option>
             {% endfor %}
           </select>
-        </div>
-        <div>
-          <label class="block text-[9px] text-gray-500 mb-1">Ngày nhận</label>
-          <input id="drawer-receive-date" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-white focus:border-emerald-500 focus:ring-0" placeholder="Chọn ngày nhận" readonly>
         </div>
       </div>
       <div>
@@ -1098,6 +1121,27 @@
 
 <script>
   document.addEventListener('DOMContentLoaded', function () {
+    const toastContainer = document.getElementById('toast-container');
+    const showToast = (message, type = 'success') => {
+      if (!toastContainer || !message) return;
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.innerHTML = `<span class="toast-dot"></span><div>${message}</div>`;
+      toastContainer.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-4px)';
+      }, 2400);
+      setTimeout(() => toast.remove(), 3000);
+    };
+
+    if (Array.isArray(window.SERVER_TOASTS)) {
+      window.SERVER_TOASTS.forEach((item) => {
+        const tag = (item.level || '').toLowerCase();
+        const type = tag.includes('error') ? 'error' : tag.includes('warning') ? 'warning' : tag.includes('success') ? 'success' : 'info';
+        showToast(item.text, type);
+      });
+    }
     const bulkModal = document.getElementById('bulkReceiveModal');
     if (!bulkModal) return;
     if (bulkModal.parentElement !== document.body) {

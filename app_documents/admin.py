@@ -10,7 +10,9 @@ from .models import (
     HistoricalDocuments,HistoricalFolder,PackageDocumentHistory, PackageFolderHistory,
     UserProfile,ChangeRequest,
     CheckingAdditional,
-    BorrowingDocument,BorrowingStatus, FolderDeadlineRule,FolderGroup  
+    BorrowingDocument,BorrowingStatus, FolderDeadlineRule,FolderGroup,
+    BorrowRequest, BorrowRequestItem, BorrowRequestLog,
+    DocumentKpiSetting
 )
 # Register your models here.
 admin.site.site_header = "Chứng từ F88"  
@@ -75,6 +77,41 @@ class BorrowingStatusAdmin(admin.ModelAdmin):
     list_display = ('borrow_status_code', 'borrow_status_name', 'flag_return', 'flag_is_borrowing', 'flag_is_lost', 'badge_color')
     search_fields = ('borrow_status_code', 'borrow_status_name')
 admin.site.register(BorrowingStatus,BorrowingStatusAdmin)
+
+
+class BorrowRequestAdmin(admin.ModelAdmin):
+    list_display = ('request_id', 'borrower', 'status', 'needed_date', 'appointment_date', 'ticket_code', 'created_at')
+    search_fields = ('request_id', 'ticket_code', 'external_ref', 'borrower__shop_name')
+    list_filter = ('status', 'needed_date', 'appointment_date')
+    list_select_related = ('borrower',)
+    list_per_page = 25
+admin.site.register(BorrowRequest, BorrowRequestAdmin)
+
+
+class BorrowRequestItemAdmin(admin.ModelAdmin):
+    list_display = ('item_id', 'borrow_request', 'documents_id', 'status', 'handed_over_date', 'return_date')
+    search_fields = ('borrow_request__request_id', 'documents_id__documents_code')
+    list_filter = ('status',)
+    list_select_related = ('borrow_request', 'documents_id')
+    list_per_page = 25
+admin.site.register(BorrowRequestItem, BorrowRequestItemAdmin)
+
+
+class BorrowRequestLogAdmin(admin.ModelAdmin):
+    list_display = ('log_id', 'borrow_request', 'item', 'action', 'from_status', 'to_status', 'created_at', 'created_by')
+    search_fields = ('borrow_request__request_id', 'action', 'created_by__username')
+    list_filter = ('action', 'created_at')
+    list_select_related = ('borrow_request', 'item')
+    list_per_page = 25
+admin.site.register(BorrowRequestLog, BorrowRequestLogAdmin)
+
+# Document KPI Setting Admin
+class DocumentKpiSettingAdmin(admin.ModelAdmin):
+    list_display = ('metric_code', 'metric_name', 'target_rate', 'is_active', 'updated_by', 'updated_at')
+    search_fields = ('metric_code', 'metric_name')
+    list_filter = ('is_active',)
+    list_per_page = 25
+admin.site.register(DocumentKpiSetting, DocumentKpiSettingAdmin)
 
 class PartnerAdmin(admin.ModelAdmin):
     list_display = ('partner_code', 'partner_name', 'require_partner_selection', 'require_partner_code', 'is_active')
@@ -236,9 +273,9 @@ admin.site.register(FoldersTransactionReceiving, FoldersTransactionReceivingAdmi
 
 # CheckingTransactionStatus Admin
 class CheckingTransactionStatusAdmin(admin.ModelAdmin):
-    list_display = ('status_id', 'checking_status_name', 'checking_status_code', 'created_date', 'created_by', 'is_allowed_to_borrow', 'valid_from', 'valid_to')
+    list_display = ('status_id', 'checking_status_name', 'checking_status_code', 'created_date', 'created_by', 'is_allowed_to_borrow', 'is_request_additional', 'valid_from', 'valid_to')
     search_fields = ('checking_status_name', 'checking_status_code', 'created_by')
-    list_filter = ('created_date', 'is_allowed_to_borrow', 'valid_from', 'valid_to')
+    list_filter = ('created_date', 'is_allowed_to_borrow', 'is_request_additional', 'valid_from', 'valid_to')
     list_per_page = 25
 admin.site.register(CheckingTransactionStatus, CheckingTransactionStatusAdmin)
 

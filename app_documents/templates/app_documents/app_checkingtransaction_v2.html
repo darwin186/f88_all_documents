@@ -21,13 +21,48 @@
   .flatpickr-weekdays { font-size: 10px; }
   .flatpickr-input { border: 0 !important; box-shadow: none !important; outline: none !important; }
   .flatpickr-input:focus { border: 0 !important; box-shadow: none !important; outline: none !important; }
+  .row-active { box-shadow: inset 0 -1px 0 #f59e0b, inset 0 1px 0 #f59e0b; }
+  .toast-container { position: fixed; top: 76px; right: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
+  .toast { min-width: 220px; max-width: 320px; padding: 10px 12px; border-radius: 12px; border: 1px solid #e5e7eb; background: #ffffff; box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08); font-size: 10px; color: #111827; display: flex; align-items: flex-start; gap: 8px; }
+  .toast-dot { width: 8px; height: 8px; border-radius: 9999px; margin-top: 4px; }
+  .toast-success .toast-dot { background: #10b981; }
+  .toast-error .toast-dot { background: #ef4444; }
+  .toast-warning .toast-dot { background: #f59e0b; }
+  .toast-info .toast-dot { background: #3b82f6; }
 </style>
 
 <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
   <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
     <form id="filter-form-checking" method="get" action="{% url 'checking_transaction_v2' %}" x-data="{ showMore: false }" class="grid lg:grid-cols-[2fr,1fr,1fr,1fr,auto] gap-3 items-center">
+      <input type="hidden" name="sort" value="{{ sort_param }}">
       <div class="relative">
-        <input name="choice_shop" value="{{ request.GET.choice_shop|default:'' }}" placeholder="Phòng giao dịch" class="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[10px] focus:border-emerald-500 focus:outline-none" />
+        {% with request.GET.choice_shop|default_if_none:'' as shop_value %}
+        <div class="relative" x-data="{ open: false, searchText: '{{ shop_value|escapejs }}', selected: '{{ shop_value|escapejs }}' }">
+          <input type="hidden" name="choice_shop" x-model="selected">
+          <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
+            <span class="text-gray-700 text-[10px]" x-text="selected || 'Phòng giao dịch'"></span>
+            <span class="text-gray-400 text-xs">▾</span>
+          </button>
+          <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
+            <div class="flex items-center gap-2">
+              <input type="text" x-model="searchText" class="w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Tìm phòng giao dịch">
+              <button type="button" @click="searchText=''; selected=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm2.707-10.707a1 1 0 00-1.414-1.414L10 7.586 8.707 6.293a1 1 0 00-1.414 1.414L8.586 9l-1.293 1.293a1 1 0 101.414 1.414L10 10.414l1.293 1.293a1 1 0 001.414-1.414L11.414 9l1.293-1.293z" clip-rule="evenodd"/>
+                </svg>
+              </button>
+            </div>
+            <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
+              {% for shop in drop_list_shops %}
+              <button type="button" x-show="!searchText || '{{ shop.shop_name|escapejs }}'.toLowerCase().includes(searchText.toLowerCase())" @click="selected='{{ shop.shop_name }}'; searchText='{{ shop.shop_name }}'; open=false" class="w-full text-left px-2 py-2 hover:bg-emerald-50">
+                <div class="font-semibold text-gray-900">{{ shop.shop_name }}</div>
+                <div class="text-gray-500 text-[9px]">Mã: {{ shop.shop_code }}</div>
+              </button>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endwith %}
       </div>
       <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
         <input id="filter-document-date" name="filterdocumentdate" value="{{ request.GET.filterdocumentdate|default:'' }}" placeholder="Ngày chứng từ" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" readonly />
@@ -35,18 +70,22 @@
       <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
         <input id="filter-check-date" name="filtercheckdate" value="{{ request.GET.filtercheckdate|default:'' }}" placeholder="Ngày duyệt" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" readonly />
       </div>
-      <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
-        <select name="choicedocumentstatus" class="block w-full bg-transparent text-[10px] text-gray-700 focus:outline-none focus:ring-0 appearance-none border-0 pr-6">
-          <option value="">Trạng thái chứng từ</option>
-          {% for st in drop_list_document_status %}
-          <option value="{{ st.documents_status_id }}" {% if request.GET.choicedocumentstatus|stringformat:"s" == st.documents_status_id|stringformat:"s" %}selected{% endif %}>{{ st.documents_status_name }}</option>
+        <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+          <select name="choicedocumentstatus" class="block w-full bg-transparent text-[10px] text-gray-700 focus:outline-none focus:ring-0 appearance-none border-0 pr-6">
+            <option value="">Trạng thái chứng từ</option>
+            {% for st in drop_list_document_status %}
+            <option value="{{ st.status_id }}" {% if request.GET.choicedocumentstatus|stringformat:"s" == st.status_id|stringformat:"s" %}selected{% endif %}>{{ st.documents_status_name }}</option>
           {% endfor %}
-        </select>
-      </label>
+          </select>
+        </label>
       <div class="flex items-center gap-2">
         <button type="button" @click="showMore = !showMore" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50" x-text="showMore ? 'Thu gọn' : 'Mở rộng'"></button>
         <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Lọc</button>
         <a href="{% url 'checking_transaction_v2' %}" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50">Xóa</a>
+        <button type="button" id="bulk-check-btn" class="hidden px-4 py-2 rounded-lg bg-emerald-700 text-white font-semibold hover:bg-emerald-800">
+          Duyệt nhiều
+          <span id="bulk-check-count" class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-white/20 text-[9px] font-semibold">0</span>
+        </button>
       </div>
       <div class="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" x-show="showMore">
         <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
@@ -55,25 +94,98 @@
         <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
           <input name="choice_contract_code" value="{{ request.GET.choice_contract_code|default:'' }}" placeholder="Mã HĐCC" class="w-full bg-transparent focus:outline-none text-[10px]" />
         </label>
-        <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
-          <input name="choice_user_duyet" value="{{ request.GET.choice_user_duyet|default:'' }}" placeholder="Người duyệt" class="w-full bg-transparent focus:outline-none text-[10px]" />
-        </label>
-        <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
-          <select name="choicecheckstatus" class="block w-full bg-transparent text-[10px] text-gray-700 focus:outline-none focus:ring-0 appearance-none border-0 pr-6">
-            <option value="">Trạng thái duyệt</option>
-            {% for st in drop_list_checking_status %}
-            <option value="{{ st.status_id }}" {% if request.GET.choicecheckstatus|stringformat:"s" == st.status_id|stringformat:"s" %}selected{% endif %}>{{ st.checking_status_name }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
-          <select name="choicebusinesstype" class="block w-full bg-transparent text-[10px] text-gray-700 focus:outline-none focus:ring-0 appearance-none border-0 pr-6">
-            <option value="">Nghiệp vụ</option>
-            {% for bt in drop_list_business_type %}
-            <option value="{{ bt.business_type_id }}" {% if request.GET.choicebusinesstype|stringformat:"s" == bt.business_type_id|stringformat:"s" %}selected{% endif %}>{{ bt.business_type_name }}</option>
-            {% endfor %}
-          </select>
-        </label>
+        <div class="relative" x-data="{ open: false, search: '{{ request.GET.choice_user_duyet|default_if_none:'' }}' }">
+          <input type="hidden" name="choice_user_duyet" x-model="search">
+          <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
+            <span class="text-gray-700 text-[10px]" x-text="search || 'Người duyệt'"></span>
+            <span class="text-gray-400 text-xs">▾</span>
+          </button>
+          <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
+            <div class="flex items-center gap-2">
+              <input type="text" x-model="search" class="w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Nhập username">
+              <button type="button" @click="search=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm2.707-10.707a1 1 0 00-1.414-1.414L10 7.586 8.707 6.293a1 1 0 00-1.414 1.414L8.586 9l-1.293 1.293a1 1 0 101.414 1.414L10 10.414l1.293 1.293a1 1 0 001.414-1.414L11.414 9l1.293-1.293z" clip-rule="evenodd"/>
+                </svg>
+              </button>
+            </div>
+            <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
+              {% for u in drop_list_users %}
+              <button type="button"
+                      x-show="!search || '{{ u.username|escapejs }}'.toLowerCase().includes(search.toLowerCase()) || '{{ u.last_name|default_if_none:''|escapejs }} {{ u.first_name|default_if_none:''|escapejs }}'.toLowerCase().includes(search.toLowerCase())"
+                      @click="search='{{ u.username }}'; open=false"
+                      class="w-full text-left px-2 py-2 hover:bg-emerald-50">
+                <div class="font-semibold text-gray-900">
+                  {% if u.last_name or u.first_name %}
+                    {{ u.last_name }} {{ u.first_name }}
+                  {% else %}
+                    {{ u.username }}
+                  {% endif %}
+                </div>
+                <div class="text-gray-500 text-[9px]">{{ u.username }}</div>
+              </button>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% with request.GET.choicecheckstatus|default_if_none:'' as check_status_value %}
+        <div class="relative" x-data="{ open: false, searchText: '', selected: '{{ check_status_value|escapejs }}', selectedLabel: '{% for st in drop_list_checking_status %}{% if st.status_id|stringformat:"s" == check_status_value %}{{ st.checking_status_name|escapejs }}{% endif %}{% endfor %}' }">
+          <input type="hidden" name="choicecheckstatus" x-model="selected">
+          <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
+            <span class="text-gray-700 text-[10px]" x-text="selectedLabel || 'Trạng thái duyệt'"></span>
+            <span class="text-gray-400 text-xs">▾</span>
+          </button>
+          <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
+            <div class="flex items-center gap-2">
+              <input type="text" x-model="searchText" class="w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Tìm trạng thái">
+              <button type="button" @click="searchText=''; selected=''; selectedLabel=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm2.707-10.707a1 1 0 00-1.414-1.414L10 7.586 8.707 6.293a1 1 0 00-1.414 1.414L8.586 9l-1.293 1.293a1 1 0 101.414 1.414L10 10.414l1.293 1.293a1 1 0 001.414-1.414L11.414 9l1.293-1.293z" clip-rule="evenodd"/>
+                </svg>
+              </button>
+            </div>
+            <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
+              {% for st in drop_list_checking_status %}
+              <button type="button"
+                      x-show="!searchText || '{{ st.checking_status_name|escapejs }}'.toLowerCase().includes(searchText.toLowerCase())"
+                      @click="selected='{{ st.status_id }}'; selectedLabel='{{ st.checking_status_name|escapejs }}'; searchText=''; open=false"
+                      class="w-full text-left px-2 py-2 hover:bg-emerald-50">
+                <div class="font-semibold text-gray-900">{{ st.checking_status_name }}</div>
+              </button>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endwith %}
+        {% with request.GET.choicebusinesstype|default_if_none:'' as business_value %}
+        <div class="relative" x-data="{ open: false, searchText: '', selected: '{{ business_value|escapejs }}', selectedLabel: '{% for bt in drop_list_business_type %}{% if bt.business_type_id|stringformat:"s" == business_value %}{{ bt.business_type_name|escapejs }}{% endif %}{% endfor %}' }">
+          <input type="hidden" name="choicebusinesstype" x-model="selected">
+          <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
+            <span class="text-gray-700 text-[10px]" x-text="selectedLabel || 'Nghiệp vụ'"></span>
+            <span class="text-gray-400 text-xs">▾</span>
+          </button>
+          <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
+            <div class="flex items-center gap-2">
+              <input type="text" x-model="searchText" class="w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Tìm nghiệp vụ">
+              <button type="button" @click="searchText=''; selected=''; selectedLabel=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm2.707-10.707a1 1 0 00-1.414-1.414L10 7.586 8.707 6.293a1 1 0 00-1.414 1.414L8.586 9l-1.293 1.293a1 1 0 101.414 1.414L10 10.414l1.293 1.293a1 1 0 001.414-1.414L11.414 9l1.293-1.293z" clip-rule="evenodd"/>
+                </svg>
+              </button>
+            </div>
+            <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
+              {% for bt in drop_list_business_type %}
+              <button type="button"
+                      x-show="!searchText || '{{ bt.business_type_name|escapejs }}'.toLowerCase().includes(searchText.toLowerCase())"
+                      @click="selected='{{ bt.business_type_id }}'; selectedLabel='{{ bt.business_type_name|escapejs }}'; searchText=''; open=false"
+                      class="w-full text-left px-2 py-2 hover:bg-emerald-50">
+                <div class="font-semibold text-gray-900">{{ bt.business_type_name }}</div>
+              </button>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% endwith %}
       </div>
     </form>
   </div>
@@ -83,41 +195,100 @@
       <span>Tổng chứng từ: {{ documents_detail.paginator.count }}</span>
       <div class="flex items-center gap-1">
         {% if documents_detail.has_previous %}
-        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page=1&{{ query_string }}">«</a>
-        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ documents_detail.previous_page_number }}&{{ query_string }}">‹</a>
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page=1{% if base_qs %}&{{ base_qs }}{% endif %}{% if sort_param %}&sort={{ sort_param }}{% endif %}">«</a>
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ documents_detail.previous_page_number }}{% if base_qs %}&{{ base_qs }}{% endif %}{% if sort_param %}&sort={{ sort_param }}{% endif %}">‹</a>
         {% endif %}
-        {% for p in documents_detail.paginator.page_range %}
+        {% for p in page_range_custom %}
           {% if p == documents_detail.number %}
           <span class="px-2 py-1 rounded border border-emerald-500 text-emerald-700 font-semibold">{{ p }}</span>
           {% else %}
-          <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ p }}&{{ query_string }}">{{ p }}</a>
+          <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ p }}{% if base_qs %}&{{ base_qs }}{% endif %}{% if sort_param %}&sort={{ sort_param }}{% endif %}">{{ p }}</a>
           {% endif %}
         {% endfor %}
         {% if documents_detail.has_next %}
-        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ documents_detail.next_page_number }}&{{ query_string }}">›</a>
-        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ documents_detail.paginator.num_pages }}&{{ query_string }}">»</a>
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ documents_detail.next_page_number }}{% if base_qs %}&{{ base_qs }}{% endif %}{% if sort_param %}&sort={{ sort_param }}{% endif %}">›</a>
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ documents_detail.paginator.num_pages }}{% if base_qs %}&{{ base_qs }}{% endif %}{% if sort_param %}&sort={{ sort_param }}{% endif %}">»</a>
         {% endif %}
       </div>
     </div>
     <table class="min-w-full text-left">
       <thead class="bg-gray-50 text-gray-600 uppercase">
         <tr>
+          <th class="px-3 py-2">
+            <input id="select-all-checking" type="checkbox" class="h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+          </th>
           <th class="px-3 py-2">#</th>
-          <th class="px-3 py-2">PGD</th>
-          <th class="px-3 py-2">Quyển ngày</th>
+          <th class="px-3 py-2">
+            <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.shop }}" class="flex items-center gap-1">PGD{% if sort_param == 'shop' %}▲{% elif sort_param == '-shop' %}▼{% endif %}</a>
+          </th>
+          <th class="px-3 py-2">
+            <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.document_date }}" class="flex items-center gap-1">Quyển ngày{% if sort_param == 'document_date' %}▲{% elif sort_param == '-document_date' %}▼{% endif %}</a>
+          </th>
           <th class="px-3 py-2">Thông tin</th>
-          <th class="px-3 py-2">Loại chứng từ</th>
-          <th class="px-3 py-2">Nghiệp vụ</th>
-          <th class="px-3 py-2">Trạng thái</th>
-          <th class="px-3 py-2">Duyệt</th>
-          <th class="px-3 py-2">Ngày duyệt</th>
-          <th class="px-3 py-2">Người duyệt</th>
-          <th class="px-3 py-2">Mã thùng</th>
+          <th class="px-3 py-2">
+            <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.document_type }}" class="flex items-center gap-1">Loại chứng từ{% if sort_param == 'document_type' %}▲{% elif sort_param == '-document_type' %}▼{% endif %}</a>
+          </th>
+          <th class="px-3 py-2">
+            <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.business_type }}" class="flex items-center gap-1">Nghiệp vụ{% if sort_param == 'business_type' %}▲{% elif sort_param == '-business_type' %}▼{% endif %}</a>
+          </th>
+          <th class="px-3 py-2">
+            <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.document_status }}" class="flex items-center gap-1">Trạng thái{% if sort_param == 'document_status' %}▲{% elif sort_param == '-document_status' %}▼{% endif %}</a>
+          </th>
+          <th class="px-3 py-2">
+            <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.checking_status }}" class="flex items-center gap-1">Duyệt{% if sort_param == 'checking_status' %}▲{% elif sort_param == '-checking_status' %}▼{% endif %}</a>
+          </th>
+          <th class="px-3 py-2">
+            <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.checking_date }}" class="flex items-center gap-1">Ngày duyệt{% if sort_param == 'checking_date' %}▲{% elif sort_param == '-checking_date' %}▼{% endif %}</a>
+          </th>
+          <th class="px-3 py-2">
+            <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.checking_user }}" class="flex items-center gap-1">Người duyệt{% if sort_param == 'checking_user' %}▲{% elif sort_param == '-checking_user' %}▼{% endif %}</a>
+          </th>
+          <th class="px-3 py-2">
+            <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.package_code }}" class="flex items-center gap-1">Mã thùng{% if sort_param == 'package_code' %}▲{% elif sort_param == '-package_code' %}▼{% endif %}</a>
+          </th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-gray-100">
+      <tbody id="checking-table-body" class="divide-y divide-gray-100">
         {% for document_dtl in documents_detail %}
-        <tr class="hover:bg-gray-50">
+        <tr class="hover:bg-gray-50 cursor-pointer" data-document-id="{{ document_dtl.documents_id }}"
+            data-document-code="{{ document_dtl.documents_code }}"
+            data-shop="{{ document_dtl.shop_id.shop_name|default_if_none:'' }}"
+            data-document-date="{{ document_dtl.documents_created_date|date:'Y-m-d' }}"
+            data-contract-loan="{% if document_dtl.loan_id %}GNN: {{ document_dtl.loan_id.loan_code|default_if_none:'' }}{% elif document_dtl.contract_id %}HĐCC: {{ document_dtl.contract_id.contract_code|default_if_none:'' }}{% endif %}"
+            data-folder-type="{% if document_dtl.folder_id and document_dtl.folder_id.folder_type_id %}{{ document_dtl.folder_id.folder_type_id.folder_type_name|default_if_none:'' }}{% endif %}"
+            data-employee="{% if document_dtl.loan_id %}{% if document_dtl.loan_id.employee_name %}{{ document_dtl.loan_id.employee_name|escapejs }}{% elif document_dtl.loan_id.employee_id %}{{ document_dtl.loan_id.employee_id.employee_name|default_if_none:''|escapejs }}{% endif %}{% elif document_dtl.contract_id and document_dtl.contract_id.employee_id %}{{ document_dtl.contract_id.employee_id.employee_name|default_if_none:''|escapejs }}{% endif %}"
+            data-customer="{% if document_dtl.loan_id %}{{ document_dtl.loan_id.customer_name|default_if_none:''|escapejs }}{% elif document_dtl.contract_id %}{{ document_dtl.contract_id.customer_id.customer_name|default_if_none:''|escapejs }}{% endif %}"
+            data-document-type="{{ document_dtl.document_type_id.document_type_name|default_if_none:'' }}"
+            data-business-type="{{ document_dtl.business_type_id.business_type_name|default_if_none:'' }}"
+            data-document-status="{{ document_dtl.document_status_id.documents_status_name|default_if_none:'' }}"
+            data-document-status-color="{{ document_dtl.document_status_id.badge_color|default:'#e5e7eb' }}"
+            data-documents-selectable="{{ document_dtl.document_status_id.is_selectable|yesno:'true,false' }}"
+            data-documents-is-checked="{{ document_dtl.document_status_id.is_checked|yesno:'true,false' }}"
+            data-checking-status="{{ document_dtl.status_id.checking_status_name|default_if_none:'Chưa duyệt' }}"
+            data-checking-status-id="{{ document_dtl.status_id.status_id|default_if_none:'' }}"
+            data-checking-date="{{ document_dtl.lastest_checked_date|date:'Y-m-d H:i' }}"
+            data-checking-user="{{ document_dtl.lastest_checked_by.username|default_if_none:'' }}"
+            data-checking-user-full="{% if document_dtl.lastest_checked_by %}{{ document_dtl.lastest_checked_by.last_name }} {{ document_dtl.lastest_checked_by.first_name }}{% endif %}"
+            data-package-code="{{ document_dtl.package_id.package_code|default_if_none:'' }}"
+            data-folder-received="{% if document_dtl.folder_id and document_dtl.folder_id.folder_status_id %}{{ document_dtl.folder_id.folder_status_id.is_received|yesno:'true,false' }}{% else %}false{% endif %}"
+            data-has-package="{% if document_dtl.package_id and document_dtl.package_id.package_code %}true{% else %}false{% endif %}"
+            data-note="{{ document_dtl.note|default_if_none:''|escapejs }}">
+          <td class="px-3 py-2 text-gray-700">
+            <input type="checkbox" class="row-checkbox h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+              value="checkingitem{{ document_dtl.documents_id }}"
+              data-group-key="{% if document_dtl.loan_id %}loan:{{ document_dtl.loan_id.loan_code }}{% elif document_dtl.contract_id %}contract:{{ document_dtl.contract_id.contract_code }}{% endif %}"
+              data-group-label="{% if document_dtl.loan_id %}GNN {{ document_dtl.loan_id.loan_code }}{% elif document_dtl.contract_id %}HĐCC {{ document_dtl.contract_id.contract_code }}{% endif %}"
+              data-documents-code="{{ document_dtl.documents_code|default_if_none:''|escape }}"
+              data-documents-name="{{ document_dtl.document_type_id.document_type_name|default_if_none:''|escape }}"
+              data-documents-date="{{ document_dtl.documents_created_date|date:'Y-m-d' }}"
+              data-documents-is-checked="{{ document_dtl.document_status_id.is_checked|yesno:'true,false' }}"
+              data-documents-is-selectable="{{ document_dtl.document_status_id.is_selectable|default_if_none:'' }}"
+              data-checking-status-id="{{ document_dtl.status_id.status_id|default_if_none:'' }}"
+              data-folder-not-received="{% if document_dtl.folder_id and document_dtl.folder_id.folder_status_id %}{{ document_dtl.folder_id.folder_status_id.is_not_received_yet|yesno:'true,false' }}{% else %}false{% endif %}"
+              data-folder-received="{% if document_dtl.folder_id and document_dtl.folder_id.folder_status_id %}{{ document_dtl.folder_id.folder_status_id.is_received|yesno:'true,false' }}{% else %}false{% endif %}"
+              data-package-released="{% if document_dtl.package_id and document_dtl.package_id.partnerpackage and document_dtl.package_id.partnerpackage.status_id %}{{ document_dtl.package_id.partnerpackage.status_id.is_released|yesno:'true,false' }}{% else %}false{% endif %}"
+              data-has-package="{% if document_dtl.package_id and document_dtl.package_id.package_code %}true{% else %}false{% endif %}">
+          </td>
           <td class="px-3 py-2 text-gray-700">{{ forloop.counter|add:documents_detail.start_index|add:-1 }}</td>
           <td class="px-3 py-2 text-gray-700">{{ document_dtl.shop_id.shop_name }}</td>
           <td class="px-3 py-2 text-gray-700">{{ document_dtl.documents_created_date|date:"Y-m-d" }}</td>
@@ -132,23 +303,233 @@
           </td>
           <td class="px-3 py-2 text-gray-700">{{ document_dtl.document_type_id.document_type_name }}</td>
           <td class="px-3 py-2 text-gray-700">{{ document_dtl.business_type_id.business_type_name }}</td>
-          <td class="px-3 py-2 text-gray-700">
+          <td class="px-3 py-2 text-gray-700" data-col="document-status">
+            {% if document_dtl.document_status_id and document_dtl.document_status_id.documents_status_name %}
             <span class="px-2 py-1 rounded-full text-[9px] font-semibold" style="background-color: {{ document_dtl.document_status_id.badge_color|default:'#e5e7eb' }}; color: #0f172a;">
               {{ document_dtl.document_status_id.documents_status_name }}
             </span>
+            {% else %}
+            <span class="px-2 py-1 rounded-full text-[9px] font-semibold" style="background-color: #e5e7eb; color: #0f172a;">
+              —
+            </span>
+            {% endif %}
           </td>
-          <td class="px-3 py-2 text-gray-700">{{ document_dtl.status_id.checking_status_name|default_if_none:"Chưa duyệt" }}</td>
-          <td class="px-3 py-2 text-gray-700">{{ document_dtl.lastest_checked_date|date:"Y-m-d H:i" }}</td>
-          <td class="px-3 py-2 text-gray-700">{{ document_dtl.lastest_checked_by|default_if_none:"" }}</td>
+          <td class="px-3 py-2 text-gray-700" data-col="checking-status">{{ document_dtl.status_id.checking_status_name|default_if_none:"Chưa duyệt" }}</td>
+          <td class="px-3 py-2 text-gray-700" data-col="checking-date">{{ document_dtl.lastest_checked_date|date:"Y-m-d H:i" }}</td>
+          <td class="px-3 py-2 text-gray-700" data-col="checking-user">{{ document_dtl.lastest_checked_by|default_if_none:"" }}</td>
           <td class="px-3 py-2 text-gray-700">{{ document_dtl.package_id.package_code }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="11" class="px-3 py-4 text-center text-gray-500">Không có chứng từ phù hợp</td></tr>
+        <tr><td colspan="12" class="px-3 py-4 text-center text-gray-500">Không có chứng từ phù hợp</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+<!-- Drawer -->
+<div id="checking-drawer" class="fixed top-14 right-0 z-40 h-[calc(100vh-56px)] w-full max-w-md translate-x-full bg-white shadow-2xl transition-transform duration-300 border-l border-gray-200">
+  <div class="flex items-start justify-between border-b border-gray-100 px-4 py-3">
+    <div>
+      <p class="text-[9px] uppercase text-gray-500">Chi tiết chứng từ</p>
+      <div class="flex items-center gap-2">
+        <h3 id="drawer-doc-code" class="text-sm font-semibold text-gray-900"></h3>
+        <button id="drawer-copy-btn" type="button" class="hidden items-center justify-center p-1 rounded-md border border-gray-200 text-gray-500 hover:text-emerald-700 hover:border-emerald-500">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M8 2a2 2 0 00-2 2v1H5a2 2 0 00-2 2v9a2 2 0 002 2h6a2 2 0 002-2v-1h1a2 2 0 002-2V7l-4-5H8zm5 5a1 1 0 01-1-1V3.5L15.5 7H13zm-2 2a2 2 0 00-2-2H5a2 2 0 00-2 2v7a1 1 0 001 1h6a1 1 0 001-1V9z"/>
+          </svg>
+        </button>
+        <span id="drawer-copy-msg" class="hidden text-[9px] text-emerald-600">Copied</span>
+      </div>
+    </div>
+    <div class="flex items-start gap-3">
+      <div class="text-right">
+        <p class="text-[9px] uppercase text-gray-500">Trạng thái chứng từ</p>
+        <span id="drawer-status-badge" class="inline-flex items-center px-2 py-1 rounded-full text-[9px] font-semibold border border-gray-200 text-gray-700 bg-gray-100">—</span>
+      </div>
+      <button id="drawer-close" class="p-2 rounded-full hover:bg-gray-100">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-gray-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+      </button>
+    </div>
+  </div>
+  <div id="drawer-tab-bar" class="flex items-center gap-4 border-b border-gray-100 px-4 text-[10px]">
+    <button type="button" data-drawer-tab="info" class="py-2 font-semibold border-b-2 border-emerald-500 text-emerald-700">Thông tin</button>
+    <button type="button" data-drawer-tab="history" class="py-2 font-semibold border-b-2 border-transparent text-gray-500 hover:text-emerald-700">Lịch sử</button>
+  </div>
+  <div class="p-4 space-y-3 text-[10px] overflow-y-auto h-[calc(100vh-56px-92px)]">
+    <div id="drawer-bulk-panel" class="hidden space-y-3">
+      <div class="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-2">
+        <p class="text-[9px] uppercase text-gray-500">Duyệt nhiều chứng từ</p>
+        <p id="bulk-check-group" class="text-[9px] text-gray-500"></p>
+        <ul id="bulk-selected-list" class="max-h-40 overflow-y-auto space-y-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px] text-gray-700"></ul>
+        <div>
+          <label class="block text-[9px] text-gray-500 mb-1">Trạng thái duyệt</label>
+          <select id="bulk-check-status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-white focus:border-emerald-500 focus:outline-none">
+            <option value="">Chọn trạng thái</option>
+            {% for st in drop_list_checking_status %}
+            <option value="{{ st.status_id }}" data-code="{{ st.checking_status_code }}" data-request-additional="{{ st.is_request_additional|yesno:'true,false' }}">{{ st.checking_status_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div id="bulk-supplement-fields" class="hidden space-y-2">
+          <div>
+            <label class="block text-[9px] text-gray-500 mb-1">Ngày hẹn bổ sung</label>
+            <input id="bulk-check-date" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-white focus:border-emerald-500 focus:outline-none" placeholder="Chọn ngày hẹn" readonly>
+          </div>
+          <div>
+            <label class="block text-[9px] text-gray-500 mb-1">Ghi chú hẹn bổ sung</label>
+            <textarea id="bulk-check-additional-note" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]" rows="2" placeholder="Thêm ghi chú nếu có"></textarea>
+          </div>
+        </div>
+        <div>
+          <label class="block text-[9px] text-gray-500 mb-1">Ghi chú duyệt</label>
+          <textarea id="bulk-check-note" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]" rows="3" placeholder="Thêm ghi chú nếu có"></textarea>
+        </div>
+        <div id="bulk-check-msg" class="text-[9px] text-red-600 hidden"></div>
+        <div class="flex justify-end">
+          <button type="button" id="bulk-check-submit" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700">Duyệt nhiều</button>
+        </div>
+      </div>
+    </div>
+    <div id="drawer-tab-info" class="space-y-3">
+      <div class="grid grid-cols-2 gap-3">
+        <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+          <p class="text-[9px] text-gray-500">PGD</p>
+          <p id="drawer-shop" class="font-semibold text-gray-900"></p>
+        </div>
+        <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+          <p class="text-[9px] text-gray-500">Ngày chứng từ</p>
+          <p id="drawer-doc-date" class="font-semibold text-gray-900"></p>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+          <p class="text-[9px] text-gray-500">Loại chứng từ</p>
+          <p id="drawer-doc-type" class="font-semibold text-gray-900"></p>
+        </div>
+        <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+          <p class="text-[9px] text-gray-500">Mã HĐCC/GNN</p>
+          <p id="drawer-contract-loan" class="font-semibold text-gray-900"></p>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+          <p class="text-[9px] text-gray-500">Nghiệp vụ</p>
+          <p id="drawer-business-type" class="font-semibold text-gray-900"></p>
+        </div>
+        <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+          <p class="text-[9px] text-gray-500">Loại quyển</p>
+          <p id="drawer-folder-type" class="font-semibold text-gray-900"></p>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+          <p class="text-[9px] text-gray-500">Khách hàng</p>
+          <p id="drawer-customer" class="font-semibold text-gray-900"></p>
+        </div>
+        <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+          <p class="text-[9px] text-gray-500">Tên nhân viên</p>
+          <p id="drawer-employee" class="font-semibold text-gray-900"></p>
+        </div>
+      </div>
+      <div class="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-2">
+        <p class="text-[9px] uppercase text-gray-500">Thao tác duyệt</p>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <p class="text-[9px] text-gray-500">Ngày duyệt</p>
+            <p id="drawer-checking-date" class="font-semibold text-gray-900"></p>
+          </div>
+          <div>
+            <p class="text-[9px] text-gray-500">Người duyệt</p>
+            <p id="drawer-checking-user" class="font-semibold text-gray-900"></p>
+          </div>
+        </div>
+        <form id="drawer-status-form" method="post" class="space-y-2">
+          {% csrf_token %}
+          <input type="hidden" name="documents_id_submit" id="drawer-doc-id">
+          <input type="hidden" name="checking_status_previous" id="drawer-checking-status-prev">
+          <input type="hidden" name="filter_choice_shop" value="{{ request.GET.choice_shop|default:'' }}">
+          <input type="hidden" name="filter_choice_loan_code" value="{{ request.GET.choice_loan_code|default:'' }}">
+          <input type="hidden" name="filter_choice_user_duyet" value="{{ request.GET.choice_user_duyet|default:'' }}">
+          <input type="hidden" name="filter_filtercheckdate" value="{{ request.GET.filtercheckdate|default:'' }}">
+          <input type="hidden" name="filter_filterdocumentdate" value="{{ request.GET.filterdocumentdate|default:'' }}">
+          <input type="hidden" name="filter_choicedocumentstatus" value="{{ request.GET.choicedocumentstatus|default:'' }}">
+          <input type="hidden" name="filter_choicecheckstatus" value="{{ request.GET.choicecheckstatus|default:'' }}">
+          <input type="hidden" name="filter_choicebusinesstype" value="{{ request.GET.choicebusinesstype|default:'' }}">
+          <input type="hidden" name="filter_page" value="{{ documents_detail.number }}">
+          <input type="hidden" name="filter_sort" value="{{ sort_param }}">
+          <div>
+            <label class="block text-[9px] text-gray-500 mb-1">Trạng thái duyệt</label>
+            <select id="drawer-checking-status" name="checking_status_submit" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-white focus:border-emerald-500 focus:outline-none">
+              <option value="">Chọn trạng thái</option>
+              {% for st in drop_list_checking_status %}
+              <option value="{{ st.status_id }}" data-code="{{ st.checking_status_code }}" data-request-additional="{{ st.is_request_additional|yesno:'true,false' }}">{{ st.checking_status_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div id="drawer-supplement-fields" class="hidden space-y-2">
+            <div>
+              <label class="block text-[9px] text-gray-500 mb-1">Ngày hẹn bổ sung</label>
+              <input id="drawer-supplement-date" name="additional_date" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-white focus:border-emerald-500 focus:outline-none" placeholder="Chọn ngày hẹn" readonly>
+            </div>
+            <div>
+              <label class="block text-[9px] text-gray-500 mb-1">Ghi chú hẹn bổ sung</label>
+              <textarea id="drawer-supplement-note" name="additional_note" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]" rows="2" placeholder="Thêm ghi chú nếu có"></textarea>
+            </div>
+          </div>
+          <p id="drawer-checking-msg" class="text-[9px] text-gray-500"></p>
+          <div class="flex justify-end">
+            <button type="submit" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700">Duyệt</button>
+          </div>
+        </form>
+      </div>
+      <div class="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-2">
+        <p class="text-[9px] uppercase text-gray-500">Mã thùng</p>
+        <form id="drawer-package-form" method="post" class="space-y-2">
+          {% csrf_token %}
+          <input type="hidden" name="documents_id_submit" id="drawer-doc-id-package">
+          <input type="hidden" name="filter_choice_shop" value="{{ request.GET.choice_shop|default:'' }}">
+          <input type="hidden" name="filter_choice_loan_code" value="{{ request.GET.choice_loan_code|default:'' }}">
+          <input type="hidden" name="filter_choice_user_duyet" value="{{ request.GET.choice_user_duyet|default:'' }}">
+          <input type="hidden" name="filter_filtercheckdate" value="{{ request.GET.filtercheckdate|default:'' }}">
+          <input type="hidden" name="filter_filterdocumentdate" value="{{ request.GET.filterdocumentdate|default:'' }}">
+          <input type="hidden" name="filter_choicedocumentstatus" value="{{ request.GET.choicedocumentstatus|default:'' }}">
+          <input type="hidden" name="filter_choicecheckstatus" value="{{ request.GET.choicecheckstatus|default:'' }}">
+          <input type="hidden" name="filter_choicebusinesstype" value="{{ request.GET.choicebusinesstype|default:'' }}">
+          <input type="hidden" name="filter_page" value="{{ documents_detail.number }}">
+          <input type="hidden" name="filter_sort" value="{{ sort_param }}">
+          <div>
+            <label class="block text-[9px] text-gray-500 mb-1">Mã thùng</label>
+            <input id="drawer-package-input" name="package_code_submit" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-white focus:border-emerald-500 focus:outline-none" placeholder="Nhập mã thùng">
+          </div>
+          <p id="drawer-package-msg" class="text-[9px] text-gray-500"></p>
+          <div class="flex justify-end">
+            <button id="drawer-package-submit" type="submit" class="px-3 py-2 rounded-lg bg-gray-700 text-white text-[10px] font-semibold hover:bg-gray-800">Đổi thùng</button>
+          </div>
+        </form>
+      </div>
+      <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+        <p class="text-[9px] text-gray-500 mb-1">Ghi chú</p>
+        <textarea id="drawer-note" class="w-full rounded-lg border border-gray-200 text-[10px] px-3 py-2" rows="3" placeholder="Nhập ghi chú..."></textarea>
+        <p id="drawer-note-status" class="text-[9px] text-gray-500 mt-1"></p>
+      </div>
+    </div>
+    <div id="drawer-tab-history" class="space-y-4 hidden">
+      <div>
+        <p class="text-[9px] font-semibold text-gray-600 mb-2">Lịch sử duyệt</p>
+        <div id="drawer-history-empty" class="text-[9px] text-gray-500">Chưa có lịch sử.</div>
+        <ul id="drawer-history-list" class="space-y-2"></ul>
+      </div>
+      <div>
+        <p class="text-[9px] font-semibold text-gray-600 mb-2">Lịch sử thùng</p>
+        <div id="drawer-package-history-empty" class="text-[9px] text-gray-500">Chưa có lịch sử.</div>
+        <ul id="drawer-package-history-list" class="space-y-2"></ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script>
@@ -160,5 +541,845 @@
   };
   initRange(docDateInput);
   initRange(checkDateInput);
+</script>
+<script>
+  window.CSRF_TOKEN = "{{ csrf_token }}";
+</script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const toastContainer = document.getElementById('toast-container');
+    const showToast = (message, type = 'success') => {
+      if (!toastContainer || !message) return;
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.innerHTML = `<span class="toast-dot"></span><div>${message}</div>`;
+      toastContainer.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-4px)';
+      }, 2400);
+      setTimeout(() => toast.remove(), 3000);
+    };
+
+    const drawer = document.getElementById('checking-drawer');
+    const drawerClose = document.getElementById('drawer-close');
+    const tabButtons = drawer?.querySelectorAll('[data-drawer-tab]') || [];
+    const tabInfo = document.getElementById('drawer-tab-info');
+    const tabHistory = document.getElementById('drawer-tab-history');
+    const tabBar = document.getElementById('drawer-tab-bar');
+    const drawerCopyBtn = document.getElementById('drawer-copy-btn');
+    const drawerCopyMsg = document.getElementById('drawer-copy-msg');
+    const historyList = document.getElementById('drawer-history-list');
+    const historyEmpty = document.getElementById('drawer-history-empty');
+    const packageHistoryList = document.getElementById('drawer-package-history-list');
+    const packageHistoryEmpty = document.getElementById('drawer-package-history-empty');
+    const historyUrlTemplate = "{% url 'fetch_history' 0 %}";
+    const noteInput = document.getElementById('drawer-note');
+    const noteStatus = document.getElementById('drawer-note-status');
+    const statusForm = document.getElementById('drawer-status-form');
+    const checkingMsg = document.getElementById('drawer-checking-msg');
+    const packageForm = document.getElementById('drawer-package-form');
+    const packageInput = document.getElementById('drawer-package-input');
+    const packageSubmit = document.getElementById('drawer-package-submit');
+    const packageMsg = document.getElementById('drawer-package-msg');
+    const supplementFields = document.getElementById('drawer-supplement-fields');
+    const supplementDate = document.getElementById('drawer-supplement-date');
+    const supplementNote = document.getElementById('drawer-supplement-note');
+    const tableBody = document.getElementById('checking-table-body');
+    const selectAll = document.getElementById('select-all-checking');
+    const bulkButton = document.getElementById('bulk-check-btn');
+    const bulkCount = document.getElementById('bulk-check-count');
+    const bulkPanel = document.getElementById('drawer-bulk-panel');
+    const bulkGroup = document.getElementById('bulk-check-group');
+    const bulkList = document.getElementById('bulk-selected-list');
+    const bulkStatus = document.getElementById('bulk-check-status');
+    const bulkSupplement = document.getElementById('bulk-supplement-fields');
+    const bulkCheckDate = document.getElementById('bulk-check-date');
+    const bulkAdditionalNote = document.getElementById('bulk-check-additional-note');
+    const bulkNote = document.getElementById('bulk-check-note');
+    const bulkMsg = document.getElementById('bulk-check-msg');
+    const bulkSubmit = document.getElementById('bulk-check-submit');
+    let noteTimer = null;
+    let activeDocumentId = null;
+    let activeRow = null;
+    let bulkMode = false;
+    let bulkPicker = null;
+    let supplementPicker = null;
+    let lastHistoryDocumentId = null;
+
+    const truncateCode = (code) => {
+      if (!code) return 'Chứng từ';
+      if (code.length <= 10) return code;
+      return `${code.slice(0, 3)}...${code.slice(-3)}`;
+    };
+
+    const setCopyState = (fullCode) => {
+      if (!drawerCopyBtn || !drawerCopyMsg) return;
+      if (!fullCode || bulkMode) {
+        drawerCopyBtn.classList.add('hidden');
+        drawerCopyMsg.classList.add('hidden');
+        drawerCopyBtn.dataset.fullCode = '';
+        return;
+      }
+      drawerCopyBtn.dataset.fullCode = fullCode;
+      drawerCopyBtn.classList.remove('hidden');
+      drawerCopyMsg.classList.add('hidden');
+    };
+
+    const setDrawerTab = (tabName) => {
+      if (bulkMode) return;
+      tabButtons.forEach(btn => {
+        const isActive = btn.dataset.drawerTab === tabName;
+        btn.classList.toggle('border-emerald-500', isActive);
+        btn.classList.toggle('text-emerald-700', isActive);
+        btn.classList.toggle('border-transparent', !isActive);
+        btn.classList.toggle('text-gray-500', !isActive);
+      });
+      tabInfo?.classList.toggle('hidden', tabName !== 'info');
+      tabHistory?.classList.toggle('hidden', tabName !== 'history');
+      if (tabName === 'history' && activeDocumentId) {
+        loadHistory(activeDocumentId);
+      }
+    };
+
+    const setBulkMode = (isBulk) => {
+      bulkMode = isBulk;
+      if (bulkPanel) bulkPanel.classList.toggle('hidden', !isBulk);
+      if (tabBar) tabBar.classList.toggle('hidden', isBulk);
+      if (tabInfo) tabInfo.classList.toggle('hidden', isBulk);
+      if (tabHistory) tabHistory.classList.add('hidden');
+      setCopyState(isBulk ? '' : (activeRow?.dataset?.documentCode || ''));
+      if (!isBulk) {
+        setDrawerTab('info');
+      }
+    };
+
+    const updateSupplementState = () => {
+      if (!supplementFields || !supplementDate || !statusForm) return;
+      const selectedOption = statusForm.querySelector('#drawer-checking-status option:checked');
+      const shouldShow = selectedOption?.dataset?.requestAdditional === 'true';
+      supplementFields.classList.toggle('hidden', !shouldShow);
+      if (shouldShow && supplementPicker && !supplementDate.value) {
+        supplementPicker.setDate(new Date(), true);
+      }
+    };
+
+    const updatePackageState = () => {
+      if (!packageInput || !packageSubmit) return;
+      const isSelectable = activeRow?.dataset?.documentsSelectable === 'true';
+      const isChecked = activeRow?.dataset?.documentsIsChecked === 'true';
+      const isReceived = activeRow?.dataset?.folderReceived === 'true';
+      const allowChange = (isSelectable || isChecked) && isReceived;
+      packageInput.disabled = !allowChange;
+      packageSubmit.disabled = !allowChange;
+      packageSubmit.classList.toggle('opacity-50', !allowChange);
+      packageSubmit.classList.toggle('cursor-not-allowed', !allowChange);
+      if (packageMsg) {
+        if (!allowChange) {
+          packageMsg.textContent = 'Chỉ đổi thùng khi chứng từ đã nhận và trạng thái cho phép.';
+          packageMsg.className = 'text-[9px] text-gray-500';
+        } else {
+          packageMsg.textContent = '';
+          packageMsg.className = 'text-[9px] text-gray-500';
+        }
+      }
+    };
+
+    const fillDrawer = (row) => {
+      const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+      };
+      const setValue = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value;
+      };
+      const fullCode = row.dataset.documentCode || 'Chứng từ';
+      setText('drawer-doc-code', truncateCode(fullCode));
+      setCopyState(fullCode);
+      setText('drawer-shop', row.dataset.shop || '—');
+      setText('drawer-doc-date', row.dataset.documentDate || '—');
+      setText('drawer-contract-loan', row.dataset.contractLoan || '—');
+      setText('drawer-doc-type', row.dataset.documentType || '—');
+      setText('drawer-business-type', row.dataset.businessType || '—');
+      setText('drawer-folder-type', row.dataset.folderType || '—');
+      setText('drawer-customer', row.dataset.customer || '—');
+      setText('drawer-employee', row.dataset.employee || '—');
+      const statusBadge = document.getElementById('drawer-status-badge');
+      if (statusBadge) {
+        statusBadge.textContent = row.dataset.documentStatus || '—';
+        statusBadge.style.backgroundColor = row.dataset.documentStatusColor || '#e5e7eb';
+        statusBadge.style.color = '#0f172a';
+      }
+      const checkingUserFull = row.dataset.checkingUserFull || '';
+      const checkingUser = row.dataset.checkingUser || '';
+      const checkingUserText = checkingUserFull ? `${checkingUser} - ${checkingUserFull}`.trim() : checkingUser || '—';
+      setText('drawer-checking-date', row.dataset.checkingDate || '—');
+      setText('drawer-checking-user', checkingUserText || '—');
+      setValue('drawer-checking-status', row.dataset.checkingStatusId || '');
+      setValue('drawer-checking-status-prev', row.dataset.checkingStatusId || '');
+      setValue('drawer-doc-id', row.dataset.documentId || '');
+      setValue('drawer-doc-id-package', row.dataset.documentId || '');
+      setValue('drawer-package-input', row.dataset.packageCode || '');
+      setValue('drawer-note', row.dataset.note || '');
+      if (noteStatus) {
+        noteStatus.textContent = '';
+        noteStatus.className = 'text-[9px] text-gray-500 mt-1';
+      }
+      if (checkingMsg) {
+        checkingMsg.textContent = '';
+        checkingMsg.className = 'text-[9px] text-gray-500';
+      }
+      updateSupplementState();
+      updatePackageState();
+      if (packageHistoryList) packageHistoryList.innerHTML = '';
+      if (packageHistoryEmpty) {
+        packageHistoryEmpty.textContent = 'Chưa có lịch sử.';
+        packageHistoryEmpty.classList.remove('hidden');
+      }
+      if (historyList) historyList.innerHTML = '';
+      if (historyEmpty) {
+        historyEmpty.textContent = 'Chưa có lịch sử.';
+        historyEmpty.classList.remove('hidden');
+      }
+      lastHistoryDocumentId = null;
+    };
+
+    const getCheckboxes = () => (tableBody ? Array.from(tableBody.querySelectorAll('.row-checkbox')) : []);
+
+    const getSelectedCheckboxes = () => getCheckboxes().filter(cb => cb.checked);
+
+    const getSelectedRows = () => getSelectedCheckboxes()
+      .map(cb => cb.closest('tr'))
+      .filter(Boolean);
+
+    const isBaseDisabled = (cb) => {
+      const isChecked = (cb.dataset.documentsIsChecked || '').toLowerCase() === 'true';
+      const isSelectableRaw = cb.dataset.documentsIsSelectable;
+      const isSelectable = isSelectableRaw === undefined || isSelectableRaw === '' || isSelectableRaw.toLowerCase() === 'true';
+      const isReleased = (cb.dataset.packageReleased || '').toLowerCase() === 'true';
+      const hasCheckingStatus = (cb.dataset.checkingStatusId || '').trim() !== '';
+      const hasPackage = (cb.dataset.hasPackage || '').toLowerCase() === 'true';
+      return isChecked || isReleased || !isSelectable || hasCheckingStatus || !hasPackage;
+    };
+
+    const updateCheckboxAvailability = () => {
+      const selected = getSelectedCheckboxes();
+      const selectedGroup = selected.length ? (selected[0].dataset.groupKey || '').trim() : '';
+      getCheckboxes().forEach(cb => {
+        const groupKey = (cb.dataset.groupKey || '').trim();
+        if (!groupKey) {
+          cb.disabled = true;
+          cb.title = 'Thiếu mã HĐCC/GNN';
+          return;
+        }
+        if (isBaseDisabled(cb)) {
+          cb.disabled = true;
+          return;
+        }
+        if (!selectedGroup) {
+          cb.disabled = false;
+          return;
+        }
+        if (cb.checked) {
+          cb.disabled = false;
+          return;
+        }
+        cb.disabled = groupKey !== selectedGroup;
+      });
+    };
+
+    const updateSelectAllState = () => {
+      if (!selectAll || !tableBody) return;
+      const allCbs = tableBody.querySelectorAll('.row-checkbox:not(:disabled)');
+      const checkedCbs = tableBody.querySelectorAll('.row-checkbox:not(:disabled):checked');
+      const total = allCbs.length;
+      const checkedCount = checkedCbs.length;
+      selectAll.checked = total > 0 && checkedCount === total;
+      selectAll.indeterminate = checkedCount > 0 && checkedCount < total;
+    };
+
+    const updateBulkButton = () => {
+      if (!bulkButton || !bulkCount) return;
+      const selected = getSelectedCheckboxes();
+      bulkCount.textContent = selected.length;
+      bulkButton.classList.toggle('hidden', selected.length === 0);
+    };
+
+    const syncRowHighlight = () => {
+      const rows = tableBody ? tableBody.querySelectorAll('tr[data-document-id]') : document.querySelectorAll('tr[data-document-id]');
+      rows.forEach(row => {
+        const cb = row.querySelector('.row-checkbox');
+        const isChecked = cb && cb.checked;
+        if (row === activeRow || isChecked) {
+          row.classList.add('row-active');
+        } else {
+          row.classList.remove('row-active');
+        }
+      });
+    };
+
+    const updateRowFromResponse = (row, payload) => {
+      if (!row || !payload) return;
+      row.dataset.checkingStatus = payload.checking_status_name || '';
+      row.dataset.checkingStatusId = payload.checking_status_id || '';
+      row.dataset.checkingDate = payload.checking_date || '';
+      row.dataset.checkingUser = payload.checking_user || '';
+      row.dataset.checkingUserFull = payload.checking_user_full || '';
+      row.dataset.documentStatus = payload.document_status_name || '';
+      row.dataset.documentStatusColor = payload.document_status_color || '';
+      if (payload.document_status_is_selectable !== undefined) {
+        row.dataset.documentsSelectable = payload.document_status_is_selectable ? 'true' : 'false';
+      }
+      if (payload.document_status_is_checked !== undefined) {
+        row.dataset.documentsIsChecked = payload.document_status_is_checked ? 'true' : 'false';
+      }
+
+      const docStatusCell = row.querySelector('[data-col="document-status"]');
+      if (docStatusCell && payload.document_status_name) {
+        docStatusCell.innerHTML = `<span class="px-2 py-1 rounded-full text-[9px] font-semibold" style="background-color: ${payload.document_status_color || '#e5e7eb'}; color: #0f172a;">${payload.document_status_name}</span>`;
+      }
+      const checkingStatusCell = row.querySelector('[data-col="checking-status"]');
+      if (checkingStatusCell) {
+        checkingStatusCell.textContent = payload.checking_status_name || 'Chưa duyệt';
+      }
+      const checkingDateCell = row.querySelector('[data-col="checking-date"]');
+      if (checkingDateCell) {
+        checkingDateCell.textContent = payload.checking_date || '';
+      }
+      const checkingUserCell = row.querySelector('[data-col="checking-user"]');
+      if (checkingUserCell) {
+        checkingUserCell.textContent = payload.checking_user || '';
+      }
+
+      const checkingUserText = payload.checking_user_full
+        ? `${payload.checking_user || ''} - ${payload.checking_user_full}`.trim()
+        : payload.checking_user || '—';
+      const statusBadge = document.getElementById('drawer-status-badge');
+      if (statusBadge) {
+        statusBadge.textContent = payload.document_status_name || '—';
+        statusBadge.style.backgroundColor = payload.document_status_color || '#e5e7eb';
+        statusBadge.style.color = '#0f172a';
+      }
+      const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+      };
+      const setValue = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.value = value;
+      };
+      setText('drawer-checking-date', payload.checking_date || '—');
+      setText('drawer-checking-user', checkingUserText || '—');
+      setValue('drawer-checking-status', payload.checking_status_id || '');
+      setValue('drawer-checking-status-prev', payload.checking_status_id || '');
+
+      const cb = row.querySelector('.row-checkbox');
+      if (cb) {
+        cb.dataset.checkingStatusId = payload.checking_status_id || '';
+        if (payload.document_status_is_checked !== undefined) {
+          cb.dataset.documentsIsChecked = payload.document_status_is_checked ? 'true' : 'false';
+        } else {
+          cb.dataset.documentsIsChecked = 'true';
+        }
+        cb.checked = false;
+        cb.disabled = true;
+      }
+      if (row === activeRow) {
+        updatePackageState();
+      }
+    };
+
+    const saveNote = async (noteVal) => {
+      if (!activeDocumentId || bulkMode) return;
+      if (!noteStatus) return;
+      noteStatus.textContent = 'Đang lưu...';
+      noteStatus.className = 'text-[9px] text-gray-500 mt-1';
+      try {
+        const resp = await fetch(`/api/document/${activeDocumentId}/note/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': window.CSRF_TOKEN || '',
+          },
+          body: JSON.stringify({ note: noteVal }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.error) {
+          throw new Error(data.error || 'Lưu ghi chú thất bại.');
+        }
+        noteStatus.textContent = 'Đã lưu ghi chú';
+        noteStatus.className = 'text-[9px] text-emerald-700 mt-1';
+        if (activeRow) {
+          activeRow.dataset.note = data.note || '';
+        }
+      } catch (err) {
+        noteStatus.textContent = err.message || 'Lưu ghi chú thất bại.';
+        noteStatus.className = 'text-[9px] text-red-600 mt-1';
+      }
+    };
+
+    const renderHistory = (items) => {
+      historyList.innerHTML = '';
+      const currentStatus = activeRow?.dataset?.checkingStatus || 'Chưa duyệt';
+      const currentDate = activeRow?.dataset?.checkingDate || '';
+      const currentUser = activeRow?.dataset?.checkingUser || '';
+      const currentUserFull = activeRow?.dataset?.checkingUserFull || '';
+      const currentUserText = currentUserFull ? `${currentUser} - ${currentUserFull}`.trim() : currentUser;
+      if (currentStatus) {
+        const li = document.createElement('li');
+        li.className = 'rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-[9px] text-gray-700';
+        li.innerHTML = `<div class="font-semibold text-emerald-700">Hiện tại</div><div>${currentStatus}</div><div class="text-gray-500">${currentUserText || '—'} • ${currentDate || ''}</div>`;
+        historyList.appendChild(li);
+      }
+      if (!items || !items.length) {
+        historyEmpty.classList.add('hidden');
+        return;
+      }
+      historyEmpty.classList.add('hidden');
+      items.forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-[9px] text-gray-700';
+        li.textContent = `${item.trans_created_date || ''} • ${item.trans_created_by__username || ''} • ${item.checking_status_id__checking_status_name || ''}`;
+        historyList.appendChild(li);
+      });
+    };
+
+    const renderPackageHistory = (items) => {
+      if (!packageHistoryList || !packageHistoryEmpty) return;
+      packageHistoryList.innerHTML = '';
+      if (!items || !items.length) {
+        packageHistoryEmpty.classList.remove('hidden');
+        return;
+      }
+      packageHistoryEmpty.classList.add('hidden');
+      const formatDateTime = (value) => {
+        if (!value) return '';
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return value;
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      };
+      items.forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-[9px] text-gray-700';
+        const username = item.trans_created_by__username || '';
+        const fullName = `${item.trans_created_by__last_name || ''} ${item.trans_created_by__first_name || ''}`.trim();
+        const userLabel = fullName ? `${username} (${fullName})` : username;
+        const pkgCode = item.package_id__package_code || '';
+        const timeLabel = formatDateTime(item.trans_created_date || '');
+        li.textContent = `${userLabel || '—'} - Nhận chứng từ ở thùng [${pkgCode}] vào lúc ${timeLabel}`;
+        packageHistoryList.appendChild(li);
+      });
+    };
+
+    const loadHistory = async (documentId) => {
+      if (!documentId) return;
+      if (lastHistoryDocumentId === documentId && historyList && historyList.children.length) {
+        historyEmpty?.classList.add('hidden');
+        packageHistoryEmpty?.classList.add('hidden');
+        return;
+      }
+      try {
+        const url = historyUrlTemplate.replace('/0/', `/${documentId}/`);
+        if (historyEmpty) {
+          historyEmpty.textContent = 'Đang tải...';
+          historyEmpty.classList.remove('hidden');
+        }
+        if (packageHistoryEmpty) {
+          packageHistoryEmpty.textContent = 'Đang tải...';
+          packageHistoryEmpty.classList.remove('hidden');
+        }
+        const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        if (!res.ok) {
+          renderHistory([]);
+          renderPackageHistory([]);
+          return;
+        }
+        const data = await res.json();
+        renderHistory(data.checking_history || []);
+        renderPackageHistory(data.package_history || []);
+        lastHistoryDocumentId = documentId;
+      } catch (err) {
+        renderHistory([]);
+        renderPackageHistory([]);
+      }
+    };
+
+    const buildBulkList = (selectedRows) => {
+      if (!bulkList) return;
+      bulkList.innerHTML = '';
+      selectedRows.forEach(row => {
+        const li = document.createElement('li');
+        const docType = row.dataset.documentType || '';
+        const docCode = row.dataset.documentCode || '';
+        const docDate = row.dataset.documentDate || '';
+        const parts = [];
+        if (docType) parts.push(docType);
+        if (docCode) parts.push(docCode);
+        if (docDate) parts.push(docDate);
+        li.textContent = parts.join(' • ') || 'Chứng từ';
+        bulkList.appendChild(li);
+      });
+    };
+
+    const openBulkDrawer = () => {
+      const selectedRows = getSelectedRows();
+      if (!selectedRows.length) return;
+      setBulkMode(true);
+      activeRow = null;
+      activeDocumentId = null;
+      if (bulkMsg) {
+        bulkMsg.textContent = '';
+        bulkMsg.classList.add('hidden');
+      }
+      if (bulkStatus) bulkStatus.value = '';
+      if (bulkNote) bulkNote.value = '';
+      if (bulkAdditionalNote) bulkAdditionalNote.value = '';
+      if (bulkCheckDate) bulkCheckDate.value = '';
+      if (bulkSupplement) bulkSupplement.classList.add('hidden');
+      const titleEl = document.getElementById('drawer-doc-code');
+      if (titleEl) titleEl.textContent = `Đã chọn ${selectedRows.length} chứng từ`;
+      setCopyState('');
+      const statusBadge = document.getElementById('drawer-status-badge');
+      if (statusBadge) {
+        statusBadge.textContent = '—';
+        statusBadge.style.backgroundColor = '#e5e7eb';
+        statusBadge.style.color = '#0f172a';
+      }
+      const firstCb = selectedRows[0].querySelector('.row-checkbox');
+      if (bulkGroup) {
+        const label = firstCb?.dataset.groupLabel || '';
+        bulkGroup.textContent = label ? `Nhóm: ${label}` : '';
+      }
+      buildBulkList(selectedRows);
+      syncRowHighlight();
+      drawer?.classList.remove('translate-x-full');
+    };
+
+    const rows = tableBody ? tableBody.querySelectorAll('tr[data-document-id]') : document.querySelectorAll('tr[data-document-id]');
+    rows.forEach(row => {
+      row.addEventListener('click', (event) => {
+        if (event.target.closest('a, button, input, select, textarea')) return;
+        setBulkMode(false);
+        activeRow = row;
+        activeDocumentId = row.dataset.documentId;
+        fillDrawer(row);
+        setDrawerTab('info');
+        syncRowHighlight();
+        drawer?.classList.remove('translate-x-full');
+      });
+    });
+
+    noteInput?.addEventListener('input', () => {
+      if (!activeDocumentId || bulkMode) return;
+      if (noteTimer) clearTimeout(noteTimer);
+      noteTimer = setTimeout(() => {
+        saveNote(noteInput.value || '');
+      }, 600);
+    });
+
+    noteInput?.addEventListener('blur', () => {
+      if (!activeDocumentId || bulkMode) return;
+      if (noteTimer) {
+        clearTimeout(noteTimer);
+        noteTimer = null;
+      }
+      saveNote(noteInput.value || '');
+    });
+
+    drawerClose?.addEventListener('click', () => {
+      drawer?.classList.add('translate-x-full');
+      activeRow = null;
+      activeDocumentId = null;
+      setBulkMode(false);
+      syncRowHighlight();
+    });
+
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        setDrawerTab(btn.dataset.drawerTab);
+      });
+    });
+
+    if (bulkStatus) {
+      bulkStatus.addEventListener('change', () => {
+        const selected = bulkStatus.selectedOptions[0];
+        const showSupplement = selected?.dataset?.requestAdditional === 'true';
+        if (bulkSupplement) {
+          bulkSupplement.classList.toggle('hidden', !showSupplement);
+        }
+        if (showSupplement && bulkPicker && bulkCheckDate && !bulkCheckDate.value) {
+          bulkPicker.setDate(new Date(), true);
+        }
+      });
+    }
+
+    if (statusForm) {
+      const statusSelect = statusForm.querySelector('#drawer-checking-status');
+      statusSelect?.addEventListener('change', () => {
+        updateSupplementState();
+      });
+    }
+
+    if (bulkSubmit) {
+      bulkSubmit.addEventListener('click', async () => {
+        if (bulkMsg) {
+          bulkMsg.textContent = '';
+          bulkMsg.classList.add('hidden');
+        }
+        const selectedItems = getSelectedCheckboxes().map(cb => cb.value);
+        const statusChoice = bulkStatus ? bulkStatus.value : '';
+        const isRequestAdditional = bulkStatus?.selectedOptions?.[0]?.dataset?.requestAdditional === 'true';
+        if (!selectedItems.length || !statusChoice) {
+          if (bulkMsg) {
+            bulkMsg.textContent = 'Hãy chọn trạng thái duyệt và ít nhất một chứng từ.';
+            bulkMsg.classList.remove('hidden');
+          }
+          return;
+        }
+        if (isRequestAdditional && bulkCheckDate && !bulkCheckDate.value) {
+          if (bulkMsg) {
+            bulkMsg.textContent = 'Hãy chọn ngày hẹn bổ sung.';
+            bulkMsg.classList.remove('hidden');
+          }
+          return;
+        }
+        try {
+          const resp = await fetch("{% url 'bulk_checking' %}", {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': window.CSRF_TOKEN || '',
+            },
+            body: JSON.stringify({
+              selectedItems,
+              documents_status_choice: statusChoice,
+              checking_note_submit: bulkNote ? bulkNote.value : '',
+              additional_bulk_date_choice: bulkCheckDate ? bulkCheckDate.value : '',
+              additional_bulk_note_choice: bulkAdditionalNote ? bulkAdditionalNote.value : '',
+            }),
+          });
+          const data = await resp.json();
+          if (!resp.ok || !data.success) {
+            throw new Error(data.error || 'Duyệt nhiều thất bại.');
+          }
+          if (Array.isArray(data.updated)) {
+            data.updated.forEach(item => {
+              const row = tableBody?.querySelector(`tr[data-document-id="${item.documents_id}"]`);
+              if (row) {
+                updateRowFromResponse(row, item);
+              }
+            });
+            updateCheckboxAvailability();
+            updateSelectAllState();
+            updateBulkButton();
+            syncRowHighlight();
+          }
+          setBulkMode(false);
+          drawer?.classList.add('translate-x-full');
+          showToast('Đã duyệt chứng từ.', 'success');
+          if (bulkMsg) {
+            bulkMsg.textContent = 'Đã duyệt';
+            bulkMsg.classList.remove('hidden');
+            setTimeout(() => bulkMsg.classList.add('hidden'), 1500);
+          }
+        } catch (err) {
+          showToast(err.message || 'Duyệt nhiều thất bại.', 'error');
+          if (bulkMsg) {
+            bulkMsg.textContent = err.message || 'Đã xảy ra lỗi.';
+            bulkMsg.classList.remove('hidden');
+          }
+        }
+      });
+    }
+
+    if (statusForm) {
+      statusForm.addEventListener('submit', async (event) => {
+        if (bulkMode) return;
+        event.preventDefault();
+        if (!activeDocumentId) return;
+        const isReceived = activeRow?.dataset?.folderReceived === 'true';
+        const hasPackage = activeRow?.dataset?.hasPackage === 'true' || ((activeRow?.dataset?.packageCode || '').trim() !== '');
+        if (!isReceived || !hasPackage) {
+          if (checkingMsg) {
+            checkingMsg.textContent = 'Chỉ duyệt chứng từ đã nhận và có mã thùng.';
+            checkingMsg.className = 'text-[9px] text-red-600';
+          }
+          return;
+        }
+        const selectedOption = statusForm.querySelector('#drawer-checking-status option:checked');
+        const isRequestAdditional = selectedOption?.dataset?.requestAdditional === 'true';
+        if (isRequestAdditional && supplementDate && !supplementDate.value) {
+          if (checkingMsg) {
+            checkingMsg.textContent = 'Vui lòng chọn ngày hẹn bổ sung.';
+            checkingMsg.className = 'text-[9px] text-red-600';
+          }
+          return;
+        }
+        if (checkingMsg) {
+          checkingMsg.textContent = 'Đang cập nhật...';
+          checkingMsg.className = 'text-[9px] text-gray-500';
+        }
+        try {
+          const formData = new FormData(statusForm);
+          const resp = await fetch(window.location.href, {
+            method: 'POST',
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'X-CSRFToken': window.CSRF_TOKEN || '',
+            },
+            body: formData,
+          });
+          const data = await resp.json();
+          if (!resp.ok || !data.success) {
+            throw new Error(data.error || 'Cập nhật thất bại.');
+          }
+          if (activeRow) {
+            updateRowFromResponse(activeRow, data);
+          }
+          showToast('Duyệt chứng từ thành công.', 'success');
+          if (checkingMsg) {
+            checkingMsg.textContent = 'Đã cập nhật';
+            checkingMsg.className = 'text-[9px] text-emerald-700';
+            setTimeout(() => {
+              if (checkingMsg) {
+                checkingMsg.textContent = '';
+                checkingMsg.className = 'text-[9px] text-gray-500';
+              }
+            }, 1500);
+          }
+        } catch (err) {
+          showToast(err.message || 'Cập nhật thất bại.', 'error');
+          if (checkingMsg) {
+            checkingMsg.textContent = err.message || 'Cập nhật thất bại.';
+            checkingMsg.className = 'text-[9px] text-red-600';
+          }
+        }
+      });
+    }
+
+    if (bulkButton) {
+      bulkButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        openBulkDrawer();
+      });
+    }
+
+    if (drawerCopyBtn) {
+      drawerCopyBtn.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        const fullCode = drawerCopyBtn.dataset.fullCode || '';
+        if (!fullCode) return;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(fullCode);
+          } else {
+            const temp = document.createElement('textarea');
+            temp.value = fullCode;
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand('copy');
+            temp.remove();
+          }
+          if (drawerCopyMsg) {
+            drawerCopyMsg.classList.remove('hidden');
+            setTimeout(() => drawerCopyMsg.classList.add('hidden'), 1500);
+          }
+        } catch (err) {
+          if (drawerCopyMsg) {
+            drawerCopyMsg.textContent = 'Không thể copy';
+            drawerCopyMsg.classList.remove('hidden');
+            setTimeout(() => {
+              drawerCopyMsg.textContent = 'Copied';
+              drawerCopyMsg.classList.add('hidden');
+            }, 1500);
+          }
+        }
+      });
+    }
+
+    getCheckboxes().forEach(cb => {
+      cb.addEventListener('change', () => {
+        updateCheckboxAvailability();
+        updateSelectAllState();
+        updateBulkButton();
+        syncRowHighlight();
+        if (bulkMode) {
+          if (getSelectedCheckboxes().length === 0) {
+            setBulkMode(false);
+            drawer?.classList.add('translate-x-full');
+          } else {
+            openBulkDrawer();
+          }
+        }
+      });
+    });
+
+    selectAll?.addEventListener('change', (e) => {
+      const checked = e.target.checked;
+      const allCbs = getCheckboxes();
+      if (!checked) {
+        allCbs.forEach(cb => {
+          if (!cb.disabled) cb.checked = false;
+        });
+      } else {
+        let targetGroup = '';
+        const selected = getSelectedCheckboxes();
+        if (selected.length) {
+          targetGroup = (selected[0].dataset.groupKey || '').trim();
+        } else {
+          const firstAvailable = allCbs.find(cb => !cb.disabled);
+          targetGroup = (firstAvailable?.dataset.groupKey || '').trim();
+        }
+        if (!targetGroup) return;
+        allCbs.forEach(cb => {
+          const cbGroup = (cb.dataset.groupKey || '').trim();
+          if (!cb.disabled && cbGroup === targetGroup) {
+            cb.checked = true;
+          }
+        });
+      }
+      updateCheckboxAvailability();
+      updateSelectAllState();
+      updateBulkButton();
+      syncRowHighlight();
+      if (bulkMode) {
+        if (getSelectedCheckboxes().length === 0) {
+          setBulkMode(false);
+          drawer?.classList.add('translate-x-full');
+        } else {
+          openBulkDrawer();
+        }
+      }
+    });
+
+    if (bulkCheckDate && window.flatpickr) {
+      bulkPicker = flatpickr(bulkCheckDate, { dateFormat: 'Y-m-d', allowInput: false });
+    }
+    if (supplementDate && window.flatpickr) {
+      supplementPicker = flatpickr(supplementDate, { dateFormat: 'Y-m-d', allowInput: false });
+    }
+
+    updateCheckboxAvailability();
+    updateSelectAllState();
+    updateBulkButton();
+    syncRowHighlight();
+    updateSupplementState();
+
+    document.addEventListener('click', (event) => {
+      if (!drawer) return;
+      if (bulkButton && bulkButton.contains(event.target)) return;
+      const clickedInsideDrawer = drawer.contains(event.target);
+      const clickedRow = event.target.closest('tr[data-document-id]');
+      if (!clickedInsideDrawer && !clickedRow) {
+        drawer.classList.add('translate-x-full');
+        activeRow = null;
+        activeDocumentId = null;
+        setBulkMode(false);
+        syncRowHighlight();
+      }
+    });
+  });
 </script>
 {% endblock %}

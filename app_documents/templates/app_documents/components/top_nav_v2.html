@@ -9,28 +9,68 @@
         <span class="text-gray-300">•</span>
         <a href="{% url 'checking_transaction_v2' %}" class="{% if request.resolver_match.url_name == 'checking_transaction_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Duyệt chứng từ</a>
         <span class="text-gray-300">•</span>
+        {% if is_admin %}
+        <a href="{% url 'document_kpi_v2' %}" class="{% if request.resolver_match.url_name == 'document_kpi_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Chỉ tiêu chứng từ</a>
+        <span class="text-gray-300">•</span>
+        {% endif %}
         <a href="{% url 'package_list_management' %}" class="{% if request.resolver_match.url_name == 'package_list_management' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Quản lý thùng</a>
         <span class="text-gray-300">•</span>
-        <a href="{% url 'borrow_management_v2' %}" class="{% if request.resolver_match.url_name == 'borrow_management_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Quản lý mượn chứng từ</a>
+        <a href="{% url 'borrow_request_management_v2' %}" class="{% if request.resolver_match.url_name == 'borrow_request_management_v2' or request.resolver_match.url_name == 'borrow_request_detail_v2' or request.resolver_match.url_name == 'borrow_management_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Mượn chứng từ</a>
       </div>
     </div>
-    <div class="flex items-center gap-3 text-[9px] text-gray-700">
-      <div class="hidden sm:flex flex-col leading-tight text-right">
-        <span class="font-semibold text-gray-900 text-[9px]">
-          {% if request.user.last_name or request.user.first_name %}
-            {{ request.user.last_name }} {{ request.user.first_name }}
-          {% else %}
-            {{ request.user.username }}
-          {% endif %}
-        </span>
-        <span class="text-[9px] text-gray-500">{{ request.user }}</span>
-      </div>
-      <a href="{% url 'logout' %}" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50 text-[9px]">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6A2.25 2.25 0 005.25 5.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l3 3-3 3m6-3H9"/>
+    <div class="relative text-[9px] text-gray-700" data-user-menu>
+      <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50" data-user-toggle aria-expanded="false">
+        <div class="hidden sm:flex flex-col leading-tight text-right">
+          <span class="font-semibold text-gray-900 text-[9px]">
+            {% if request.user.last_name or request.user.first_name %}
+              {{ request.user.last_name }} {{ request.user.first_name }}
+            {% else %}
+              {{ request.user.username }}
+            {% endif %}
+          </span>
+          <span class="text-[9px] text-gray-500">{{ request.user }}</span>
+        </div>
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9l-7 7-7-7"/>
         </svg>
-        <span>Đăng xuất</span>
-      </a>
+      </button>
+      <div class="absolute right-0 mt-2 w-40 rounded-xl border border-gray-200 bg-white shadow-lg py-1 hidden" data-user-dropdown>
+        {% if is_super_admin %}
+        <a href="/admin/" class="flex items-center gap-2 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50">
+          Admin portal
+        </a>
+        {% endif %}
+        <a href="{% url 'logout' %}" class="flex items-center gap-2 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50">
+          Đăng xuất
+        </a>
+      </div>
     </div>
   </div>
 </nav>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const menu = document.querySelector('[data-user-menu]');
+    if (!menu) return;
+    const toggle = menu.querySelector('[data-user-toggle]');
+    const dropdown = menu.querySelector('[data-user-dropdown]');
+    if (!toggle || !dropdown) return;
+
+    const closeMenu = () => {
+      dropdown.classList.add('hidden');
+      toggle.setAttribute('aria-expanded', 'false');
+    };
+
+    toggle.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const isHidden = dropdown.classList.contains('hidden');
+      dropdown.classList.toggle('hidden', !isHidden);
+      toggle.setAttribute('aria-expanded', isHidden ? 'true' : 'false');
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!menu.contains(event.target)) {
+        closeMenu();
+      }
+    });
+  });
+</script>

@@ -1,0 +1,339 @@
+{% extends 'app_documents/base_app_documents_v2.html' %}
+{% block title %}Yêu cầu mượn chứng từ{% endblock %}
+{% block top_nav %}
+  {% include 'app_documents/components/top_nav_v2.html' %}
+{% endblock %}
+{% block main_extra_class %}pt-14{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<style>
+  body { font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size: 10px; }
+  .filter-bar, .filter-bar * { font-size: 10px !important; }
+  .table-wrap table { font-size: 10px; }
+  .filter-input { height: 34px; }
+  .form-input { height: 34px; }
+  .form-input input { font-size: 10px; }
+  .form-input textarea { font-size: 10px; }
+  .form-input input:focus,
+  .form-input input:focus-visible,
+  .form-input textarea:focus,
+  .form-input textarea:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+  .form-input input,
+  .form-input textarea {
+    outline: none !important;
+    box-shadow: none !important;
+    border: 0;
+  }
+  input:focus,
+  input:focus-visible,
+  textarea:focus,
+  textarea:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+  .form-input:focus-within {
+    border-color: #e5e7eb;
+  }
+  .filter-input input:focus,
+  .filter-input input:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+  .flatpickr-calendar { font-size: 10px; }
+  .flatpickr-calendar .flatpickr-day { height: 26px; line-height: 26px; width: 32px; }
+  .flatpickr-months .flatpickr-month { height: 32px; }
+  .flatpickr-months .flatpickr-current-month { font-size: 12px; }
+  .flatpickr-weekdays { font-size: 10px; }
+</style>
+
+<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
+  {% if messages %}
+  <div class="space-y-2">
+    {% for message in messages %}
+    <div class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-[10px] text-gray-700">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
+    <nav class="flex flex-wrap items-center gap-2 text-[10px] text-gray-500">
+      <span class="uppercase text-[9px] text-gray-400">Mượn chứng từ</span>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'borrow_request_management_v2' %}" class="font-semibold text-emerald-700">Yêu cầu mượn</a>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'borrow_management_v2' %}" class="hover:text-emerald-700">Quản lý mượn</a>
+    </nav>
+  </div>
+
+  <div x-data="{ showCreate: false }" class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+    <div class="flex items-center justify-between">
+      <div>
+        <div class="text-xs font-semibold text-gray-900">Phiếu yêu cầu mượn</div>
+        <div class="text-[9px] text-gray-500">Tạo phiếu yêu cầu mượn từ phòng ban.</div>
+      </div>
+      <button type="button" @click="showCreate = !showCreate" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50" x-text="showCreate ? 'Thu gọn' : 'Tạo yêu cầu'"></button>
+    </div>
+    <form method="post" action="{% url 'borrow_request_management_v2' %}" class="mt-4 grid lg:grid-cols-[2fr,1fr,1fr,1fr] gap-3 items-start" x-show="showCreate">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="create">
+      <div class="relative" x-data="{
+        open: false,
+        searchText: '',
+        selected: ''
+      }">
+        <input type="hidden" name="borrower_id" x-model="selected">
+        <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
+          <span class="text-gray-700 text-[10px]" x-text="selected ? (searchText || 'Đã chọn phòng ban') : 'Chọn phòng ban mượn'"></span>
+          <span class="text-gray-400 text-xs">▾</span>
+        </button>
+        <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
+          <div class="flex items-center gap-2">
+            <input type="text" x-model="searchText" class="w-full rounded-lg border border-gray-200 px-2 py-1 text-[10px] focus:border-emerald-500 focus:outline-none" placeholder="Tìm phòng ban">
+            <button type="button" @click="searchText=''; selected=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm2.707-10.707a1 1 0 00-1.414-1.414L10 7.586 8.707 6.293a1 1 0 00-1.414 1.414L8.586 9l-1.293 1.293a1 1 0 101.414 1.414L10 10.414l1.293 1.293a1 1 0 001.414-1.414L11.414 9l1.293-1.293z" clip-rule="evenodd"/>
+              </svg>
+            </button>
+          </div>
+          <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
+            {% for shop in drop_list_shops %}
+            <button type="button" x-show="!searchText || '{{ shop.shop_name|escapejs }}'.toLowerCase().includes(searchText.toLowerCase())" @click="selected='{{ shop.shop_id }}'; searchText='{{ shop.shop_name }}'; open=false" class="w-full text-left px-2 py-2 hover:bg-emerald-50">
+              <div class="font-semibold text-gray-900">{{ shop.shop_name }}</div>
+              <div class="text-gray-500 text-[9px]">Mã: {{ shop.shop_code }}</div>
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 form-input">
+        <input id="borrow-date" type="text" name="needed_date" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Ngày mượn" readonly>
+      </div>
+      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 form-input">
+        <input id="return-date" type="text" name="appointment_date" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Ngày cần trả" readonly>
+      </div>
+      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 form-input">
+        <input name="ticket_code" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Mã ticket">
+      </div>
+      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 form-input lg:col-span-2">
+        <input name="reference_code" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Mã hợp đồng/GNN cần mượn">
+      </div>
+      <div class="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 form-input">
+          <input name="contact_email" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Email liên hệ">
+        </div>
+        <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 form-input">
+          <input name="contact_phone" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Số điện thoại người mượn">
+        </div>
+      </div>
+      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 focus-within:border-emerald-500 lg:col-span-4">
+        <textarea name="note" rows="2" class="w-full bg-transparent border-0 ring-0 outline-none text-[10px] resize-none" placeholder="Ghi chú"></textarea>
+      </div>
+      <div class="lg:col-span-4 flex justify-end">
+        <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Tạo yêu cầu</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
+    <form id="filter-form" method="get" action="{% url 'borrow_request_management_v2' %}" class="grid lg:grid-cols-[2fr,1fr,1fr,1fr,auto] gap-3 items-center">
+      {% with filters.borrower|default_if_none:'' as borrower_value %}
+      <div class="relative" x-data="{
+        open: false,
+        selected: '{{ borrower_value|escapejs }}',
+        searchText: '',
+        shops: [
+          {% for shop in drop_list_shops %}
+          { id: '{{ shop.shop_id }}', name: '{{ shop.shop_name|escapejs }}' }{% if not forloop.last %},{% endif %}
+          {% endfor %}
+        ],
+        label(val) {
+          if (!val) return 'Phòng ban mượn';
+          const found = this.shops.find(s => s.id.toString() === val.toString());
+          return found ? found.name : val;
+        }
+      }">
+        <input type="hidden" name="borrower" x-model="selected">
+        <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
+          <span class="text-gray-700 text-[10px]" x-text="label(selected)"></span>
+          <span class="text-gray-400 text-xs">▾</span>
+        </button>
+        <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
+          <div class="flex items-center gap-2">
+            <input type="text" x-model="searchText" class="w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Tìm phòng ban">
+            <button type="button" @click="searchText=''; selected=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm2.707-10.707a1 1 0 00-1.414-1.414L10 7.586 8.707 6.293a1 1 0 00-1.414 1.414L8.586 9l-1.293 1.293a1 1 0 101.414 1.414L10 10.414l1.293 1.293a1 1 0 001.414-1.414L11.414 9l1.293-1.293z" clip-rule="evenodd"/>
+              </svg>
+            </button>
+          </div>
+          <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
+            {% for shop in drop_list_shops %}
+            <button type="button" x-show="!searchText || '{{ shop.shop_name|escapejs }}'.toLowerCase().includes(searchText.toLowerCase())" @click="selected='{{ shop.shop_id }}'; searchText='{{ shop.shop_name }}'; open=false" class="w-full text-left px-2 py-2 hover:bg-emerald-50">
+              <div class="font-semibold text-gray-900">{{ shop.shop_name }}</div>
+              <div class="text-gray-500 text-[9px]">Mã: {{ shop.shop_code }}</div>
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endwith %}
+      {% with filters.status|default_if_none:'' as status_value %}
+      <div class="relative" x-data="{
+        open: false,
+        selected: '{{ status_value|escapejs }}',
+        statuses: [
+          {% for st in drop_list_request_status %}
+          { id: '{{ st.0 }}', name: '{{ st.1|escapejs }}' }{% if not forloop.last %},{% endif %}
+          {% endfor %}
+        ],
+        label(val) {
+          if (!val) return 'Trạng thái yêu cầu';
+          const found = this.statuses.find(s => s.id.toString() === val.toString());
+          return found ? found.name : 'Trạng thái yêu cầu';
+        }
+      }">
+        <input type="hidden" name="status" x-model="selected">
+        <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
+          <span class="text-gray-700 text-[10px]" x-text="label(selected)"></span>
+          <span class="text-gray-400 text-xs">▾</span>
+        </button>
+        <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-1 text-[10px]">
+          <button type="button" @click="selected=''; open=false" class="w-full text-left px-2 py-2 rounded hover:bg-emerald-50 text-gray-700">Tất cả</button>
+          <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
+            {% for st in drop_list_request_status %}
+            <button type="button" @click="selected='{{ st.0 }}'; open=false" class="w-full text-left px-2 py-2 hover:bg-emerald-50">
+              {{ st.1 }}
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endwith %}
+      <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+        <input name="ticket" value="{{ filters.ticket }}" placeholder="Mã ticket/email" class="w-full bg-transparent focus:outline-none text-[10px]" />
+      </label>
+      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
+        <input id="filter-needed-date" name="needed_date" value="{{ filters.needed_date }}" placeholder="Ngày mượn (từ - đến)" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" readonly />
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Lọc</button>
+        <a href="{% url 'borrow_request_management_v2' %}" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50">Xóa</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden table-wrap">
+    <div class="flex justify-between items-center px-3 py-2 text-[10px] text-gray-600">
+      <span>Tổng yêu cầu: {{ borrow_requests.paginator.count }}</span>
+      <div class="flex items-center gap-1">
+        {% if borrow_requests.has_previous %}
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page=1{% if base_qs %}&{{ base_qs }}{% endif %}">«</a>
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ borrow_requests.previous_page_number }}{% if base_qs %}&{{ base_qs }}{% endif %}">‹</a>
+        {% endif %}
+        {% for p in page_range_custom %}
+        {% if p == borrow_requests.number %}
+        <span class="px-2 py-1 rounded border border-emerald-500 text-emerald-700 font-semibold">{{ p }}</span>
+        {% else %}
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ p }}{% if base_qs %}&{{ base_qs }}{% endif %}">{{ p }}</a>
+        {% endif %}
+        {% endfor %}
+        {% if borrow_requests.has_next %}
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ borrow_requests.next_page_number }}{% if base_qs %}&{{ base_qs }}{% endif %}">›</a>
+        <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page={{ borrow_requests.paginator.num_pages }}{% if base_qs %}&{{ base_qs }}{% endif %}">»</a>
+        {% endif %}
+      </div>
+    </div>
+    <table class="min-w-full text-left">
+      <thead class="bg-gray-50 text-gray-600 uppercase">
+        <tr>
+          <th class="px-3 py-2">Mã phiếu</th>
+          <th class="px-3 py-2">Phòng ban</th>
+          <th class="px-3 py-2">Ngày mượn</th>
+          <th class="px-3 py-2">Ngày hẹn trả</th>
+          <th class="px-3 py-2">Trạng thái</th>
+          <th class="px-3 py-2">Số chứng từ</th>
+          <th class="px-3 py-2">Cảnh báo trễ hạn</th>
+          <th class="px-3 py-2">Ticket</th>
+          <th class="px-3 py-2">Người tạo</th>
+          <th class="px-3 py-2 text-right">Thao tác</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for br in borrow_requests %}
+        <tr class="hover:bg-gray-50">
+          <td class="px-3 py-2 font-semibold text-gray-900">BR-{{ br.created_at|date:"Ymd" }}-{{ br.request_id|stringformat:"04d" }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ br.borrower.shop_name }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ br.needed_date|date:"Y-m-d" }}</td>
+          <td class="px-3 py-2 text-gray-700">{{ br.appointment_date|date:"Y-m-d" }}</td>
+          <td class="px-3 py-2">
+            {% if br.status == 'pending' %}
+            <span class="px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 text-[9px]">Chờ xử lý</span>
+            {% elif br.status == 'assigned' %}
+            <span class="px-2 py-1 rounded-full bg-blue-100 text-blue-700 text-[9px]">Đã gán</span>
+            {% elif br.status == 'handed_over' %}
+            <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[9px]">Đã bàn giao</span>
+            {% elif br.status == 'partially_returned' %}
+            <span class="px-2 py-1 rounded-full bg-orange-100 text-orange-700 text-[9px]">Trả một phần</span>
+            {% elif br.status == 'returned' %}
+            <span class="px-2 py-1 rounded-full bg-gray-100 text-gray-700 text-[9px]">Đã trả</span>
+            {% elif br.status == 'cancelled' %}
+            <span class="px-2 py-1 rounded-full bg-red-100 text-red-700 text-[9px]">Hủy</span>
+            {% else %}
+            <span class="px-2 py-1 rounded-full bg-gray-100 text-gray-700 text-[9px]">{{ br.get_status_display }}</span>
+            {% endif %}
+          </td>
+          <td class="px-3 py-2 text-gray-700">{{ br.items_count|default:br.items.count }}</td>
+          <td class="px-3 py-2">
+            {% if br.overdue_count %}
+            <span class="px-2 py-1 rounded-full bg-red-100 text-red-700 text-[9px]">Trễ {{ br.overdue_count }}</span>
+            {% else %}
+            <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[9px]">Đúng hạn</span>
+            {% endif %}
+          </td>
+          <td class="px-3 py-2 text-gray-700">{{ br.ticket_code|default:"" }}</td>
+          <td class="px-3 py-2 text-gray-700">
+            {% if br.requester %}
+              {{ br.requester.last_name }} {{ br.requester.first_name }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td class="px-3 py-2 text-right">
+            <a href="{% url 'borrow_request_detail_v2' br.request_id %}" class="px-3 py-1 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50">Chi tiết</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="10" class="px-3 py-4 text-center text-gray-500">Chưa có yêu cầu mượn</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const neededInput = document.getElementById('filter-needed-date');
+    if (neededInput && typeof flatpickr !== 'undefined') {
+      flatpickr(neededInput, {
+        mode: 'range',
+        dateFormat: 'Y-m-d',
+        conjunction: ' to ',
+        allowInput: true,
+      });
+    }
+    const borrowDate = document.getElementById('borrow-date');
+    const returnDate = document.getElementById('return-date');
+    if (borrowDate && typeof flatpickr !== 'undefined') {
+      flatpickr(borrowDate, { dateFormat: 'Y-m-d', allowInput: true });
+    }
+    if (returnDate && typeof flatpickr !== 'undefined') {
+      flatpickr(returnDate, { dateFormat: 'Y-m-d', allowInput: true });
+    }
+  });
+</script>
+{% endblock %}

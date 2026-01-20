@@ -14,6 +14,16 @@
 </style>
 
 <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
+    <nav class="flex flex-wrap items-center gap-2 text-[10px] text-gray-500">
+      <span class="uppercase text-[9px] text-gray-400">Mượn chứng từ</span>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'borrow_request_management_v2' %}" class="hover:text-emerald-700">Yêu cầu mượn</a>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'borrow_management_v2' %}" class="font-semibold text-emerald-700">Quản lý mượn</a>
+    </nav>
+  </div>
+
   <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
     <form method="get" action="{% url 'borrow_management_v2' %}" class="grid lg:grid-cols-[2fr,1fr,1fr,auto] gap-3 items-center">
       <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">

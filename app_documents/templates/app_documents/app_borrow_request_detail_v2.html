@@ -1,0 +1,354 @@
+{% extends 'app_documents/base_app_documents_v2.html' %}
+{% block title %}Chi tiết yêu cầu mượn{% endblock %}
+{% block top_nav %}
+  {% include 'app_documents/components/top_nav_v2.html' %}
+{% endblock %}
+{% block main_extra_class %}pt-14{% endblock %}
+
+{% block content %}
+<style>
+  body { font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size: 10px; }
+  .card, .card * { font-size: 10px; }
+  .table-wrap table { font-size: 10px; }
+  .receipt-card { border: 1px solid #e5e7eb; background: #fff; }
+  .receipt-header { border-bottom: 1px dashed #e5e7eb; padding-bottom: 10px; margin-bottom: 12px; }
+  .receipt-meta { color: #6b7280; font-size: 9px; }
+  .receipt-title { font-size: 11px; font-weight: 600; color: #111827; }
+  .receipt-badge { font-size: 9px; padding: 4px 8px; border-radius: 9999px; border: 1px solid #e5e7eb; background: #f9fafb; color: #374151; }
+  .stepper { position: relative; }
+  .stepper::before { content: ""; position: absolute; left: 14px; top: 10px; bottom: 10px; width: 2px; background: linear-gradient(180deg, #d1fae5 0%, #e5e7eb 100%); }
+  .step { position: relative; padding-left: 40px; }
+  .step + .step { margin-top: 10px; }
+  .step::before { content: ""; position: absolute; left: 9px; top: 12px; width: 10px; height: 10px; border-radius: 9999px; border: 2px solid #10b981; background: #fff; }
+  .step summary { cursor: pointer; list-style: none; }
+  .step summary::-webkit-details-marker { display: none; }
+  .step summary::after { content: "▼"; font-size: 9px; color: #9ca3af; margin-left: auto; }
+  .step[open] summary::after { content: "▲"; }
+  .step-header { display: flex; align-items: center; gap: 8px; border: 1px solid #e5e7eb; border-radius: 12px; padding: 8px 12px; background: #f9fafb; }
+  .step-index { width: 22px; height: 22px; border-radius: 9999px; border: 1px solid #e5e7eb; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; color: #374151; background: #fff; }
+  .step-count { font-size: 9px; color: #6b7280; margin-left: auto; }
+  .step-body { padding: 10px 12px 4px; }
+  .step-item { border-left: 2px solid #e5e7eb; padding-left: 10px; margin-left: 8px; }
+  .step-item + .step-item { margin-top: 10px; }
+</style>
+
+<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
+  {% if messages %}
+  <div class="space-y-2">
+    {% for message in messages %}
+    <div class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-[10px] text-gray-700">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
+    <nav class="flex flex-wrap items-center gap-2 text-[10px] text-gray-500">
+      <span class="uppercase text-[9px] text-gray-400">Mượn chứng từ</span>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'borrow_request_management_v2' %}" class="font-semibold text-emerald-700">Yêu cầu mượn</a>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'borrow_management_v2' %}" class="hover:text-emerald-700">Quản lý mượn</a>
+    </nav>
+  </div>
+
+  <div class="flex items-center justify-between">
+    <div>
+      <div class="text-xs font-semibold text-gray-900">Phiếu yêu cầu mượn BR-{{ borrow_request.created_at|date:"Ymd" }}-{{ borrow_request.request_id|stringformat:"04d" }}</div>
+      <div class="text-[9px] text-gray-500">Phòng ban: {{ borrow_request.borrower.shop_name }}</div>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="{% url 'borrow_request_management_v2' %}" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50">Quay lại</a>
+      <form method="post" action="{% url 'borrow_request_detail_v2' borrow_request.request_id %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="cancel_request">
+        <button type="submit" class="px-3 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">Hủy yêu cầu</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="grid lg:grid-cols-[2fr,1fr] gap-4">
+    <div class="card receipt-card rounded-2xl shadow-sm p-4">
+      <div class="flex items-start justify-between gap-3 receipt-header">
+        <div>
+          <div class="receipt-title">Phiếu yêu cầu mượn</div>
+          <div class="receipt-meta">BR-{{ borrow_request.created_at|date:"Ymd" }}-{{ borrow_request.request_id|stringformat:"04d" }}</div>
+        </div>
+        <span class="receipt-badge">{{ borrow_request.get_status_display }}</span>
+      </div>
+      <div class="grid md:grid-cols-3 gap-3">
+        <div>
+          <div class="text-[9px] text-gray-500">Trạng thái</div>
+          <div class="font-semibold text-gray-900">{{ borrow_request.get_status_display }}</div>
+        </div>
+        <div>
+          <div class="text-[9px] text-gray-500">Người tạo</div>
+          <div class="font-semibold text-gray-900">
+            {% if borrow_request.requester %}
+              {{ borrow_request.requester.last_name }} {{ borrow_request.requester.first_name }}
+            {% else %}
+              —
+            {% endif %}
+          </div>
+        </div>
+        <div>
+          <div class="text-[9px] text-gray-500">Ngày mượn</div>
+          <div class="font-semibold text-gray-900">{{ borrow_request.needed_date|date:"Y-m-d" }}</div>
+        </div>
+        <div>
+          <div class="text-[9px] text-gray-500">Ngày hẹn trả</div>
+          <div class="font-semibold text-gray-900">{{ borrow_request.appointment_date|date:"Y-m-d" }}</div>
+        </div>
+        <div>
+          <div class="text-[9px] text-gray-500">Mã ticket</div>
+          <div class="font-semibold text-gray-900">{{ borrow_request.ticket_code|default:"" }}</div>
+        </div>
+        <div>
+          <div class="text-[9px] text-gray-500">Email liên hệ</div>
+          <div class="font-semibold text-gray-900">{{ borrow_request.contact_email|default:"" }}</div>
+        </div>
+        <div>
+          <div class="text-[9px] text-gray-500">Số điện thoại</div>
+          <div class="font-semibold text-gray-900">{{ borrow_request.contact_phone|default:"" }}</div>
+        </div>
+        <div>
+          <div class="text-[9px] text-gray-500">Mã hợp đồng/GNN</div>
+          <div class="font-semibold text-gray-900">{{ borrow_request.reference_code|default:"" }}</div>
+        </div>
+        <div class="md:col-span-2">
+          <div class="text-[9px] text-gray-500">Ghi chú</div>
+          <div class="font-semibold text-gray-900">{{ borrow_request.note|default:"" }}</div>
+        </div>
+      </div>
+      <div class="mt-4 border-t border-dashed border-gray-200 pt-3">
+        <div class="text-[10px] font-semibold text-gray-900">Danh sách chứng từ</div>
+        <div class="mt-2 overflow-x-auto">
+          <table class="min-w-full text-left">
+            <thead class="bg-gray-50 text-gray-600 uppercase">
+              <tr>
+                <th class="px-3 py-2">#</th>
+                <th class="px-3 py-2">Mã chứng từ</th>
+                <th class="px-3 py-2">Loại chứng từ</th>
+                <th class="px-3 py-2">Phòng giao dịch</th>
+                <th class="px-3 py-2">Trạng thái chứng từ</th>
+                <th class="px-3 py-2">Mã quyển</th>
+                <th class="px-3 py-2">Trạng thái</th>
+                <th class="px-3 py-2">Hẹn trả</th>
+                <th class="px-3 py-2">Ngày bàn giao</th>
+                <th class="px-3 py-2">Ngày trả</th>
+                <th class="px-3 py-2 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              {% for item in items %}
+              <tr class="hover:bg-gray-50">
+                <td class="px-3 py-2 text-gray-500">{{ forloop.counter }}</td>
+                <td class="px-3 py-2 font-semibold text-gray-900">{{ item.documents_id.documents_code|default:"—" }}</td>
+                <td class="px-3 py-2 text-gray-700">{{ item.documents_id.document_type_id.document_type_name|default:"—" }}</td>
+                <td class="px-3 py-2 text-gray-700">{{ item.documents_id.shop_id.shop_name|default:"—" }}</td>
+                <td class="px-3 py-2 text-gray-700">{{ item.documents_id.document_status_id.documents_status_name|default:"—" }}</td>
+                <td class="px-3 py-2 text-gray-700">{{ item.documents_id.folder_id.folder_code|default:"—" }}</td>
+                <td class="px-3 py-2 text-gray-700">{{ item.get_status_display }}</td>
+                <td class="px-3 py-2 text-gray-700">
+                  <form method="post" action="{% url 'borrow_request_detail_v2' borrow_request.request_id %}" class="flex items-center gap-2">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="update_item_appointment">
+                    <input type="hidden" name="item_id" value="{{ item.item_id }}">
+                    <input type="date" name="appointment_date" value="{{ item.appointment_date|date:'Y-m-d' }}" class="w-28 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-[9px] focus:border-emerald-500 focus:outline-none">
+                    <button type="submit" class="px-2 py-1 rounded-lg border border-gray-200 text-gray-700 text-[9px] hover:bg-gray-50">Lưu</button>
+                  </form>
+                </td>
+                <td class="px-3 py-2 text-gray-700">{{ item.handed_over_date|date:"Y-m-d H:i" }}</td>
+                <td class="px-3 py-2 text-gray-700">{{ item.return_date|date:"Y-m-d H:i" }}</td>
+                <td class="px-3 py-2 text-right">
+                  {% if item.status == 'handed_over' %}
+                  <div class="inline-flex items-center gap-2">
+                    <form method="post" action="{% url 'borrow_request_detail_v2' borrow_request.request_id %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="return_item">
+                      <input type="hidden" name="item_id" value="{{ item.item_id }}">
+                      <button type="submit" class="px-3 py-1 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50">Hoàn trả</button>
+                    </form>
+                    <form method="post" action="{% url 'borrow_request_detail_v2' borrow_request.request_id %}">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="lost_item">
+                      <input type="hidden" name="item_id" value="{{ item.item_id }}">
+                      <button type="submit" class="px-3 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">Báo mất</button>
+                    </form>
+                  </div>
+                  {% else %}
+                  <span class="text-gray-400">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="7" class="px-3 py-4 text-center text-gray-500">Chưa có chứng từ trong phiếu</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card rounded-2xl border border-gray-100 bg-white shadow-sm p-4 space-y-3">
+      <div class="font-semibold text-gray-900 text-xs">Cập nhật yêu cầu</div>
+      <form method="post" action="{% url 'borrow_request_detail_v2' borrow_request.request_id %}" class="space-y-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="update_request">
+        <label class="block">
+          <span class="text-[9px] text-gray-500">Ngày hẹn trả</span>
+          <input type="date" name="appointment_date" value="{{ borrow_request.appointment_date|date:'Y-m-d' }}" class="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[10px] focus:border-emerald-500 focus:outline-none">
+        </label>
+        <label class="block">
+          <span class="text-[9px] text-gray-500">Mã ticket</span>
+          <input name="ticket_code" value="{{ borrow_request.ticket_code }}" class="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[10px] focus:border-emerald-500 focus:outline-none">
+        </label>
+        <label class="block">
+          <span class="text-[9px] text-gray-500">Mã hợp đồng/GNN</span>
+          <input name="reference_code" value="{{ borrow_request.reference_code }}" class="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[10px] focus:border-emerald-500 focus:outline-none">
+        </label>
+        <label class="block">
+          <span class="text-[9px] text-gray-500">Email liên hệ</span>
+          <input name="contact_email" value="{{ borrow_request.contact_email }}" class="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[10px] focus:border-emerald-500 focus:outline-none">
+        </label>
+        <label class="block">
+          <span class="text-[9px] text-gray-500">Số điện thoại</span>
+          <input name="contact_phone" value="{{ borrow_request.contact_phone }}" class="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[10px] focus:border-emerald-500 focus:outline-none">
+        </label>
+        <label class="block">
+          <span class="text-[9px] text-gray-500">Ghi chú</span>
+          <textarea name="note" rows="3" class="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[10px] focus:border-emerald-500 focus:outline-none">{{ borrow_request.note }}</textarea>
+        </label>
+        <button type="submit" class="w-full px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Lưu cập nhật</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card rounded-2xl border border-gray-100 bg-white shadow-sm p-4 space-y-3 table-wrap">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div class="font-semibold text-gray-900 text-xs">Tìm kiếm chứng từ bằng mã HDCC/GNN</div>
+      <form method="post" action="{% url 'borrow_request_detail_v2' borrow_request.request_id %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="handover">
+        <button type="submit" class="px-3 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Bàn giao</button>
+      </form>
+    </div>
+    <form method="get" action="{% url 'borrow_request_detail_v2' borrow_request.request_id %}" class="flex flex-wrap items-center gap-2">
+      <input name="preview_key" value="{{ preview_key }}" placeholder="Nhập contract_code hoặc loan_code" class="flex-1 min-w-[240px] rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[10px] focus:border-emerald-500 focus:outline-none">
+      <button type="submit" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50">Tìm</button>
+      <a href="{% url 'borrow_request_detail_v2' borrow_request.request_id %}" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50">Xóa</a>
+    </form>
+    <div class="text-[9px] text-gray-500">Nhập contract_code hoặc loan_code để xem danh sách chứng từ trước khi gán.</div>
+
+    {% if preview_error %}
+    <div class="rounded-xl border border-yellow-200 bg-yellow-50 px-3 py-2 text-[10px] text-yellow-700">{{ preview_error }}</div>
+    {% endif %}
+
+    {% if preview_rows %}
+    <form method="post" action="{% url 'borrow_request_detail_v2' borrow_request.request_id %}" class="space-y-3">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="assign_selected">
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-left">
+          <thead class="bg-gray-50 text-gray-600 uppercase">
+            <tr>
+              <th class="px-3 py-2 text-center">
+                <input id="select-all-preview" type="checkbox" class="h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+              </th>
+              <th class="px-3 py-2">Mã chứng từ</th>
+              <th class="px-3 py-2">Phòng giao dịch</th>
+              <th class="px-3 py-2">Loại chứng từ</th>
+              <th class="px-3 py-2">Trạng thái</th>
+              <th class="px-3 py-2">Mã quyển</th>
+              <th class="px-3 py-2">Ngày phát sinh</th>
+              <th class="px-3 py-2">Trạng thái duyệt</th>
+              <th class="px-3 py-2">Mã thùng</th>
+              <th class="px-3 py-2">Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for row in preview_rows %}
+            <tr class="{% if not row.eligible %}text-gray-400{% else %}hover:bg-gray-50{% endif %}">
+              <td class="px-3 py-2 text-center">
+                <input type="checkbox" name="document_ids" value="{{ row.doc.documents_id }}" {% if not row.eligible %}disabled{% endif %} class="h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 preview-checkbox">
+              </td>
+              <td class="px-3 py-2 font-semibold text-gray-900">{{ row.doc.documents_code }}</td>
+              <td class="px-3 py-2">{{ row.doc.shop_id.shop_name }}</td>
+              <td class="px-3 py-2">{{ row.doc.document_type_id.document_type_name|default:"—" }}</td>
+              <td class="px-3 py-2">
+                <div>{{ row.doc.document_status_id.documents_status_name|default:"—" }}</div>
+                {% if row.reason %}
+                <div class="text-[9px] text-red-500">{{ row.reason }}</div>
+                {% endif %}
+              </td>
+              <td class="px-3 py-2">{{ row.doc.folder_id.folder_code|default:"—" }}</td>
+              <td class="px-3 py-2">{{ row.doc.documents_created_date|date:"Y-m-d" }}</td>
+              <td class="px-3 py-2">{{ row.doc.status_id.checking_status_name|default:"—" }}</td>
+              <td class="px-3 py-2">{{ row.doc.package_id.package_code|default:"—" }}</td>
+              <td class="px-3 py-2">{{ row.doc.note|default:"" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="flex justify-end">
+        <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Gán đã chọn</button>
+      </div>
+    </form>
+    {% endif %}
+
+    <div class="text-[9px] text-gray-500">Danh sách chứng từ đã gán hiển thị trong phiếu ở trên.</div>
+  </div>
+
+  <div class="card rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+    <div class="font-semibold text-gray-900 text-xs mb-3">Tiến trình phiếu mượn</div>
+    <div class="stepper">
+      {% for step in log_steps %}
+      <details class="step" {% if forloop.first %}open{% endif %}>
+        <summary class="step-header">
+          <span class="step-index">{{ forloop.counter }}</span>
+          <span class="text-[10px] font-semibold text-gray-900">{{ step.label }}</span>
+          <span class="step-count">{{ step.logs|length }} log</span>
+        </summary>
+        <div class="step-body">
+          {% for log in step.logs %}
+          <div class="step-item">
+            <div class="text-[9px] text-gray-500">{{ log.created_at|date:"Y-m-d H:i" }}</div>
+            <div class="text-[10px] font-semibold text-gray-900">{{ log.action }}</div>
+            <div class="text-[9px] text-gray-500">Từ: {{ log.from_status|default:"—" }} → Đến: {{ log.to_status|default:"—" }}</div>
+            <div class="text-[9px] text-gray-500">
+              {% if log.created_by %}
+                {{ log.created_by.last_name }} {{ log.created_by.first_name }}
+              {% else %}
+                —
+              {% endif %}
+            </div>
+            {% if log.item %}
+            <div class="text-[9px] text-gray-600">Item #{{ log.item.item_id }}{% if log.item.documents_id %} • {{ log.item.documents_id.documents_code }}{% endif %}</div>
+            {% endif %}
+            {% if log.note %}
+            <div class="text-[9px] text-gray-600">{{ log.note }}</div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </details>
+      {% empty %}
+      <div class="text-center text-gray-500 text-[10px]">Chưa có lịch sử</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const selectAll = document.getElementById('select-all-preview');
+    if (!selectAll) return;
+    const checkboxes = Array.from(document.querySelectorAll('.preview-checkbox'));
+    selectAll.addEventListener('change', function () {
+      checkboxes.forEach((cb) => {
+        if (!cb.disabled) cb.checked = selectAll.checked;
+      });
+    });
+  });
+</script>
+{% endblock %}

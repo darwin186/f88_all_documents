@@ -250,6 +250,7 @@ class CheckingTransactionStatus(models.Model):
     valid_from = models.DateTimeField(null= True, blank= True)
     valid_to = models.DateTimeField(null= True, blank= True)
     is_allowed_to_borrow = models.BooleanField(default= True) 
+    is_request_additional = models.BooleanField(default=False)
     checking_status_type = models.ForeignKey(CheckingStatusType, db_column = 'checking_status_type', on_delete=models.CASCADE, null= True)
     class Meta:
         db_table = 'f_CheckingStatus'    
@@ -584,6 +585,93 @@ class BorrowingDocument(models.Model):
         
     def __str__(self):
         return f"{self.documents_id.documents_code}"
+
+
+class BorrowRequestStatus(models.TextChoices):
+    DRAFT = "draft", "Nháp"
+    PENDING = "pending", "Chờ xử lý"
+    ASSIGNED = "assigned", "Đã gán chứng từ"
+    HANDED_OVER = "handed_over", "Đã bàn giao"
+    PARTIALLY_RETURNED = "partially_returned", "Trả một phần"
+    RETURNED = "returned", "Đã trả"
+    CANCELLED = "cancelled", "Hủy"
+    REJECTED = "rejected", "Từ chối"
+
+
+class BorrowRequestItemStatus(models.TextChoices):
+    PENDING = "pending", "Chờ gán"
+    ASSIGNED = "assigned", "Đã gán"
+    HANDED_OVER = "handed_over", "Đã bàn giao"
+    RETURNED = "returned", "Đã trả"
+    LOST = "lost", "Báo mất"
+    CANCELLED = "cancelled", "Hủy"
+
+
+class BorrowRequest(models.Model):
+    request_id = models.AutoField(primary_key=True)
+    borrower = models.ForeignKey(Shop, db_column="borrower", related_name="borrow_requests", on_delete=models.CASCADE)
+    requester = models.ForeignKey(User, db_column="requester", related_name="borrow_requesters", on_delete=models.SET_NULL, null=True, blank=True)
+    reference_code = models.CharField(max_length=50, null=True, blank=True)
+    needed_date = models.DateField(auto_now_add=False, null=False)
+    appointment_date = models.DateField(auto_now_add=False, null=True, blank=True)
+    ticket_code = models.CharField(max_length=100, null=True, blank=True)
+    contact_email = models.EmailField(null=True, blank=True)
+    contact_phone = models.CharField(max_length=30, null=True, blank=True)
+    note = models.TextField(null=True, blank=True)
+    status = models.CharField(max_length=30, choices=BorrowRequestStatus.choices, default=BorrowRequestStatus.PENDING)
+    source_system = models.CharField(max_length=50, null=True, blank=True)
+    external_ref = models.CharField(max_length=100, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, db_column="created_by", related_name="borrow_request_created", on_delete=models.SET_NULL, null=True, blank=True)
+    updated_by = models.ForeignKey(User, db_column="updated_by", related_name="borrow_request_updated", on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        db_table = "f_BorrowRequest"
+
+    def __str__(self):
+        return f"BorrowRequest {self.request_id}"
+
+
+class BorrowRequestItem(models.Model):
+    item_id = models.AutoField(primary_key=True)
+    borrow_request = models.ForeignKey(BorrowRequest, db_column="request_id", related_name="items", on_delete=models.CASCADE)
+    documents_id = models.ForeignKey(DocumentsDetail, db_column="documents_id", related_name="borrow_request_items", on_delete=models.SET_NULL, null=True, blank=True)
+    appointment_date = models.DateField(auto_now_add=False, null=True, blank=True)
+    status = models.CharField(max_length=30, choices=BorrowRequestItemStatus.choices, default=BorrowRequestItemStatus.PENDING)
+    note = models.TextField(null=True, blank=True)
+    handed_over_date = models.DateTimeField(null=True, blank=True)
+    return_date = models.DateTimeField(null=True, blank=True)
+    legacy_borrowing = models.ForeignKey(BorrowingDocument, db_column="borrow_id", related_name="request_items", on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, db_column="created_by", related_name="borrow_request_item_created", on_delete=models.SET_NULL, null=True, blank=True)
+    updated_by = models.ForeignKey(User, db_column="updated_by", related_name="borrow_request_item_updated", on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        db_table = "f_BorrowRequestItem"
+
+    def __str__(self):
+        return f"BorrowRequestItem {self.item_id}"
+
+
+class BorrowRequestLog(models.Model):
+    log_id = models.AutoField(primary_key=True)
+    borrow_request = models.ForeignKey(BorrowRequest, db_column="request_id", related_name="logs", on_delete=models.CASCADE)
+    item = models.ForeignKey(BorrowRequestItem, db_column="item_id", related_name="logs", on_delete=models.SET_NULL, null=True, blank=True)
+    action = models.CharField(max_length=50)
+    from_status = models.CharField(max_length=30, null=True, blank=True)
+    to_status = models.CharField(max_length=30, null=True, blank=True)
+    note = models.TextField(null=True, blank=True)
+    meta = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(User, db_column="created_by", related_name="borrow_request_logs", on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        db_table = "f_BorrowRequestLog"
+
+    def __str__(self):
+        return f"BorrowRequestLog {self.log_id}"
     
 class HistoricalFolder(models.Model):
     folder_id = models.AutoField(primary_key=True)
@@ -621,4 +709,19 @@ class HistoricalDocuments(models.Model):
     note =  models.TextField(null= True, blank= True) 
     class Meta:
         db_table = 'historical_documents'
+
+class DocumentKpiSetting(models.Model):
+    metric_code = models.CharField(max_length=60, unique=True)
+    metric_name = models.CharField(max_length=255)
+    target_rate = models.DecimalField(max_digits=6, decimal_places=2, default=90.0)
+    is_active = models.BooleanField(default=True)
+    updated_by = models.ForeignKey(User, db_column='updated_by', on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'd_DocumentKpiSetting'
+
+    def __str__(self):
+        return self.metric_name
     

@@ -1,0 +1,698 @@
+{% extends 'app_documents/base_app_documents_v2.html' %}
+{% load humanize %}
+{% block title %}Chỉ tiêu chứng từ{% endblock %}
+{% block top_nav %}
+  {% include 'app_documents/components/top_nav_v2.html' %}
+{% endblock %}
+{% block main_extra_class %}pt-14{% endblock %}
+
+{% block content %}
+<style>
+  .kpi-card { border: 1px solid #e5e7eb; border-radius: 14px; padding: 10px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .kpi-label { font-size: 9px; text-transform: uppercase; color: #6b7280; letter-spacing: 0.04em; }
+  .kpi-value { font-size: 16px; font-weight: 700; color: #0f172a; }
+  .kpi-sub { font-size: 8px; color: #6b7280; }
+  .bar-track { background: #f1f5f9; border-radius: 999px; height: 10px; overflow: hidden; }
+  .bar-fill { height: 10px; border-radius: 999px; background: #16a34a; }
+  .table-xs th, .table-xs td { padding: 8px 10px; font-size: 10px; text-align: center; }
+  .table-xs th:first-child, .table-xs td:first-child { text-align: left; }
+  .table-xs thead th { background: #f8fafc; text-transform: uppercase; color: #6b7280; }
+  .filter-bar, .filter-bar * { font-size: 10px !important; }
+  .filter-input { height: 34px; }
+  .filter-bar input:focus,
+  .filter-bar input:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+</style>
+
+<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
+    <nav class="flex flex-wrap items-center gap-2 text-[10px] text-gray-500">
+      <span class="uppercase text-[9px] text-gray-400">Chỉ tiêu</span>
+      <span class="text-gray-300">›</span>
+      {% with active_tab|default:'receive' as tab %}
+      <a href="{% url 'document_kpi_v2' %}?tab=receive{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'receive' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Nhận chứng từ</a>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'document_kpi_v2' %}?tab=quality{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'quality' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Chất lượng chứng từ</a>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'document_kpi_v2' %}?tab=borrow{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'borrow' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Mượn chứng từ</a>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'document_kpi_v2' %}?tab=lost{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'lost' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Thất lạc</a>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'document_kpi_v2' %}?tab=feedback{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'feedback' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Phản hồi lỗi</a>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'document_kpi_v2' %}?tab=config" class="{% if tab == 'config' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Cấu hình KPI</a>
+      {% endwith %}
+    </nav>
+  </div>
+
+  {% if active_tab == 'config' %}
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4 space-y-4">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <h3 class="text-[11px] font-semibold text-gray-800">Cấu hình KPI</h3>
+        <p class="text-[9px] text-gray-500">Chỉ áp dụng KPI theo tỉ lệ cho 3 chỉ số: nhận đúng hạn, nhận trễ hạn, chưa nhận.</p>
+      </div>
+    </div>
+    <form method="post" class="space-y-3">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="update_kpi">
+      <div class="overflow-x-auto">
+        <table class="min-w-full table-xs">
+          <thead>
+            <tr>
+              <th>Mã KPI</th>
+              <th>Tên KPI</th>
+              <th>Tỉ lệ mục tiêu (%)</th>
+              <th>Trạng thái</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for setting in kpi_settings %}
+            <tr>
+              <td class="font-semibold text-gray-700">{{ setting.metric_code }}</td>
+              <td>{{ setting.metric_name }}</td>
+              <td>
+                <input type="number" name="target_rate_{{ setting.metric_code }}" value="{{ setting.target_rate|floatformat:2 }}" min="0" max="100" step="0.1" class="w-28 rounded-lg border border-gray-200 px-2 py-1 text-[10px] bg-gray-50 focus:border-emerald-500 focus:outline-none">
+              </td>
+              <td>{% if setting.is_active %}<span class="text-emerald-600">Đang dùng</span>{% else %}<span class="text-gray-400">Tắt</span>{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-center text-gray-500">Chưa có KPI.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="flex items-center justify-end">
+        <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700">Lưu KPI</button>
+      </div>
+    </form>
+  </div>
+  {% elif active_tab != 'receive' %}
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-6 text-center text-[11px] text-gray-600">
+    Nội dung đang được cập nhật cho tab này.
+  </div>
+  {% else %}
+  <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
+    <form method="get" class="grid grid-cols-1 lg:grid-cols-[1.1fr,1.1fr,1fr,0.9fr,auto] gap-3 items-end">
+      <input type="hidden" name="tab" value="receive">
+      <div>
+        <label class="block text-[9px] text-gray-500 mb-1">Ngày phát sinh (từ)</label>
+        <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
+          <input type="date" name="start_date" value="{{ start_date }}" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none">
+        </div>
+      </div>
+      <div>
+        <label class="block text-[9px] text-gray-500 mb-1">Ngày phát sinh (đến)</label>
+        <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
+          <input type="date" name="end_date" value="{{ end_date }}" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none">
+        </div>
+      </div>
+      <div>
+        <label class="block text-[9px] text-gray-500 mb-1">Theo tháng</label>
+        <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
+          <input type="month" name="month" value="{{ month }}" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none">
+        </div>
+      </div>
+      <div>
+        <label class="block text-[9px] text-gray-500 mb-1">Loại quyển</label>
+        <select name="folder_type_id" class="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[10px] text-gray-700 focus:border-emerald-500 focus:outline-none focus:ring-0">
+          <option value="">Tất cả</option>
+          {% for folder_type in filter_folder_types %}
+          <option value="{{ folder_type.folder_type_id }}" {% if folder_type_id|stringformat:"s" == folder_type.folder_type_id|stringformat:"s" %}selected{% endif %}>
+            {{ folder_type.folder_type_name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700">Lọc</button>
+        <a href="{% url 'document_kpi_v2' %}?tab=receive" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 text-[10px] font-semibold hover:bg-gray-50">Xóa</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2">
+    <div class="kpi-card">
+      <div class="kpi-label">Tổng số quyển phát sinh</div>
+      <div class="kpi-value">{{ issue_original_total|intcomma }}</div>
+      <div class="kpi-sub">Theo ngày phát sinh</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Tổng số quyển đã nhận</div>
+      <div class="kpi-value text-emerald-600">{{ received_count|intcomma }}</div>
+      <div class="kpi-sub">Theo ngày phát sinh</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Tổng số quyển chưa nhận</div>
+      <div class="kpi-value text-gray-600">{{ not_received_count|intcomma }}</div>
+      <div class="kpi-sub">Tổng quyển phát sinh: {{ issue_original_total|intcomma }}</div>
+      <div class="kpi-sub mt-1">
+        <span class="inline-flex items-center gap-1 {% if not_received_rate_all <= kpi_targets.not_received_rate %}text-emerald-600{% else %}text-red-600{% endif %}">
+          {% if not_received_rate_all <= kpi_targets.not_received_rate %}
+          <svg class="w-3 h-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 11l5-5 5 5"/></svg>
+          {% else %}
+          <svg class="w-3 h-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 9l5 5 5-5"/></svg>
+          {% endif %}
+          {{ not_received_rate_all|floatformat:1 }}% KPI {{ kpi_targets.not_received_rate|floatformat:1 }}%
+        </span>
+      </div>
+      <div class="kpi-sub mt-1 text-gray-500">KPI: {{ kpi_labels.not_received_rate }} (not_received_rate)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Nhận đúng hạn</div>
+      <div class="kpi-value text-emerald-600">{{ on_time_count|intcomma }}</div>
+      <div class="kpi-sub">Tổng quyển đã nhận: {{ received_count|intcomma }}</div>
+      <div class="kpi-sub mt-1">
+        <span class="inline-flex items-center gap-1 {% if on_time_rate_all >= kpi_targets.on_time_rate %}text-emerald-600{% else %}text-red-600{% endif %}">
+          {% if on_time_rate_all >= kpi_targets.on_time_rate %}
+          <svg class="w-3 h-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 11l5-5 5 5"/></svg>
+          {% else %}
+          <svg class="w-3 h-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 9l5 5 5-5"/></svg>
+          {% endif %}
+          {{ on_time_rate_all|floatformat:1 }}% KPI {{ kpi_targets.on_time_rate|floatformat:1 }}%
+        </span>
+      </div>
+      <div class="kpi-sub mt-1 text-gray-500">KPI: {{ kpi_labels.on_time_rate }} (on_time_rate)</div>
+      <div class="kpi-sub mt-2">Tỉ lệ nhận đúng hạn (quyển phát sinh)</div>
+      <div class="mt-1 bar-track">
+        <div class="bar-fill" style="width: {{ ratio_percent }}%;"></div>
+      </div>
+      <div class="kpi-sub mt-1">
+        <span class="inline-flex items-center gap-1 text-gray-600">{{ ratio_percent|floatformat:1 }}%</span>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Nhận trễ hạn</div>
+      <div class="kpi-value text-amber-600">{{ late_count|intcomma }}</div>
+      <div class="kpi-sub">Tổng quyển đã nhận: {{ received_count|intcomma }}</div>
+      <div class="kpi-sub mt-1">
+        <span class="inline-flex items-center gap-1 {% if late_rate_all <= kpi_targets.late_rate %}text-emerald-600{% else %}text-red-600{% endif %}">
+          {% if late_rate_all <= kpi_targets.late_rate %}
+          <svg class="w-3 h-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 11l5-5 5 5"/></svg>
+          {% else %}
+          <svg class="w-3 h-3" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 9l5 5 5-5"/></svg>
+          {% endif %}
+          {{ late_rate_all|floatformat:1 }}% KPI {{ kpi_targets.late_rate|floatformat:1 }}%
+        </span>
+      </div>
+      <div class="kpi-sub mt-1 text-gray-500">KPI: {{ kpi_labels.late_rate }} (late_rate)</div>
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+      <h3 class="text-[11px] font-semibold text-gray-800">Theo vùng & khu vực</h3>
+      <span class="text-[9px] text-gray-500">Tỷ lệ nhận quyển chứng từ đúng hạn theo vùng kinh doanh.</span>
+    </div>
+    <div class="space-y-3" id="region-area-list">
+      {% for row in region_area_breakdown %}
+      <div class="space-y-2 {% if forloop.counter > 6 %}hidden{% endif %}" data-expand-group="region">
+        <div class="flex flex-wrap items-center justify-between gap-2 text-[9px] text-gray-600">
+          <div class="flex flex-wrap items-center gap-2">
+            <span>{{ row.name }} {{ row.code }}</span>
+            <span class="text-gray-500">Đúng hạn: {{ row.on_time|intcomma }} • Trễ: {{ row.late|intcomma }} • Chưa nhận: {{ row.not_received|intcomma }}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span>{{ row.ratio|floatformat:2 }}%</span>
+            {% if row.areas %}
+            <button type="button" class="text-[9px] font-semibold text-emerald-700 hover:text-emerald-800" data-toggle-area="{{ row.id }}">Xem khu vực</button>
+            {% endif %}
+          </div>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width: {{ row.ratio }}%; background: {% if row.ratio >= kpi_targets.on_time_rate %}#16a34a{% else %}#dc2626{% endif %};"></div>
+        </div>
+        {% if row.areas %}
+        <div class="mt-2 space-y-2 pl-3 border-l border-dashed border-gray-200 hidden" data-area-group="{{ row.id }}">
+          <div class="text-[8px] uppercase text-gray-400">Khu vực</div>
+          {% for area in row.areas %}
+          <div class="space-y-1">
+            <div class="flex items-center justify-between gap-2 text-[9px] text-gray-600">
+              <div class="flex flex-wrap items-center gap-2">
+                <span>{{ area.name }} {{ area.code }}</span>
+                <span class="text-gray-500">Đúng hạn: {{ area.on_time|intcomma }} • Trễ: {{ area.late|intcomma }} • Chưa nhận: {{ area.not_received|intcomma }}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span>{{ area.ratio|floatformat:2 }}%</span>
+                {% if area.shops %}
+                <button type="button" class="text-[9px] font-semibold text-emerald-700 hover:text-emerald-800" data-toggle-shop="{{ area.uid }}">Xem PGD</button>
+                {% endif %}
+              </div>
+            </div>
+            <div class="bar-track">
+              <div class="bar-fill" style="width: {{ area.ratio }}%; background: {% if area.ratio >= kpi_targets.on_time_rate %}#16a34a{% else %}#dc2626{% endif %};"></div>
+            </div>
+            {% if area.shops %}
+            <div class="mt-1 space-y-1 pl-3 border-l border-gray-100 hidden" data-shop-group="{{ area.uid }}">
+              <div class="grid grid-cols-[1fr,120px,24px] items-center gap-2 text-[8px] uppercase text-gray-400">
+                <span>PGD</span>
+                <span class="text-right">Đúng hạn / Tổng</span>
+                <span class="text-center">Tải</span>
+              </div>
+              {% for shop in area.shops %}
+              <div class="space-y-1">
+                <div class="grid grid-cols-[1fr,120px,24px] items-center gap-2 text-[9px] text-gray-600">
+                  <span>{{ shop.name }}{% if shop.code %} ({{ shop.code }}){% endif %}</span>
+                  <span class="text-right">{{ shop.on_time|intcomma }} / {{ shop.total|intcomma }}</span>
+                  <a class="flex items-center justify-center text-gray-500 hover:text-emerald-700" title="Tải dữ liệu PGD" href="{% url 'document_kpi_shop_export' %}?shop_id={{ shop.id }}&start_date={{ start_date }}&end_date={{ end_date }}{% if month %}&month={{ month }}{% endif %}{% if folder_type_id %}&folder_type_id={{ folder_type_id }}{% endif %}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 3v12m0 0l3-3m-3 3l-3-3m9 6H6a2 2 0 01-2-2v-2"/>
+                    </svg>
+                  </a>
+                </div>
+                <div class="bar-track">
+                  <div class="bar-fill" style="width: {{ shop.on_time_rate }}%; background: {% if shop.on_time_rate >= kpi_targets.on_time_rate %}#86efac{% elif shop.on_time_rate >= kpi_on_time_warn %}#fde68a{% else %}#fecaca{% endif %};"></div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+      {% empty %}
+      <div class="text-[9px] text-gray-500">Không có dữ liệu.</div>
+      {% endfor %}
+    </div>
+    {% if region_area_breakdown|length > 6 %}
+    <div class="mt-3">
+      <button type="button" class="text-[9px] font-semibold text-emerald-700 hover:text-emerald-800" data-expand-toggle="region">Xem thêm</button>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
+    <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+      <h3 class="text-[11px] font-semibold text-gray-800 mb-3">Theo tháng</h3>
+      <div class="mb-4 rounded-xl border border-gray-100 bg-gray-50 p-3">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-3 text-[9px] text-gray-600">
+            <span class="inline-flex items-center gap-1"><span class="inline-block h-2 w-2 rounded-full bg-emerald-600"></span>Đúng hạn</span>
+            <span class="inline-flex items-center gap-1"><span class="inline-block h-2 w-2 rounded-full bg-amber-500"></span>Trễ hạn</span>
+            <span class="inline-flex items-center gap-1"><span class="inline-block h-2 w-2 rounded-full bg-gray-500"></span>Chưa nhận</span>
+          </div>
+        </div>
+        <div id="months-chart-empty" class="text-[9px] text-gray-500 hidden">Không có dữ liệu.</div>
+        <div id="months-chart-wrap" class="relative">
+          <svg id="months-chart" viewBox="0 0 520 220" class="w-full h-44"></svg>
+          <div id="months-chart-tooltip" class="absolute hidden rounded-lg border border-gray-200 bg-white px-2 py-1 text-[9px] text-gray-700 shadow-md"></div>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full table-xs">
+          <thead>
+            <tr>
+              <th>Tháng</th>
+              <th>Tổng</th>
+              <th>Đúng hạn</th>
+              <th>Trễ hạn</th>
+              <th>Chưa nhận</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for row in months_breakdown %}
+            <tr>
+              <td>{{ row.month }}</td>
+              <td>
+                <div class="flex items-center justify-center gap-1">
+                  <span>{{ row.total|intcomma }}</span>
+                  {% if row.total_change_pct is not None %}
+                  <span class="text-[8px] {% if row.total_change_pct > 0 %}text-emerald-600{% elif row.total_change_pct < 0 %}text-red-600{% else %}text-gray-400{% endif %}">
+                    {% if row.total_change_pct > 0 %}▲{% elif row.total_change_pct < 0 %}▼{% endif %}{{ row.total_change_pct|floatformat:1 }}%
+                  </span>
+                  {% endif %}
+                </div>
+              </td>
+              <td>
+                <div class="flex items-center justify-center gap-1">
+                  <span>{{ row.on_time|intcomma }}</span>
+                  {% if row.on_time_change_pct is not None %}
+                  <span class="text-[8px] {% if row.on_time_change_pct > 0 %}text-emerald-600{% elif row.on_time_change_pct < 0 %}text-red-600{% else %}text-gray-400{% endif %}">
+                    {% if row.on_time_change_pct > 0 %}▲{% elif row.on_time_change_pct < 0 %}▼{% endif %}{{ row.on_time_change_pct|floatformat:1 }}%
+                  </span>
+                  {% endif %}
+                </div>
+              </td>
+              <td>
+                <div class="flex items-center justify-center gap-1">
+                  <span>{{ row.late|intcomma }}</span>
+                  {% if row.late_change_pct is not None %}
+                  <span class="text-[8px] {% if row.late_change_pct > 0 %}text-emerald-600{% elif row.late_change_pct < 0 %}text-red-600{% else %}text-gray-400{% endif %}">
+                    {% if row.late_change_pct > 0 %}▲{% elif row.late_change_pct < 0 %}▼{% endif %}{{ row.late_change_pct|floatformat:1 }}%
+                  </span>
+                  {% endif %}
+                </div>
+              </td>
+              <td>
+                <div class="flex items-center justify-center gap-1">
+                  <span>{{ row.not_received|intcomma }}</span>
+                  {% if row.not_received_change_pct is not None %}
+                  <span class="text-[8px] {% if row.not_received_change_pct > 0 %}text-emerald-600{% elif row.not_received_change_pct < 0 %}text-red-600{% else %}text-gray-400{% endif %}">
+                    {% if row.not_received_change_pct > 0 %}▲{% elif row.not_received_change_pct < 0 %}▼{% endif %}{{ row.not_received_change_pct|floatformat:1 }}%
+                  </span>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-center text-gray-500">Không có dữ liệu.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-[11px] font-semibold text-gray-800">Theo PGD (Top/Bottom 10)</h3>
+        <span class="text-[9px] text-gray-500">Bấm header để sắp xếp tăng/giảm</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full table-xs" id="shops-table">
+          <thead>
+            <tr>
+              <th class="cursor-pointer select-none" data-sort-key="name">PGD</th>
+              <th class="cursor-pointer select-none" data-sort-key="total">Tổng quyển phát sinh chứng từ</th>
+              <th class="cursor-pointer select-none" data-sort-key="on_time_rate">Đúng hạn (Tỉ lệ)</th>
+              <th class="cursor-pointer select-none" data-sort-key="late_rate">Trễ hạn (Tỉ lệ)</th>
+              <th class="cursor-pointer select-none" data-sort-key="not_received_rate">Chưa nhận (Tỉ lệ)</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for row in shops_breakdown %}
+            <tr data-name="{{ row.shop_name|lower }}" data-total="{{ row.total }}" data-on_time_rate="{{ row.on_time_rate }}" data-late_rate="{{ row.late_rate }}" data-not_received_rate="{{ row.not_received_rate }}">
+              <td>{{ row.shop_name }}</td>
+              <td>{{ row.total|intcomma }}</td>
+              <td>
+                <div class="flex items-center justify-center gap-1">
+                  <span>{{ row.on_time|intcomma }}</span>
+                  <span class="text-[8px] {% if row.on_time_rate >= kpi_targets.on_time_rate %}text-emerald-600{% else %}text-red-600{% endif %}">
+                    ({{ row.on_time_rate|floatformat:1 }}%)
+                  </span>
+                </div>
+              </td>
+              <td>
+                <div class="flex items-center justify-center gap-1">
+                  <span>{{ row.late|intcomma }}</span>
+                  <span class="text-[8px] {% if row.late_rate <= kpi_targets.late_rate %}text-emerald-600{% else %}text-red-600{% endif %}">
+                    ({{ row.late_rate|floatformat:1 }}%)
+                  </span>
+                </div>
+              </td>
+              <td>
+                <div class="flex items-center justify-center gap-1">
+                  <span>{{ row.not_received|intcomma }}</span>
+                  <span class="text-[8px] {% if row.not_received_rate <= kpi_targets.not_received_rate %}text-emerald-600{% else %}text-red-600{% endif %}">
+                    ({{ row.not_received_rate|floatformat:1 }}%)
+                  </span>
+                </div>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-center text-gray-500">Không có dữ liệu.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+<script type="application/json" id="months-chart-data">{{ months_chart_json|safe }}</script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const toggleButtons = document.querySelectorAll('[data-expand-toggle]');
+    toggleButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const group = btn.dataset.expandToggle;
+        const items = document.querySelectorAll(`[data-expand-group="${group}"]`);
+        const hasHidden = Array.from(items).some(item => item.classList.contains('hidden'));
+        items.forEach(item => item.classList.toggle('hidden', !hasHidden));
+        btn.textContent = hasHidden ? 'Thu gọn' : 'Xem thêm';
+      });
+    });
+    const areaButtons = document.querySelectorAll('[data-toggle-area]');
+    areaButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.toggleArea;
+        const areaGroup = document.querySelector(`[data-area-group="${key}"]`);
+        if (!areaGroup) return;
+        const isHidden = areaGroup.classList.contains('hidden');
+        areaGroup.classList.toggle('hidden', !isHidden);
+        btn.textContent = isHidden ? 'Thu gọn khu vực' : 'Xem khu vực';
+      });
+    });
+    const shopButtons = document.querySelectorAll('[data-toggle-shop]');
+    shopButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.toggleShop;
+        const shopGroup = document.querySelector(`[data-shop-group="${key}"]`);
+        if (!shopGroup) return;
+        const isHidden = shopGroup.classList.contains('hidden');
+        shopGroup.classList.toggle('hidden', !isHidden);
+        btn.textContent = isHidden ? 'Thu gọn PGD' : 'Xem PGD';
+      });
+    });
+
+    const shopsTable = document.getElementById('shops-table');
+    if (shopsTable) {
+      const headers = shopsTable.querySelectorAll('[data-sort-key]');
+      const tbody = shopsTable.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      const directions = {};
+
+      const sortRows = (key, direction) => {
+        const sorted = rows.slice().sort((a, b) => {
+          const aVal = a.dataset[key];
+          const bVal = b.dataset[key];
+          if (key === 'name') {
+            return direction * aVal.localeCompare(bVal, 'vi');
+          }
+          const aNum = parseFloat(aVal) || 0;
+          const bNum = parseFloat(bVal) || 0;
+          return direction * (aNum - bNum);
+        });
+        sorted.forEach(row => tbody.appendChild(row));
+      };
+
+      headers.forEach(header => {
+        header.addEventListener('click', () => {
+          const key = header.dataset.sortKey;
+          const current = directions[key] || -1;
+          const next = current === 1 ? -1 : 1;
+          directions[key] = next;
+          sortRows(key, next);
+        });
+      });
+    }
+  });
+</script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const dataEl = document.getElementById('months-chart-data');
+    const svg = document.getElementById('months-chart');
+    const emptyEl = document.getElementById('months-chart-empty');
+    const tooltip = document.getElementById('months-chart-tooltip');
+    const wrap = document.getElementById('months-chart-wrap');
+    if (!dataEl || !svg) return;
+    const data = JSON.parse(dataEl.textContent || '[]');
+    if (!data.length) {
+      if (emptyEl) emptyEl.classList.remove('hidden');
+      return;
+    }
+    const width = 520;
+    const height = 220;
+    const margin = { top: 14, right: 12, bottom: 28, left: 32 };
+    const plotW = width - margin.left - margin.right;
+    const plotH = height - margin.top - margin.bottom;
+
+    const xStep = data.length > 1 ? plotW / (data.length - 1) : plotW;
+    const yScale = (val) => margin.top + plotH * (1 - (val / 100));
+
+    const makePath = (key) => {
+      return data.map((d, i) => {
+        const x = margin.left + (xStep * i);
+        const y = yScale(d[key] || 0);
+        return `${i === 0 ? 'M' : 'L'}${x},${y}`;
+      }).join(' ');
+    };
+
+    const gridLines = [0, 25, 50, 75, 100];
+    gridLines.forEach(val => {
+      const y = yScale(val);
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', margin.left);
+      line.setAttribute('x2', width - margin.right);
+      line.setAttribute('y1', y);
+      line.setAttribute('y2', y);
+      line.setAttribute('stroke', '#e5e7eb');
+      line.setAttribute('stroke-width', '1');
+      svg.appendChild(line);
+
+      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      label.setAttribute('x', 6);
+      label.setAttribute('y', y + 3);
+      label.setAttribute('font-size', '9');
+      label.setAttribute('fill', '#6b7280');
+      label.textContent = `${val}%`;
+      svg.appendChild(label);
+    });
+
+    const axis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    axis.setAttribute('x1', margin.left);
+    axis.setAttribute('x2', width - margin.right);
+    axis.setAttribute('y1', margin.top + plotH);
+    axis.setAttribute('y2', margin.top + plotH);
+    axis.setAttribute('stroke', '#cbd5f5');
+    axis.setAttribute('stroke-width', '1');
+    svg.appendChild(axis);
+
+    const lines = [
+      { key: 'on_time_rate', color: '#16a34a' },
+      { key: 'late_rate', color: '#f59e0b' },
+      { key: 'not_received_rate', color: '#6b7280' },
+    ];
+    lines.forEach(lineDef => {
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', makePath(lineDef.key));
+      path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', lineDef.color);
+      path.setAttribute('stroke-width', '2');
+      path.setAttribute('stroke-linejoin', 'round');
+      svg.appendChild(path);
+    });
+
+    data.forEach((d, i) => {
+      const x = margin.left + (xStep * i);
+      lines.forEach((lineDef, lineIdx) => {
+        const value = d[lineDef.key] || 0;
+        const y = yScale(value);
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        dot.setAttribute('cx', x);
+        dot.setAttribute('cy', y);
+        dot.setAttribute('r', '2.6');
+        dot.setAttribute('fill', lineDef.color);
+        svg.appendChild(dot);
+
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.setAttribute('x', x);
+        label.setAttribute('y', y - 6 - (lineIdx * 10));
+        label.setAttribute('font-size', '8');
+        label.setAttribute('fill', lineDef.color);
+        label.setAttribute('text-anchor', 'middle');
+        label.textContent = `${value.toFixed(1)}%`;
+        svg.appendChild(label);
+      });
+    });
+
+    data.forEach((d, i) => {
+      const x = margin.left + (xStep * i);
+      if (i % 2 === 1 && data.length > 8) return;
+      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      label.setAttribute('x', x);
+      label.setAttribute('y', height - 8);
+      label.setAttribute('font-size', '9');
+      label.setAttribute('fill', '#6b7280');
+      label.setAttribute('text-anchor', 'middle');
+      label.textContent = d.month || '';
+      svg.appendChild(label);
+    });
+
+    const focusLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    focusLine.setAttribute('stroke', '#94a3b8');
+    focusLine.setAttribute('stroke-dasharray', '3 3');
+    focusLine.setAttribute('y1', margin.top);
+    focusLine.setAttribute('y2', margin.top + plotH);
+    focusLine.setAttribute('visibility', 'hidden');
+    svg.appendChild(focusLine);
+
+    const focusDots = lines.map(lineDef => {
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('r', '3');
+      dot.setAttribute('fill', lineDef.color);
+      dot.setAttribute('stroke', '#fff');
+      dot.setAttribute('stroke-width', '1');
+      dot.setAttribute('visibility', 'hidden');
+      svg.appendChild(dot);
+      return dot;
+    });
+
+    const showTooltip = (idx, clientX, clientY) => {
+      if (!tooltip || !wrap) return;
+      const point = data[idx];
+      tooltip.innerHTML = `
+        <div class="font-semibold text-gray-900">${point.month || ''}</div>
+        <div>Đúng hạn: ${point.on_time_rate.toFixed(2)}%</div>
+        <div>Trễ hạn: ${point.late_rate.toFixed(2)}%</div>
+        <div>Chưa nhận: ${point.not_received_rate.toFixed(2)}%</div>
+      `;
+      tooltip.classList.remove('hidden');
+      const rect = wrap.getBoundingClientRect();
+      const maxLeft = rect.width - tooltip.offsetWidth - 8;
+      const maxTop = rect.height - tooltip.offsetHeight - 8;
+      const left = Math.min(maxLeft, Math.max(8, clientX - rect.left + 12));
+      const top = Math.min(maxTop, Math.max(8, clientY - rect.top - 12));
+      tooltip.style.left = `${left}px`;
+      tooltip.style.top = `${top}px`;
+    };
+
+    const hideTooltip = () => {
+      if (tooltip) tooltip.classList.add('hidden');
+      focusLine.setAttribute('visibility', 'hidden');
+      focusDots.forEach(dot => dot.setAttribute('visibility', 'hidden'));
+    };
+
+    const handleMove = (evt, rect) => {
+      const relX = evt.clientX - rect.left;
+      if (relX < 0 || relX > rect.width) {
+        hideTooltip();
+        return;
+      }
+      const scaleX = width / rect.width;
+      const x = relX * scaleX;
+      if (x < margin.left || x > (width - margin.right)) {
+        hideTooltip();
+        return;
+      }
+      let idx = Math.round((x - margin.left) / xStep);
+      idx = Math.max(0, Math.min(data.length - 1, idx));
+
+      const xPos = margin.left + (xStep * idx);
+      focusLine.setAttribute('x1', xPos);
+      focusLine.setAttribute('x2', xPos);
+      focusLine.setAttribute('visibility', 'visible');
+
+      const values = [
+        data[idx].on_time_rate,
+        data[idx].late_rate,
+        data[idx].not_received_rate,
+      ];
+      focusDots.forEach((dot, dIdx) => {
+        const y = yScale(values[dIdx] || 0);
+        dot.setAttribute('cx', xPos);
+        dot.setAttribute('cy', y);
+        dot.setAttribute('visibility', 'visible');
+      });
+      showTooltip(idx, evt.clientX, evt.clientY);
+    };
+
+    const overlay = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    overlay.setAttribute('x', margin.left);
+    overlay.setAttribute('y', margin.top);
+    overlay.setAttribute('width', plotW);
+    overlay.setAttribute('height', plotH);
+    overlay.setAttribute('fill', 'transparent');
+    overlay.style.cursor = 'crosshair';
+    svg.appendChild(overlay);
+
+    overlay.addEventListener('mousemove', (evt) => {
+      const rect = overlay.getBoundingClientRect();
+      handleMove(evt, rect);
+    });
+    overlay.addEventListener('mouseleave', hideTooltip);
+  });
+</script>
+{% endblock %}

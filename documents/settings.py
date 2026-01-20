@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.humanize',
     "app_documents.apps.AppDocumentsConfig",
     "app_admindocuments.apps.AdmindocumentsConfig",
     "app_notification.apps.AppNotificationConfig",
@@ -193,6 +194,9 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL')
 GAPO_API_URL = os.getenv('GAPO_API_URL')
 GAPO_BOT_API_KEY = (os.getenv('BOT_API_KEY') or '').strip()
 GAPO_BOT_ID = os.getenv('BOT_ID')
+
+# Borrow request API key
+BORROW_REQUEST_API_KEY = (os.getenv('BORROW_REQUEST_API_KEY') or '').strip()
 
 AUTH_PASSWORD_RESET_SUBJECT = 'registration/password_reset_subject.txt'
 PASSWORD_RESET_EMAIL_TEMPLATE = 'registration/password_reset_email.html'

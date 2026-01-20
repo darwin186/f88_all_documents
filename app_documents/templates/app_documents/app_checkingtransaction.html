@@ -454,10 +454,10 @@
                                                         {% if document_dtl.status_id == None %}required{% endif %}
                                                         oninvalid="this.setCustomValidity('Confirm trạng thái duyệt chứng từ')"
                                                         oninput="this.setCustomValidity('')">                    
-                                                    <option value = "">{{document_dtl.status_id.checking_status_name }}</option>
+                                                    <option value = "" data-request-additional="{{ document_dtl.status_id.is_request_additional|yesno:'true,false' }}">{{document_dtl.status_id.checking_status_name }}</option>
                                                     {% for checking_status in drop_list_checking_status %}
                                                     {% if checking_status.status_id != document_dtl.status_id.status_id %}
-                                                    <option value={{checking_status.status_id}}>{{checking_status.checking_status_name}}</option>
+                                                    <option value={{checking_status.status_id}} data-request-additional="{{ checking_status.is_request_additional|yesno:'true,false' }}">{{checking_status.checking_status_name}}</option>
                                                     {% endif %}
                                                     {% endfor %}
                                                 </select>
@@ -698,7 +698,7 @@
                             <option value = "">{{document_dtl.status_id.checking_status_name }}</option>
                             {% for checking_status in drop_list_checking_status %}
                             {% if checking_status.status_id != document_dtl.status_id.status_id %}
-                            <option value={{checking_status.status_id}}>{{checking_status.checking_status_name}}</option>
+                            <option value={{checking_status.status_id}} data-request-additional="{{ checking_status.is_request_additional|yesno:'true,false' }}">{{checking_status.checking_status_name}}</option>
                             {% endif %}
                             {% endfor %}
                         </select>
@@ -864,7 +864,8 @@ function checkDocumentStatus(statusSelectElement, documentId) {
     const buttonId = 'editButton' + documentId; // Tạo một ID duy nhất cho nút
     let existingButton = document.getElementById(buttonId);
     
-    if (statusSelectElement.value == "3") {
+    const isRequestAdditional = statusSelectElement?.selectedOptions?.[0]?.dataset?.requestAdditional === 'true';
+    if (isRequestAdditional) {
         // Nếu giá trị là "3" và nút chưa tồn tại, tạo nút mới
         if (!existingButton) {
             let newButton = document.createElement('button');
@@ -1060,7 +1061,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Xử lý dữ liệu khi nhấn nút xác nhận trong Modal
         window.submitData = function() {
             event.preventDefault();
-            const statusSelectBulk = document.getElementById('statusSelectBulk').value;
+            const statusSelectEl = document.getElementById('statusSelectBulk');
+            const statusSelectBulk = statusSelectEl.value;
             const selectedItems = Array.from(document.querySelectorAll('.form-check-input:checked')).map(item => item.value);
             const checkNote = document.getElementById('checkingNoteBulk').value;
             const additionalBulkDate = document.getElementById('supplementDate').value;
@@ -1068,7 +1070,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (selectedItems.length === 0 || statusSelectBulk === '' ) 
                 alert('Hãy chọn trạng thái duyệt, chọn ít nhất một chứng từ.');
             // Additional validation for specific status
-            if (statusSelectBulk === '3' && additionalBulkDate === '') {
+            const isRequestAdditional = statusSelectEl?.selectedOptions?.[0]?.dataset?.requestAdditional === 'true';
+            if (isRequestAdditional && additionalBulkDate === '') {
                 alert('Hãy chọn ngày hẹn bổ sung.');
                 return; 
             }
@@ -1149,8 +1152,8 @@ document.addEventListener('DOMContentLoaded', function() {
     function toggleSupplementaryFields() {
         const statusDropdown = document.getElementById('statusSelectBulk');
         const supplementDiv = document.getElementById('supplementFields');
-        // Check if the selected status is "3" for "Hẹn bổ sung"
-        if (statusDropdown.value === "3") {
+        const isRequestAdditional = statusDropdown?.selectedOptions?.[0]?.dataset?.requestAdditional === 'true';
+        if (isRequestAdditional) {
             supplementDiv.style.display = 'block';
         } else {
             supplementDiv.style.display = 'none';

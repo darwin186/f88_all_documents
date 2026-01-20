@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse, JsonResponse, HttpResponseRedirect
 from django.urls import reverse, path
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import authenticate, login, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -22,14 +23,17 @@ from django.core.serializers.json import DjangoJSONEncoder
 from urllib.parse import urlencode
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
+import csv
 import json
 import re
 import logging
 import os
+import secrets
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
-from django.db.models.functions import ExtractHour
+import calendar
+from django.db.models.functions import ExtractHour, TruncMonth
 import openpyxl
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -38,7 +42,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from io import BytesIO
 # Import các model
-from .models import ( 
+from .models import (
     Manager,
     Shop,
     DocumentType,
@@ -67,9 +71,15 @@ from .models import (
     Region,
     HistoricalFolder,
     HistoricalDocuments,
+    DocumentKpiSetting,
     ChangeRequest,
     BorrowingDocument,
     BorrowingStatus,
+    BorrowRequest,
+    BorrowRequestItem,
+    BorrowRequestLog,
+    BorrowRequestStatus,
+    BorrowRequestItemStatus,
     GapoScheduledMessage
 )
 # Import các form
@@ -311,10 +321,10 @@ def checking_transaction_view(request, template_name="app_documents/app_checking
                                     )
                             message_success_content += f"Thay đổi trạng thái thành công cho chứng từ {documents_detail_instance_log.documents_code}\n" 
                             # Nếu trạng thái chứng từ thay đổi và trạng thái kiểm chứng từ cũ là hẹn bổ sung thì đánh dấu is_valid trong AdditionalChecking là False
-                            if checking_status_instance_log.checking_status_code != '103':
+                            if not checking_status_instance_log.is_request_additional:
                                 CheckingAdditional.objects.filter(additional=documents_detail_instance_log).update(is_valid=False) 
                             # Nếu trạng thái chứng từ đổi thành hẹn bổ sung thì đánh dấu is_valid trong AdditionalChecking là True
-                            if checking_status_instance_log.checking_status_code == '103':
+                            if checking_status_instance_log.is_request_additional:
                                 CheckingAdditional.objects.filter(additional=documents_detail_instance_log).update(is_valid=True)
                             # Chuyển trạng thái nếu chưa có trạng thái hoặc trạng thái là đã nhận thành đã duyệt  
                             if documents_detail_instance_log.document_status_id == None: 
@@ -399,6 +409,363 @@ def checking_transaction_view(request, template_name="app_documents/app_checking
         context['query_string'] = query_string
         return render(request, template_name, context)
 
+@login_required
+def checking_transaction_view_v2(request):
+    user = request.user
+    user_context = get_user_context(user)
+    documents_detail = DocumentsDetail.objects.none()
+    if not user_context['is_admin'] and not user_context['is_checker']:
+        return redirect('home')
+
+    change_requests_map = {}
+    if request.method == 'GET':
+        filters = {}
+        choice_shop = request.GET.get('choice_shop')
+        choice_loan_code = request.GET.get('choice_loan_code')
+        choice_contract_code = request.GET.get('choice_contract_code')
+        choice_user_duyet = request.GET.get('choice_user_duyet')
+        choice_check_date = request.GET.get('filtercheckdate')
+        choice_document_date = request.GET.get('filterdocumentdate')
+        choice_document_status = request.GET.get('choicedocumentstatus')
+        choice_check_status = request.GET.get('choicecheckstatus')
+        choice_business_type = request.GET.get('choicebusinesstype')
+        sort_raw = request.GET.get('sort', '').strip()
+        region_filter = AccessControls.get_filters_for_user(user)
+        range_date = 15
+        if choice_shop:
+            try:
+                if choice_shop.isdigit():
+                    filters['shop_id__shop_id'] = choice_shop
+                else:
+                    choice_shop = str(choice_shop).strip()
+                    filters['shop_id__shop_name__iexact'] = choice_shop
+            except ValueError:
+                choice_shop = str(choice_shop).strip()
+                filters['shop_id__shop_name__icontains'] = choice_shop
+            if choice_user_duyet:
+                filters['lastest_checked_by__username__icontains'] = choice_user_duyet
+            if choice_check_date:
+                date_range = choice_check_date.split(' to ')
+                if len(date_range) == 2:
+                    check_date_start, check_date_end = date_range
+                    check_date_start = datetime.strptime(check_date_start, "%Y-%m-%d").date()
+                    check_date_end = datetime.strptime(check_date_end, "%Y-%m-%d").date()
+                    if (check_date_end - check_date_start).days > range_date:
+                        messages.info(request, f'Chỉ cho phép xuất dữ liệu Ngày duyệt {range_date} ngày liên tục.')
+                        check_date_end_short7 = check_date_start + timedelta(days=range_date)
+                        filters['lastest_checked_date__date__range'] = [check_date_start, check_date_end_short7]
+                    else:
+                        filters['lastest_checked_date__date__range'] = [check_date_start, check_date_end]
+                elif len(date_range) == 1:
+                    check_date = datetime.strptime(date_range[0], "%Y-%m-%d").date()
+                    filters['lastest_checked_date__date__range'] = [check_date, check_date]
+            if choice_document_date:
+                date_parts = choice_document_date.split(' to ')
+                if len(date_parts) == 2:
+                    document_date_start, document_date_end = date_parts
+                    document_date_start = datetime.strptime(document_date_start, "%Y-%m-%d").date()
+                    document_date_end = datetime.strptime(document_date_end, "%Y-%m-%d").date()
+                    if (document_date_end - document_date_start).days > range_date:
+                        messages.info(request, f'Chỉ cho phép xuất dữ liệu Ngày chứng từ {range_date} ngày liên tục.')
+                        document_date_end_short7 = document_date_start + timedelta(days=range_date)
+                        filters['documents_created_date__range'] = [document_date_start, document_date_end_short7]
+                    else:
+                        filters['documents_created_date__range'] = [document_date_start, document_date_end]
+                elif len(date_parts) == 1:
+                    create_date = datetime.strptime(date_parts[0], "%Y-%m-%d").date()
+                    filters['documents_created_date__range'] = [create_date, create_date]
+            if choice_document_status:
+                filters['document_status_id'] = choice_document_status
+            if choice_check_status:
+                filters['status_id'] = choice_check_status
+            if choice_business_type:
+                filters['business_type_id'] = choice_business_type
+        if choice_loan_code:
+            filters['loan_id__loan_code__icontains'] = choice_loan_code
+        if choice_contract_code:
+            filters['contract_id__contract_code__icontains'] = choice_contract_code
+        if len(filters) == 0:
+            documents_detail = DocumentsDetail.objects.none()
+        else:
+            filters['business_type_id__allow_checking'] = True
+            region_shop = AccessControls.filter_shop_region_based_on_role(user)
+            filters.update(region_shop)
+            documents_detail = DocumentsDetail.objects.filter(**filters).select_related(
+                'checkingadditional',
+                'package_id',
+                'package_id__partnerpackage',
+                'package_id__partnerpackage__status_id',
+                'shop_id',
+                'loan_id',
+                'loan_id__employee_id',
+                'contract_id',
+                'contract_id__employee_id',
+                'folder_id',
+                'folder_id__folder_type_id',
+                'folder_id__folder_status_id',
+                'document_type_id',
+                'business_type_id',
+                'document_status_id',
+                'status_id',
+                'lastest_checked_by',
+            )
+            default_doc_status = DocumentStatus.objects.filter(is_selectable=True).order_by('status_id').first()
+            if default_doc_status:
+                DocumentsDetail.objects.filter(
+                    **filters,
+                    document_status_id__isnull=True,
+                    folder_id__folder_status_id__is_received=True,
+                ).update(document_status_id=default_doc_status)
+            if sort_raw:
+                sort_map = {
+                    'shop': 'shop_id__shop_name',
+                    '-shop': '-shop_id__shop_name',
+                    'document_date': 'documents_created_date',
+                    '-document_date': '-documents_created_date',
+                    'document_type': 'document_type_id__document_type_name',
+                    '-document_type': '-document_type_id__document_type_name',
+                    'business_type': 'business_type_id__business_type_name',
+                    '-business_type': '-business_type_id__business_type_name',
+                    'document_status': 'document_status_id__documents_status_name',
+                    '-document_status': '-document_status_id__documents_status_name',
+                    'checking_status': 'status_id__checking_status_name',
+                    '-checking_status': '-status_id__checking_status_name',
+                    'checking_date': 'lastest_checked_date',
+                    '-checking_date': '-lastest_checked_date',
+                    'checking_user': 'lastest_checked_by__username',
+                    '-checking_user': '-lastest_checked_by__username',
+                    'package_code': 'package_id__package_code',
+                    '-package_code': '-package_id__package_code',
+                }
+                sort_parts = [p for p in sort_raw.split(',') if p]
+                resolved_sorts = [sort_map.get(p) for p in sort_parts if sort_map.get(p)]
+                if resolved_sorts:
+                    documents_detail = documents_detail.order_by(*resolved_sorts)
+                else:
+                    documents_detail = documents_detail.order_by('documents_created_date', 'loan_id', 'contract_id', 'document_type_id')
+            else:
+                documents_detail = documents_detail.order_by('documents_created_date', 'loan_id', 'contract_id', 'document_type_id')
+
+        paginator = Paginator(documents_detail, 50)
+        page_number = request.GET.get('page')
+        documents_detail = paginator.get_page(page_number)
+        change_requests = ChangeRequest.objects.filter(document__in=documents_detail, status='pending')
+        change_requests_map = {req.document_id: req for req in change_requests}
+
+    if request.method == 'POST':
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest'
+        if 'formcheck':
+            documents_id_submit = request.POST.get('documents_id_submit')
+            checking_status_submit = request.POST.get('checking_status_submit')
+            lasted_checked_date_submit = timezone.now()
+            note_submit = request.POST.get('checking_note_submit')
+            package_code_submit = request.POST.get('package_code_submit')
+            checking_status_previous = request.POST.get('checking_status_previous')
+            documents_detail_instance = DocumentsDetail.objects.filter(documents_id=documents_id_submit)
+            documents_detail_instance_log = DocumentsDetail.objects.get(documents_id=documents_id_submit)
+            is_checkingstatus_changed = False
+            message_success_content = ''
+            folder_received = bool(documents_detail_instance_log.folder_id and documents_detail_instance_log.folder_id.folder_status_id and documents_detail_instance_log.folder_id.folder_status_id.is_received)
+            has_package = bool(documents_detail_instance_log.package_id and documents_detail_instance_log.package_id.package_code)
+            if checking_status_submit:
+                if not folder_received or not has_package:
+                    error_msg = 'Chỉ duyệt chứng từ đã nhận và có mã thùng.'
+                    if is_ajax:
+                        return JsonResponse({'success': False, 'error': error_msg}, status=400)
+                    messages.add_message(request, messages.ERROR, error_msg)
+                    return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+                checked_status = DocumentStatus.objects.filter(is_checked=True).order_by('status_id').first()
+                if not checked_status:
+                    error_msg = 'Chưa cấu hình trạng thái chứng từ đã duyệt.'
+                    if is_ajax:
+                        return JsonResponse({'success': False, 'error': error_msg}, status=400)
+                    messages.add_message(request, messages.ERROR, error_msg)
+                    return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+                checking_status_instance_log = CheckingTransactionStatus.objects.get(status_id=checking_status_submit)
+                if checking_status_submit != checking_status_previous:
+                    is_checkingstatus_changed = True
+                    documents_detail_instance.update(
+                        status_id=checking_status_submit,
+                        lastest_checked_date=lasted_checked_date_submit,
+                        lastest_checked_by=user)
+                    if is_checkingstatus_changed:
+                        DocumentsTransactionChecking.objects.create(
+                            documents_id=documents_detail_instance_log,
+                            trans_created_date=lasted_checked_date_submit,
+                            trans_created_by=user,
+                            checking_status_id=checking_status_instance_log,
+                        )
+                        message_success_content += f"Thay đổi trạng thái thành công cho chứng từ {documents_detail_instance_log.documents_code}\n"
+                        if documents_detail_instance_log.document_status_id is None or (
+                            documents_detail_instance_log.document_status_id and documents_detail_instance_log.document_status_id.is_selectable
+                        ):
+                            documents_detail_instance.update(document_status_id=checked_status)
+                if not checking_status_instance_log.is_request_additional:
+                    CheckingAdditional.objects.filter(additional=documents_detail_instance_log).update(is_valid=False)
+                if checking_status_instance_log.is_request_additional:
+                    additional_date = request.POST.get('additional_date')
+                    additional_note = request.POST.get('additional_note')
+                    if not additional_date:
+                        if is_ajax:
+                            return JsonResponse({'success': False, 'error': 'Vui lòng chọn ngày hẹn bổ sung.'}, status=400)
+                        messages.add_message(request, messages.ERROR, 'Vui lòng chọn ngày hẹn bổ sung.')
+                        return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+                    additional_obj, created = CheckingAdditional.objects.get_or_create(
+                        additional=documents_detail_instance_log,
+                        defaults={
+                            'is_valid': True,
+                            'additional_note': additional_note if additional_note else None,
+                            'date_addition': additional_date,
+                            'additional_created_by': user,
+                        },
+                    )
+                    if not created:
+                        CheckingAdditional.objects.filter(additional=documents_detail_instance_log).update(
+                            is_valid=True,
+                            additional_note=additional_note if additional_note else None,
+                            date_addition=additional_date,
+                            additional_updated_date=timezone.now(),
+                        )
+            if note_submit:
+                document_detail_instance_get_note = documents_detail_instance_log.note
+                if note_submit != document_detail_instance_get_note:
+                    documents_detail_instance.update(note=note_submit)
+                    message_success_content += f"Thêm ghi chú thành công cho chứng từ {documents_detail_instance_log.documents_code}\n"
+            if package_code_submit:
+                is_selectable = bool(documents_detail_instance_log.document_status_id and documents_detail_instance_log.document_status_id.is_selectable)
+                is_checked = bool(documents_detail_instance_log.document_status_id and documents_detail_instance_log.document_status_id.is_checked)
+                if (not is_selectable and not is_checked) or not folder_received:
+                    error_msg = 'Chỉ đổi thùng khi chứng từ đã nhận và trạng thái cho phép.'
+                    if is_ajax:
+                        return JsonResponse({'success': False, 'error': error_msg}, status=400)
+                    messages.add_message(request, messages.ERROR, error_msg)
+                    return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+                try:
+                    if Package.objects.filter(package_code=package_code_submit).exists():
+                        package_id = Package.objects.get(package_code=package_code_submit)
+                        documents_detail_instance.update(package_id=package_id)
+                        message_success_content += f"Gán thùng thành công cho chứng từ {documents_detail_instance_log.documents_code}\n"
+                        PackageDocumentHistory.objects.create(
+                            document_id=documents_detail_instance_log,
+                            package_id=package_id,
+                            trans_created_date=timezone.now(),
+                            trans_created_by=user
+                        )
+                    else:
+                        noti_error = f"Thùng {package_code_submit} không tồn tại. Vui lòng chọn một mã thùng đã tồn tại"
+                        if is_ajax:
+                            return JsonResponse({'success': False, 'error': noti_error}, status=400)
+                        messages.add_message(request, messages.ERROR, noti_error)
+                        return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+                except IntegrityError:
+                    noti_error = f"Thùng {package_code_submit} không tồn tại. Vui lòng chọn một mã thùng đã tồn tại"
+                    if is_ajax:
+                        return JsonResponse({'success': False, 'error': noti_error}, status=400)
+                    messages.add_message(request, messages.ERROR, noti_error)
+                    return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            if message_success_content != '':
+                messages.add_message(request, messages.SUCCESS, message_success_content)
+            if is_ajax:
+                documents_detail_instance_log = DocumentsDetail.objects.select_related(
+                    'status_id', 'lastest_checked_by', 'document_status_id'
+                ).get(documents_id=documents_id_submit)
+                checking_user_full = ''
+                if documents_detail_instance_log.lastest_checked_by:
+                    checking_user_full = f"{documents_detail_instance_log.lastest_checked_by.last_name} {documents_detail_instance_log.lastest_checked_by.first_name}".strip()
+                return JsonResponse({
+                    'success': True,
+                    'checking_status_id': documents_detail_instance_log.status_id.status_id if documents_detail_instance_log.status_id else '',
+                    'checking_status_name': documents_detail_instance_log.status_id.checking_status_name if documents_detail_instance_log.status_id else '',
+                    'checking_date': documents_detail_instance_log.lastest_checked_date.strftime('%Y-%m-%d %H:%M') if documents_detail_instance_log.lastest_checked_date else '',
+                    'checking_user': documents_detail_instance_log.lastest_checked_by.username if documents_detail_instance_log.lastest_checked_by else '',
+                    'checking_user_full': checking_user_full,
+                    'document_status_name': documents_detail_instance_log.document_status_id.documents_status_name if documents_detail_instance_log.document_status_id else '',
+                    'document_status_color': documents_detail_instance_log.document_status_id.badge_color if documents_detail_instance_log.document_status_id else '',
+                    'document_status_is_selectable': documents_detail_instance_log.document_status_id.is_selectable if documents_detail_instance_log.document_status_id else False,
+                    'document_status_is_checked': documents_detail_instance_log.document_status_id.is_checked if documents_detail_instance_log.document_status_id else False,
+                })
+            filter_params = {
+                'choice_shop': request.POST.get('filter_choice_shop'),
+                'choice_loan_code': request.POST.get('filter_choice_loan_code'),
+                'choice_user_duyet': request.POST.get('filter_choice_user_duyet'),
+                'filtercheckdate': request.POST.get('filter_filtercheckdate'),
+                'filterdocumentdate': request.POST.get('filter_filterdocumentdate'),
+                'choicedocumentstatus': request.POST.get('filter_choicedocumentstatus'),
+                'choicecheckstatus': request.POST.get('filter_choicecheckstatus'),
+                'choicebusinesstype': request.POST.get('filter_choicebusinesstype'),
+                'page': request.POST.get('filter_page'),
+                'sort': request.POST.get('filter_sort'),
+            }
+            redirect_url = f"{reverse('checking_transaction_v2')}?{urlencode(filter_params)}"
+            return HttpResponseRedirect(redirect_url)
+
+    current = documents_detail.number if documents_detail else 1
+    total_pages = documents_detail.paginator.num_pages if documents_detail else 1
+    start_range = max(current - 2, 1)
+    end_range = min(current + 2, total_pages)
+    page_range_custom = list(range(1, min(2, total_pages) + 1))
+    page_range_custom += list(range(start_range, end_range + 1))
+    page_range_custom += list(range(max(total_pages - 1, 1), total_pages + 1))
+    page_range_custom = sorted(set([p for p in page_range_custom if 1 <= p <= total_pages]))
+
+    def base_field(part):
+        return part.lstrip('-')
+
+    sort_fields = ['shop', 'document_date', 'document_type', 'business_type', 'document_status', 'checking_status', 'checking_date', 'checking_user', 'package_code']
+    sort_toggle = {}
+    current_sort_parts = [p for p in request.GET.get('sort', '').split(',') if p]
+    for f in sort_fields:
+        current_dir = None
+        for p in current_sort_parts:
+            if base_field(p) == f:
+                current_dir = p.startswith('-')
+                break
+        if current_dir is None:
+            toggled = f
+        elif current_dir is False:
+            toggled = f'-{f}'
+        else:
+            toggled = f
+        remaining = [p for p in current_sort_parts if base_field(p) != f]
+        new_parts = [toggled] + remaining
+        sort_toggle[f] = ','.join(new_parts)
+
+    qs_no_page = request.GET.copy()
+    qs_no_page.pop('page', None)
+    qs_no_page.pop('sort', None)
+    base_qs = qs_no_page.urlencode()
+
+    query_string = '&'.join(f"{key}={value}" for key, value in request.GET.items() if key != 'page')
+    user_by_role = AccessControls.get_users_based_on_role(user)
+    drop_list_checking_status = CheckingTransactionStatus.objects.all()
+    drop_list_shops = Shop.objects.filter(**region_filter)
+    drop_list_users = user_by_role
+    drop_list_document_status = DocumentStatus.objects.all()
+    drop_list_business_type = BusinessType.objects.all()
+    drop_list_borrowing_status = BorrowingStatus.objects.all()
+    drop_list_shops_borrow = Shop.objects.filter(for_borrow_only=True)
+    regions = Region.objects.all()
+    context = {
+        **user_context,
+        'user': user,
+        'documents_detail': documents_detail,
+        'drop_list_checking_status': drop_list_checking_status,
+        'drop_list_shops': drop_list_shops,
+        'drop_list_users': drop_list_users,
+        'drop_list_document_status': drop_list_document_status,
+        'drop_list_business_type': drop_list_business_type,
+        'query_string': query_string,
+        'regions': regions,
+        'change_requests_map': change_requests_map,
+        'drop_list_borrowing_status': drop_list_borrowing_status,
+        'drop_list_shops_borrow': drop_list_shops_borrow,
+        'page_range_custom': page_range_custom,
+        'base_qs': base_qs,
+        'sort_param': request.GET.get('sort', ''),
+        'sort_toggle': sort_toggle,
+    }
+    return render(request, "app_documents/app_checkingtransaction_v2.html", context)
+
 # Lịch sử duyệt chứng từ
 @login_required
 def fetch_history(request, document_id):
@@ -407,8 +774,18 @@ def fetch_history(request, document_id):
             'trans_created_date', 
             'trans_created_by__username', 
             'checking_status_id__checking_status_name'
-            )
-        return JsonResponse(list(history), safe=False)
+            ).order_by('-trans_created_date')
+        package_history = PackageDocumentHistory.objects.filter(document_id=document_id).values(
+            'trans_created_date',
+            'trans_created_by__username',
+            'trans_created_by__first_name',
+            'trans_created_by__last_name',
+            'package_id__package_code'
+            ).order_by('-trans_created_date')
+        return JsonResponse({
+            'checking_history': list(history),
+            'package_history': list(package_history),
+        })
     else:
         return JsonResponse({'error': 'Invalid request'}, status=400)
     
@@ -433,22 +810,24 @@ def checking_additional_view(request, document_id):
                     is_valid=True
                 )
                 messages.success(request, f'Hẹn bổ sung thành công cho chứng từ mã {document.documents_code}')  
-                # Nếu user đã CheckingAdditional thành công thì chuyển trạng thái của checkingdocuments status_id thành 3
-                already_check_documents_103  = CheckingTransactionStatus.objects.get(checking_status_code = '103') # Instance của kiểm Thiếu chứng từ hẹn bổ sung
+                # Nếu user đã CheckingAdditional thành công thì chuyển trạng thái của checkingdocuments status_id thành trạng thái hẹn bổ sung
+                additional_status = CheckingTransactionStatus.objects.filter(is_request_additional=True).order_by('status_id').first()
+                if not additional_status:
+                    messages.error(request, 'Chưa cấu hình trạng thái hẹn bổ sung.')
+                    return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
                 already_documents_status_102 = DocumentStatus.objects.get(documents_status_code = '102') # Instance của trạng thái chứng từ đã duyệt
-                 # Nếu user đã CheckingAdditional thành công thì chuyển trạng thái của checkingdocuments status_id thành 3 
                 DocumentsDetail.objects.filter(documents_id = document_id).update(
-                                                                                status_id = already_check_documents_103.status_id , # Trạng thái duyệt là hẹn bổ sung 
-                                                                                document_status_id = already_documents_status_102.status_id, # ID  Đã duyệt lấy theo code
+                                                                                status_id = additional_status.status_id ,
+                                                                                document_status_id = already_documents_status_102.status_id,
                                                                                 lastest_checked_date = timezone.now(),
                                                                                 lastest_checked_by = request.user)
                 # Nếu trạng thái hiện tại của chứng từ khác hẹn bổ sung thì có nghĩa là đang thay đổi trạng thái, từ đó log thay đổi.
-                if previous_check_status != '3':
+                if previous_check_status != str(additional_status.status_id):
                     DocumentsTransactionChecking.objects.create(
                                         documents_id = document,
                                         trans_created_date = additional_create_date,
                                         trans_created_by=request.user,
-                                        checking_status_id = already_check_documents_103,
+                                        checking_status_id = additional_status,
                                         )
             except IntegrityError:
                 # Handle the case where a CheckingAdditional instance already exists for this document
@@ -458,8 +837,10 @@ def checking_additional_view(request, document_id):
                 existing_additional.is_valid = True
                 existing_additional.save()
                 messages.info(request, 'Cập nhật dữ liệu hẹn chứng từ thành công')
-                # Nếu user đã CheckingAdditional thành công thì chuyển trạng thái của checkingdocuments status_id thành 3
-                DocumentsDetail.objects.filter(documents_id = document_id).update(status_id = CheckingTransactionStatus.objects.get(checking_status_code='103'))
+                # Nếu user đã CheckingAdditional thành công thì chuyển trạng thái của checkingdocuments status_id thành trạng thái hẹn bổ sung
+                additional_status = CheckingTransactionStatus.objects.filter(is_request_additional=True).order_by('status_id').first()
+                if additional_status:
+                    DocumentsDetail.objects.filter(documents_id = document_id).update(status_id = additional_status)
             # Redirect về trang trước đó
         return HttpResponseRedirect(request.META.get('HTTP_REFERER'))   # Redirect to the desired URL after handling the form submission
     return redirect('checking_transaction')  # Redirect if it's not a POST request or if something goes wrong
@@ -479,19 +860,47 @@ def bulk_checking_document_view(request):
         user = request.user
         if not selected_items or not documents_status_choice:
             return JsonResponse({'success': False, 'error': 'Invalid data'})
+        documents_status_choice_instance = CheckingTransactionStatus.objects.get(status_id=documents_status_choice)
+        if documents_status_choice_instance.is_request_additional and not additional_bulk_date_choice:
+            return JsonResponse({'success': False, 'error': 'Vui lòng chọn ngày hẹn bổ sung.'}, status=400)
+        selected_qs = DocumentsDetail.objects.filter(documents_id__in=selected_documents).select_related(
+            'loan_id',
+            'contract_id',
+            'folder_id',
+            'folder_id__folder_status_id',
+            'package_id',
+        )
+        checked_status = DocumentStatus.objects.filter(is_checked=True).order_by('status_id').first()
+        if not checked_status:
+            return JsonResponse({'success': False, 'error': 'Chưa cấu hình trạng thái chứng từ đã duyệt.'}, status=400)
+        if selected_qs.count() != len(selected_documents):
+            return JsonResponse({'success': False, 'error': 'Không tìm thấy đủ chứng từ đã chọn.'})
+        group_keys = set()
+        for doc in selected_qs:
+            if not doc.package_id or not doc.package_id.package_code:
+                return JsonResponse({'success': False, 'error': 'Chỉ duyệt chứng từ có mã thùng.'}, status=400)
+        for doc in selected_qs:
+            if getattr(doc, 'loan_id', None) and getattr(doc.loan_id, 'loan_code', None):
+                group_keys.add(f"loan:{doc.loan_id.loan_code}")
+            elif getattr(doc, 'contract_id', None) and getattr(doc.contract_id, 'contract_code', None):
+                group_keys.add(f"contract:{doc.contract_id.contract_code}")
+            else:
+                group_keys.add(f"unknown:{doc.documents_id}")
+        if len(group_keys) > 1:
+            return JsonResponse({'success': False, 'error': 'Chỉ được duyệt nhiều chứng từ cùng HĐCC hoặc GNN.'}, status=400)
         try:
             with transaction.atomic():
+                updated_rows = []
                 for document_id in selected_documents:
                     documents_detail_instance = DocumentsDetail.objects.filter(documents_id=document_id)
                     documents_detail_instance_log = DocumentsDetail.objects.get(documents_id=document_id)
-                    documents_status_choice_instance = CheckingTransactionStatus.objects.get(status_id=documents_status_choice)
                     documents_detail_instance.update(
                         status_id = documents_status_choice_instance, 
-                        document_status_id = DocumentStatus.objects.get(documents_status_code='102'),
+                        document_status_id = checked_status,
                         lastest_checked_date= checking_time, 
                         note=checking_note_submit if checking_note_submit else None,
                         lastest_checked_by = user
-                        )
+                    )
                     DocumentsTransactionChecking.objects.create(
                         documents_id = documents_detail_instance_log,
                         trans_created_date = checking_time,
@@ -499,7 +908,7 @@ def bulk_checking_document_view(request):
                         checking_status_id = documents_status_choice_instance,
                         )
                     #Tạo bổ sung cho chứng từ nếu trạng thái là hẹn bổ sung
-                    if documents_status_choice_instance.checking_status_code == '103' :
+                    if documents_status_choice_instance.is_request_additional:
                         CheckingAdditional.objects.create(
                             additional = documents_detail_instance_log, 
                             is_valid=True,
@@ -508,8 +917,26 @@ def bulk_checking_document_view(request):
                             additional_created_date = checking_time,
                             additional_created_by = user
                             )
+                    updated_doc = DocumentsDetail.objects.select_related(
+                        'status_id', 'lastest_checked_by', 'document_status_id'
+                    ).get(documents_id=document_id)
+                    checking_user_full = ''
+                    if updated_doc.lastest_checked_by:
+                        checking_user_full = f"{updated_doc.lastest_checked_by.last_name} {updated_doc.lastest_checked_by.first_name}".strip()
+                    updated_rows.append({
+                        'documents_id': updated_doc.documents_id,
+                        'checking_status_id': updated_doc.status_id.status_id if updated_doc.status_id else '',
+                        'checking_status_name': updated_doc.status_id.checking_status_name if updated_doc.status_id else '',
+                        'checking_date': updated_doc.lastest_checked_date.strftime('%Y-%m-%d %H:%M') if updated_doc.lastest_checked_date else '',
+                        'checking_user': updated_doc.lastest_checked_by.username if updated_doc.lastest_checked_by else '',
+                        'checking_user_full': checking_user_full,
+                        'document_status_name': updated_doc.document_status_id.documents_status_name if updated_doc.document_status_id else '',
+                        'document_status_color': updated_doc.document_status_id.badge_color if updated_doc.document_status_id else '',
+                        'document_status_is_selectable': updated_doc.document_status_id.is_selectable if updated_doc.document_status_id else False,
+                        'document_status_is_checked': updated_doc.document_status_id.is_checked if updated_doc.document_status_id else False,
+                    })
                 messages.success(request, f'Duyệt {len(selected_items)} quyển chứng từ thành công') 
-                return JsonResponse({'success': True})
+                return JsonResponse({'success': True, 'updated': updated_rows})
         except Exception as e:
             messages.error(request, 'Có lỗi xảy ra, vui lòng thử lại sau')
             return JsonResponse({'success': False, 'error': 'Có lỗi xảy ra'} )
@@ -1207,6 +1634,23 @@ def api_folder_note_v2(request, folder_id):
     folder.note = note_clean or None
     folder.save(update_fields=["note"])
     return JsonResponse({"success": True, "note": folder.note or ""})
+
+@login_required
+@require_http_methods(["POST"])
+def api_document_note_v2(request, document_id):
+    user_context = get_user_context(request.user)
+    if not user_context['is_admin'] and not user_context['is_checker']:
+        return JsonResponse({'error': 'Unauthorized access.'}, status=403)
+    try:
+        payload = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+    note_val = payload.get("note")
+    note_clean = note_val.strip() if isinstance(note_val, str) else ""
+    document = get_object_or_404(DocumentsDetail, documents_id=document_id)
+    document.note = note_clean or None
+    document.save(update_fields=["note"])
+    return JsonResponse({"success": True, "note": document.note or ""})
 
 # Lịch sử nhận quyển chứng từ
 @login_required
@@ -2929,6 +3373,490 @@ def folder_received_dashboard(request):
     }
     return render(request, "app_documents/app_dashboard_folder.html", context)
 
+
+@login_required
+def document_kpi_dashboard_v2(request):
+    user = request.user
+    user_context = get_user_context(user)
+    if not user_context.get("is_admin"):
+        messages.error(request, "Bạn không có quyền truy cập dashboard.")
+        return redirect("home")
+
+    tab = request.GET.get("tab", "receive")
+    start_date_str = request.GET.get("start_date")
+    end_date_str = request.GET.get("end_date")
+    month_str = request.GET.get("month")
+    folder_type_id = request.GET.get("folder_type_id")
+
+    kpi_defaults = [
+        {"code": "on_time_rate", "name": "KPI nhận đúng hạn", "target_rate": 90.0},
+        {"code": "late_rate", "name": "KPI nhận trễ hạn", "target_rate": 90.0},
+        {"code": "not_received_rate", "name": "KPI chưa nhận", "target_rate": 90.0},
+    ]
+    default_codes = [item["code"] for item in kpi_defaults]
+    settings_by_code = {
+        item.metric_code: item
+        for item in DocumentKpiSetting.objects.filter(metric_code__in=default_codes)
+    }
+    for item in kpi_defaults:
+        setting = settings_by_code.get(item["code"])
+        if not setting:
+            setting = DocumentKpiSetting.objects.create(
+                metric_code=item["code"],
+                metric_name=item["name"],
+                target_rate=item["target_rate"],
+                updated_by=user,
+            )
+            settings_by_code[item["code"]] = setting
+        elif not setting.metric_name:
+            setting.metric_name = item["name"]
+            setting.updated_by = user
+            setting.save(update_fields=["metric_name", "updated_by"])
+
+    if request.method == "POST" and tab == "config":
+        action = request.POST.get("action")
+        if action == "update_kpi":
+            for setting in DocumentKpiSetting.objects.filter(metric_code__in=default_codes):
+                raw_value = request.POST.get(f"target_rate_{setting.metric_code}")
+                if raw_value is None:
+                    continue
+                try:
+                    new_rate = float(raw_value)
+                except (TypeError, ValueError):
+                    continue
+                if new_rate != float(setting.target_rate):
+                    setting.target_rate = new_rate
+                    setting.updated_by = user
+                    setting.save(update_fields=["target_rate", "updated_by", "updated_at"])
+            messages.success(request, "Đã cập nhật KPI.")
+        return redirect(f"{reverse('document_kpi_v2')}?tab=config")
+
+    kpi_settings = [settings_by_code[code] for code in default_codes if code in settings_by_code]
+    kpi_targets = {
+        setting.metric_code: float(setting.target_rate)
+        for setting in kpi_settings
+        if setting.is_active
+    }
+    for item in kpi_defaults:
+        kpi_targets.setdefault(item["code"], item["target_rate"])
+    kpi_labels = {item["code"]: item["name"] for item in kpi_defaults}
+    kpi_on_time_warn = max(kpi_targets.get("on_time_rate", 90.0) - 5, 0)
+
+    today = timezone.now().date()
+    if month_str:
+        try:
+            year, month = [int(part) for part in month_str.split("-")]
+            last_day = calendar.monthrange(year, month)[1]
+            start_date = datetime(year, month, 1).date()
+            end_date = datetime(year, month, last_day).date()
+        except (ValueError, IndexError):
+            start_date, end_date = parse_dates(start_date_str, end_date_str)
+    else:
+        start_date, end_date = parse_dates(start_date_str, end_date_str)
+
+    start_date = start_date or today.replace(day=1)
+    end_date = end_date or today
+
+    base_qs = Folder.objects.select_related('shop_id', 'shop_id__region_id', 'folder_type_id', 'folder_status_id').filter(
+        folder_created_date__range=[start_date, end_date]
+    )
+    if folder_type_id and folder_type_id.isdigit():
+        base_qs = base_qs.filter(folder_type_id=folder_type_id)
+
+    receiving_qs = base_qs.filter(is_original=True, is_issue=True)
+    on_time_count = receiving_qs.filter(is_on_time=True).count()
+    late_count = receiving_qs.filter(is_late=True).count()
+    received_count = receiving_qs.filter(folder_status_id__is_received=True).count()
+    not_received_issue_original_count = receiving_qs.filter(
+        folder_status_id__is_not_received_yet=True
+    ).count()
+    total_count = received_count + not_received_issue_original_count
+    base_total_count = base_qs.count()
+    total_original_count = base_qs.filter(is_original=True).count()
+    total_issue_count = base_qs.filter(is_issue=True).count()
+
+    def safe_rate(part, total):
+        return round((part / total) * 100, 2) if total else 0.0
+
+    on_time_rate_all = safe_rate(on_time_count, received_count)
+    late_rate_all = safe_rate(late_count, received_count)
+    issue_original_total = total_count
+    not_received_rate_all = safe_rate(not_received_issue_original_count, issue_original_total)
+    original_rate_all = safe_rate(total_original_count, base_total_count)
+    issue_rate_all = safe_rate(total_issue_count, base_total_count)
+
+    ratio_qs = receiving_qs
+    ratio_denominator = ratio_qs.filter(lastest_received_date__isnull=False).count()
+    ratio_numerator = ratio_qs.filter(is_on_time=True).count()
+    ratio_percent = round((ratio_numerator / ratio_denominator) * 100, 2) if ratio_denominator else 0.0
+
+    by_shop = receiving_qs.values('shop_id__shop_name').annotate(
+        total=Count('folder_id'),
+        on_time=Count('folder_id', filter=Q(is_on_time=True)),
+        late=Count('folder_id', filter=Q(is_late=True)),
+        not_received=Count('folder_id', filter=Q(folder_status_id__is_not_received_yet=True) | Q(lastest_received_date__isnull=True)),
+    ).order_by('-total')
+
+    shop_rows = []
+    for row in by_shop:
+        total = row['total'] or 0
+        on_time = row['on_time'] or 0
+        ratio = round((on_time / total) * 100, 2) if total else 0.0
+        late_rate = round(((row['late'] or 0) / total) * 100, 2) if total else 0.0
+        not_received_rate = round(((row['not_received'] or 0) / total) * 100, 2) if total else 0.0
+        shop_rows.append({
+            'shop_name': row['shop_id__shop_name'] or 'Không xác định',
+            'total': total,
+            'on_time': on_time,
+            'late': row['late'] or 0,
+            'not_received': row['not_received'] or 0,
+            'ratio': ratio,
+            'on_time_rate': ratio,
+            'late_rate': late_rate,
+            'not_received_rate': not_received_rate,
+        })
+    shops_top = sorted(shop_rows, key=lambda x: (-x['ratio'], -x['total']))[:10]
+    shops_bottom = sorted(shop_rows, key=lambda x: (x['ratio'], x['total']))[:10]
+    shops_combined = []
+    shop_seen = set()
+    for row in shops_top + shops_bottom:
+        if row['shop_name'] in shop_seen:
+            continue
+        shop_seen.add(row['shop_name'])
+        shops_combined.append(row)
+
+    by_region_manager = receiving_qs.values(
+        'manager_id__regionManager__regionManager_id',
+        'manager_id__regionManager__regionManager_name',
+        'manager_id__regionManager__regionManager_code',
+    ).annotate(
+        total=Count('folder_id'),
+        on_time=Count('folder_id', filter=Q(is_on_time=True)),
+        late=Count('folder_id', filter=Q(is_late=True)),
+        not_received=Count('folder_id', filter=Q(folder_status_id__is_not_received_yet=True) | Q(lastest_received_date__isnull=True)),
+    ).order_by('-total')
+
+    region_map = {}
+    area_lookup = {}
+    for row in by_region_manager:
+        total = row['total'] or 0
+        on_time = row['on_time'] or 0
+        ratio = round((on_time / total) * 100, 2) if total else 0.0
+        region_id = row['manager_id__regionManager__regionManager_id'] or 'none'
+        region_map[region_id] = {
+            'id': region_id,
+            'name': row['manager_id__regionManager__regionManager_name'] or 'Chưa phân vùng',
+            'code': row['manager_id__regionManager__regionManager_code'] or '',
+            'total': total,
+            'on_time': on_time,
+            'late': row['late'] or 0,
+            'not_received': row['not_received'] or 0,
+            'ratio': ratio,
+            'areas': [],
+        }
+
+    by_area_manager = receiving_qs.values(
+        'manager_id__regionManager__regionManager_id',
+        'manager_id__regionManager__regionManager_name',
+        'manager_id__regionManager__regionManager_code',
+        'manager_id__areaManager__areaManager_id',
+        'manager_id__areaManager__areaManager_name',
+        'manager_id__areaManager__areaManager_code',
+    ).annotate(
+        total=Count('folder_id'),
+        on_time=Count('folder_id', filter=Q(is_on_time=True)),
+        late=Count('folder_id', filter=Q(is_late=True)),
+        not_received=Count('folder_id', filter=Q(folder_status_id__is_not_received_yet=True) | Q(lastest_received_date__isnull=True)),
+    ).order_by('-total')
+
+    for row in by_area_manager:
+        total = row['total'] or 0
+        on_time = row['on_time'] or 0
+        ratio = round((on_time / total) * 100, 2) if total else 0.0
+        region_id = row['manager_id__regionManager__regionManager_id'] or 'none'
+        area_id = row['manager_id__areaManager__areaManager_id'] or ''
+        if region_id not in region_map:
+            region_map[region_id] = {
+                'id': region_id,
+                'name': row['manager_id__regionManager__regionManager_name'] or 'Chưa phân vùng',
+                'code': row['manager_id__regionManager__regionManager_code'] or '',
+                'total': 0,
+                'on_time': 0,
+                'late': 0,
+                'not_received': 0,
+                'ratio': 0.0,
+                'areas': [],
+            }
+        area_entry = {
+            'id': area_id,
+            'uid': f"{region_id}_{area_id or 'none'}",
+            'name': row['manager_id__areaManager__areaManager_name'] or 'Chưa phân khu vực',
+            'code': row['manager_id__areaManager__areaManager_code'] or '',
+            'total': total,
+            'on_time': on_time,
+            'late': row['late'] or 0,
+            'not_received': row['not_received'] or 0,
+            'ratio': ratio,
+            'shops': [],
+        }
+        region_map[region_id]['areas'].append(area_entry)
+        area_lookup[(region_id, area_id)] = area_entry
+
+    by_shop_area = receiving_qs.values(
+        'manager_id__regionManager__regionManager_id',
+        'manager_id__areaManager__areaManager_id',
+        'shop_id',
+        'shop_id__shop_name',
+        'shop_id__shop_code',
+    ).annotate(
+        total=Count('folder_id'),
+        on_time=Count('folder_id', filter=Q(is_on_time=True)),
+        late=Count('folder_id', filter=Q(is_late=True)),
+        not_received=Count('folder_id', filter=Q(folder_status_id__is_not_received_yet=True) | Q(lastest_received_date__isnull=True)),
+    ).order_by('-total')
+
+    for row in by_shop_area:
+        total = row['total'] or 0
+        on_time = row['on_time'] or 0
+        late = row['late'] or 0
+        not_received = row['not_received'] or 0
+        ratio = round((on_time / total) * 100, 2) if total else 0.0
+        late_rate = round((late / total) * 100, 2) if total else 0.0
+        not_received_rate = round((not_received / total) * 100, 2) if total else 0.0
+        region_id = row['manager_id__regionManager__regionManager_id'] or 'none'
+        area_id = row['manager_id__areaManager__areaManager_id'] or ''
+        if region_id not in region_map:
+            region_map[region_id] = {
+                'id': region_id,
+                'name': 'Chưa phân vùng',
+                'code': '',
+                'total': 0,
+                'on_time': 0,
+                'late': 0,
+                'not_received': 0,
+                'ratio': 0.0,
+                'areas': [],
+            }
+        area_entry = area_lookup.get((region_id, area_id))
+        if not area_entry:
+            area_entry = {
+                'id': area_id,
+                'uid': f"{region_id}_{area_id or 'none'}",
+                'name': 'Chưa phân khu vực',
+                'code': '',
+                'total': 0,
+                'on_time': 0,
+                'late': 0,
+                'not_received': 0,
+                'ratio': 0.0,
+                'shops': [],
+            }
+            region_map[region_id]['areas'].append(area_entry)
+            area_lookup[(region_id, area_id)] = area_entry
+        area_entry['shops'].append({
+            'id': row['shop_id'],
+            'name': row['shop_id__shop_name'] or 'Không xác định',
+            'code': row['shop_id__shop_code'] or '',
+            'total': total,
+            'on_time': on_time,
+            'late': late,
+            'not_received': not_received,
+            'on_time_rate': ratio,
+            'late_rate': late_rate,
+            'not_received_rate': not_received_rate,
+        })
+
+    for area_entry in area_lookup.values():
+        area_entry['shops'] = sorted(area_entry['shops'], key=lambda x: (-x['total'], x['name']))
+
+    for region in region_map.values():
+        region['areas'] = sorted(region['areas'], key=lambda x: (x['ratio'], -x['total'], x['name']))
+    region_area_rows = sorted(region_map.values(), key=lambda x: (x['ratio'], -x['total'], x['name']))
+
+    by_month = receiving_qs.annotate(month=TruncMonth('folder_created_date')).values('month').annotate(
+        total=Count('folder_id'),
+        on_time=Count('folder_id', filter=Q(is_on_time=True)),
+        late=Count('folder_id', filter=Q(is_late=True)),
+        not_received=Count('folder_id', filter=Q(folder_status_id__is_not_received_yet=True) | Q(lastest_received_date__isnull=True)),
+    ).order_by('month')
+
+    month_rows = []
+    month_chart_rows = []
+    prev_month = None
+    def change_pct(current, previous):
+        if previous in (None, 0):
+            return None
+        return round(((current - previous) / previous) * 100, 2)
+    for row in by_month:
+        label = row['month'].strftime('%Y-%m') if row['month'] else ''
+        total = row['total'] or 0
+        on_time = row['on_time'] or 0
+        late = row['late'] or 0
+        not_received = row['not_received'] or 0
+        month_rows.append({
+            'month': label,
+            'total': total,
+            'on_time': on_time,
+            'late': late,
+            'not_received': not_received,
+            'total_change_pct': change_pct(total, prev_month['total'] if prev_month else None),
+            'on_time_change_pct': change_pct(on_time, prev_month['on_time'] if prev_month else None),
+            'late_change_pct': change_pct(late, prev_month['late'] if prev_month else None),
+            'not_received_change_pct': change_pct(not_received, prev_month['not_received'] if prev_month else None),
+        })
+        prev_month = {
+            'total': total,
+            'on_time': on_time,
+            'late': late,
+            'not_received': not_received,
+        }
+        if total:
+            month_chart_rows.append({
+                'month': label,
+                'on_time_rate': round((on_time / total) * 100, 2),
+                'late_rate': round((late / total) * 100, 2),
+                'not_received_rate': round((not_received / total) * 100, 2),
+            })
+        else:
+            month_chart_rows.append({
+                'month': label,
+                'on_time_rate': 0.0,
+                'late_rate': 0.0,
+                'not_received_rate': 0.0,
+            })
+
+    context = {
+        **user_context,
+        'user': user,
+        'active_tab': tab,
+        'tab_qs': urlencode({k: v for k, v in request.GET.items() if k != 'tab'}),
+        'start_date': start_date.strftime("%Y-%m-%d"),
+        'end_date': end_date.strftime("%Y-%m-%d"),
+        'month': month_str or '',
+        'folder_type_id': folder_type_id or '',
+        'filter_folder_types': FolderType.objects.filter(is_valid=True).order_by('folder_type_name'),
+        'kpi_settings': kpi_settings,
+        'kpi_targets': kpi_targets,
+        'kpi_labels': kpi_labels,
+        'kpi_on_time_warn': kpi_on_time_warn,
+        'on_time_count': on_time_count,
+        'late_count': late_count,
+        'not_received_count': not_received_issue_original_count,
+        'total_count': total_count,
+        'received_count': received_count,
+        'issue_original_total': issue_original_total,
+        'ratio_percent': ratio_percent,
+        'ratio_numerator': ratio_numerator,
+        'ratio_denominator': ratio_denominator,
+        'shops_breakdown': shops_combined,
+        'region_area_breakdown': region_area_rows,
+        'months_breakdown': month_rows,
+        'months_chart_json': json.dumps(month_chart_rows, cls=DjangoJSONEncoder, ensure_ascii=False),
+        'total_original_count': total_original_count,
+        'total_issue_count': total_issue_count,
+        'on_time_rate_all': on_time_rate_all,
+        'late_rate_all': late_rate_all,
+        'not_received_rate_all': not_received_rate_all,
+        'original_rate_all': original_rate_all,
+        'issue_rate_all': issue_rate_all,
+    }
+    return render(request, "app_documents/app_document_kpi_v2.html", context)
+
+@login_required
+def export_kpi_shop_detail(request):
+    user = request.user
+    user_context = get_user_context(user)
+    if not user_context.get("is_admin"):
+        messages.error(request, "Bạn không có quyền truy cập dữ liệu.")
+        return redirect("home")
+
+    shop_id = request.GET.get("shop_id")
+    if not shop_id or not shop_id.isdigit():
+        messages.error(request, "Thiếu phòng giao dịch.")
+        return redirect("document_kpi_v2")
+
+    start_date_str = request.GET.get("start_date")
+    end_date_str = request.GET.get("end_date")
+    month_str = request.GET.get("month")
+    folder_type_id = request.GET.get("folder_type_id")
+
+    today = timezone.now().date()
+    if month_str:
+        try:
+            year, month = [int(part) for part in month_str.split("-")]
+            last_day = calendar.monthrange(year, month)[1]
+            start_date = datetime(year, month, 1).date()
+            end_date = datetime(year, month, last_day).date()
+        except (ValueError, IndexError):
+            start_date, end_date = parse_dates(start_date_str, end_date_str)
+    else:
+        start_date, end_date = parse_dates(start_date_str, end_date_str)
+
+    start_date = start_date or today.replace(day=1)
+    end_date = end_date or today
+
+    qs = Folder.objects.select_related(
+        'shop_id',
+        'folder_type_id',
+        'folder_status_id',
+        'manager_id__regionManager',
+        'manager_id__areaManager',
+    ).filter(
+        shop_id=shop_id,
+        is_original=True,
+        is_issue=True,
+        folder_created_date__range=[start_date, end_date],
+    ).order_by('folder_created_date')
+
+    if folder_type_id and folder_type_id.isdigit():
+        qs = qs.filter(folder_type_id=folder_type_id)
+
+    response = HttpResponse(content_type="text/csv; charset=utf-8")
+    filename = f"pgd_detail_{shop_id}_{start_date}_{end_date}.csv"
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    response.write("\ufeff")
+
+    writer = csv.writer(response)
+    writer.writerow([
+        "Phòng giao dịch",
+        "Ngày phát sinh quyển",
+        "Loại quyển",
+        "Tình trạng đúng hạn",
+        "Tình trạng trễ hạn",
+        "Tình trạng chưa nhận",
+        "Ngày nhận (nếu có)",
+        "Khu vực",
+        "Vùng",
+    ])
+
+    for folder in qs.iterator():
+        shop_name = folder.shop_id.shop_name if folder.shop_id else "Không xác định"
+        folder_type = folder.folder_type_id.folder_type_name if folder.folder_type_id else ""
+        on_time = "Có" if folder.is_on_time else "Không"
+        late = "Có" if folder.is_late else "Không"
+        not_received = "Có" if folder.folder_status_id and folder.folder_status_id.is_not_received_yet else "Không"
+        received_date = folder.lastest_received_date.date().isoformat() if folder.lastest_received_date else ""
+        area_name = ""
+        region_name = ""
+        if folder.manager_id:
+            if folder.manager_id.areaManager:
+                area_name = folder.manager_id.areaManager.areaManager_name or ""
+            if folder.manager_id.regionManager:
+                region_name = folder.manager_id.regionManager.regionManager_name or ""
+        writer.writerow([
+            shop_name,
+            folder.folder_created_date.isoformat(),
+            folder_type,
+            on_time,
+            late,
+            not_received,
+            received_date,
+            area_name,
+            region_name,
+        ])
+
+    return response
+
 @login_required
 def gapo_schedule_view(request):
     user = request.user
@@ -3238,7 +4166,547 @@ def request_change_document_view(request, document_id):
     return JsonResponse({'success': False, 'message': 'Invalid request.'})
 
 
+# Borrow request helpers
+def _borrow_request_log(borrow_request, action, from_status=None, to_status=None, user=None, item=None, note=None, meta=None):
+    BorrowRequestLog.objects.create(
+        borrow_request=borrow_request,
+        item=item,
+        action=action,
+        from_status=from_status,
+        to_status=to_status,
+        note=note,
+        meta=meta,
+        created_by=user,
+    )
+
+
+def _refresh_borrow_request_status(borrow_request):
+    items = list(borrow_request.items.all())
+    if not items:
+        if borrow_request.status != BorrowRequestStatus.PENDING:
+            borrow_request.status = BorrowRequestStatus.PENDING
+            borrow_request.save(update_fields=['status'])
+        return
+
+    statuses = {item.status for item in items}
+    if statuses.issubset({BorrowRequestItemStatus.RETURNED, BorrowRequestItemStatus.LOST, BorrowRequestItemStatus.CANCELLED}):
+        borrow_request.status = BorrowRequestStatus.RETURNED
+    elif BorrowRequestItemStatus.HANDED_OVER in statuses or BorrowRequestItemStatus.RETURNED in statuses or BorrowRequestItemStatus.LOST in statuses:
+        if BorrowRequestItemStatus.ASSIGNED in statuses or BorrowRequestItemStatus.PENDING in statuses:
+            borrow_request.status = BorrowRequestStatus.PARTIALLY_RETURNED
+        else:
+            borrow_request.status = BorrowRequestStatus.HANDED_OVER
+    elif statuses.issubset({BorrowRequestItemStatus.ASSIGNED, BorrowRequestItemStatus.PENDING}):
+        borrow_request.status = BorrowRequestStatus.ASSIGNED
+    else:
+        borrow_request.status = BorrowRequestStatus.PARTIALLY_RETURNED
+
+    borrow_request.save(update_fields=['status'])
+
+
 #BORROW
+@login_required
+def borrow_request_management_v2(request):
+    user = request.user
+    user_context = get_user_context(user)
+    if not user_context['is_admin'] and not user_context['is_checker']:
+        return redirect('home')
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'create':
+            borrower_id = request.POST.get('borrower_id')
+            reference_code = request.POST.get('reference_code')
+            needed_date = request.POST.get('needed_date')
+            appointment_date = request.POST.get('appointment_date')
+            ticket_code = request.POST.get('ticket_code')
+            contact_email = request.POST.get('contact_email')
+            contact_phone = request.POST.get('contact_phone')
+            note = request.POST.get('note')
+            if not borrower_id or not needed_date:
+                messages.error(request, 'Vui lòng nhập phòng ban và ngày cần.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            borrower = Shop.objects.filter(shop_id=borrower_id).first()
+            if not borrower:
+                messages.error(request, 'Không tìm thấy phòng ban.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            try:
+                needed_date_value = datetime.strptime(needed_date, "%Y-%m-%d").date()
+            except ValueError:
+                messages.error(request, 'Ngày cần không hợp lệ.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            appointment_date_value = None
+            if appointment_date:
+                try:
+                    appointment_date_value = datetime.strptime(appointment_date, "%Y-%m-%d").date()
+                except ValueError:
+                    messages.error(request, 'Ngày hẹn trả không hợp lệ.')
+                    return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            new_request = BorrowRequest.objects.create(
+                borrower=borrower,
+                requester=user,
+                reference_code=reference_code or None,
+                needed_date=needed_date_value,
+                appointment_date=appointment_date_value,
+                ticket_code=ticket_code or None,
+                contact_email=contact_email or None,
+                contact_phone=contact_phone or None,
+                note=note or None,
+                status=BorrowRequestStatus.PENDING,
+                created_by=user,
+                updated_by=user,
+            )
+            _borrow_request_log(new_request, 'create', None, BorrowRequestStatus.PENDING, user=user)
+            return redirect('borrow_request_detail_v2', request_id=new_request.request_id)
+
+    filters = {}
+    choice_borrower = (request.GET.get('borrower') or '').strip()
+    choice_status = (request.GET.get('status') or '').strip()
+    choice_ticket = (request.GET.get('ticket') or '').strip()
+    choice_needed_date = (request.GET.get('needed_date') or '').strip()
+
+    if choice_borrower:
+        if choice_borrower.isdigit():
+            filters['borrower__shop_id'] = choice_borrower
+        else:
+            filters['borrower__shop_name__icontains'] = choice_borrower
+    if choice_status:
+        filters['status'] = choice_status
+    if choice_ticket:
+        filters['ticket_code__icontains'] = choice_ticket
+    if choice_needed_date:
+        date_parts = choice_needed_date.split(' to ')
+        if len(date_parts) == 2:
+            start_date = datetime.strptime(date_parts[0], "%Y-%m-%d").date()
+            end_date = datetime.strptime(date_parts[1], "%Y-%m-%d").date()
+            filters['needed_date__range'] = [start_date, end_date]
+        elif len(date_parts) == 1:
+            single_date = datetime.strptime(date_parts[0], "%Y-%m-%d").date()
+            filters['needed_date__range'] = [single_date, single_date]
+
+    qs = BorrowRequest.objects.select_related('borrower', 'requester').prefetch_related('items').annotate(items_count=Count('items')).order_by('-created_at')
+    if filters:
+        qs = qs.filter(**filters)
+
+    paginator = Paginator(qs, 25)
+    page_number = request.GET.get('page')
+    borrow_requests = paginator.get_page(page_number)
+    today = timezone.now().date()
+    for req in borrow_requests:
+        overdue_count = 0
+        for item in req.items.all():
+            if item.status in (BorrowRequestItemStatus.RETURNED, BorrowRequestItemStatus.CANCELLED):
+                continue
+            due_date = item.appointment_date or req.appointment_date
+            if due_date and due_date < today:
+                overdue_count += 1
+        req.overdue_count = overdue_count
+
+    current = borrow_requests.number if borrow_requests else 1
+    total_pages = borrow_requests.paginator.num_pages if borrow_requests else 1
+    start_range = max(current - 2, 1)
+    end_range = min(current + 2, total_pages)
+    page_range_custom = list(range(1, min(2, total_pages) + 1))
+    page_range_custom += list(range(start_range, end_range + 1))
+    page_range_custom += list(range(max(total_pages - 1, 1), total_pages + 1))
+    page_range_custom = sorted(set([p for p in page_range_custom if 1 <= p <= total_pages]))
+
+    qs_no_page = request.GET.copy()
+    qs_no_page.pop('page', None)
+    base_qs = qs_no_page.urlencode()
+
+    context = {
+        **user_context,
+        'user': user,
+        'borrow_requests': borrow_requests,
+        'page_range_custom': page_range_custom,
+        'base_qs': base_qs,
+        'drop_list_shops': Shop.objects.filter(for_borrow_only=True).order_by('shop_name'),
+        'drop_list_request_status': BorrowRequestStatus.choices,
+        'filters': {
+            'borrower': choice_borrower,
+            'status': choice_status,
+            'ticket': choice_ticket,
+            'needed_date': choice_needed_date,
+        },
+    }
+    return render(request, 'app_documents/app_borrow_request_v2.html', context)
+
+
+@login_required
+def borrow_request_detail_v2(request, request_id):
+    user = request.user
+    user_context = get_user_context(user)
+    if not user_context['is_admin'] and not user_context['is_checker']:
+        return redirect('home')
+
+    borrow_request = get_object_or_404(BorrowRequest, request_id=request_id)
+    items = borrow_request.items.select_related('documents_id', 'legacy_borrowing').order_by('-created_at')
+    logs = borrow_request.logs.select_related('created_by', 'item').order_by('-created_at')
+    status_labels = dict(BorrowRequestStatus.choices)
+    status_flow = [
+        BorrowRequestStatus.PENDING,
+        BorrowRequestStatus.ASSIGNED,
+        BorrowRequestStatus.HANDED_OVER,
+        BorrowRequestStatus.PARTIALLY_RETURNED,
+        BorrowRequestStatus.RETURNED,
+        BorrowRequestStatus.CANCELLED,
+        BorrowRequestStatus.REJECTED,
+    ]
+    logs_by_status = {}
+    for log in logs:
+        status_key = log.to_status or log.from_status or 'unknown'
+        logs_by_status.setdefault(status_key, []).append(log)
+    log_steps = []
+    for status_code in status_flow:
+        if status_code in logs_by_status:
+            log_steps.append({
+                'code': status_code,
+                'label': status_labels.get(status_code, status_code),
+                'logs': logs_by_status[status_code],
+            })
+    for status_code, status_logs in logs_by_status.items():
+        if status_code in status_flow:
+            continue
+        log_steps.append({
+            'code': status_code,
+            'label': status_labels.get(status_code, status_code),
+            'logs': status_logs,
+        })
+    preview_key = (request.GET.get('preview_key') or '').strip()
+    preview_rows = []
+    preview_error = None
+
+    if preview_key:
+        documents = DocumentsDetail.objects.select_related(
+            'shop_id',
+            'document_type_id',
+            'folder_id',
+            'status_id',
+            'document_status_id',
+            'package_id',
+        ).filter(
+            Q(loan_id__loan_code__iexact=preview_key) | Q(contract_id__contract_code__iexact=preview_key)
+        ).order_by('documents_created_date', 'documents_id')
+        if not documents.exists():
+            preview_error = 'Không tìm thấy chứng từ theo contract_code hoặc loan_code.'
+        else:
+            doc_ids = list(documents.values_list('documents_id', flat=True))
+            active_borrow_ids = set(
+                BorrowingDocument.objects.filter(
+                    documents_id__in=doc_ids,
+                    borrow_status_id__flag_return=False,
+                ).values_list('documents_id', flat=True)
+            )
+            assigned_ids = set(
+                BorrowRequestItem.objects.filter(
+                    borrow_request=borrow_request,
+                    documents_id__in=doc_ids,
+                ).values_list('documents_id', flat=True)
+            )
+            for doc in documents:
+                reasons = []
+                doc_status = doc.document_status_id
+                if not doc_status or not doc_status.is_checked:
+                    reasons.append('Chưa duyệt')
+                if doc_status and doc_status.is_borrow:
+                    reasons.append('Đang mượn')
+                if doc.documents_id in active_borrow_ids:
+                    reasons.append('Đang có giao dịch mượn')
+                if doc.documents_id in assigned_ids:
+                    reasons.append('Đã gán trong yêu cầu')
+                preview_rows.append({
+                    'doc': doc,
+                    'eligible': not reasons,
+                    'reason': ', '.join(reasons),
+                })
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        if action == 'add_item':
+            document_code = (request.POST.get('documents_code') or '').strip()
+            if not document_code:
+                messages.error(request, 'Vui lòng nhập mã chứng từ.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            try:
+                document = DocumentsDetail.objects.select_related('document_status_id').get(documents_code=document_code)
+            except DocumentsDetail.DoesNotExist:
+                messages.error(request, 'Không tìm thấy chứng từ.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            if document.document_status_id and document.document_status_id.is_borrow:
+                messages.error(request, 'Chứng từ đang được mượn.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            if document.document_status_id and not document.document_status_id.is_checked:
+                messages.error(request, 'Chứng từ chưa ở trạng thái đã duyệt.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            active_borrow = BorrowingDocument.objects.filter(documents_id=document, borrow_status_id__flag_return=False).exists()
+            if active_borrow:
+                messages.error(request, 'Chứng từ đang có giao dịch mượn.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            item = BorrowRequestItem.objects.create(
+                borrow_request=borrow_request,
+                documents_id=document,
+                appointment_date=borrow_request.appointment_date,
+                status=BorrowRequestItemStatus.ASSIGNED,
+                created_by=user,
+                updated_by=user,
+            )
+            _borrow_request_log(borrow_request, 'assign_document', borrow_request.status, BorrowRequestStatus.ASSIGNED, user=user, item=item, meta={'documents_id': document.documents_id})
+            _refresh_borrow_request_status(borrow_request)
+            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+        if action == 'assign_selected':
+            selected_ids = request.POST.getlist('document_ids')
+            if not selected_ids:
+                messages.error(request, 'Vui lòng chọn chứng từ để gán.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            documents = DocumentsDetail.objects.select_related(
+                'document_status_id',
+            ).filter(documents_id__in=selected_ids)
+            active_borrow_ids = set(
+                BorrowingDocument.objects.filter(
+                    documents_id__in=selected_ids,
+                    borrow_status_id__flag_return=False,
+                ).values_list('documents_id', flat=True)
+            )
+            existing_ids = set(
+                BorrowRequestItem.objects.filter(
+                    borrow_request=borrow_request,
+                    documents_id__in=selected_ids,
+                ).values_list('documents_id', flat=True)
+            )
+            added_count = 0
+            skipped = []
+            for doc in documents:
+                doc_status = doc.document_status_id
+                if doc.documents_id in existing_ids:
+                    skipped.append(doc.documents_code)
+                    continue
+                if not doc_status or not doc_status.is_checked:
+                    skipped.append(doc.documents_code)
+                    continue
+                if doc_status.is_borrow or doc.documents_id in active_borrow_ids:
+                    skipped.append(doc.documents_code)
+                    continue
+                item = BorrowRequestItem.objects.create(
+                    borrow_request=borrow_request,
+                    documents_id=doc,
+                    appointment_date=borrow_request.appointment_date,
+                    status=BorrowRequestItemStatus.ASSIGNED,
+                    created_by=user,
+                    updated_by=user,
+                )
+                _borrow_request_log(borrow_request, 'assign_document', borrow_request.status, BorrowRequestStatus.ASSIGNED, user=user, item=item, meta={'documents_id': doc.documents_id})
+                added_count += 1
+            if added_count:
+                _refresh_borrow_request_status(borrow_request)
+                messages.success(request, f'Đã gán {added_count} chứng từ.')
+            if skipped:
+                messages.warning(request, f'Bỏ qua {len(skipped)} chứng từ không hợp lệ hoặc đã gán.')
+            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+        if action == 'handover':
+            items_to_handover = borrow_request.items.filter(status=BorrowRequestItemStatus.ASSIGNED, documents_id__isnull=False)
+            if not items_to_handover.exists():
+                messages.error(request, 'Không có chứng từ để bàn giao.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            borrow_status = BorrowingStatus.objects.filter(flag_is_borrowing=True).first()
+            if not borrow_status:
+                messages.error(request, 'Không tìm thấy trạng thái mượn.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            document_status_borrow = DocumentStatus.objects.filter(is_borrow=True).first()
+            if not document_status_borrow:
+                messages.error(request, 'Không tìm thấy trạng thái chứng từ đang mượn.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            for item in items_to_handover:
+                legacy = BorrowingDocument.objects.create(
+                    documents_id=item.documents_id,
+                    borrow_date=timezone.now().date(),
+                    appointment_date=item.appointment_date or borrow_request.appointment_date,
+                    lender=user,
+                    borrower=borrow_request.borrower,
+                    borrower_detail=None,
+                    ticket_code=borrow_request.ticket_code,
+                    note=borrow_request.note,
+                    borrow_status_id=borrow_status,
+                )
+                DocumentsDetail.objects.filter(documents_id=item.documents_id.documents_id).update(document_status_id=document_status_borrow)
+                item.legacy_borrowing = legacy
+                item.status = BorrowRequestItemStatus.HANDED_OVER
+                item.handed_over_date = timezone.now()
+                item.updated_by = user
+                item.save(update_fields=['legacy_borrowing', 'status', 'handed_over_date', 'updated_by', 'updated_at'])
+                _borrow_request_log(borrow_request, 'handover', BorrowRequestStatus.ASSIGNED, BorrowRequestStatus.HANDED_OVER, user=user, item=item)
+            _refresh_borrow_request_status(borrow_request)
+            messages.success(request, 'Đã bàn giao chứng từ.')
+            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+        if action == 'return_item':
+            item_id = request.POST.get('item_id')
+            item = get_object_or_404(BorrowRequestItem, item_id=item_id, borrow_request=borrow_request)
+            return_status = BorrowingStatus.objects.filter(flag_return=True).first()
+            checked_status = DocumentStatus.objects.filter(is_checked=True).first()
+            if item.legacy_borrowing and return_status:
+                item.legacy_borrowing.borrow_status_id = return_status
+                item.legacy_borrowing.return_date = timezone.now().date()
+                item.legacy_borrowing.save(update_fields=['borrow_status_id', 'return_date'])
+            if item.documents_id and checked_status:
+                DocumentsDetail.objects.filter(documents_id=item.documents_id.documents_id).update(document_status_id=checked_status)
+            item.status = BorrowRequestItemStatus.RETURNED
+            item.return_date = timezone.now()
+            item.updated_by = user
+            item.save(update_fields=['status', 'return_date', 'updated_by', 'updated_at'])
+            _borrow_request_log(borrow_request, 'return', BorrowRequestStatus.HANDED_OVER, BorrowRequestStatus.RETURNED, user=user, item=item)
+            _refresh_borrow_request_status(borrow_request)
+            messages.success(request, 'Đã hoàn trả chứng từ.')
+            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+        if action == 'lost_item':
+            item_id = request.POST.get('item_id')
+            item = get_object_or_404(BorrowRequestItem, item_id=item_id, borrow_request=borrow_request)
+            lost_status = BorrowingStatus.objects.filter(flag_is_lost=True).first()
+            doc_lost_status = DocumentStatus.objects.filter(is_lost=True).first()
+            if item.legacy_borrowing and lost_status:
+                item.legacy_borrowing.borrow_status_id = lost_status
+                item.legacy_borrowing.save(update_fields=['borrow_status_id'])
+            if item.documents_id and doc_lost_status:
+                DocumentsDetail.objects.filter(documents_id=item.documents_id.documents_id).update(document_status_id=doc_lost_status)
+            item.status = BorrowRequestItemStatus.LOST
+            item.updated_by = user
+            item.save(update_fields=['status', 'updated_by', 'updated_at'])
+            _borrow_request_log(borrow_request, 'lost', BorrowRequestStatus.HANDED_OVER, BorrowRequestStatus.PARTIALLY_RETURNED, user=user, item=item)
+            _refresh_borrow_request_status(borrow_request)
+            messages.success(request, 'Đã cập nhật báo mất.')
+            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+        if action == 'cancel_request':
+            from_status = borrow_request.status
+            borrow_request.status = BorrowRequestStatus.CANCELLED
+            borrow_request.updated_by = user
+            borrow_request.save(update_fields=['status', 'updated_by', 'updated_at'])
+            _borrow_request_log(borrow_request, 'cancel', from_status, BorrowRequestStatus.CANCELLED, user=user)
+            messages.success(request, 'Đã hủy yêu cầu.')
+            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+        if action == 'update_request':
+            appointment_date = request.POST.get('appointment_date')
+            if appointment_date:
+                try:
+                    borrow_request.appointment_date = datetime.strptime(appointment_date, "%Y-%m-%d").date()
+                except ValueError:
+                    messages.error(request, 'Ngày hẹn trả không hợp lệ.')
+                    return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            borrow_request.reference_code = request.POST.get('reference_code') or borrow_request.reference_code
+            borrow_request.ticket_code = request.POST.get('ticket_code') or borrow_request.ticket_code
+            borrow_request.contact_email = request.POST.get('contact_email') or borrow_request.contact_email
+            borrow_request.contact_phone = request.POST.get('contact_phone') or borrow_request.contact_phone
+            borrow_request.note = request.POST.get('note') or borrow_request.note
+            borrow_request.updated_by = user
+            borrow_request.save(update_fields=['appointment_date', 'reference_code', 'ticket_code', 'contact_email', 'contact_phone', 'note', 'updated_by', 'updated_at'])
+            _borrow_request_log(borrow_request, 'update', borrow_request.status, borrow_request.status, user=user)
+            messages.success(request, 'Đã cập nhật yêu cầu.')
+            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+        if action == 'update_item_appointment':
+            item_id = request.POST.get('item_id')
+            appointment_date = request.POST.get('appointment_date')
+            if not item_id or not appointment_date:
+                messages.error(request, 'Vui lòng chọn ngày hẹn trả.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            try:
+                appointment_date_value = datetime.strptime(appointment_date, "%Y-%m-%d").date()
+            except ValueError:
+                messages.error(request, 'Ngày hẹn trả không hợp lệ.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            item = get_object_or_404(BorrowRequestItem, item_id=item_id, borrow_request=borrow_request)
+            item.appointment_date = appointment_date_value
+            item.updated_by = user
+            item.save(update_fields=['appointment_date', 'updated_by', 'updated_at'])
+            if item.legacy_borrowing:
+                item.legacy_borrowing.appointment_date = appointment_date_value
+                item.legacy_borrowing.save(update_fields=['appointment_date'])
+            _borrow_request_log(
+                borrow_request,
+                'Cập nhật hẹn trả',
+                borrow_request.status,
+                borrow_request.status,
+                user=user,
+                item=item,
+                note=f'Hẹn trả: {appointment_date_value.strftime("%Y-%m-%d")}',
+            )
+            messages.success(request, 'Đã cập nhật ngày hẹn trả.')
+            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+    context = {
+        **user_context,
+        'user': user,
+        'borrow_request': borrow_request,
+        'items': items,
+        'logs': logs,
+        'log_steps': log_steps,
+        'preview_key': preview_key,
+        'preview_rows': preview_rows,
+        'preview_error': preview_error,
+        'drop_list_shops': Shop.objects.filter(for_borrow_only=True).order_by('shop_name'),
+        'status_choices': BorrowRequestStatus.choices,
+    }
+    return render(request, 'app_documents/app_borrow_request_detail_v2.html', context)
+
+
+@csrf_exempt
+def api_borrow_request_create(request):
+    api_key_setting = getattr(settings, 'BORROW_REQUEST_API_KEY', '') or os.environ.get('BORROW_REQUEST_API_KEY', '')
+    if not api_key_setting:
+        return JsonResponse({'success': False, 'error': 'API key not configured.'}, status=503)
+    client_key = (
+        request.headers.get('X-API-KEY')
+        or request.headers.get('X-Api-Key')
+        or request.headers.get('x-api-key')
+        or request.META.get('HTTP_X_API_KEY')
+    )
+    if not client_key or not secrets.compare_digest(client_key, api_key_setting):
+        return JsonResponse({'success': False, 'error': 'Unauthorized'}, status=401)
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Invalid request'}, status=400)
+    try:
+        data = json.loads(request.body)
+    except Exception:
+        data = request.POST
+    borrower_id = data.get('borrower_id')
+    needed_date = data.get('needed_date')
+    appointment_date = data.get('appointment_date')
+    reference_code = data.get('reference_code')
+    ticket_code = data.get('ticket_code')
+    contact_email = data.get('contact_email')
+    contact_phone = data.get('contact_phone')
+    note = data.get('note')
+    source_system = data.get('source_system')
+    external_ref = data.get('external_ref')
+    if not borrower_id or not needed_date:
+        return JsonResponse({'success': False, 'error': 'borrower_id and needed_date are required.'}, status=400)
+    borrower = Shop.objects.filter(shop_id=borrower_id).first()
+    if not borrower:
+        return JsonResponse({'success': False, 'error': 'Borrower not found.'}, status=404)
+    user = request.user if request.user.is_authenticated else None
+    borrow_request = BorrowRequest.objects.create(
+        borrower=borrower,
+        requester=user,
+        reference_code=reference_code or None,
+        needed_date=needed_date,
+        appointment_date=appointment_date or None,
+        ticket_code=ticket_code or None,
+        contact_email=contact_email or None,
+        contact_phone=contact_phone or None,
+        note=note or None,
+        status=BorrowRequestStatus.PENDING,
+        source_system=source_system or None,
+        external_ref=external_ref or None,
+        created_by=user,
+        updated_by=user,
+    )
+    _borrow_request_log(borrow_request, 'create', None, BorrowRequestStatus.PENDING, user=user, meta={'source_system': source_system, 'external_ref': external_ref})
+    return JsonResponse({'success': True, 'request_id': borrow_request.request_id})
+
 @login_required
 def borrow_document_management_v2(request):
     user = request.user
