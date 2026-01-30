@@ -12,7 +12,10 @@ from .models import (
     CheckingAdditional,
     BorrowingDocument,BorrowingStatus, FolderDeadlineRule,FolderGroup,
     BorrowRequest, BorrowRequestItem, BorrowRequestLog,
-    DocumentKpiSetting
+    DocumentKpiSetting,
+    UserPresenceDaily,
+    FolderIssueType,
+    FolderIssue
 )
 # Register your models here.
 admin.site.site_header = "Chứng từ F88"  
@@ -112,6 +115,30 @@ class DocumentKpiSettingAdmin(admin.ModelAdmin):
     list_filter = ('is_active',)
     list_per_page = 25
 admin.site.register(DocumentKpiSetting, DocumentKpiSettingAdmin)
+
+
+class UserPresenceDailyAdmin(admin.ModelAdmin):
+    list_display = ('user', 'work_date', 'last_seen_at', 'total_active_seconds')
+    search_fields = ('user__username', 'user__first_name', 'user__last_name')
+    list_filter = ('work_date',)
+    list_per_page = 25
+admin.site.register(UserPresenceDaily, UserPresenceDailyAdmin)
+
+
+class FolderIssueTypeAdmin(admin.ModelAdmin):
+    list_display = ('issue_type_name', 'is_active', 'is_no_issue', 'badge_color', 'sort_order')
+    list_filter = ('is_active', 'is_no_issue')
+    search_fields = ('issue_type_name',)
+    list_per_page = 25
+admin.site.register(FolderIssueType, FolderIssueTypeAdmin)
+
+
+class FolderIssueAdmin(admin.ModelAdmin):
+    list_display = ('folder', 'issue_type', 'created_by', 'created_at')
+    search_fields = ('folder__folder_code', 'issue_type__issue_type_name')
+    list_filter = ('issue_type',)
+    list_per_page = 25
+admin.site.register(FolderIssue, FolderIssueAdmin)
 
 class PartnerAdmin(admin.ModelAdmin):
     list_display = ('partner_code', 'partner_name', 'require_partner_selection', 'require_partner_code', 'is_active')

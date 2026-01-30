@@ -40,7 +40,7 @@ class AdmDocumentStatusAdmin(admin.ModelAdmin):
 
 @admin.register(AdmCompany)
 class AdmCompanyAdmin(admin.ModelAdmin):
-    list_display = ("code", "name")
+    list_display = ("code", "name", "badge_text_color", "badge_bg_color", "badge_logo_url", "is_active")
     verbose_name_plural = "Companies (Công ty)"
 
 

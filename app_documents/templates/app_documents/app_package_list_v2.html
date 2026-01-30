@@ -964,6 +964,7 @@
       <div class="flex gap-2 border-b border-gray-200">
         <button type="button" class="tab-btn active px-3 py-2 text-[10px] font-semibold text-emerald-700 border-b-2 border-emerald-600" data-tab-target="tab-create-package">Tạo thùng mới</button>
         <button type="button" class="tab-btn px-3 py-2 text-[10px] font-semibold text-gray-600 hover:text-emerald-700" data-tab-target="tab-update-partner">Cập nhật thùng đối tác</button>
+        <button type="button" class="tab-btn px-3 py-2 text-[10px] font-semibold text-gray-600 hover:text-emerald-700" data-tab-target="tab-export-packages">Xuất dữ liệu</button>
         <button type="button" class="tab-btn px-3 py-2 text-[10px] font-semibold text-gray-600 hover:text-emerald-700" data-tab-target="tab-bulk-create">Tạo thùng hàng loạt</button>
       </div>
     </div>
@@ -1028,6 +1029,27 @@
         </div>
         <div class="text-[9px] text-gray-500">
           Ghi chú: tối ưu file < 5MB, mẫu cột sẽ cung cấp sau.
+        </div>
+      </div>
+      <div id="tab-export-packages" class="tab-panel space-y-3 hidden text-[9px]">
+        <div class="p-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 text-gray-600">
+          Xuất danh sách thùng theo bộ lọc đang áp dụng trên màn hình. Nếu vừa đổi bộ lọc, vui lòng bấm "Lọc" trước khi xuất.
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="rounded-lg border border-gray-200 p-3">
+            <div class="text-[10px] font-semibold text-gray-700">Từ khóa</div>
+            <div id="export-filter-search" class="text-[9px] text-gray-600 mt-1">---</div>
+          </div>
+          <div class="rounded-lg border border-gray-200 p-3">
+            <div class="text-[10px] font-semibold text-gray-700">Trạng thái thùng</div>
+            <div id="export-filter-status" class="text-[9px] text-gray-600 mt-1">---</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" id="export-packages-btn" class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-[9px] font-semibold text-white hover:bg-emerald-700">
+            Tải file Excel
+          </button>
+          <span id="export-packages-msg" class="text-[9px] text-gray-600"></span>
         </div>
       </div>
       <div id="tab-bulk-create" class="tab-panel space-y-3 hidden text-[9px]">
@@ -1103,6 +1125,25 @@
     // Tabs
     const tabButtons = modalEl.querySelectorAll('.tab-btn');
     const tabPanels = modalEl.querySelectorAll('.tab-panel');
+    const exportBtn = modalEl.querySelector('#export-packages-btn');
+    const exportSearchEl = modalEl.querySelector('#export-filter-search');
+    const exportStatusEl = modalEl.querySelector('#export-filter-status');
+    const exportMsgEl = modalEl.querySelector('#export-packages-msg');
+    const statusOptionsRaw = JSON.parse(document.getElementById('status-options')?.textContent || '[]');
+    const statusById = {};
+    statusOptionsRaw.forEach(st => {
+      statusById[String(st.status_id)] = st.package_status_name || '';
+    });
+
+    const refreshExportFilters = () => {
+      const params = new URLSearchParams(window.location.search);
+      const searchVal = (params.get('package_search') || '').trim();
+      const statusVal = (params.get('status_id') || '').trim();
+      if (exportSearchEl) exportSearchEl.textContent = searchVal || '---';
+      if (exportStatusEl) exportStatusEl.textContent = statusById[statusVal] || (statusVal ? `#${statusVal}` : '---');
+      if (exportMsgEl) exportMsgEl.textContent = '';
+    };
+
     tabButtons.forEach(btn => {
       btn.addEventListener('click', () => {
         const target = btn.dataset.tabTarget;
@@ -1112,10 +1153,20 @@
         tabPanels.forEach(panel => panel.classList.add('hidden'));
         const targetEl = modalEl.querySelector(`#${target}`);
         if (targetEl) targetEl.classList.remove('hidden');
+        if (target === 'tab-export-packages') {
+          refreshExportFilters();
+        }
       });
     });
     // default active first tab
     if (tabButtons.length) tabButtons[0].click();
+
+    exportBtn?.addEventListener('click', () => {
+      refreshExportFilters();
+      const params = new URLSearchParams(window.location.search);
+      const url = `{% url 'package_list_export_v2' %}?${params.toString()}`;
+      window.location.href = url;
+    });
 
     // Auto suggest mã thùng theo Loại thùng + Ngày + Mã kho
     const typeSelect = modalEl.querySelector('#create-package-type');

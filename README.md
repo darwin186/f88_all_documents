@@ -1,6 +1,128 @@
 # documents
 # The system of management document
 
+## App Documents (app_documents) - Tổng quan A-Z
+
+### 1) Mục tiêu hệ thống
+Hệ thống quản lý chứng từ bản cứng gồm các luồng chính: **nhận chứng từ**, **duyệt chứng từ**, **quản lý thùng**, **chỉ tiêu/KPI**, và **mượn chứng từ**. Toàn bộ màn hình v2 dùng base/layout chung để đồng bộ UI.
+
+### 2) Ứng dụng chính
+- `app_documents`: nghiệp vụ chứng từ, nhận/duyệt, thùng, KPI, mượn.
+- `app_admindocuments`: cấp số văn bản hành chính/giấy tờ (khác mảng chứng từ).
+- `app_notification`: thông báo hệ thống (gửi, template).
+- `documents/`: project settings, urls, celery.
+
+### 3) Vai trò & phân quyền
+Lấy từ `app_documents/utils.py::get_user_context`:
+- **super_admin**: quyền cao nhất.
+- **admin**: quản trị hệ thống nghiệp vụ.
+- **checker**: cộng tác viên xử lý nhận/duyệt.
+- **shop**: người dùng cửa hàng.
+- **supervisor/manager/risk**: theo nhóm.
+
+Filter dữ liệu theo role dùng `app_documents/access_controls.py` (lọc region/shop).
+
+### 4) Điều hướng v2 (routes chính)
+- Nhận chứng từ v2: `/nhan-chung-tu-v2`
+- Duyệt chứng từ v2: `/duyet-chung-tu-v2`
+- Quản lý thùng: `/package-list-management`
+- Chỉ tiêu chứng từ: `/chi-tieu-chung-tu-v2` (admin)
+- Mượn chứng từ (tab): `/yeu-cau-muon-chung-tu-v2`, `/quan-ly-muon-chung-tu-v2`
+- Quản lý tài khoản CTV (online): `/quan-ly-tai-khoan-ctv` (admin)
+
+### 5) Dữ liệu & thực thể chính
+- **Folder (quyển)**: `Folder` (f_FolderDetail)
+- **Document (chứng từ)**: `DocumentsDetail` (f_DocumentsDetail)
+- **Package (thùng)**: `Package` (d_Package)
+- **FolderType/DocumentType/BusinessType**: danh mục loại
+- **FolderStatus/DocumentStatus**: trạng thái quyển/chứng từ
+- **BorrowingDocument/BorrowRequest**: mượn chứng từ
+- **Logs**: `FoldersTransactionReceiving`, `DocumentsTransactionChecking`, `PackageFolderHistory`, `PackageDocumentHistory`, `BorrowRequestLog`
+
+#### Trạng thái quyển (FolderStatus)
+Flag chính: `is_received`, `is_not_received_yet`, `is_borrow`, `is_lost`, `is_transfer`.
+
+#### Trạng thái chứng từ (DocumentStatus)
+Flag chính: `is_selectable` (đã nhận), `is_checked` (đã duyệt), `is_borrow` (đang mượn), `is_lost`.
+
+### 6) Luồng nghiệp vụ chính
+
+#### 6.1 Nhận chứng từ (v2)
+Trang: `/nhan-chung-tu-v2`.
+Luồng:
+1) Lọc quyển theo shop, loại, trạng thái, ngày.
+2) Nhập mã thùng F88 để nhận (validate package type).
+3) Cập nhật: `Folder.folder_status_id`, `lastest_received_date`, `lastest_received_by`, `package_id`.
+4) Ghi log:
+   - `FoldersTransactionReceiving` (trạng thái quyển)
+   - `PackageFolderHistory` (quyển ↔ thùng)
+   - `PackageDocumentHistory` (chứng từ ↔ thùng)
+5) Đồng bộ `DocumentsDetail.package_id` theo thùng.
+6) Check đúng hạn bằng `check_on_time()` (set `is_on_time`, `is_late`).
+
+#### 6.2 Duyệt chứng từ (v2)
+Trang: `/duyet-chung-tu-v2`.
+Luồng:
+1) Chọn trạng thái duyệt (CheckingTransactionStatus).
+2) Cập nhật `DocumentsDetail.status_id`, `lastest_checked_date`, `lastest_checked_by`.
+3) Chuyển `document_status_id` theo cờ `is_checked` (không hardcode code).
+4) Tạo log `DocumentsTransactionChecking`.
+5) Nếu trạng thái yêu cầu bổ sung (`is_request_additional`) thì tạo `CheckingAdditional`.
+6) Duyệt nhiều: chỉ cho phép chọn chứng từ cùng HDCC/GNN và chưa duyệt.
+
+#### 6.3 Quản lý thùng
+Trang: `/package-list-management`.
+- Tạo thùng theo chuẩn `{FolderType}-{yymmdd}-{region}{bb}`.
+- Validate thùng theo loại quyển, region.
+- Gỡ thùng v1: chỉ cho gỡ trong ngày, không có chứng từ đã duyệt.
+
+#### 6.4 KPI/Chỉ tiêu chứng từ
+Trang: `/chi-tieu-chung-tu-v2` (admin).
+- Dataset: các quyển gốc phát sinh (`is_issue=True` & `is_original=True`).
+- KPI dùng `DocumentKpiSetting` với các metric được bật.
+- Báo cáo theo: PGD, vùng/khu vực, theo tháng.
+- Hỗ trợ export dữ liệu chi tiết.
+
+#### 6.5 Mượn chứng từ (Borrow Request v2)
+Trang: `/yeu-cau-muon-chung-tu-v2`.
+Luồng:
+1) Tạo **Phiếu yêu cầu mượn** (BorrowRequest) với phòng ban, ngày mượn, hẹn trả, ticket/email...
+2) Gán chứng từ theo **contract_code/loan_code** (chỉ chứng từ đã duyệt, chưa mượn).
+3) **Bàn giao**: tạo `BorrowingDocument`, cập nhật `document_status_id` sang `is_borrow`.
+   - Khi bàn giao, chứng từ được gỡ khỏi thùng: `DocumentsDetail.package_id = None`.
+4) **Hoàn trả** (theo item hoặc theo phiếu): cập nhật legacy `BorrowingDocument` và trả lại `document_status_id` sang `is_checked`.
+5) Log đầy đủ `BorrowRequestLog`.
+
+### 7) Giao diện v2 (theme)
+Base: `app_documents/templates/app_documents/base_app_documents_v2.html`.
+Đặc trưng v2:
+- Font nhỏ (9–10px), input bo tròn, viền mỏng.
+- Filter và droplist đồng nhất với nhận/duyệt.
+- Drawer cho thao tác chi tiết (nhận/duyệt).
+- Toast thông báo (duyệt/nhận).
+
+### 8) API chính
+- `POST /api/folder/receive-v2/` nhận quyển v2
+- `POST /api/document/<id>/note/` cập nhật ghi chú
+- `POST /api/package/create-v2/` tạo thùng v2
+- `POST /api/borrow-requests/` tạo BorrowRequest từ hệ thống khác (API key)
+- `POST /api/heartbeat/` ping online user
+
+### 9) Online user / đo thời gian làm việc
+- Model: `UserPresenceDaily` (f_UserPresenceDaily)
+- Heartbeat chạy từ base v2 mỗi 60s.
+- Online window mặc định 5 phút.
+- Trang admin: `/quan-ly-tai-khoan-ctv`
+
+### 10) Cấu hình env liên quan
+Trong `documents/settings.py`:
+- `BORROW_REQUEST_API_KEY`
+- `USER_PRESENCE_ACTIVE_GAP`, `USER_PRESENCE_ONLINE_WINDOW`, `USER_PRESENCE_HEARTBEAT_SECONDS`
+- Celery/GAPO (xem phần Celery bên dưới)
+
+### 11) Quy ước versioning
+Các màn hình v2 có hậu tố `_v2` để tách khỏi v1 (route/template/JS).
+
 ## Celery (background tasks)
 This project now includes a basic Celery setup.
 

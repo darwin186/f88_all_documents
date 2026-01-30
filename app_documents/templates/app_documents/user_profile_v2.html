@@ -1,0 +1,197 @@
+{% extends "app_documents/base_app_documents_v2.html" %}
+
+{% block title %}Thông tin cá nhân{% endblock %}
+
+{% block top_nav %}
+  {% include "app_documents/components/top_nav_v2.html" %}
+{% endblock %}
+
+{% block main_extra_class %}pt-14{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.1/dist/cropper.min.css">
+<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
+  <div class="rounded-2xl border border-gray-200 bg-white p-4">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-[12px] font-semibold text-gray-900">Thông tin cá nhân</h1>
+        <p class="text-[9px] text-gray-500">Cập nhật ngày sinh và ảnh đại diện.</p>
+      </div>
+    </div>
+
+    {% if messages %}
+    <div class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[9px] text-emerald-700 space-y-1">
+      {% for message in messages %}
+        <div>{{ message }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" class="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4 text-[9px]">
+      {% csrf_token %}
+      <input type="hidden" name="remove_avatar" id="remove-avatar" value="0">
+      <div class="space-y-2 lg:col-span-1">
+        <div class="rounded-xl border border-gray-200 bg-gray-50 p-3 flex flex-col items-center gap-2">
+          {% if profile.avatar %}
+            <img src="{{ profile.avatar.url }}" alt="Avatar" class="h-16 w-16 rounded-none object-cover border border-gray-200" data-avatar-preview>
+          {% else %}
+            <div class="h-16 w-16 rounded-none bg-emerald-100 text-emerald-700 flex items-center justify-center text-[16px] font-semibold" data-avatar-placeholder>
+              {% if request.user.first_name or request.user.last_name %}
+                {{ request.user.first_name|default:request.user.last_name|slice:":1"|upper }}
+              {% else %}
+                {{ request.user.username|slice:":1"|upper }}
+              {% endif %}
+            </div>
+          {% endif %}
+          <label class="w-full">
+            <span class="block text-[9px] text-gray-500 mb-1">Ảnh đại diện</span>
+            <input type="file" id="avatar-input" name="avatar" accept="image/*" class="hidden" data-avatar-input>
+            <div class="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-2 py-1">
+              <label for="avatar-input" class="cursor-pointer rounded-md bg-gray-100 px-2 py-1 text-[8px] text-gray-700 hover:bg-gray-200">Chọn ảnh</label>
+              <span class="text-[8px] text-gray-400 truncate" data-avatar-filename>Chưa chọn file</span>
+            </div>
+          </label>
+          {% if profile.avatar %}
+          <button type="button" class="text-[8px] text-red-600" data-remove-avatar>Xóa ảnh</button>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 lg:col-span-2">
+        <div>
+          <label class="block text-[9px] text-gray-500 mb-1">Họ</label>
+          <input type="text" value="{{ request.user.last_name }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-gray-50" disabled>
+        </div>
+        <div>
+          <label class="block text-[9px] text-gray-500 mb-1">Tên</label>
+          <input type="text" value="{{ request.user.first_name }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-gray-50" disabled>
+        </div>
+        <div>
+          <label class="block text-[9px] text-gray-500 mb-1">Ngày sinh</label>
+          <input type="date" name="date_of_birth" value="{{ profile.date_of_birth|date:'Y-m-d' }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
+        </div>
+        <div>
+          <label class="block text-[9px] text-gray-500 mb-1">Email</label>
+          <input type="email" value="{{ request.user.email }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-gray-50" disabled>
+        </div>
+        <div>
+          <label class="block text-[9px] text-gray-500 mb-1">Tài khoản</label>
+          <input type="text" value="{{ request.user.username }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-gray-50" disabled>
+        </div>
+        <div>
+          <label class="block text-[9px] text-gray-500 mb-1">Mã nhân viên</label>
+          <input type="text" value="{{ profile.employee_code }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-gray-50" disabled>
+        </div>
+        <div class="md:col-span-2 flex justify-end pt-2">
+          <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[9px] font-semibold">Lưu thông tin</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 px-4" data-crop-modal>
+  <div class="w-full max-w-lg rounded-2xl bg-white p-4 shadow-lg">
+    <div class="flex items-center justify-between">
+      <h2 class="text-[11px] font-semibold text-gray-900">Cắt ảnh đại diện</h2>
+      <button type="button" class="text-[10px] text-gray-500" data-crop-close>Đóng</button>
+    </div>
+    <div class="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-2">
+      <img src="" alt="Crop" class="max-h-[320px] w-full object-contain" data-crop-image>
+    </div>
+    <div class="mt-4 flex items-center justify-end gap-2">
+      <button type="button" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-[9px]" data-crop-cancel>Hủy</button>
+      <button type="button" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[9px] font-semibold" data-crop-apply>Cắt ảnh</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/cropperjs@1.6.1/dist/cropper.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const removeBtn = document.querySelector('[data-remove-avatar]');
+    const removeInput = document.getElementById('remove-avatar');
+    const avatarInput = document.querySelector('[data-avatar-input]');
+    const previewImg = document.querySelector('[data-avatar-preview]');
+    const placeholder = document.querySelector('[data-avatar-placeholder]');
+    const fileNameEl = document.querySelector('[data-avatar-filename]');
+    const cropModal = document.querySelector('[data-crop-modal]');
+    const cropImage = document.querySelector('[data-crop-image]');
+    const cropClose = document.querySelector('[data-crop-close]');
+    const cropCancel = document.querySelector('[data-crop-cancel]');
+    const cropApply = document.querySelector('[data-crop-apply]');
+    let cropper = null;
+
+    if (!removeBtn || !removeInput) return;
+    removeBtn.addEventListener('click', () => {
+      removeInput.value = '1';
+      removeBtn.textContent = 'Đã chọn xóa ảnh';
+      removeBtn.classList.add('text-gray-400');
+    });
+
+    const closeCropper = () => {
+      if (cropper) {
+        cropper.destroy();
+        cropper = null;
+      }
+      if (cropModal) {
+        cropModal.classList.add('hidden');
+        cropModal.classList.remove('flex');
+      }
+      if (avatarInput) {
+        avatarInput.value = '';
+      }
+    };
+
+    const openCropper = (file) => {
+      if (!cropImage || !cropModal) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        cropImage.src = event.target.result;
+        cropModal.classList.remove('hidden');
+        cropModal.classList.add('flex');
+        cropper = new Cropper(cropImage, {
+          aspectRatio: 1,
+          viewMode: 1,
+          autoCropArea: 1,
+        });
+      };
+      reader.readAsDataURL(file);
+    };
+
+    if (avatarInput) {
+      avatarInput.addEventListener('change', (event) => {
+        const file = event.target.files && event.target.files[0];
+        if (fileNameEl) {
+          fileNameEl.textContent = file ? file.name : 'Chưa chọn file';
+        }
+        if (!file) return;
+        openCropper(file);
+      });
+    }
+
+    const applyCropped = () => {
+      if (!cropper || !avatarInput) return;
+      cropper.getCroppedCanvas({ width: 256, height: 256, fillColor: '#ffffff' })
+        .toBlob((blob) => {
+          if (!blob) return;
+          const file = new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(file);
+          avatarInput.files = dataTransfer.files;
+          if (previewImg) {
+            previewImg.src = URL.createObjectURL(blob);
+          }
+          if (placeholder) {
+            placeholder.classList.add('hidden');
+          }
+          closeCropper();
+        }, 'image/jpeg', 0.9);
+    };
+
+    cropClose?.addEventListener('click', closeCropper);
+    cropCancel?.addEventListener('click', closeCropper);
+    cropApply?.addEventListener('click', applyCropped);
+  });
+</script>
+{% endblock %}

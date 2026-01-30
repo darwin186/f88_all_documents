@@ -350,8 +350,27 @@ class AdmDocumentStatusForm(_MasterBaseForm):
 class AdmCompanyForm(_MasterBaseForm):
     class Meta:
         model = AdmCompany
-        fields = ["code", "name", "is_active"]
-        labels = {"code": "Mã công ty", "name": "Tên công ty", "is_active": "Đang dùng"}
+        fields = [
+            "code",
+            "name",
+            "badge_text_color",
+            "badge_bg_color",
+            "badge_logo_url",
+            "is_active",
+        ]
+        labels = {
+            "code": "Mã công ty",
+            "name": "Tên công ty",
+            "badge_text_color": "Màu chữ badge",
+            "badge_bg_color": "Màu nền badge",
+            "badge_logo_url": "Logo (URL)",
+            "is_active": "Đang dùng",
+        }
+        widgets = {
+            "badge_text_color": forms.TextInput(attrs={"type": "color"}),
+            "badge_bg_color": forms.TextInput(attrs={"type": "color"}),
+            "badge_logo_url": forms.URLInput(attrs={"placeholder": "https://..."}),
+        }
 
 
 class AdmDepartmentForm(_MasterBaseForm):

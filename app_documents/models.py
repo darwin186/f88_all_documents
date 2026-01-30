@@ -152,10 +152,17 @@ class UserProfile(models.Model):
     gapo_user_id = models.CharField(max_length=50, null=True, blank=True, unique=True)
     employee_code = models.CharField(max_length= 10, null= True, blank= True, unique= False, default= None)
     gender = models.ForeignKey(Gender, on_delete=models.SET_NULL, null=True, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    avatar = models.FileField(upload_to='avatars/', null=True, blank=True)
     class Meta:
         db_table = 'd_UserProfile' 
     def __str__(self):
         return self.user.username
+    @property
+    def get_avatar(self):
+        if self.avatar:
+            return self.avatar.url
+        return ""
     
 class FolderStatus(models.Model):
     folder_status_id = models.AutoField(primary_key=True)
@@ -421,6 +428,56 @@ class Folder(models.Model):
     
     def __str__(self):
         return self.folder_code
+
+# Danh mục lỗi quyển chứng từ
+class FolderIssueType(models.Model):
+    issue_type_id = models.AutoField(primary_key=True)
+    issue_type_name = models.CharField(max_length=255, unique=True)
+    is_active = models.BooleanField(default=True)
+    is_no_issue = models.BooleanField(default=False)
+    badge_color = models.CharField(max_length=20, null=True, blank=True)
+    sort_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        User,
+        db_column='created_by',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='folder_issue_types_created',
+    )
+    updated_by = models.ForeignKey(
+        User,
+        db_column='updated_by',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='folder_issue_types_updated',
+    )
+
+    class Meta:
+        db_table = 'd_FolderIssueType'
+        ordering = ['sort_order', 'issue_type_name']
+
+    def __str__(self):
+        return self.issue_type_name
+
+
+# Log lỗi quyển chứng từ
+class FolderIssue(models.Model):
+    issue_id = models.AutoField(primary_key=True)
+    folder = models.ForeignKey(Folder, db_column='folder_id', on_delete=models.CASCADE)
+    issue_type = models.ForeignKey(FolderIssueType, db_column='issue_type_id', on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(User, db_column='created_by', on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        db_table = 'f_FolderIssue'
+        unique_together = ('folder', 'issue_type')
+
+    def __str__(self):
+        return f"{self.folder.folder_code} - {self.issue_type.issue_type_name}"
 
 # Chi tiết chứng từ 
 class DocumentsDetail(models.Model):
@@ -724,4 +781,21 @@ class DocumentKpiSetting(models.Model):
 
     def __str__(self):
         return self.metric_name
+
+
+class UserPresenceDaily(models.Model):
+    user = models.ForeignKey(User, db_column='user_id', on_delete=models.CASCADE, related_name='presence_daily')
+    work_date = models.DateField()
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    total_active_seconds = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'f_UserPresenceDaily'
+        unique_together = ('user', 'work_date')
+        ordering = ['-work_date', '-last_seen_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.work_date}"
     

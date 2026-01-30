@@ -1,0 +1,594 @@
+{% extends "app_documents/base_app_documents_v2.html" %}
+
+{% block title %}Lịch làm việc{% endblock %}
+
+{% block top_nav %}
+  {% include "app_documents/components/top_nav_v2.html" %}
+{% endblock %}
+
+{% block main_extra_class %}pt-14{% endblock %}
+
+{% block content %}
+<style>
+  .ws-slot.ws-shift-1 { background: #d1fae5; border-color: #6ee7b7; }
+  .ws-slot.ws-shift-2 { background: #dbeafe; border-color: #93c5fd; }
+  .ws-slot.ws-shift-excess { background: #fee2e2; border-color: #fca5a5; }
+  .ws-block-1 { border-color: #a7f3d0; background: #ecfdf5; }
+  .ws-block-2 { border-color: #bfdbfe; background: #eff6ff; }
+</style>
+<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
+  {% include "app_workshift/components/sub_nav.html" %}
+  {% if is_admin %}
+  <div class="rounded-xl border border-gray-200 bg-white p-3 text-[9px]">
+    <form method="get" class="flex flex-wrap items-end gap-3">
+      <div>
+        <label class="block text-[9px] text-gray-500 mb-1">CTV</label>
+        <select name="user_id" class="rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
+          {% for user in ctv_users %}
+            <option value="{{ user.id }}" {% if user.id == selected_user.id %}selected{% endif %}>{{ user.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <input type="hidden" name="week_start" value="{{ week_start|date:"Y-m-d" }}">
+      <button type="submit" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[9px] font-semibold">Xem lịch</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="rounded-xl border border-gray-200 bg-white p-3 flex flex-wrap items-center gap-4 text-[9px]">
+    <div class="flex items-center gap-2 text-gray-700">
+      <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4.95 2.636a1 1 0 011.414 1.414l-.707.707a1 1 0 11-1.414-1.414l.707-.707zM18 9a1 1 0 010 2h-1a1 1 0 110-2h1zM4 9a1 1 0 110 2H3a1 1 0 110-2h1zm11.657 6.657a1 1 0 00-1.414 0l-.707.707a1 1 0 001.414 1.414l.707-.707a1 1 0 000-1.414zM10 15a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zm-4.95-2.364a1 1 0 010 1.414l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 0zM10 5a5 5 0 100 10 5 5 0 000-10z" />
+        </svg>
+      </span>
+      <span>Open: {{ policy_values.open_time|time:"H:i" }} sáng</span>
+    </div>
+    <div class="flex items-center gap-2 text-gray-700">
+      <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm1 8.414V6a1 1 0 10-2 0v5a1 1 0 00.553.894l3 1.5a1 1 0 10.894-1.788L11 10.414z" />
+        </svg>
+      </span>
+      <span>Close: {{ policy_values.close_time|time:"H:i" }} chiều</span>
+    </div>
+  </div>
+
+  {% if errors %}
+  <div class="rounded-xl border border-red-200 bg-red-50 p-3 text-[9px] text-red-700 space-y-1">
+    {% for err in errors %}
+      <div>{{ err }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if messages %}
+  <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[9px] text-emerald-700 space-y-1">
+    {% for message in messages %}
+      <div>{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <form method="post" class="space-y-4">
+    {% csrf_token %}
+    <div class="rounded-2xl border border-gray-200 bg-white p-4">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-[10px] font-semibold text-gray-700">Lịch tuần</p>
+        <p class="text-[8px] text-gray-500">Click hoặc kéo để chọn nhiều khung giờ.</p>
+        {% if is_locked and not is_admin %}
+          <span class="text-[9px] text-amber-600">Tuần đã submit, không chỉnh sửa.</span>
+        {% endif %}
+      </div>
+      <div class="grid grid-cols-1 xl:grid-cols-[1fr_280px] gap-4">
+        <div class="rounded-xl border border-gray-100 bg-gray-50 p-3 overflow-x-auto">
+          <div class="flex items-center justify-between mb-2 text-[9px]">
+            <a href="?week_start={{ prev_week|date:"Y-m-d" }}{% if is_admin %}&user_id={{ selected_user.id }}{% endif %}" class="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Tuần trước</a>
+            <span class="text-gray-500">Tuần {{ week_start|date:"d/m/Y" }} - {{ week_end|date:"d/m/Y" }}</span>
+            <a href="?week_start={{ next_week|date:"Y-m-d" }}{% if is_admin %}&user_id={{ selected_user.id }}{% endif %}" class="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Tuần sau</a>
+          </div>
+          <div class="grid grid-cols-[64px_repeat(5,minmax(0,1fr))] gap-1">
+            <button type="button" class="ws-day-clear rounded-lg border border-gray-200 bg-white px-2 py-1 text-[9px] font-semibold text-gray-600 hover:bg-gray-50">
+              Tổng tuần
+            </button>
+            {% for day in week_days %}
+              <button type="button" class="ws-day-btn rounded-lg border border-gray-200 bg-white px-2 py-1 text-[9px] font-semibold text-gray-700 hover:bg-emerald-50" data-day="{{ day|date:'Y-m-d' }}">
+                {{ day|date:"D" }}<br>{{ day|date:"d/m" }}
+              </button>
+            {% endfor %}
+            {% for slot in slot_times %}
+              <div class="text-[8px] text-gray-500 text-right pr-1">{{ slot }}</div>
+              {% for day in week_days %}
+                <button type="button" class="ws-slot h-7 rounded-md border border-gray-200 bg-white text-[8px]" data-day="{{ day|date:'Y-m-d' }}" data-time="{{ slot }}"></button>
+              {% endfor %}
+            {% endfor %}
+            {% if policy_values.close_time %}
+              <div class="text-[8px] text-gray-500 text-right pr-1">{{ policy_values.close_time|time:"H:i" }}</div>
+              {% for day in week_days %}
+                <div class="h-2"></div>
+              {% endfor %}
+            {% endif %}
+          </div>
+        </div>
+        <aside class="rounded-xl border border-gray-200 bg-white p-3 space-y-3 text-[9px]">
+          <div>
+            <p class="text-[9px] text-gray-500">Ngày đang chọn</p>
+            <p class="text-[11px] font-semibold text-gray-900 ws-selected-day">--</p>
+            <p class="text-[9px] text-gray-500 mt-1"><span class="ws-total-label">Tổng giờ ngày</span>: <span class="ws-day-total">0.00</span>h</p>
+          </div>
+          <div>
+            <p class="text-[9px] text-gray-500 mb-1">Ca đã chọn</p>
+            <ul class="ws-selected-blocks space-y-1 text-[9px] text-gray-700"></ul>
+            <p class="ws-selection-warning text-[8px] text-red-500 mt-1 hidden"></p>
+          </div>
+          <div class="border-t border-gray-100 pt-2">
+            <p class="text-[9px] text-gray-500">Tổng giờ tuần</p>
+            <p class="text-[11px] font-semibold text-gray-900">Đã lưu: <span class="ws-week-saved">{{ total_hours }}</span>h</p>
+            <p class="text-[9px] text-emerald-700">Đang chọn: <span class="ws-week-current">{{ total_hours }}</span>h</p>
+            <div class="mt-2">
+              <div class="flex items-center justify-between text-[8px] text-gray-500">
+                <span>Giới hạn tuần: {{ policy_values.max_hours_per_week }}h</span>
+                <span class="ws-week-percent">0%</span>
+              </div>
+              <div class="w-full bg-gray-200 rounded-full h-2 mt-1">
+                <div class="ws-week-bar h-2 rounded-full bg-emerald-500" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+          <div class="border-t border-gray-100 pt-2">
+            <p class="text-[9px] text-gray-500">Tổng giờ tháng ({{ month_start|date:"d/m" }} - {{ month_end|date:"d/m" }})</p>
+            <p class="text-[11px] font-semibold text-gray-900">Đã lưu: <span class="ws-month-saved">{{ month_hours }}</span>h</p>
+            <p class="text-[9px] text-emerald-700">Đang chọn: <span class="ws-month-current">{{ month_hours }}</span>h</p>
+            <div class="mt-2">
+              <div class="flex items-center justify-between text-[8px] text-gray-500">
+                <span>Giới hạn tháng: {{ policy_values.max_hours_per_month }}h</span>
+                <span class="ws-month-percent">0%</span>
+              </div>
+              <div class="w-full bg-gray-200 rounded-full h-2 mt-1">
+                <div class="ws-month-bar h-2 rounded-full bg-emerald-500" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+          <div class="pt-2 flex items-center gap-2">
+            <button name="action" value="draft" type="submit" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-[9px] font-semibold hover:bg-gray-50 flex-1" {% if is_locked and not is_admin %}disabled{% endif %}>Lưu nháp</button>
+            <button name="action" value="submit" type="submit" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[9px] font-semibold hover:bg-emerald-700 flex-1" {% if is_locked and not is_admin %}disabled{% endif %}>Submit</button>
+          </div>
+        </aside>
+      </div>
+      <div class="hidden">
+        {% for row in shift_rows %}
+          <input type="text" name="shift_{{ row.day_key }}_1_start" value="{{ row.shifts.1.start_time }}" data-hidden-shift="{{ row.day_key }}_1_start">
+          <input type="text" name="shift_{{ row.day_key }}_1_end" value="{{ row.shifts.1.end_time }}" data-hidden-shift="{{ row.day_key }}_1_end">
+          <input type="text" name="shift_{{ row.day_key }}_2_start" value="{{ row.shifts.2.start_time }}" data-hidden-shift="{{ row.day_key }}_2_start">
+          <input type="text" name="shift_{{ row.day_key }}_2_end" value="{{ row.shifts.2.end_time }}" data-hidden-shift="{{ row.day_key }}_2_end">
+        {% endfor %}
+      </div>
+    </div>
+  </form>
+</div>
+
+<script type="application/json" id="workshift-assignments">{{ assignment_map_json|safe }}</script>
+<script>
+  (function () {
+    const slots = document.querySelectorAll('.ws-slot');
+    const dayButtons = document.querySelectorAll('.ws-day-btn');
+    const selectedDayEl = document.querySelector('.ws-selected-day');
+    const selectedBlocksEl = document.querySelector('.ws-selected-blocks');
+    const dayTotalEl = document.querySelector('.ws-day-total');
+    const totalLabelEl = document.querySelector('.ws-total-label');
+    const clearDayBtn = document.querySelector('.ws-day-clear');
+    const warningEl = document.querySelector('.ws-selection-warning');
+    const weekCurrentEl = document.querySelector('.ws-week-current');
+    const monthCurrentEl = document.querySelector('.ws-month-current');
+    const weekBar = document.querySelector('.ws-week-bar');
+    const weekPercent = document.querySelector('.ws-week-percent');
+    const monthBar = document.querySelector('.ws-month-bar');
+    const monthPercent = document.querySelector('.ws-month-percent');
+    const weekLimit = parseFloat("{{ policy_values.max_hours_per_week }}") || 0;
+    const monthLimit = parseFloat("{{ policy_values.max_hours_per_month }}") || 0;
+    const weekSaved = parseFloat("{{ total_hours }}") || 0;
+    const monthSaved = parseFloat("{{ month_hours }}") || 0;
+    const policy = {
+      lunchStart: "{{ policy_values.lunch_start|time:'H:i' }}",
+      lunchEnd: "{{ policy_values.lunch_end|time:'H:i' }}",
+      stepMinutes: 30,
+    };
+    const maxShiftsPerDay = parseInt("{{ policy_values.max_shifts_per_day }}", 10) || 1;
+    const maxHoursPerDay = parseFloat("{{ policy_values.max_hours_per_day }}") || 0;
+    const maxShiftHours = maxShiftsPerDay ? (maxHoursPerDay / maxShiftsPerDay) : 0;
+    const maxShiftSlots = maxShiftHours ? Math.max(1, Math.floor((maxShiftHours * 60) / policy.stepMinutes)) : 0;
+    const assignments = JSON.parse(document.getElementById('workshift-assignments')?.textContent || '{}');
+    const daySelections = new Map();
+    let activeDay = null;
+    let isDragging = false;
+    let dragMode = 'add';
+
+    const parseMinutes = (val) => {
+      if (!val) return null;
+      const parts = val.split(':').map(Number);
+      if (parts.length < 2 || Number.isNaN(parts[0]) || Number.isNaN(parts[1])) return null;
+      return parts[0] * 60 + parts[1];
+    };
+
+    const formatTime = (mins) => {
+      const hh = String(Math.floor(mins / 60)).padStart(2, '0');
+      const mm = String(mins % 60).padStart(2, '0');
+      return `${hh}:${mm}`;
+    };
+
+    const getHiddenInput = (dayKey, shiftIndex, type) => {
+      return document.querySelector(`[data-hidden-shift="${dayKey}_${shiftIndex}_${type}"]`);
+    };
+
+    const isLunchSlot = (timeVal) => {
+      const t = parseMinutes(timeVal);
+      const start = parseMinutes(policy.lunchStart);
+      const end = parseMinutes(policy.lunchEnd);
+      if (t === null || start === null || end === null) return false;
+      return t >= start && t < end;
+    };
+
+    const setActiveDay = (dayKey) => {
+      activeDay = dayKey;
+      dayButtons.forEach(btn => {
+        const isActive = dayKey && btn.dataset.day === dayKey;
+        btn.classList.toggle('bg-emerald-50', isActive);
+        btn.classList.toggle('border-emerald-400', isActive);
+      });
+      if (selectedDayEl) {
+        if (!dayKey) {
+          selectedDayEl.textContent = 'Tổng tuần';
+        } else {
+          const labelBtn = Array.from(dayButtons).find(btn => btn.dataset.day === dayKey);
+          const labelText = labelBtn ? labelBtn.textContent.replace(/\s+/g, ' ').trim() : dayKey;
+          selectedDayEl.textContent = labelText || '--';
+        }
+      }
+      renderSelectedBlocks();
+    };
+
+    const ensureDaySet = (dayKey) => {
+      if (!daySelections.has(dayKey)) {
+        daySelections.set(dayKey, new Set());
+      }
+      return daySelections.get(dayKey);
+    };
+
+    const addRange = (dayKey, startVal, endVal) => {
+      const start = parseMinutes(startVal);
+      const end = parseMinutes(endVal);
+      if (start === null || end === null || end <= start) return;
+      const set = ensureDaySet(dayKey);
+      for (let t = start; t < end; t += policy.stepMinutes) {
+        const label = formatTime(t);
+        if (!isLunchSlot(label)) {
+          set.add(label);
+        }
+      }
+    };
+
+    const buildRawBlocks = (dayKey) => {
+      const times = Array.from(ensureDaySet(dayKey)).map(parseMinutes).filter(v => v !== null).sort((a, b) => a - b);
+      if (!times.length) return [];
+      const blocks = [];
+      let blockStart = times[0];
+      let prev = times[0];
+      let slotCount = 1;
+      let slotTimes = [times[0]];
+      for (let i = 1; i < times.length; i += 1) {
+        if (times[i] === prev + policy.stepMinutes) {
+          prev = times[i];
+          slotCount += 1;
+          slotTimes.push(times[i]);
+        } else {
+          blocks.push({ start: blockStart, end: prev + policy.stepMinutes, slots: slotTimes, slotCount });
+          blockStart = times[i];
+          prev = times[i];
+          slotCount = 1;
+          slotTimes = [times[i]];
+        }
+      }
+      blocks.push({ start: blockStart, end: prev + policy.stepMinutes, slots: slotTimes, slotCount });
+      return blocks;
+    };
+
+    const mergeLunchBlocks = (blocks) => {
+      const lunchStart = parseMinutes(policy.lunchStart);
+      const lunchEnd = parseMinutes(policy.lunchEnd);
+      if (!blocks.length || lunchStart === null || lunchEnd === null) return blocks;
+      const merged = [];
+      for (let i = 0; i < blocks.length; i += 1) {
+        const current = blocks[i];
+        const next = blocks[i + 1];
+        if (next && current.end === lunchStart && next.start === lunchEnd) {
+          merged.push({
+            start: current.start,
+            end: next.end,
+            slots: current.slots.concat(next.slots),
+            slotCount: current.slotCount + next.slotCount,
+          });
+          i += 1;
+        } else {
+          merged.push(current);
+        }
+      }
+      return merged;
+    };
+
+    const splitBlocksByLimit = (blocks) => {
+      if (!maxShiftSlots) return blocks;
+      const split = [];
+      blocks.forEach((block) => {
+        if (!block.slots || block.slots.length <= maxShiftSlots) {
+          split.push(block);
+          return;
+        }
+        for (let idx = 0; idx < block.slots.length; idx += maxShiftSlots) {
+          const chunk = block.slots.slice(idx, idx + maxShiftSlots);
+          split.push({
+            start: chunk[0],
+            end: chunk[chunk.length - 1] + policy.stepMinutes,
+            slots: chunk,
+            slotCount: chunk.length,
+          });
+        }
+      });
+      return split;
+    };
+
+    const buildBlocks = (dayKey) => {
+      const merged = mergeLunchBlocks(buildRawBlocks(dayKey));
+      const blocks = splitBlocksByLimit(merged);
+      return blocks.map((b) => ({
+        start: formatTime(b.start),
+        end: formatTime(b.end),
+        hours: ((b.slotCount * policy.stepMinutes) / 60),
+        slots: b.slots,
+      }));
+    };
+
+    const countContinuousBlocks = (dayKey) => {
+      return mergeLunchBlocks(buildRawBlocks(dayKey)).length;
+    };
+
+    const getSlotBlockMap = (dayKey) => {
+      const blocks = buildBlocks(dayKey);
+      const map = new Map();
+      blocks.forEach((block, idx) => {
+        (block.slots || []).forEach((mins) => {
+          map.set(formatTime(mins), idx + 1);
+        });
+      });
+      return map;
+    };
+
+    const updateHiddenInputs = (dayKey) => {
+      const blocks = buildBlocks(dayKey);
+      for (let idx = 1; idx <= maxShiftsPerDay; idx += 1) {
+        const startInput = getHiddenInput(dayKey, idx, 'start');
+        const endInput = getHiddenInput(dayKey, idx, 'end');
+        const block = blocks[idx - 1];
+        if (startInput) startInput.value = block ? block.start : '';
+        if (endInput) endInput.value = block ? block.end : '';
+      }
+    };
+
+    const updateTotals = () => {
+      let weekTotal = 0;
+      daySelections.forEach((set) => {
+        weekTotal += (set.size * policy.stepMinutes) / 60;
+      });
+      if (weekCurrentEl) {
+        weekCurrentEl.textContent = weekTotal.toFixed(2);
+      }
+      const monthTotal = Math.max(0, monthSaved - weekSaved + weekTotal);
+      if (monthCurrentEl) {
+        monthCurrentEl.textContent = monthTotal.toFixed(2);
+      }
+      const weekPct = weekLimit ? Math.min(100, (weekTotal / weekLimit) * 100) : 0;
+      const monthPct = monthLimit ? Math.min(100, (monthTotal / monthLimit) * 100) : 0;
+      if (weekBar) {
+        weekBar.style.width = `${weekPct.toFixed(0)}%`;
+        weekBar.className = `ws-week-bar h-2 rounded-full ${weekPct >= 100 ? 'bg-red-500' : weekPct >= 80 ? 'bg-amber-500' : 'bg-emerald-500'}`;
+      }
+      if (weekPercent) weekPercent.textContent = `${weekPct.toFixed(0)}%`;
+      if (monthBar) {
+        monthBar.style.width = `${monthPct.toFixed(0)}%`;
+        monthBar.className = `ws-month-bar h-2 rounded-full ${monthPct >= 100 ? 'bg-red-500' : monthPct >= 80 ? 'bg-amber-500' : 'bg-emerald-500'}`;
+      }
+      if (monthPercent) monthPercent.textContent = `${monthPct.toFixed(0)}%`;
+    };
+
+    const renderSelectedBlocks = () => {
+      if (!selectedBlocksEl) return;
+      selectedBlocksEl.innerHTML = '';
+      if (!activeDay) {
+        if (totalLabelEl) totalLabelEl.textContent = 'Tổng giờ tuần';
+        const weekTotal = Array.from(dayButtons).reduce((sum, btn) => {
+          const dayKey = btn.dataset.day;
+          const set = daySelections.get(dayKey) || new Set();
+          const hours = (set.size * policy.stepMinutes) / 60;
+          const labelText = btn.textContent.replace(/\s+/g, ' ').trim();
+          const li = document.createElement('li');
+          li.className = 'flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-2 py-1';
+          li.innerHTML = `<span>${labelText}</span><span class="text-gray-600">${hours.toFixed(2)}h</span>`;
+          selectedBlocksEl.appendChild(li);
+          return sum + hours;
+        }, 0);
+        if (dayTotalEl) dayTotalEl.textContent = weekTotal.toFixed(2);
+        if (warningEl) {
+          warningEl.textContent = '';
+          warningEl.classList.add('hidden');
+        }
+        return;
+      }
+
+      const blocks = buildBlocks(activeDay);
+      const dayHours = blocks.reduce((sum, block) => sum + block.hours, 0);
+      const continuousCount = countContinuousBlocks(activeDay);
+      if (totalLabelEl) totalLabelEl.textContent = 'Tổng giờ ngày';
+      if (dayTotalEl) {
+        dayTotalEl.textContent = dayHours.toFixed(2);
+      }
+      if (!blocks.length) {
+        selectedBlocksEl.innerHTML = '<li class="text-gray-400">Chưa chọn giờ.</li>';
+      } else {
+        blocks.slice(0, maxShiftsPerDay).forEach((block, idx) => {
+          const tasks = assignments?.[activeDay]?.[String(idx + 1)] || [];
+          const li = document.createElement('li');
+          li.className = `flex flex-col gap-1 rounded-lg border px-2 py-1 ${idx === 0 ? 'ws-block-1' : 'ws-block-2'}`;
+          li.innerHTML = `<div class="font-semibold text-gray-700">Ca ${idx + 1}: ${block.start} - ${block.end} (${block.hours.toFixed(2)}h)</div>`;
+          if (tasks.length) {
+            const taskWrap = document.createElement('div');
+            taskWrap.className = 'flex flex-wrap gap-1';
+            tasks.forEach((task) => {
+              const badge = document.createElement('span');
+              badge.className = 'rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 text-[8px]';
+              badge.textContent = `${task.task} (${task.hours}h)`;
+              taskWrap.appendChild(badge);
+            });
+            li.appendChild(taskWrap);
+          }
+          selectedBlocksEl.appendChild(li);
+        });
+      }
+      if (warningEl) {
+        if (continuousCount > 1) {
+          warningEl.textContent = 'Chỉ được chọn ca liên tục trong ngày.';
+          warningEl.classList.remove('hidden');
+        } else if (blocks.length > maxShiftsPerDay) {
+          warningEl.textContent = 'Bạn đã chọn quá số ca cho phép trong ngày.';
+          warningEl.classList.remove('hidden');
+        } else {
+          warningEl.textContent = '';
+          warningEl.classList.add('hidden');
+        }
+      }
+      updateHiddenInputs(activeDay);
+    };
+
+    const applySlotStyles = (dayKey) => {
+      const set = ensureDaySet(dayKey);
+      const blockMap = getSlotBlockMap(dayKey);
+      document.querySelectorAll(`.ws-slot[data-day="${dayKey}"]`).forEach((slot) => {
+        slot.classList.remove('ws-shift-1', 'ws-shift-2', 'ws-shift-excess');
+        if (!set.has(slot.dataset.time)) return;
+        const index = blockMap.get(slot.dataset.time) || 1;
+        if (index > maxShiftsPerDay) {
+          slot.classList.add('ws-shift-excess');
+        } else {
+          slot.classList.add(index === 1 ? 'ws-shift-1' : 'ws-shift-2');
+        }
+      });
+    };
+
+    const toggleSlot = (slot, shouldSelect) => {
+      const dayKey = slot.dataset.day;
+      const timeVal = slot.dataset.time;
+      if (!dayKey || !timeVal || slot.dataset.disabled === 'true') return;
+      const set = ensureDaySet(dayKey);
+      const beforeBlocks = countContinuousBlocks(dayKey);
+      if (shouldSelect) {
+        set.add(timeVal);
+      } else {
+        set.delete(timeVal);
+      }
+      const afterBlocks = countContinuousBlocks(dayKey);
+      if (afterBlocks > 1 && afterBlocks > beforeBlocks) {
+        if (shouldSelect) {
+          set.delete(timeVal);
+        } else {
+          set.add(timeVal);
+        }
+        applySlotStyles(dayKey);
+        updateTotals();
+        updateHiddenInputs(dayKey);
+        if (warningEl) {
+          warningEl.textContent = 'Chỉ được chọn ca liên tục trong ngày.';
+          warningEl.classList.remove('hidden');
+        }
+        return;
+      }
+      applySlotStyles(dayKey);
+      updateTotals();
+      updateHiddenInputs(dayKey);
+      if (dayKey === activeDay) {
+        renderSelectedBlocks();
+      }
+    };
+
+    slots.forEach((slot) => {
+      if (isLunchSlot(slot.dataset.time)) {
+        slot.dataset.disabled = 'true';
+        slot.classList.add('bg-gray-100', 'text-gray-300', 'cursor-not-allowed');
+        return;
+      }
+      slot.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        const dayKey = slot.dataset.day;
+        setActiveDay(dayKey);
+        const isSelected = slot.classList.contains('ws-shift-1') || slot.classList.contains('ws-shift-2') || slot.classList.contains('ws-shift-excess');
+        dragMode = isSelected ? 'remove' : 'add';
+        isDragging = true;
+        toggleSlot(slot, dragMode === 'add');
+      });
+      slot.addEventListener('mouseover', () => {
+        if (!isDragging) return;
+        toggleSlot(slot, dragMode === 'add');
+      });
+      slot.addEventListener('click', () => {
+        const dayKey = slot.dataset.day;
+        setActiveDay(dayKey);
+      });
+    });
+
+    document.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+
+    dayButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        setActiveDay(btn.dataset.day);
+      });
+    });
+
+    clearDayBtn?.addEventListener('click', () => {
+      setActiveDay(null);
+    });
+
+    document.querySelectorAll('[data-hidden-shift]').forEach((input) => {
+      const [dayKey, shiftIndex, type] = input.dataset.hiddenShift.split('_');
+      if (type !== 'start') return;
+      const startVal = input.value;
+      const endInput = getHiddenInput(dayKey, shiftIndex, 'end');
+      if (startVal && endInput?.value) {
+        addRange(dayKey, startVal, endInput.value);
+      }
+    });
+
+    daySelections.forEach((set, dayKey) => {
+      applySlotStyles(dayKey);
+    });
+
+    const renderTaskBadges = () => {
+      Object.entries(assignments).forEach(([dayKey, shiftData]) => {
+        Object.entries(shiftData).forEach(([shiftIndex, tasks]) => {
+          const startInput = getHiddenInput(dayKey, shiftIndex, 'start');
+          if (!startInput || !startInput.value) return;
+          const slot = document.querySelector(`.ws-slot[data-day="${dayKey}"][data-time="${startInput.value}"]`);
+          if (!slot) return;
+          slot.innerHTML = '';
+          const badge = document.createElement('span');
+          badge.className = 'block text-[7px] text-emerald-700 font-semibold';
+          badge.textContent = tasks.map(t => t.task).join(', ');
+          slot.appendChild(badge);
+        });
+      });
+    };
+
+    setActiveDay(null);
+    updateTotals();
+    renderTaskBadges();
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,112 @@
+{% extends 'app_documents/base_app_documents_v2.html' %}
+{% block title %}Quản lý tài khoản CTV{% endblock %}
+{% block top_nav %}
+  {% include 'app_documents/components/top_nav_v2.html' %}
+{% endblock %}
+{% block main_extra_class %}pt-14{% endblock %}
+
+{% block content %}
+<style>
+  body { font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size: 10px; }
+  .table-wrap table { font-size: 10px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 9999px; display: inline-block; }
+  .activity-bar { height: 6px; border-radius: 9999px; background: #e5e7eb; overflow: hidden; }
+  .activity-fill { height: 100%; border-radius: 9999px; background: linear-gradient(90deg, #10b981 0%, #34d399 100%); }
+  .activity-fill.offline { background: linear-gradient(90deg, #cbd5f5 0%, #a5b4fc 100%); }
+  .row-online { background: #f0fdf4; }
+</style>
+
+<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+    <div class="flex items-center justify-between">
+      <div>
+        <div class="text-xs font-semibold text-gray-900">Quản lý tài khoản CTV</div>
+        <div class="text-[9px] text-gray-500">Cập nhật theo heartbeat ({{ cutoff|date:"Y-m-d H:i" }} trở lại).</div>
+      </div>
+      <div class="text-[9px] text-gray-500">Ngày: {{ today|date:"Y-m-d" }}</div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+    <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+      <div class="text-[9px] uppercase text-gray-500">Đang online</div>
+      <div class="mt-1 text-xl font-semibold text-gray-900">{{ online_count }}/{{ total_count }}</div>
+      <div class="mt-2 activity-bar">
+        <div class="activity-fill" style="width: {{ online_ratio }}%;"></div>
+      </div>
+      <div class="mt-1 text-[9px] text-gray-500">Cửa sổ {{ cutoff|date:"H:i" }} trở lại</div>
+    </div>
+    <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+      <div class="text-[9px] uppercase text-gray-500">Offline</div>
+      <div class="mt-1 text-xl font-semibold text-gray-900">{{ offline_count }}</div>
+      <div class="mt-2 activity-bar">
+        <div class="activity-fill offline" style="width: {{ offline_ratio }}%;"></div>
+      </div>
+      <div class="mt-1 text-[9px] text-gray-500">Không ping gần đây</div>
+    </div>
+    <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+      <div class="text-[9px] uppercase text-gray-500">Tổng giờ hoạt động</div>
+      <div class="mt-1 text-xl font-semibold text-gray-900">{{ total_hours_sum }}h</div>
+      <div class="mt-1 text-[9px] text-gray-500">Tổng cộng hôm nay</div>
+    </div>
+    <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+      <div class="text-[9px] uppercase text-gray-500">Trạng thái realtime</div>
+      <div class="mt-1 flex items-center gap-2 text-[10px]">
+        <span class="status-dot bg-emerald-500"></span>
+        <span>Online</span>
+        <span class="status-dot bg-gray-300 ml-3"></span>
+        <span>Offline</span>
+      </div>
+      <div class="mt-2 text-[9px] text-gray-500">Dựa vào heartbeat gần nhất</div>
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden table-wrap">
+    <table class="min-w-full text-left">
+      <thead class="bg-gray-50 text-gray-600 uppercase">
+        <tr>
+          <th class="px-3 py-2">Người dùng</th>
+          <th class="px-3 py-2">Username</th>
+          <th class="px-3 py-2">Trạng thái</th>
+          <th class="px-3 py-2">Hoạt động</th>
+          <th class="px-3 py-2">Last seen</th>
+          <th class="px-3 py-2">Idle (phút)</th>
+          <th class="px-3 py-2">Giờ làm hôm nay</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for p in presences %}
+        <tr class="hover:bg-gray-50 {% if p.is_online %}row-online{% endif %}">
+          <td class="px-3 py-2 text-gray-900 font-semibold">
+            {% if p.user.last_name or p.user.first_name %}
+              {{ p.user.last_name }} {{ p.user.first_name }}
+            {% else %}
+              {{ p.user.username }}
+            {% endif %}
+          </td>
+          <td class="px-3 py-2 text-gray-700">{{ p.user.username }}</td>
+          <td class="px-3 py-2">
+            {% if p.is_online %}
+            <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[9px]">Online</span>
+            {% else %}
+            <span class="px-2 py-1 rounded-full bg-gray-100 text-gray-600 text-[9px]">Offline</span>
+            {% endif %}
+          </td>
+          <td class="px-3 py-2">
+            <div class="activity-bar">
+              <div class="activity-fill {% if not p.is_online %}offline{% endif %}" style="width: {{ p.activity_pct }}%;"></div>
+            </div>
+            <div class="text-[9px] text-gray-500 mt-1">{{ p.total_hours }}h</div>
+          </td>
+          <td class="px-3 py-2 text-gray-700">{{ p.last_seen_at|date:"Y-m-d H:i" }}</td>
+          <td class="px-3 py-2 text-gray-700">{% if p.idle_minutes is not None %}{{ p.idle_minutes }}{% else %}—{% endif %}</td>
+          <td class="px-3 py-2 text-gray-700">{{ p.total_hours }}h</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="px-3 py-4 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

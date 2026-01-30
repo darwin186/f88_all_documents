@@ -17,7 +17,7 @@ from django.utils import timezone, dateparse
 from django.utils.dateparse import parse_datetime
 from django.conf import settings
 from django.db import IntegrityError, transaction, connection
-from django.db.models import Count, Max, Q, Min, Prefetch
+from django.db.models import Count, Max, Q, Min, Prefetch, F
 from django.forms.models import model_to_dict
 from django.core.serializers.json import DjangoJSONEncoder
 from urllib.parse import urlencode
@@ -78,6 +78,9 @@ from .models import (
     BorrowRequest,
     BorrowRequestItem,
     BorrowRequestLog,
+    FolderIssueType,
+    FolderIssue,
+    UserPresenceDaily,
     BorrowRequestStatus,
     BorrowRequestItemStatus,
     GapoScheduledMessage
@@ -95,6 +98,44 @@ AI_STYLE_HINTS = {
     "friendly": "Viết thân thiện, gần gũi, rõ ràng, tránh từ ngữ quá trang trọng.",
     "fun": "Viết vui vẻ, dí dỏm, tích cực nhưng vẫn lịch sự.",
 }
+
+def _normalize_issue_type_ids(issue_type_ids_raw):
+    if not isinstance(issue_type_ids_raw, list):
+        return []
+    issue_type_ids = []
+    for item in issue_type_ids_raw:
+        try:
+            issue_type_ids.append(int(item))
+        except (TypeError, ValueError):
+            continue
+    seen = set()
+    unique_ids = []
+    for item in issue_type_ids:
+        if item in seen:
+            continue
+        seen.add(item)
+        unique_ids.append(item)
+    return unique_ids
+
+
+def _get_valid_issue_types(issue_type_ids):
+    if not issue_type_ids:
+        return [], 'Vui lòng chọn ít nhất 1 trạng thái lỗi.'
+    issue_types = list(FolderIssueType.objects.filter(is_active=True, issue_type_id__in=issue_type_ids))
+    if len(issue_types) != len(issue_type_ids):
+        return [], 'Trạng thái lỗi không hợp lệ.'
+    if any(t.is_no_issue for t in issue_types) and len(issue_types) > 1:
+        return [], 'Không thể chọn "Không lỗi" cùng các lỗi khác.'
+    return issue_types, None
+
+
+def _replace_folder_issues(folder, issue_types, user):
+    FolderIssue.objects.filter(folder_id=folder).delete()
+    if issue_types:
+        FolderIssue.objects.bulk_create([
+            FolderIssue(folder=folder, issue_type=issue_type, created_by=user)
+            for issue_type in issue_types
+        ])
 class CustomPasswordResetView(PasswordResetView):
     form_class = GapoPasswordResetForm
     email_template_name = 'registration/password_reset_email.html'
@@ -663,7 +704,7 @@ def checking_transaction_view_v2(request):
                         return JsonResponse({'success': False, 'error': noti_error}, status=400)
                     messages.add_message(request, messages.ERROR, noti_error)
                     return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
-            if message_success_content != '':
+            if message_success_content != '' and not is_ajax:
                 messages.add_message(request, messages.SUCCESS, message_success_content)
             if is_ajax:
                 documents_detail_instance_log = DocumentsDetail.objects.select_related(
@@ -935,10 +976,9 @@ def bulk_checking_document_view(request):
                         'document_status_is_selectable': updated_doc.document_status_id.is_selectable if updated_doc.document_status_id else False,
                         'document_status_is_checked': updated_doc.document_status_id.is_checked if updated_doc.document_status_id else False,
                     })
-                messages.success(request, f'Duyệt {len(selected_items)} quyển chứng từ thành công') 
                 return JsonResponse({'success': True, 'updated': updated_rows})
         except Exception as e:
-            messages.error(request, 'Có lỗi xảy ra, vui lòng thử lại sau')
+            # Không set messages cho JSON response để tránh tràn sang màn hình khác
             return JsonResponse({'success': False, 'error': 'Có lỗi xảy ra'} )
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
@@ -1303,6 +1343,7 @@ def receive_folder_view(request, template_name="app_documents/app_receivingtrans
         return render(request, template_name, context)
 
 
+@login_required
 def receive_folder_view_v2(request):
     """
     Trang nhận chứng từ ver2 (UI mới, layout giống package-list).
@@ -1327,7 +1368,8 @@ def receive_folder_view_v2(request):
     range_date = 30  # giới hạn 30 ngày
 
     region_shop_filter = AccessControls.filter_shop_region_based_on_role(user)
-    drop_list_shops = Shop.objects.filter(is_shop_active=True, for_borrow_only=False, **region_shop_filter).order_by('shop_name')
+    region_filter = AccessControls.get_filters_for_user(user)
+    drop_list_shops = Shop.objects.filter(is_shop_active=True, for_borrow_only=False, **region_filter).order_by('shop_name')
     drop_list_folder_status = FolderStatus.objects.filter(is_valid=True).order_by('folder_status_name')
     drop_list_folder_status_received = FolderStatus.objects.filter(is_received=True, is_valid=True).order_by('folder_status_name')
     drop_list_folder_type = FolderType.objects.filter(is_valid=True).order_by('folder_type_name')
@@ -1344,6 +1386,18 @@ def receive_folder_view_v2(request):
         cls=DjangoJSONEncoder,
         ensure_ascii=False,
     )
+    issue_palette = ['#f59e0b', '#10b981', '#3b82f6', '#f97316', '#ec4899', '#8b5cf6', '#14b8a6', '#94a3b8']
+    issue_types = FolderIssueType.objects.filter(is_active=True).order_by('sort_order', 'issue_type_name')
+    issue_type_options = []
+    for idx, issue in enumerate(issue_types):
+        color = issue.badge_color or issue_palette[idx % len(issue_palette)]
+        issue_type_options.append({
+            'id': issue.issue_type_id,
+            'name': issue.issue_type_name,
+            'color': color,
+            'is_no_issue': issue.is_no_issue,
+        })
+    issue_color_map = {opt['id']: opt['color'] for opt in issue_type_options}
 
     if choice_shop:
         if choice_shop.isdigit():
@@ -1429,6 +1483,18 @@ def receive_folder_view_v2(request):
     paginator = Paginator(folder_detail_qs, 25)
     page_number = request.GET.get('page')
     folder_detail = paginator.get_page(page_number)
+    folder_ids = [f.folder_id for f in folder_detail] if folder_detail else []
+    folder_issues_map = {}
+    if folder_ids:
+        for issue in FolderIssue.objects.select_related('issue_type').filter(folder_id__in=folder_ids):
+            issue_type = issue.issue_type
+            color = issue_color_map.get(issue_type.issue_type_id, issue_type.badge_color or issue_palette[0])
+            folder_issues_map.setdefault(str(issue.folder_id), []).append({
+                'id': issue_type.issue_type_id,
+                'name': issue_type.issue_type_name,
+                'color': color,
+                'is_no_issue': issue_type.is_no_issue,
+            })
 
     current = folder_detail.number if folder_detail else 1
     total_pages = paginator.num_pages if paginator else 1
@@ -1485,6 +1551,9 @@ def receive_folder_view_v2(request):
         'partners_active': partners_active,
         'partners_options_json': partners_options_json,
         'region_options_json': region_options_json,
+        'issue_type_options': issue_type_options,
+        'issue_types_json': json.dumps(issue_type_options, cls=DjangoJSONEncoder, ensure_ascii=False),
+        'folder_issues_json': json.dumps(folder_issues_map, cls=DjangoJSONEncoder, ensure_ascii=False),
         'filters': {
             'choice_shop': choice_shop,
             'choice_folder_code': choice_folder_code,
@@ -1517,6 +1586,7 @@ def api_receive_folder_update_v2(request):
     package_code = (payload.get('package_code') or "").strip()
     received_date_raw = (payload.get('received_date') or "").strip()
     redirect_url = payload.get('redirect_url') or request.META.get('HTTP_REFERER') or reverse('receiving_transaction_v2')
+    issue_type_ids = _normalize_issue_type_ids(payload.get('issue_type_ids') or [])
 
     if not folder_id or not folder_status_id:
         return JsonResponse({'error': 'Thiếu thông tin quyển hoặc trạng thái.'}, status=400)
@@ -1543,6 +1613,9 @@ def api_receive_folder_update_v2(request):
             folder = Folder.objects.select_for_update().get(folder_id=folder_id)
             package = Package.objects.select_related('package_type').get(package_code=package_code)
             folder_status = FolderStatus.objects.get(folder_status_id=folder_status_id)
+            issue_types, issue_error = _get_valid_issue_types(issue_type_ids)
+            if issue_error:
+                return JsonResponse({'error': issue_error}, status=400)
 
             folder_pkg_type = (folder.folder_type_id.package_type if folder.folder_type_id else None)
             package_pkg_type = (package.package_type.package_type if package.package_type else None)
@@ -1593,6 +1666,7 @@ def api_receive_folder_update_v2(request):
                     trans_created_date=receive_time,
                     trans_created_by=request.user,
                 )
+            _replace_folder_issues(folder, issue_types, request.user)
 
     except Folder.DoesNotExist:
         return JsonResponse({'error': 'Không tìm thấy quyển chứng từ.'}, status=404)
@@ -1697,6 +1771,7 @@ def bulk_receive_folder_view(request):
         package_choice = data.get('package_choice')
         folder_status_choice = data.get('folder_status_choice')
         folder_note_choice = data.get('folder_note_choice')
+        issue_type_ids = _normalize_issue_type_ids(data.get('issue_type_ids') or [])
         lasted_received_date_submit  = data.get('trueLastestReceiveDate')
         if lasted_received_date_submit == '':
             lasted_received_date_submit = timezone.now()
@@ -1711,6 +1786,9 @@ def bulk_receive_folder_view(request):
                 return JsonResponse({'success': False, 'error': 'Vui lòng nhập mã thùng.'})
             if not folder_status_choice:
                 return JsonResponse({'success': False, 'error': 'Vui lòng chọn trạng thái nhận.'})
+            issue_types, issue_error = _get_valid_issue_types(issue_type_ids)
+            if issue_error:
+                return JsonResponse({'success': False, 'error': issue_error})
 
             package_id_instance = Package.objects.select_related('package_type').get(package_code=package_choice)
             folder_status_instance = FolderStatus.objects.get(folder_status_id=folder_status_choice)
@@ -1766,8 +1844,9 @@ def bulk_receive_folder_view(request):
                             document_id = document,
                             package_id = package_id_instance,
                             trans_created_date=receive_time,
-                            trans_created_by=user )      
-                messages.success(request, f'Nhận {len(selected_folder)} quyển chứng từ thành công')         
+                            trans_created_by=user )
+                    _replace_folder_issues(folder, issue_types, user)
+                # Không set messages cho JSON response để tránh tràn sang màn hình khác
         except Package.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Mã thùng không tồn tại.'})
         except FolderStatus.DoesNotExist:
@@ -2131,6 +2210,58 @@ def package_list_management_view(request):
         'folder_type_options_json': folder_type_options_json,
     }
     return render(request, 'app_documents/app_package_list_v2.html', context)
+
+
+@login_required
+def export_package_list_v2(request):
+    user = request.user
+    user_context = get_user_context(user)
+    if not user_context['is_admin'] and not user_context['is_checker']:
+        messages.error(request, "Unauthorized access.")
+        return redirect('home')
+
+    search_term = request.GET.get('package_search', '').strip()
+    status_filter = request.GET.get('status_id', '').strip()
+    created_from = request.GET.get('created_from', '').strip()
+    created_to = request.GET.get('created_to', '').strip()
+
+    def _parse_input_date(val):
+        if not val:
+            return None
+        try:
+            return datetime.strptime(val, "%d/%m/%Y").date()
+        except ValueError:
+            return dateparse.parse_date(val)
+
+    filters = Q()
+    if search_term:
+        filters &= (
+            Q(package_code__icontains=search_term) |
+            Q(package_code_old__icontains=search_term) |
+            Q(partnerpackage__partner_package_code__icontains=search_term)
+        )
+    if status_filter:
+        filters &= Q(partnerpackage__status_id=status_filter)
+    start_date = _parse_input_date(created_from)
+    end_date = _parse_input_date(created_to)
+    if start_date:
+        filters &= Q(created_date__date__gte=start_date)
+    if end_date:
+        filters &= Q(created_date__date__lte=end_date)
+
+    queryset = Package.objects.select_related(
+        'partnerpackage',
+        'partnerpackage__partner',
+        'partnerpackage__status_id',
+        'package_type',
+        'region_id',
+        'created_by',
+    ).order_by('-created_date')
+
+    if filters.children:
+        queryset = queryset.filter(filters)
+
+    return export_packages_view(queryset)
 
 
 @login_required
@@ -3725,6 +3856,202 @@ def document_kpi_dashboard_v2(request):
                 'not_received_rate': 0.0,
             })
 
+    borrow_base_qs = BorrowingDocument.objects.select_related(
+        'borrow_status_id',
+        'borrower',
+        'documents_id',
+        'documents_id__loan_id',
+        'documents_id__contract_id',
+    ).filter(borrow_date__range=[start_date, end_date])
+
+    borrow_total_count = borrow_base_qs.count()
+    borrow_active_qs = borrow_base_qs.filter(borrow_status_id__flag_is_borrowing=True)
+    borrow_returned_qs = borrow_base_qs.filter(borrow_status_id__flag_return=True)
+    borrow_lost_qs = borrow_base_qs.filter(borrow_status_id__flag_is_lost=True)
+    borrow_active_count = borrow_active_qs.count()
+    borrow_returned_count = borrow_returned_qs.count()
+    borrow_lost_count = borrow_lost_qs.count()
+    borrow_overdue_count = borrow_active_qs.filter(appointment_date__lt=today).count()
+    borrow_overdue_rate = safe_rate(borrow_overdue_count, borrow_active_count)
+
+    borrow_on_time_count = borrow_returned_qs.filter(
+        return_date__isnull=False,
+        appointment_date__isnull=False,
+        return_date__lte=F('appointment_date'),
+    ).count()
+    borrow_late_count = borrow_returned_qs.filter(
+        return_date__isnull=False,
+        appointment_date__isnull=False,
+        return_date__gt=F('appointment_date'),
+    ).count()
+    borrow_on_time_rate = safe_rate(borrow_on_time_count, borrow_total_count)
+
+    borrow_pending_request_qs = BorrowRequest.objects.filter(
+        status__in=[BorrowRequestStatus.HANDED_OVER, BorrowRequestStatus.PARTIALLY_RETURNED],
+    )
+    borrow_pending_request_qs = borrow_pending_request_qs.filter(
+        created_at__date__range=[start_date, end_date]
+    )
+    borrow_pending_request_count = borrow_pending_request_qs.count()
+
+    borrow_by_borrower_raw = borrow_base_qs.values('borrower__shop_name').annotate(
+        total=Count('borrow_id'),
+        on_time=Count('borrow_id', filter=Q(
+            borrow_status_id__flag_return=True,
+            return_date__isnull=False,
+            appointment_date__isnull=False,
+            return_date__lte=F('appointment_date'),
+        )),
+        late=Count('borrow_id', filter=Q(
+            borrow_status_id__flag_return=True,
+            return_date__isnull=False,
+            appointment_date__isnull=False,
+            return_date__gt=F('appointment_date'),
+        )),
+        active=Count('borrow_id', filter=Q(borrow_status_id__flag_is_borrowing=True)),
+        overdue=Count('borrow_id', filter=Q(borrow_status_id__flag_is_borrowing=True, appointment_date__lt=today)),
+        loan_count=Count('documents_id__loan_id', distinct=True),
+        contract_count=Count('documents_id__contract_id', distinct=True),
+    ).order_by('-total')
+
+    borrow_by_borrower = []
+    for row in borrow_by_borrower_raw:
+        total = row['total'] or 0
+        overdue_rate = safe_rate(row['overdue'] or 0, row['active'] or 0)
+        borrow_by_borrower.append({
+            'borrower': row['borrower__shop_name'] or 'Không xác định',
+            'total': total,
+            'on_time': row['on_time'] or 0,
+            'late': row['late'] or 0,
+            'active': row['active'] or 0,
+            'overdue': row['overdue'] or 0,
+            'overdue_rate': overdue_rate,
+            'loan_count': row['loan_count'] or 0,
+            'contract_count': row['contract_count'] or 0,
+        })
+
+    borrow_pivot_raw = borrow_base_qs.annotate(
+        month=TruncMonth('borrow_date')
+    ).values('borrower__shop_name', 'month').annotate(
+        total=Count('borrow_id'),
+        on_time=Count('borrow_id', filter=Q(
+            borrow_status_id__flag_return=True,
+            return_date__isnull=False,
+            appointment_date__isnull=False,
+            return_date__lte=F('appointment_date'),
+        )),
+        late=Count('borrow_id', filter=Q(
+            borrow_status_id__flag_return=True,
+            return_date__isnull=False,
+            appointment_date__isnull=False,
+            return_date__gt=F('appointment_date'),
+        )),
+    ).order_by('borrower__shop_name', 'month')
+
+    borrow_pivot_rows = []
+    for row in borrow_pivot_raw:
+        month_label = row['month'].strftime('%Y-%m') if row['month'] else ''
+        borrow_pivot_rows.append({
+            'borrower': row['borrower__shop_name'] or 'Không xác định',
+            'month': month_label,
+            'total': row['total'] or 0,
+            'on_time': row['on_time'] or 0,
+            'late': row['late'] or 0,
+        })
+
+    borrow_month_rows = []
+    borrow_month_chart_rows = []
+    prev_borrow = None
+    for row in borrow_base_qs.annotate(month=TruncMonth('borrow_date')).values('month').annotate(
+        total=Count('borrow_id'),
+        on_time=Count('borrow_id', filter=Q(
+            borrow_status_id__flag_return=True,
+            return_date__isnull=False,
+            appointment_date__isnull=False,
+            return_date__lte=F('appointment_date'),
+        )),
+        late=Count('borrow_id', filter=Q(
+            borrow_status_id__flag_return=True,
+            return_date__isnull=False,
+            appointment_date__isnull=False,
+            return_date__gt=F('appointment_date'),
+        )),
+        overdue=Count('borrow_id', filter=Q(
+            borrow_status_id__flag_is_borrowing=True,
+            appointment_date__lt=today,
+        )),
+    ).order_by('month'):
+        label = row['month'].strftime('%Y-%m') if row['month'] else ''
+        total = row['total'] or 0
+        on_time = row['on_time'] or 0
+        late = row['late'] or 0
+        overdue = row['overdue'] or 0
+        borrow_month_rows.append({
+            'month': label,
+            'total': total,
+            'on_time': on_time,
+            'late': late,
+            'overdue': overdue,
+            'total_change_pct': change_pct(total, prev_borrow['total'] if prev_borrow else None),
+            'on_time_change_pct': change_pct(on_time, prev_borrow['on_time'] if prev_borrow else None),
+            'late_change_pct': change_pct(late, prev_borrow['late'] if prev_borrow else None),
+            'overdue_change_pct': change_pct(overdue, prev_borrow['overdue'] if prev_borrow else None),
+        })
+        prev_borrow = {'total': total, 'on_time': on_time, 'late': late, 'overdue': overdue}
+        if total:
+            borrow_month_chart_rows.append({
+                'month': label,
+                'on_time_rate': round((on_time / total) * 100, 2),
+                'late_rate': round((late / total) * 100, 2),
+                'overdue_rate': round((overdue / total) * 100, 2),
+            })
+        else:
+            borrow_month_chart_rows.append({
+                'month': label,
+                'on_time_rate': 0.0,
+                'late_rate': 0.0,
+                'overdue_rate': 0.0,
+            })
+
+    borrow_late_rows = []
+    for row in borrow_returned_qs.filter(
+        return_date__isnull=False,
+        appointment_date__isnull=False,
+        return_date__gt=F('appointment_date'),
+    ).select_related('borrower', 'documents_id', 'documents_id__loan_id', 'documents_id__contract_id').order_by('-return_date')[:200]:
+        borrow_late_rows.append({
+            'borrower': row.borrower.shop_name if row.borrower else 'Không xác định',
+            'note': row.note or '',
+            'documents_code': row.documents_id.documents_code if row.documents_id else '',
+            'contract_code': row.documents_id.contract_id.contract_code if row.documents_id and row.documents_id.contract_id else '',
+            'loan_code': row.documents_id.loan_id.loan_code if row.documents_id and row.documents_id.loan_id else '',
+            'appointment_date': row.appointment_date,
+            'return_date': row.return_date,
+        })
+
+    borrow_detail_rows = []
+    for row in borrow_base_qs.select_related(
+        'borrower', 'documents_id', 'documents_id__loan_id', 'documents_id__contract_id', 'borrow_status_id'
+    ).order_by('-borrow_date')[:300]:
+        on_time = False
+        late = False
+        if row.return_date and row.appointment_date:
+            on_time = row.return_date <= row.appointment_date
+            late = row.return_date > row.appointment_date
+        borrow_detail_rows.append({
+            'borrower': row.borrower.shop_name if row.borrower else 'Không xác định',
+            'documents_code': row.documents_id.documents_code if row.documents_id else '',
+            'contract_code': row.documents_id.contract_id.contract_code if row.documents_id and row.documents_id.contract_id else '',
+            'loan_code': row.documents_id.loan_id.loan_code if row.documents_id and row.documents_id.loan_id else '',
+            'borrow_date': row.borrow_date,
+            'appointment_date': row.appointment_date,
+            'return_date': row.return_date,
+            'status': row.borrow_status_id.borrow_status_name if row.borrow_status_id else '',
+            'note': row.note or '',
+            'on_time': on_time,
+            'late': late,
+        })
+
     context = {
         **user_context,
         'user': user,
@@ -3752,6 +4079,7 @@ def document_kpi_dashboard_v2(request):
         'region_area_breakdown': region_area_rows,
         'months_breakdown': month_rows,
         'months_chart_json': json.dumps(month_chart_rows, cls=DjangoJSONEncoder, ensure_ascii=False),
+        'borrow_months_chart_json': json.dumps(borrow_month_chart_rows, cls=DjangoJSONEncoder, ensure_ascii=False),
         'total_original_count': total_original_count,
         'total_issue_count': total_issue_count,
         'on_time_rate_all': on_time_rate_all,
@@ -3759,6 +4087,21 @@ def document_kpi_dashboard_v2(request):
         'not_received_rate_all': not_received_rate_all,
         'original_rate_all': original_rate_all,
         'issue_rate_all': issue_rate_all,
+        'borrow_total_count': borrow_total_count,
+        'borrow_active_count': borrow_active_count,
+        'borrow_returned_count': borrow_returned_count,
+        'borrow_lost_count': borrow_lost_count,
+        'borrow_overdue_count': borrow_overdue_count,
+        'borrow_overdue_rate': borrow_overdue_rate,
+        'borrow_on_time_count': borrow_on_time_count,
+        'borrow_late_count': borrow_late_count,
+        'borrow_on_time_rate': borrow_on_time_rate,
+        'borrow_pending_request_count': borrow_pending_request_count,
+        'borrow_by_borrower': borrow_by_borrower,
+        'borrow_pivot_rows': borrow_pivot_rows,
+        'borrow_months_breakdown': borrow_month_rows,
+        'borrow_late_rows': borrow_late_rows,
+        'borrow_detail_rows': borrow_detail_rows,
     }
     return render(request, "app_documents/app_document_kpi_v2.html", context)
 
@@ -4342,6 +4685,11 @@ def borrow_request_detail_v2(request, request_id):
 
     borrow_request = get_object_or_404(BorrowRequest, request_id=request_id)
     items = borrow_request.items.select_related('documents_id', 'legacy_borrowing').order_by('-created_at')
+    has_assigned_items = items.filter(documents_id__isnull=False).exists()
+    has_handover_items = items.filter(
+        status=BorrowRequestItemStatus.ASSIGNED,
+        documents_id__isnull=False,
+    ).exists()
     logs = borrow_request.logs.select_related('created_by', 'item').order_by('-created_at')
     status_labels = dict(BorrowRequestStatus.choices)
     status_flow = [
@@ -4530,7 +4878,10 @@ def borrow_request_detail_v2(request, request_id):
                     note=borrow_request.note,
                     borrow_status_id=borrow_status,
                 )
-                DocumentsDetail.objects.filter(documents_id=item.documents_id.documents_id).update(document_status_id=document_status_borrow)
+                DocumentsDetail.objects.filter(documents_id=item.documents_id.documents_id).update(
+                    document_status_id=document_status_borrow,
+                    package_id=None,
+                )
                 item.legacy_borrowing = legacy
                 item.status = BorrowRequestItemStatus.HANDED_OVER
                 item.handed_over_date = timezone.now()
@@ -4580,6 +4931,9 @@ def borrow_request_detail_v2(request, request_id):
             return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
         if action == 'cancel_request':
+            if has_assigned_items:
+                messages.error(request, 'Phiếu đã có chứng từ, không thể hủy.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
             from_status = borrow_request.status
             borrow_request.status = BorrowRequestStatus.CANCELLED
             borrow_request.updated_by = user
@@ -4642,6 +4996,8 @@ def borrow_request_detail_v2(request, request_id):
         'user': user,
         'borrow_request': borrow_request,
         'items': items,
+        'has_assigned_items': has_assigned_items,
+        'has_handover_items': has_handover_items,
         'logs': logs,
         'log_steps': log_steps,
         'preview_key': preview_key,
@@ -4706,6 +5062,72 @@ def api_borrow_request_create(request):
     )
     _borrow_request_log(borrow_request, 'create', None, BorrowRequestStatus.PENDING, user=user, meta={'source_system': source_system, 'external_ref': external_ref})
     return JsonResponse({'success': True, 'request_id': borrow_request.request_id})
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_user_heartbeat(request):
+    now = timezone.now()
+    work_date = now.date()
+    active_gap = getattr(settings, 'USER_PRESENCE_ACTIVE_GAP', 120)
+    presence, created = UserPresenceDaily.objects.get_or_create(
+        user=request.user,
+        work_date=work_date,
+        defaults={'last_seen_at': now},
+    )
+    if not created and presence.last_seen_at:
+        delta = (now - presence.last_seen_at).total_seconds()
+        if 0 < delta <= active_gap:
+            presence.total_active_seconds += int(delta)
+    presence.last_seen_at = now
+    presence.save(update_fields=['last_seen_at', 'total_active_seconds', 'updated_at'])
+    return JsonResponse({'success': True})
+
+
+@login_required
+def online_users_view(request):
+    user = request.user
+    user_context = get_user_context(user)
+    if not user_context['is_admin']:
+        return redirect('home')
+
+    now = timezone.now()
+    online_window = getattr(settings, 'USER_PRESENCE_ONLINE_WINDOW', 300)
+    cutoff = now - timedelta(seconds=online_window)
+    today = now.date()
+    presences = list(UserPresenceDaily.objects.select_related('user').filter(work_date=today).order_by('-last_seen_at'))
+    for presence in presences:
+        presence.is_online = bool(presence.last_seen_at and presence.last_seen_at >= cutoff)
+        presence.total_hours = round((presence.total_active_seconds or 0) / 3600, 2)
+        if presence.last_seen_at:
+            presence.idle_minutes = int((now - presence.last_seen_at).total_seconds() // 60)
+        else:
+            presence.idle_minutes = None
+    max_active_seconds = max([p.total_active_seconds or 0 for p in presences], default=0)
+    for presence in presences:
+        if max_active_seconds:
+            presence.activity_pct = round((presence.total_active_seconds or 0) * 100 / max_active_seconds, 1)
+        else:
+            presence.activity_pct = 0
+    total_count = len(presences)
+    online_count = sum(1 for p in presences if p.is_online)
+    total_hours_sum = round(sum((p.total_active_seconds or 0) for p in presences) / 3600, 2)
+    online_ratio = round((online_count / total_count) * 100, 1) if total_count else 0
+    offline_ratio = round(((total_count - online_count) / total_count) * 100, 1) if total_count else 0
+    context = {
+        **user_context,
+        'presences': presences,
+        'cutoff': cutoff,
+        'today': today,
+        'total_count': total_count,
+        'online_count': online_count,
+        'offline_count': total_count - online_count,
+        'total_hours_sum': total_hours_sum,
+        'max_active_seconds': max_active_seconds,
+        'online_ratio': online_ratio,
+        'offline_ratio': offline_ratio,
+    }
+    return render(request, 'app_documents/app_online_users_v2.html', context)
 
 @login_required
 def borrow_document_management_v2(request):
@@ -4872,5 +5294,40 @@ def manage_borrow_document(request, document_id, action):
             else:
                 return JsonResponse({'status': 'error', 'message': 'Invalid action'}, status=400)
             return JsonResponse({'status': 'Thao tác thành công?'})
-        return JsonResponse({'status': 'error', 'message': 'Không tìm thấy chứng từ mượn, hỏi Admin!'}, status=400)
+    return JsonResponse({'status': 'error', 'message': 'Không tìm thấy chứng từ mượn, hỏi Admin!'}, status=400)
     return JsonResponse({'status': 'error', 'message': 'Invalid request method'}, status=400)
+
+
+@login_required
+def user_profile_v2_view(request):
+    profile, _ = UserProfile.objects.get_or_create(
+        user=request.user,
+        defaults={'department': 'Chưa cập nhật'},
+    )
+    user_context = get_user_context(request.user)
+
+    if request.method == 'POST':
+        date_of_birth_raw = request.POST.get('date_of_birth', '').strip()
+        avatar_file = request.FILES.get('avatar')
+        remove_avatar = request.POST.get('remove_avatar') == '1'
+
+        profile.date_of_birth = dateparse.parse_date(date_of_birth_raw) if date_of_birth_raw else None
+
+        if remove_avatar and profile.avatar:
+            profile.avatar.delete(save=False)
+            profile.avatar = None
+
+        if avatar_file:
+            if profile.avatar:
+                profile.avatar.delete(save=False)
+            profile.avatar = avatar_file
+
+        profile.save(update_fields=['date_of_birth', 'avatar'])
+        messages.success(request, 'Đã cập nhật thông tin cá nhân.')
+        return redirect('user_profile_v2')
+
+    context = {
+        **user_context,
+        'profile': profile,
+    }
+    return render(request, 'app_documents/user_profile_v2.html', context)

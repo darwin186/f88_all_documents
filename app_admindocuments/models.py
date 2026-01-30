@@ -146,6 +146,9 @@ class AdmDocumentStatus(models.Model):
 class AdmCompany(models.Model):
     code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=255)
+    badge_text_color = models.CharField(max_length=20, blank=True, null=True)
+    badge_bg_color = models.CharField(max_length=20, blank=True, null=True)
+    badge_logo_url = models.URLField(max_length=500, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(

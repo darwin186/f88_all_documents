@@ -240,7 +240,7 @@
         <tbody id="folder-table-body" class="divide-y divide-gray-100">
           {% for folder_dtl in folder_detail %}
           {% with st=folder_dtl.folder_status_id %}
-          <tr class="cursor-pointer hover:bg-gray-50" data-folder-id="{{ folder_dtl.folder_id }}" data-code="{{ folder_dtl.folder_code }}" data-shop="{{ folder_dtl.shop_id.shop_name }}" data-type="{{ folder_dtl.folder_type_id.folder_type_name }}" data-created="{{ folder_dtl.folder_created_date|date:'Y-m-d' }}" data-received="{{ folder_dtl.lastest_received_date|date:'Y-m-d H:i' }}" data-status="{{ st.folder_status_name }}" data-status-id="{{ st.folder_status_id }}" data-status-color="{{ st.badge_color|default:'' }}" data-status-received="{{ st.is_received|yesno:'true,false' }}" data-is-original="{{ folder_dtl.is_original|yesno:'true,false' }}" data-note="{{ folder_dtl.note|default:'' }}" data-user="{{ folder_dtl.lastest_received_by|default:'' }}" data-package-code="{{ folder_dtl.package_id.package_code|default:'' }}" data-package-id="{{ folder_dtl.package_id.package_id|default:'' }}" data-partner-released="{% if folder_dtl.package_id and folder_dtl.package_id.partnerpackage and folder_dtl.package_id.partnerpackage.status_id and folder_dtl.package_id.partnerpackage.status_id.is_released %}true{% else %}false{% endif %}" data-clear-url="{% url 'clear_package' folder_dtl.folder_id %}">
+          <tr class="cursor-pointer hover:bg-gray-50" data-folder-id="{{ folder_dtl.folder_id }}" data-code="{{ folder_dtl.folder_code }}" data-shop="{{ folder_dtl.shop_id.shop_name }}" data-type="{{ folder_dtl.folder_type_id.folder_type_name }}" data-created="{{ folder_dtl.folder_created_date|date:'Y-m-d' }}" data-received="{{ folder_dtl.lastest_received_date|date:'Y-m-d H:i' }}" data-status="{{ st.folder_status_name }}" data-status-id="{{ st.folder_status_id }}" data-status-color="{{ st.badge_color|default:'' }}" data-status-received="{{ st.is_received|yesno:'true,false' }}" data-is-original="{{ folder_dtl.is_original|yesno:'true,false' }}" data-is-issue="{% if folder_dtl.is_issue %}true{% else %}false{% endif %}" data-note="{{ folder_dtl.note|default:'' }}" data-user="{{ folder_dtl.lastest_received_by|default:'' }}" data-package-code="{{ folder_dtl.package_id.package_code|default:'' }}" data-package-id="{{ folder_dtl.package_id.package_id|default:'' }}" data-partner-released="{% if folder_dtl.package_id and folder_dtl.package_id.partnerpackage and folder_dtl.package_id.partnerpackage.status_id and folder_dtl.package_id.partnerpackage.status_id.is_released %}true{% else %}false{% endif %}" data-clear-url="{% url 'clear_package' folder_dtl.folder_id %}">
             <td class="px-3 py-2 text-center">
               <input type="checkbox" class="row-checkbox h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" value="checkingitem{{ folder_dtl.folder_id }}" data-folder-code="{{ folder_dtl.folder_code }}" data-folder-created-date="{{ folder_dtl.folder_created_date|date:'Y-m-d' }}" data-package-type="{{ folder_dtl.folder_type_id.package_type|default:'' }}" data-disabled-received="{{ st.is_received|yesno:'true,false' }}" {% if st.is_received %}disabled{% endif %}>
             </td>
@@ -285,7 +285,12 @@
   <div class="flex items-start justify-between border-b border-gray-100 px-4 py-3">
     <div>
       <p class="text-[9px] uppercase text-gray-500">Chi tiết quyển</p>
-      <h3 id="drawer-folder-code" class="text-sm font-semibold text-gray-900"></h3>
+      <div class="flex items-center gap-2">
+        <h3 id="drawer-folder-code" class="text-sm font-semibold text-gray-900"></h3>
+        <span id="drawer-issue-flag" class="hidden inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[8px] font-semibold text-gray-900">
+          Phát sinh chứng từ
+        </span>
+      </div>
     </div>
     <div class="flex items-start gap-3">
       <div class="text-right">
@@ -327,6 +332,33 @@
           <p class="text-[9px] text-gray-500">Người nhận</p>
           <p id="drawer-user" class="font-semibold text-gray-900"></p>
         </div>
+      </div>
+      <div class="rounded-lg border border-gray-100 bg-gray-50 p-3">
+        <p class="text-[9px] text-gray-500 mb-1">Lỗi quyển</p>
+        <div class="relative">
+          <button type="button" id="drawer-issue-btn" class="w-full flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px] text-gray-700 focus:border-emerald-500">
+            <span>Chọn trạng thái lỗi</span>
+            <span class="text-gray-400 text-[10px]">▾</span>
+          </button>
+          <div id="drawer-issue-dropdown" class="hidden absolute z-30 mt-2 w-full rounded-xl border border-gray-200 bg-white shadow-lg p-2">
+            <div class="text-[9px] text-gray-500 mb-2">Chọn ít nhất 1 trạng thái</div>
+            <div class="max-h-40 overflow-y-auto space-y-1">
+              {% for issue in issue_type_options %}
+              <label class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-50 cursor-pointer">
+                <input type="checkbox" class="drawer-issue-option h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" value="{{ issue.id }}" data-name="{{ issue.name|escape }}" data-color="{{ issue.color }}" data-no-issue="{{ issue.is_no_issue|yesno:'true,false' }}">
+                <span class="inline-flex items-center gap-2 text-[9px] text-gray-700">
+                  <span class="w-2.5 h-2.5 rounded-full" style="background: {{ issue.color }};"></span>
+                  {{ issue.name }}
+                </span>
+              </label>
+              {% empty %}
+              <div class="text-[9px] text-gray-400 px-2">Chưa có cấu hình lỗi.</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        <div id="drawer-issue-chips" class="mt-2 flex flex-wrap gap-2"></div>
+        <div id="drawer-issue-error" class="text-[9px] text-red-600 hidden"></div>
       </div>
     <div class="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-2">
       <p class="text-[9px] uppercase text-gray-500">Cập nhật nhận</p>
@@ -431,6 +463,11 @@
   const clearBtn = document.getElementById('drawer-clear-package-btn');
   const saveBtn = document.getElementById('drawer-save-btn');
   const selectionTitle = document.getElementById('drawer-folder-code');
+  const issueFlag = document.getElementById('drawer-issue-flag');
+  const drawerIssueBtn = document.getElementById('drawer-issue-btn');
+  const drawerIssueDropdown = document.getElementById('drawer-issue-dropdown');
+  const drawerIssueChips = document.getElementById('drawer-issue-chips');
+  const drawerIssueError = document.getElementById('drawer-issue-error');
   const selectionList = document.getElementById('drawer-selection-list');
   const tabButtons = drawer?.querySelectorAll('[data-drawer-tab]') || [];
   const tabInfo = document.getElementById('drawer-tab-info');
@@ -456,6 +493,122 @@
   let drawerReceivePicker = null;
   let drawerAdditionalPicker = null;
   let lastHistoryFolderId = null;
+
+  const initIssuePicker = ({ button, dropdown, chips, error, optionSelector }) => {
+    const options = Array.from(dropdown?.querySelectorAll(optionSelector) || []);
+    const labelEl = button?.querySelector('span');
+    const hasOptions = options.length > 0;
+
+    const setError = (text) => {
+      if (!error) return;
+      if (!text) {
+        error.classList.add('hidden');
+        error.textContent = '';
+        return;
+      }
+      error.textContent = text;
+      error.classList.remove('hidden');
+    };
+
+    const updateButtonLabel = (count) => {
+      if (!labelEl) return;
+      if (!hasOptions) {
+        labelEl.textContent = 'Chưa có cấu hình lỗi';
+        return;
+      }
+      labelEl.textContent = count ? `Đã chọn ${count} trạng thái` : 'Chọn trạng thái lỗi';
+    };
+
+    const renderChips = (checked) => {
+      if (!chips) return;
+      chips.innerHTML = '';
+      checked.forEach(cb => {
+        const chip = document.createElement('span');
+        chip.className = 'inline-flex items-center rounded-full border border-gray-200 px-2 py-0.5 text-[8px] font-semibold text-gray-900';
+        chip.style.backgroundColor = cb.dataset.color || '#f1f5f9';
+        chip.textContent = cb.dataset.name || cb.value;
+        chips.appendChild(chip);
+      });
+    };
+
+    const updateState = () => {
+      const checked = options.filter(cb => cb.checked);
+      const hasNoIssue = checked.some(cb => cb.dataset.noIssue === 'true');
+      options.forEach(cb => {
+        if (!hasNoIssue) {
+          cb.disabled = false;
+          return;
+        }
+        cb.disabled = cb.dataset.noIssue !== 'true';
+        if (cb.disabled) cb.checked = false;
+      });
+      const refreshed = options.filter(cb => cb.checked);
+      renderChips(refreshed);
+      updateButtonLabel(refreshed.length);
+    };
+
+    const setSelectedIds = (ids) => {
+      const idSet = new Set((ids || []).map(id => String(id)));
+      options.forEach(cb => {
+        cb.checked = idSet.has(String(cb.value));
+        cb.disabled = false;
+      });
+      updateState();
+    };
+
+    const getSelectedIds = () => options
+      .filter(cb => cb.checked)
+      .map(cb => parseInt(cb.value, 10))
+      .filter(Number.isFinite);
+
+    const clearSelection = () => setSelectedIds([]);
+
+    if (button && dropdown) {
+      button.disabled = !hasOptions;
+      button.classList.toggle('opacity-50', !hasOptions);
+      button.classList.toggle('cursor-not-allowed', !hasOptions);
+      updateButtonLabel(0);
+      button.addEventListener('click', (e) => {
+        if (!hasOptions) return;
+        e.stopPropagation();
+        dropdown.classList.toggle('hidden');
+      });
+      document.addEventListener('click', (e) => {
+        if (!dropdown || dropdown.classList.contains('hidden')) return;
+        if (button.contains(e.target) || dropdown.contains(e.target)) return;
+        dropdown.classList.add('hidden');
+      });
+    }
+
+    options.forEach(cb => {
+      cb.addEventListener('change', () => {
+        updateState();
+        setError('');
+      });
+    });
+
+    updateState();
+
+    return {
+      hasOptions,
+      setError,
+      clearError: () => setError(''),
+      getSelectedIds,
+      setSelectedIds,
+      clearSelection,
+      closeDropdown: () => dropdown?.classList.add('hidden'),
+    };
+  };
+
+  const drawerIssuePicker = initIssuePicker({
+    button: drawerIssueBtn,
+    dropdown: drawerIssueDropdown,
+    chips: drawerIssueChips,
+    error: drawerIssueError,
+    optionSelector: '.drawer-issue-option',
+  });
+  window.initIssuePicker = initIssuePicker;
+  window.drawerIssuePicker = drawerIssuePicker;
 
   const setTabButtonState = (btn, isActive) => {
     btn.classList.toggle('text-emerald-700', isActive);
@@ -563,6 +716,16 @@
     document.getElementById('drawer-created').textContent = tr.dataset.created || '';
     document.getElementById('drawer-received').textContent = tr.dataset.received || '—';
     document.getElementById('drawer-user').textContent = tr.dataset.user || '';
+    if (issueFlag) {
+      const isIssue = (tr.dataset.isIssue || '').toLowerCase() === 'true';
+      issueFlag.classList.toggle('hidden', !isIssue);
+    }
+    if (drawerIssuePicker) {
+      const issues = (window.FOLDER_ISSUES_MAP?.[String(activeFolderId)] || []);
+      const issueIds = issues.map(item => item.id);
+      drawerIssuePicker.setSelectedIds(issueIds);
+      drawerIssuePicker.clearError();
+    }
     noteInput.value = tr.dataset.note || '';
     if (statusBadge) {
       const statusName = tr.dataset.status || '—';
@@ -688,6 +851,10 @@
       selectionTitle.textContent = `Đã chọn ${selected.length} quyển`;
       selectionList.classList.remove('hidden');
       noteInput.value = '';
+      if (drawerIssuePicker) {
+        drawerIssuePicker.clearSelection();
+        drawerIssuePicker.clearError();
+      }
       selected.forEach(tr => {
         const li = document.createElement('li');
         li.className = 'px-3 py-1 rounded border border-gray-200 bg-gray-50 text-[10px]';
@@ -795,6 +962,7 @@
     activeFolderId = null;
     activeRow = null;
     lastHistoryFolderId = null;
+    drawerIssuePicker?.closeDropdown();
   });
 
   // Validate shop required + date range <= 30 days for both date filters
@@ -876,6 +1044,7 @@
       activeFolderId = null;
       activeRow = null;
       lastHistoryFolderId = null;
+      drawerIssuePicker?.closeDropdown();
     }
   });
 
@@ -978,6 +1147,16 @@
     if (!activeFolderId) return;
     const statusVal = statusSelect?.value || '';
     const pkgVal = packageInput?.value?.trim() || '';
+    const issueIds = drawerIssuePicker?.getSelectedIds?.() || [];
+    if (!drawerIssuePicker?.hasOptions) {
+      drawerIssuePicker?.setError('Chưa có cấu hình lỗi để nhận.');
+      return;
+    }
+    if (!issueIds.length) {
+      drawerIssuePicker?.setError('Vui lòng chọn ít nhất 1 trạng thái lỗi.');
+      return;
+    }
+    drawerIssuePicker?.clearError();
     if (!statusVal) {
       setUpdateMsg('Vui lòng chọn trạng thái nhận.');
       return;
@@ -1001,6 +1180,7 @@
           folder_status_id: statusVal,
           package_code: pkgVal,
           received_date: receiveInput?.value || '',
+          issue_type_ids: issueIds,
           redirect_url: window.location.href,
         }),
       });
@@ -1070,8 +1250,12 @@
 
 <script type="application/json" id="partners-options">{{ partners_options_json|safe }}</script>
 <script type="application/json" id="regions-options">{{ region_options_json|safe }}</script>
+<script type="application/json" id="issue-types">{{ issue_types_json|safe }}</script>
+<script type="application/json" id="folder-issues-map">{{ folder_issues_json|safe }}</script>
 <script>
   window.CSRF_TOKEN = "{{ csrf_token }}";
+  window.ISSUE_TYPES = JSON.parse(document.getElementById('issue-types')?.textContent || '[]');
+  window.FOLDER_ISSUES_MAP = JSON.parse(document.getElementById('folder-issues-map')?.textContent || '{}');
 </script>
 
 <!-- Modal nhận nhiều (v2) -->
@@ -1104,6 +1288,33 @@
       <div>
         <label class="block text-[10px] font-semibold text-gray-700 mb-1">Mã thùng</label>
         <input id="bulk-package-code" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0" placeholder="Nhập mã thùng F88">
+      </div>
+      <div>
+        <label class="block text-[10px] font-semibold text-gray-700 mb-1">Lỗi quyển</label>
+        <div class="relative">
+          <button type="button" id="bulk-issue-btn" class="w-full flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px] text-gray-700 focus:border-emerald-500">
+            <span>Chọn trạng thái lỗi</span>
+            <span class="text-gray-400 text-[10px]">▾</span>
+          </button>
+          <div id="bulk-issue-dropdown" class="hidden absolute z-30 mt-2 w-full rounded-xl border border-gray-200 bg-white shadow-lg p-2">
+            <div class="text-[9px] text-gray-500 mb-2">Chọn ít nhất 1 trạng thái</div>
+            <div class="max-h-40 overflow-y-auto space-y-1">
+              {% for issue in issue_type_options %}
+              <label class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-gray-50 cursor-pointer">
+                <input type="checkbox" class="bulk-issue-option h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" value="{{ issue.id }}" data-name="{{ issue.name|escape }}" data-color="{{ issue.color }}" data-no-issue="{{ issue.is_no_issue|yesno:'true,false' }}">
+                <span class="inline-flex items-center gap-2 text-[9px] text-gray-700">
+                  <span class="w-2.5 h-2.5 rounded-full" style="background: {{ issue.color }};"></span>
+                  {{ issue.name }}
+                </span>
+              </label>
+              {% empty %}
+              <div class="text-[9px] text-gray-400 px-2">Chưa có cấu hình lỗi.</div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        <div id="bulk-issue-chips" class="mt-2 flex flex-wrap gap-2"></div>
+        <div id="bulk-issue-error" class="text-[9px] text-red-600 hidden"></div>
       </div>
       <div>
         <label class="block text-[10px] font-semibold text-gray-700 mb-1">Ghi chú</label>
@@ -1156,6 +1367,13 @@
     const noteEl = document.getElementById('bulk-note');
     const msgEl = document.getElementById('bulk-receive-msg');
     const submitEl = document.getElementById('bulk-receive-submit');
+    const bulkIssuePicker = window.initIssuePicker ? window.initIssuePicker({
+      button: document.getElementById('bulk-issue-btn'),
+      dropdown: document.getElementById('bulk-issue-dropdown'),
+      chips: document.getElementById('bulk-issue-chips'),
+      error: document.getElementById('bulk-issue-error'),
+      optionSelector: '.bulk-issue-option',
+    }) : null;
 
     const setBulkMsg = (text, isError = true) => {
       if (!msgEl) return;
@@ -1236,6 +1454,8 @@
         if (bulkReceivePicker && !dateEl.value) {
           bulkReceivePicker.setDate(new Date(), true);
         }
+        bulkIssuePicker?.clearSelection();
+        bulkIssuePicker?.clearError();
         setBulkMsg('');
         syncBulkValidation();
         showBulk();
@@ -1262,6 +1482,7 @@
       const codeVal = codeEl?.value?.trim() || '';
       const noteVal = noteEl?.value || '';
       const selectedItems = Array.from(document.querySelectorAll('.row-checkbox:checked')).map(cb => cb.value);
+      const issueIds = bulkIssuePicker?.getSelectedIds?.() || [];
       const selectedTypes = Array.from(new Set(
         Array.from(document.querySelectorAll('.row-checkbox:checked'))
           .map(cb => (cb.dataset.packageType || '').trim().toUpperCase())
@@ -1290,6 +1511,15 @@
         setBulkMsg('Vui lòng nhập mã thùng.');
         return;
       }
+      if (!bulkIssuePicker?.hasOptions) {
+        bulkIssuePicker?.setError('Chưa có cấu hình lỗi để nhận.');
+        return;
+      }
+      if (!issueIds.length) {
+        bulkIssuePicker?.setError('Vui lòng chọn ít nhất 1 trạng thái lỗi.');
+        return;
+      }
+      bulkIssuePicker?.clearError();
       setBulkMsg('');
       submitEl.disabled = true;
       submitEl.textContent = 'Đang nhận...';
@@ -1306,6 +1536,7 @@
             package_choice: codeVal,
             folder_status_choice: statusVal,
             folder_note_choice: noteVal,
+            issue_type_ids: issueIds,
           }),
         });
         const data = await resp.json();

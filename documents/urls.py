@@ -26,6 +26,7 @@ urlpatterns = [
 path('admin/', admin.site.urls),
 path("", include("app_documents.urls")),
 path("admindocuments/", include("app_admindocuments.urls")),
+path("lich-lam-viec/", include("app_workshift.urls")),
 path(
     "notifications/",
     include(("app_notification.urls", "app_notification"), namespace="app_notification"),

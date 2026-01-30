@@ -2,6 +2,12 @@
 {% block title %}Chi tiết văn bản{% endblock %}
 
 {% block content %}
+<style>
+  .inline-editor { display: none; }
+  .inline-editing .inline-display { display: none; }
+  .inline-editing .inline-editor { display: block; }
+  .inline-display { cursor: pointer; }
+</style>
 {% if messages %}
   <div class="space-y-2 mb-4">
     {% for message in messages %}
@@ -24,8 +30,6 @@
       {% csrf_token %}
       <button type="submit" class="bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-lg shadow">Vô hiệu</button>
     </form>
-    <button data-modal-target="editModal" data-modal-toggle="editModal"
-            class="bg-f88green hover:bg-f88dark text-white px-4 py-2 rounded-lg shadow">Edit</button>
   </div>
 </div>
 
@@ -141,16 +145,20 @@
   </div>
 </div>
 
-<div class="relative overflow-x-auto shadow-md sm:rounded-lg">
-  <table class="w-full text-sm text-left rtl:text-right text-gray-500">
-    <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-      <tr>
-        <th scope="col" class="px-6 py-3">Thuộc tính</th>
-        <th scope="col" class="px-6 py-3">Giá trị</th>
-        <th scope="col" class="px-6 py-3"><span class="sr-only">Edit</span></th>
-      </tr>
-    </thead>
-    <tbody>
+<div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div id="doc-detail"
+       data-update-url="{% url 'admindocuments:admindocuments_update_field' doc.id %}"
+       data-company-id="{{ doc.issuing_company_id }}"
+       class="relative overflow-x-auto shadow-md sm:rounded-lg lg:col-span-2">
+    <table class="w-full text-sm text-left rtl:text-right text-gray-500">
+      <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+        <tr>
+          <th scope="col" class="px-6 py-3">Thuộc tính</th>
+          <th scope="col" class="px-6 py-3">Giá trị</th>
+          <th scope="col" class="px-6 py-3"><span class="sr-only">Edit</span></th>
+        </tr>
+      </thead>
+      <tbody>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Số hiệu</th>
         <td class="px-6 py-4">
@@ -169,12 +177,26 @@
           <div class="text-xs text-blue-600 mt-1">Tham chiếu: {{ doc.reference_number }}</div>
           {% endif %}
         </td>
-        <td class="px-6 py-4 text-right"><a href="#" data-modal-target="editModal" data-modal-toggle="editModal" class="font-medium text-blue-600 hover:underline">Edit</a></td>
+        <td class="px-6 py-4 text-right"></td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Tiêu đề</th>
-        <td class="px-6 py-4">{{ doc.title }}</td>
-        <td class="px-6 py-4"></td>
+        <td class="px-6 py-4">
+          <div class="inline-edit" data-field="title">
+            <div class="inline-display" data-display>{{ doc.title }}</div>
+            <div class="inline-editor">
+              <input type="text" class="block w-full rounded-lg border border-gray-300 px-3 py-2" data-input value="{{ doc.title }}">
+              <div class="mt-2 flex gap-2">
+                <button type="button" class="inline-save px-3 py-1.5 bg-f88green text-white rounded">Lưu</button>
+                <button type="button" class="inline-cancel px-3 py-1.5 bg-gray-200 rounded">Hủy</button>
+              </div>
+              <p class="text-xs text-red-600 mt-1 hidden" data-error></p>
+            </div>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-right">
+          <button type="button" class="inline-edit-toggle text-blue-600 hover:underline">Sửa</button>
+        </td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Loại văn bản</th>
@@ -183,29 +205,81 @@
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Loại nội dung</th>
-        <td class="px-6 py-4">{{ doc.content_type.name }}</td>
-        <td class="px-6 py-4"></td>
+        <td class="px-6 py-4">
+          <div class="inline-edit" data-field="content_type">
+            <div class="inline-display" data-display>{{ doc.content_type.name }}</div>
+            <div class="inline-editor">
+              <select class="block w-full rounded-lg border border-gray-300 px-3 py-2" data-input>
+                {% for it in content_types %}
+                  <option value="{{ it.id }}" {% if doc.content_type_id == it.id %}selected{% endif %}>{{ it.name }}</option>
+                {% endfor %}
+              </select>
+              <div class="mt-2 flex gap-2">
+                <button type="button" class="inline-save px-3 py-1.5 bg-f88green text-white rounded">Lưu</button>
+                <button type="button" class="inline-cancel px-3 py-1.5 bg-gray-200 rounded">Hủy</button>
+              </div>
+              <p class="text-xs text-red-600 mt-1 hidden" data-error></p>
+            </div>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-right">
+          <button type="button" class="inline-edit-toggle text-blue-600 hover:underline">Sửa</button>
+        </td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Ngày ban hành</th>
         <td class="px-6 py-4">
-          {% if doc.issue_date %}{{ doc.issue_date|date:'d/m/Y' }}{% else %}{{ doc.created_at|date:'d/m/Y' }}{% endif %}
+          <div class="inline-edit" data-field="issue_date">
+            <div class="inline-display" data-display>
+              {% if doc.issue_date %}{{ doc.issue_date|date:'d/m/Y' }}{% else %}{{ doc.created_at|date:'d/m/Y' }}{% endif %}
+            </div>
+            <div class="inline-editor">
+              <input name="issue_date" datepicker datepicker-buttons datepicker-autoselect-today datepicker-format="dd/mm/yyyy" type="text"
+                     class="block w-full rounded-lg border border-gray-300 px-3 py-2" data-input
+                     value="{% if doc.issue_date %}{{ doc.issue_date|date:'d/m/Y' }}{% endif %}">
+              <div class="mt-2 flex gap-2">
+                <button type="button" class="inline-save px-3 py-1.5 bg-f88green text-white rounded">Lưu</button>
+                <button type="button" class="inline-cancel px-3 py-1.5 bg-gray-200 rounded">Hủy</button>
+              </div>
+              <p class="text-xs text-red-600 mt-1 hidden" data-error></p>
+            </div>
+          </div>
         </td>
-        <td class="px-6 py-4"></td>
+        <td class="px-6 py-4 text-right">
+          <button type="button" class="inline-edit-toggle text-blue-600 hover:underline">Sửa</button>
+        </td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Trạng thái</th>
         <td class="px-6 py-4">
-          <span class="px-2 py-1 text-xs font-semibold rounded
-            {% if doc.status.code == STATUS_ISSUED %} bg-green-100 text-green-800
-            {% elif doc.status.code == STATUS_DRAFT %} bg-yellow-100 text-yellow-800
-            {% elif doc.status.code == STATUS_PENDING %} bg-blue-100 text-blue-800
-            {% elif doc.status.code == STATUS_EXPIRED %} bg-red-100 text-red-800
-            {% else %} bg-gray-100 text-gray-700 {% endif %}">
-            {{ doc.status.name }}
-          </span>
+          <div class="inline-edit" data-field="status">
+            <div class="inline-display" data-display>
+              <span data-status-badge data-base-class="px-2 py-1 text-xs font-semibold rounded" class="px-2 py-1 text-xs font-semibold rounded
+                {% if doc.status.code == STATUS_ISSUED %} bg-green-100 text-green-800
+                {% elif doc.status.code == STATUS_DRAFT %} bg-yellow-100 text-yellow-800
+                {% elif doc.status.code == STATUS_PENDING %} bg-blue-100 text-blue-800
+                {% elif doc.status.code == STATUS_EXPIRED %} bg-red-100 text-red-800
+                {% else %} bg-gray-100 text-gray-700 {% endif %}">
+                {{ doc.status.name }}
+              </span>
+            </div>
+            <div class="inline-editor">
+              <select class="block w-full rounded-lg border border-gray-300 px-3 py-2" data-input>
+                {% for s in statuses %}
+                  <option value="{{ s.id }}" {% if doc.status_id == s.id %}selected{% endif %}>{{ s.name }} ({{ s.code }})</option>
+                {% endfor %}
+              </select>
+              <div class="mt-2 flex gap-2">
+                <button type="button" class="inline-save px-3 py-1.5 bg-f88green text-white rounded">Lưu</button>
+                <button type="button" class="inline-cancel px-3 py-1.5 bg-gray-200 rounded">Hủy</button>
+              </div>
+              <p class="text-xs text-red-600 mt-1 hidden" data-error></p>
+            </div>
+          </div>
         </td>
-        <td class="px-6 py-4"></td>
+        <td class="px-6 py-4 text-right">
+          <button type="button" class="inline-edit-toggle text-blue-600 hover:underline">Sửa</button>
+        </td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Công ty</th>
@@ -214,78 +288,191 @@
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Phòng ban</th>
-        <td class="px-6 py-4">{{ doc.issuing_department.name }}</td>
-        <td class="px-6 py-4"></td>
+        <td class="px-6 py-4">
+          <div class="inline-edit" data-field="issuing_department">
+            <div class="inline-display" data-display>{{ doc.issuing_department.name }}</div>
+            <div class="inline-editor">
+              <select class="block w-full rounded-lg border border-gray-300 px-3 py-2" data-input>
+                {% for it in departments %}
+                  <option value="{{ it.id }}" data-company="{{ it.company_id }}" {% if doc.issuing_department_id == it.id %}selected{% endif %}>
+                    {{ it.name }} ({{ it.company.code }})
+                  </option>
+                {% endfor %}
+              </select>
+              <div class="mt-2 flex gap-2">
+                <button type="button" class="inline-save px-3 py-1.5 bg-f88green text-white rounded">Lưu</button>
+                <button type="button" class="inline-cancel px-3 py-1.5 bg-gray-200 rounded">Hủy</button>
+              </div>
+              <p class="text-xs text-red-600 mt-1 hidden" data-error></p>
+            </div>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-right">
+          <button type="button" class="inline-edit-toggle text-blue-600 hover:underline">Sửa</button>
+        </td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Chức danh người ký</th>
-        <td class="px-6 py-4">{{ doc.signer_role.title }}</td>
-        <td class="px-6 py-4"></td>
+        <td class="px-6 py-4">
+          <div class="inline-edit" data-field="signer_role">
+            <div class="inline-display" data-display>{{ doc.signer_role.title }}</div>
+            <div class="inline-editor">
+              <select class="block w-full rounded-lg border border-gray-300 px-3 py-2" data-input>
+                {% for it in signer_roles %}
+                  <option value="{{ it.id }}" {% if doc.signer_role_id == it.id %}selected{% endif %}>{{ it.title }}</option>
+                {% endfor %}
+              </select>
+              <div class="mt-2 flex gap-2">
+                <button type="button" class="inline-save px-3 py-1.5 bg-f88green text-white rounded">Lưu</button>
+                <button type="button" class="inline-cancel px-3 py-1.5 bg-gray-200 rounded">Hủy</button>
+              </div>
+              <p class="text-xs text-red-600 mt-1 hidden" data-error></p>
+            </div>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-right">
+          <button type="button" class="inline-edit-toggle text-blue-600 hover:underline">Sửa</button>
+        </td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Số hiệu văn bản bổ sung/thay thế</th>
-        <td class="px-6 py-4">{{ doc.reference_number|default:'-' }}</td>
-        <td class="px-6 py-4"></td>
+        <td class="px-6 py-4">
+          <div class="inline-edit" data-field="reference_number">
+            <div class="inline-display" data-display>{{ doc.reference_number|default:'-' }}</div>
+            <div class="inline-editor">
+              <input type="text" class="block w-full rounded-lg border border-gray-300 px-3 py-2" data-input value="{{ doc.reference_number|default_if_none:'' }}">
+              <div class="mt-2 flex gap-2">
+                <button type="button" class="inline-save px-3 py-1.5 bg-f88green text-white rounded">Lưu</button>
+                <button type="button" class="inline-cancel px-3 py-1.5 bg-gray-200 rounded">Hủy</button>
+              </div>
+              <p class="text-xs text-red-600 mt-1 hidden" data-error></p>
+            </div>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-right">
+          <button type="button" class="inline-edit-toggle text-blue-600 hover:underline">Sửa</button>
+        </td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Ngày hiệu lực</th>
-        <td class="px-6 py-4">{{ doc.effective_date|date:'d/m/Y'|default:'-' }}</td>
-        <td class="px-6 py-4"></td>
+        <td class="px-6 py-4">
+          <div class="inline-edit" data-field="effective_date">
+            <div class="inline-display" data-display>{{ doc.effective_date|date:'d/m/Y'|default:'-' }}</div>
+            <div class="inline-editor">
+              <input name="effective_date" datepicker datepicker-buttons datepicker-autoselect-today datepicker-format="dd/mm/yyyy" type="text"
+                     class="block w-full rounded-lg border border-gray-300 px-3 py-2" data-input
+                     value="{{ doc.effective_date|date:'d/m/Y' }}">
+              <div class="mt-2 flex gap-2">
+                <button type="button" class="inline-save px-3 py-1.5 bg-f88green text-white rounded">Lưu</button>
+                <button type="button" class="inline-cancel px-3 py-1.5 bg-gray-200 rounded">Hủy</button>
+              </div>
+              <p class="text-xs text-red-600 mt-1 hidden" data-error></p>
+            </div>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-right">
+          <button type="button" class="inline-edit-toggle text-blue-600 hover:underline">Sửa</button>
+        </td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Ngày hết hiệu lực</th>
-        <td class="px-6 py-4">{{ doc.expiry_date|date:'d/m/Y'|default:'-' }}</td>
-        <td class="px-6 py-4"></td>
+        <td class="px-6 py-4">
+          <div class="inline-edit" data-field="expiry_date">
+            <div class="inline-display" data-display>{{ doc.expiry_date|date:'d/m/Y'|default:'-' }}</div>
+            <div class="inline-editor">
+              <input name="expiry_date" datepicker datepicker-buttons datepicker-autoselect-today datepicker-format="dd/mm/yyyy" type="text"
+                     class="block w-full rounded-lg border border-gray-300 px-3 py-2" data-input
+                     value="{{ doc.expiry_date|date:'d/m/Y' }}">
+              <div class="mt-2 flex gap-2">
+                <button type="button" class="inline-save px-3 py-1.5 bg-f88green text-white rounded">Lưu</button>
+                <button type="button" class="inline-cancel px-3 py-1.5 bg-gray-200 rounded">Hủy</button>
+              </div>
+              <p class="text-xs text-red-600 mt-1 hidden" data-error></p>
+            </div>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-right">
+          <button type="button" class="inline-edit-toggle text-blue-600 hover:underline">Sửa</button>
+        </td>
       </tr>
       <tr class="bg-white border-b border-gray-200 hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Tệp đính kèm</th>
         <td class="px-6 py-4">
-          {% if doc.attachment %}
-            <a href="{{ doc.attachment.url }}" target="_blank" class="text-blue-600 hover:underline">Tải tệp</a>
-          {% else %}-{% endif %}
+          <div class="flex flex-wrap items-center gap-3">
+            {% if doc.attachment %}
+              <span>Đã có tệp đính kèm</span>
+            {% else %}<span>-</span>{% endif %}
+            <span class="text-xs text-gray-500">Nếu lỗi tên file, vui lòng đổi tên rồi thử lại.</span>
+          </div>
         </td>
-        <td class="px-6 py-4"></td>
+        <td class="px-6 py-4 text-right">
+          <form method="post" action="{% url 'admindocuments:admindocuments_attachment_upload' doc.id %}" enctype="multipart/form-data" class="inline-flex items-center justify-end w-full">
+            {% csrf_token %}
+            <input id="inlineUploadInput" type="file" name="attachment" class="hidden" />
+            <label for="inlineUploadInput" class="inline-flex items-center justify-center w-9 h-9 rounded-full bg-f88green text-white hover:bg-f88dark cursor-pointer -mr-2" title="Tải file lên">
+              <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path d="M10 3l4 4h-3v6H9V7H6l4-4z"/>
+                <path d="M4 15a1 1 0 0 1 1-1h10a1 1 0 1 1 0 2H5a1 1 0 0 1-1-1z"/>
+              </svg>
+            </label>
+          </form>
+        </td>
       </tr>
       <tr class="bg-white hover:bg-gray-50">
         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">Ghi chú</th>
-        <td class="px-6 py-4 whitespace-pre-line">{{ doc.note|default:'-' }}</td>
-        <td class="px-6 py-4"></td>
+        <td class="px-6 py-4 whitespace-pre-line">
+          <div class="inline-edit" data-field="note">
+            <div class="inline-display" data-display>{{ doc.note|default:'-' }}</div>
+            <div class="inline-editor">
+              <textarea rows="3" class="block w-full rounded-lg border border-gray-300 px-3 py-2" data-input>{{ doc.note|default_if_none:'' }}</textarea>
+              <div class="mt-2 flex gap-2">
+                <button type="button" class="inline-save px-3 py-1.5 bg-f88green text-white rounded">Lưu</button>
+                <button type="button" class="inline-cancel px-3 py-1.5 bg-gray-200 rounded">Hủy</button>
+              </div>
+              <p class="text-xs text-red-600 mt-1 hidden" data-error></p>
+            </div>
+          </div>
+        </td>
+        <td class="px-6 py-4 text-right">
+          <button type="button" class="inline-edit-toggle text-blue-600 hover:underline">Sửa</button>
+        </td>
       </tr>
-    </tbody>
-  </table>
-</div>
+      </tbody>
+    </table>
+  </div>
 
-<div class="mt-6 bg-white shadow-sm rounded-lg p-4">
-  <h3 class="text-lg font-semibold text-gray-800 mb-4">Lịch sử trạng thái</h3>
-  {% if status_history %}
-  <ol class="relative border-s border-gray-200">
-    {% for item in status_history %}
-    <li class="mb-6 ms-6">
-      {% with ns=item.new_status|default:""|lower %}
-      <span class="absolute flex items-center justify-center w-6 h-6 rounded-full -start-3 ring-8 ring-white
-        {% if ns|slice:':11' == 'đã ban hành' or ns|slice:':6' == 'issued' %}bg-green-100 text-green-700
-        {% elif ns|slice:':4' == 'nháp' or ns|slice:':5' == 'draft' %}bg-amber-100 text-amber-700
-        {% elif ns|slice:':13' == 'hết hiệu lực' or ns|slice:':7' == 'expired' %}bg-gray-200 text-gray-700
-        {% else %}bg-blue-100 text-blue-700{% endif %}">
-      {% endwith %}
-        <svg class="w-3 h-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
-      </span>
-      <div class="flex items-center gap-2 text-xs text-gray-600">
-        <time class="bg-gray-100 border border-gray-200 text-gray-800 font-medium px-2 py-0.5 rounded">{{ item.timestamp|date:"d/m/Y H:i" }}</time>
-        {% if item.user %}<span>• {{ item.user.get_full_name|default:item.user.username }}</span>{% endif %}
-      </div>
-      <h4 class="mt-2 text-sm font-semibold text-gray-800">
-        {% if item.type == 'created' %}Tạo mới{% else %}Đổi trạng thái{% endif %} → {{ item.new_status|default:"(Không rõ)" }}
-      </h4>
-      {% if item.old_status %}
-      <p class="text-xs text-gray-500">Từ: {{ item.old_status }}</p>
-      {% endif %}
-    </li>
-    {% endfor %}
-  </ol>
-  {% else %}
-  <p class="text-sm text-gray-500">Chưa có lịch sử trạng thái.</p>
-  {% endif %}
+  <div class="bg-white shadow-sm rounded-lg p-4 lg:col-span-1">
+    <h3 class="text-lg font-semibold text-gray-800 mb-4">Lịch sử trạng thái</h3>
+    {% if status_history %}
+    <ol class="relative border-s border-gray-200 ps-4">
+      {% for item in status_history %}
+      <li class="mb-6 ms-4">
+        {% with ns=item.new_status|default:""|lower %}
+        <span class="absolute flex items-center justify-center w-6 h-6 rounded-full start-0 -translate-x-1/2 ring-8 ring-white
+          {% if ns|slice:':11' == 'đã ban hành' or ns|slice:':6' == 'issued' %}bg-green-100 text-green-700
+          {% elif ns|slice:':4' == 'nháp' or ns|slice:':5' == 'draft' %}bg-amber-100 text-amber-700
+          {% elif ns|slice:':13' == 'hết hiệu lực' or ns|slice:':7' == 'expired' %}bg-gray-200 text-gray-700
+          {% else %}bg-blue-100 text-blue-700{% endif %}">
+        {% endwith %}
+          <svg class="w-3 h-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
+        </span>
+        <div class="flex items-center gap-2 text-xs text-gray-600">
+          <time class="bg-gray-100 border border-gray-200 text-gray-800 font-medium px-2 py-0.5 rounded">{{ item.timestamp|date:"d/m/Y H:i" }}</time>
+          {% if item.user %}<span>• {{ item.user.get_full_name|default:item.user.username }}</span>{% endif %}
+        </div>
+        <h4 class="mt-2 text-sm font-semibold text-gray-800">
+          {% if item.type == 'created' %}Tạo mới{% else %}Đổi trạng thái{% endif %} → {{ item.new_status|default:"(Không rõ)" }}
+        </h4>
+        {% if item.old_status %}
+        <p class="text-xs text-gray-500">Từ: {{ item.old_status }}</p>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="text-sm text-gray-500">Chưa có lịch sử trạng thái.</p>
+    {% endif %}
+  </div>
 </div>
 
 <div class="mt-6 bg-white shadow-sm rounded-lg p-4">
@@ -348,154 +535,19 @@
   </table>
 </div>
 
-<div id="editModal" tabindex="-1" aria-hidden="true"
-     class="fixed inset-0 z-50 hidden bg-black/40 flex justify-center items-center">
-  <div class="relative p-4 w-full max-w-2xl max-h-full">
-    <div class="relative bg-white rounded-lg shadow">
-      <div class="flex justify-between items-center p-4 border-b rounded-t">
-        <h3 class="text-xl font-semibold text-gray-900">Cập nhật văn bản</h3>
-        <button type="button" data-modal-hide="editModal"
-                class="text-gray-400 hover:text-gray-900 rounded-lg text-sm p-2 ml-auto inline-flex items-center">×</button>
-      </div>
-      <div class="p-6 space-y-4">
-        <form method="post" action="{% url 'admindocuments:admindocuments_update' doc.id %}" enctype="multipart/form-data" class="grid grid-cols-2 gap-4" x-data="{ attachmentMode: 'file' }">
-          {% csrf_token %}
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Loại văn bản</label>
-            <input type="hidden" name="doc_type" value="{{ form.instance.doc_type_id }}">
-            <select name="doc_type" class="block w-full rounded-lg border border-gray-300 px-3 py-2 bg-gray-100 cursor-not-allowed" disabled>
-              {% for it in doc_types %}
-                <option value="{{ it.id }}" {% if form.instance.doc_type_id == it.id %}selected{% endif %}>{{ it.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Loại nội dung</label>
-            <select name="content_type" class="block w-full rounded-lg border border-gray-300 px-3 py-2">
-              {% for it in content_types %}
-                <option value="{{ it.id }}" {% if form.instance.content_type_id == it.id %}selected{% endif %}>{{ it.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-span-2">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Tiêu đề</label>
-            <input type="text" name="title" value="{{ form.instance.title }}" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Người ký</label>
-            <select name="signer_role" class="block w-full rounded-lg border border-gray-300 px-3 py-2">
-              {% for it in signer_roles %}
-                <option value="{{ it.id }}" {% if form.instance.signer_role_id == it.id %}selected{% endif %}>{{ it.title }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Số hiệu văn bản bổ sung/thay thế</label>
-            <input type="text" name="reference_number" value="{{ form.instance.reference_number|default_if_none:'' }}" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Tham chiếu tới văn bản</label>
-            <select name="reference_document" class="block w-full rounded-lg border border-gray-300 px-3 py-2">
-              <option value="">-- Chọn văn bản --</option>
-              {% for it in reference_docs %}
-                <option value="{{ it.id }}" {% if form.instance.reference_document_id == it.id %}selected{% endif %}>{{ it.document_number_full }} - {{ it.title }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Công ty ban hành</label>
-            <input type="hidden" name="issuing_company" value="{{ form.instance.issuing_company_id }}">
-            <select id="issuingCompanyEdit" name="issuing_company" class="block w-full rounded-lg border border-gray-300 px-3 py-2 bg-gray-100 cursor-not-allowed" disabled>
-              {% for it in companies %}
-                <option value="{{ it.id }}" {% if form.instance.issuing_company_id == it.id %}selected{% endif %}>{{ it.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Phòng ban</label>
-            <select id="issuingDepartmentEdit" name="issuing_department" class="block w-full rounded-lg border border-gray-300 px-3 py-2">
-              {% for it in departments %}
-                <option value="{{ it.id }}" data-company="{{ it.company_id }}" {% if form.instance.issuing_department_id == it.id %}selected{% endif %}>{{ it.name }} ({{ it.company.code }})</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ngày ban hành</label>
-            <div class="relative">
-              <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
-              </div>
-              <input name="issue_date" datepicker datepicker-buttons datepicker-autoselect-today datepicker-format="dd/mm/yyyy" type="text" value="{{ doc.issue_date|default:doc.created_at|date:'d/m/Y' }}" class="block w-full pl-9 pr-3 py-2.5 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-f88green focus:border-f88green placeholder:text-gray-500" placeholder="dd/mm/yyyy" />
-            </div>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ngày hiệu lực</label>
-            <div class="relative">
-              <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
-              </div>
-              <input name="effective_date" datepicker datepicker-buttons datepicker-autoselect-today datepicker-format="dd/mm/yyyy" type="text" value="{{ form.instance.effective_date|date:'d/m/Y' }}" class="block w-full pl-9 pr-3 py-2.5 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-f88green focus:border-f88green placeholder:text-gray-500" placeholder="dd/mm/yyyy" />
-            </div>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ngày hết hiệu lực</label>
-            <div class="relative">
-              <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                <svg class="w-4 h-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 10h16m-8-3V4M7 7V4m10 3V4M5 20h14a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1Zm3-7h.01v.01H8V13Zm4 0h.01v.01H12V13Zm4 0h.01v.01H16V13Zm-8 4h.01v.01H8V17Zm4 0h.01v.01H12V17Zm4 0h.01v.01H16V17Z"/></svg>
-              </div>
-              <input name="expiry_date" datepicker datepicker-format="dd/mm/yyyy" type="text" value="{{ form.instance.expiry_date|date:'d/m/Y' }}" class="block w-full pl-9 pr-3 py-2.5 bg-white border border-gray-300 text-gray-800 text-sm rounded-lg focus:ring-f88green focus:border-f88green placeholder:text-gray-500" placeholder="dd/mm/yyyy" />
-            </div>
-          </div>
-          <div class="col-span-2 flex items-center gap-2">
-            <label class="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" name="is_reference_document" value="true" {% if form.instance.is_reference_document %}checked{% endif %} class="text-f88green">
-              <span>Đánh dấu văn bản tham chiếu</span>
-            </label>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Trạng thái</label>
-            <select name="status" class="block w-full rounded-lg border border-gray-300 px-3 py-2">
-              {% for s in statuses %}
-                <option value="{{ s.id }}" {% if form.instance.status_id == s.id %}selected{% endif %}>{{ s.name }} ({{ s.code }})</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-span-2">
-            <label class="block text-sm font-medium text-gray-700 mb-2">File đính kèm</label>
-            <div class="flex items-center gap-4 mb-2">
-              <label class="inline-flex items-center gap-2 text-sm">
-                <input type="radio" name="attachment_mode" value="file" class="text-f88green" x-model="attachmentMode">
-                <span>Upload file</span>
-              </label>
-              <label class="inline-flex items-center gap-2 text-sm">
-                <input type="radio" name="attachment_mode" value="text" class="text-f88green" x-model="attachmentMode">
-                <span>Nhập link (text)</span>
-              </label>
-            </div>
-            <div x-show="attachmentMode === 'file'">
-              <input type="file" name="attachment" class="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-f88green file:text-white hover:file:bg-f88dark" />
-            </div>
-            <div x-show="attachmentMode === 'text'">
-              <input type="text" name="attachment_link" placeholder="https://link-tai-lieu" class="block w-full rounded-lg border border-gray-300 px-3 py-2" />
-            </div>
-          </div>
-          <div class="col-span-2">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
-            <textarea name="note" rows="3" class="block w-full rounded-lg border border-gray-300 px-3 py-2">{{ form.instance.note|default_if_none:'' }}</textarea>
-          </div>
-
-          <div class="col-span-2 flex justify-end gap-2 mt-4">
-            <button data-modal-hide="editModal" type="button" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">Hủy</button>
-            <button type="submit" class="px-4 py-2 bg-f88green text-white rounded hover:bg-f88dark">Update</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-</div>
-
 <script>
   document.addEventListener('DOMContentLoaded', () => {
+    const root = document.getElementById('doc-detail');
+    const updateUrl = root?.dataset.updateUrl;
+    const companyId = root?.dataset.companyId;
+
+    const getCookie = (name) => {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(';').shift();
+      return '';
+    };
+
     const initPicker = (input) => {
       if (!window.Datepicker || !input || input.dataset.dpAttached) return;
       new window.Datepicker(input, {
@@ -513,31 +565,142 @@
 
     runInit();
 
-    document.querySelectorAll('[data-modal-toggle="editModal"], [data-modal-target="editModal"]').forEach((btn) => {
-      btn.addEventListener('click', () => setTimeout(runInit, 150));
-    });
     document.querySelectorAll('[data-modal-toggle="docRefCreateModal"], [data-modal-target="docRefCreateModal"]').forEach((btn) => {
       btn.addEventListener('click', () => setTimeout(runInit, 150));
     });
 
-    // Filter departments by company (edit modal)
-    const filterDepartments = () => {
-      const companySel = document.getElementById('issuingCompanyEdit');
-      const deptSel = document.getElementById('issuingDepartmentEdit');
-      if (!deptSel) return;
-      const companyId = companySel ? companySel.value : '';
-      Array.from(deptSel.options).forEach((opt) => {
-        const match = !companyId || opt.dataset.company === companyId;
-        opt.hidden = !match;
+    if (root && companyId) {
+      root.querySelectorAll('[data-field="issuing_department"] select[data-input]').forEach((deptSel) => {
+        Array.from(deptSel.options).forEach((opt) => {
+          const match = opt.dataset.company === companyId;
+          opt.hidden = !match;
+        });
       });
-      // if selected option hidden, reset
-      if (deptSel.selectedOptions.length && deptSel.selectedOptions[0].hidden) {
-        const firstVisible = Array.from(deptSel.options).find((o) => !o.hidden);
-        if (firstVisible) firstVisible.selected = true;
-      }
+    }
+
+    const statusClassMap = {
+      "102": "bg-green-100 text-green-800",
+      "100": "bg-yellow-100 text-yellow-800",
+      "101": "bg-blue-100 text-blue-800",
+      "103": "bg-red-100 text-red-800",
     };
-    filterDepartments();
+
+    const openEditor = (wrapper) => {
+      if (!wrapper) return;
+      const input = wrapper.querySelector('[data-input]');
+      if (input) {
+        wrapper.dataset.original = input.value ?? '';
+        input.focus();
+      }
+      wrapper.classList.add('inline-editing');
+    };
+
+    const closeEditor = (wrapper, restore = false) => {
+      if (!wrapper) return;
+      if (restore) {
+        const input = wrapper.querySelector('[data-input]');
+        if (input && wrapper.dataset.original !== undefined) {
+          input.value = wrapper.dataset.original;
+        }
+      }
+      const errorEl = wrapper.querySelector('[data-error]');
+      if (errorEl) {
+        errorEl.classList.add('hidden');
+        errorEl.textContent = '';
+      }
+      wrapper.classList.remove('inline-editing');
+    };
+
+    if (!root || !updateUrl) return;
+
+    root.querySelectorAll('.inline-edit-toggle').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const row = btn.closest('tr');
+        const wrapper = row?.querySelector('.inline-edit');
+        openEditor(wrapper);
+      });
+    });
+
+    root.querySelectorAll('.inline-display').forEach((display) => {
+      display.addEventListener('click', () => {
+        const wrapper = display.closest('.inline-edit');
+        openEditor(wrapper);
+      });
+    });
+
+    const inlineUploadInput = document.getElementById('inlineUploadInput');
+    if (inlineUploadInput) {
+      inlineUploadInput.addEventListener('change', () => {
+        const form = inlineUploadInput.closest('form');
+        if (form && inlineUploadInput.files && inlineUploadInput.files.length) {
+          form.submit();
+        }
+      });
+    }
+
+    root.querySelectorAll('.inline-cancel').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const wrapper = btn.closest('.inline-edit');
+        closeEditor(wrapper, true);
+      });
+    });
+
+    root.querySelectorAll('.inline-save').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const wrapper = btn.closest('.inline-edit');
+        const field = wrapper?.dataset.field;
+        const input = wrapper?.querySelector('[data-input]');
+        if (!field || !input) return;
+
+        const value = input.value ?? '';
+        const errorEl = wrapper.querySelector('[data-error]');
+        if (errorEl) {
+          errorEl.classList.add('hidden');
+          errorEl.textContent = '';
+        }
+
+        btn.disabled = true;
+        try {
+          const body = new URLSearchParams({ field, value });
+          const resp = await fetch(updateUrl, {
+            method: 'POST',
+            headers: {
+              'X-CSRFToken': getCookie('csrftoken'),
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body,
+          });
+          const data = await resp.json();
+          if (!resp.ok || !data.ok) {
+            throw new Error(data.error || 'Cập nhật thất bại.');
+          }
+
+          const displayEl = wrapper.querySelector('[data-display]');
+          if (field === 'status' && data.status) {
+            const badge = displayEl?.querySelector('[data-status-badge]');
+            if (badge) {
+              const baseClass = badge.dataset.baseClass || '';
+              const colorClass = statusClassMap[data.status.code] || 'bg-gray-100 text-gray-700';
+              badge.className = `${baseClass} ${colorClass}`;
+              badge.textContent = data.status.name;
+            } else if (displayEl) {
+              displayEl.textContent = data.display;
+            }
+          } else if (displayEl) {
+            displayEl.textContent = data.display;
+          }
+
+          closeEditor(wrapper, false);
+        } catch (err) {
+          if (errorEl) {
+            errorEl.textContent = err.message || 'Cập nhật thất bại.';
+            errorEl.classList.remove('hidden');
+          }
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
   });
 </script>
-
 {% endblock %}

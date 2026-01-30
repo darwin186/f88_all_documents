@@ -13,9 +13,15 @@
         <a href="{% url 'document_kpi_v2' %}" class="{% if request.resolver_match.url_name == 'document_kpi_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Chỉ tiêu chứng từ</a>
         <span class="text-gray-300">•</span>
         {% endif %}
+        {% if is_admin or is_super_admin %}
+        <a href="{% url 'ctv_account_management_v2' %}" class="{% if request.resolver_match.url_name == 'ctv_account_management_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Quản lý tài khoản CTV</a>
+        <span class="text-gray-300">•</span>
+        {% endif %}
         <a href="{% url 'package_list_management' %}" class="{% if request.resolver_match.url_name == 'package_list_management' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Quản lý thùng</a>
         <span class="text-gray-300">•</span>
         <a href="{% url 'borrow_request_management_v2' %}" class="{% if request.resolver_match.url_name == 'borrow_request_management_v2' or request.resolver_match.url_name == 'borrow_request_detail_v2' or request.resolver_match.url_name == 'borrow_management_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Mượn chứng từ</a>
+        <span class="text-gray-300">•</span>
+        <a href="{% url 'workshift_register' %}" class="{% if request.resolver_match.url_name == 'workshift_register' or request.resolver_match.url_name == 'workshift_tasks' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Lịch làm việc</a>
       </div>
     </div>
     <div class="relative text-[9px] text-gray-700" data-user-menu>
@@ -28,21 +34,33 @@
               {{ request.user.username }}
             {% endif %}
           </span>
-          <span class="text-[9px] text-gray-500">{{ request.user }}</span>
+          <span class="text-[9px] text-gray-500">
+            {% if is_super_admin %}Super Admin{% elif is_admin %}Admin{% elif is_checker %}Checker{% elif is_supervisor %}Supervisor{% elif is_risk %}Risk{% elif is_shop_user %}Shop{% else %}User{% endif %}
+            • {{ request.user.username }}
+          </span>
         </div>
         <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9l-7 7-7-7"/>
         </svg>
       </button>
       <div class="absolute right-0 mt-2 w-40 rounded-xl border border-gray-200 bg-white shadow-lg py-1 hidden" data-user-dropdown>
-        {% if is_super_admin %}
+        <a href="{% url 'user_profile_v2' %}" class="flex items-center gap-2 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50">
+          Thông tin cá nhân
+        </a>
+        {% if is_admin or is_super_admin %}
+        <a href="{% url 'ctv_account_management_v2' %}" class="flex items-center gap-2 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50">
+          Quản lý tài khoản CTV
+        </a>
         <a href="/admin/" class="flex items-center gap-2 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50">
           Admin portal
         </a>
         {% endif %}
-        <a href="{% url 'logout' %}" class="flex items-center gap-2 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50">
-          Đăng xuất
-        </a>
+        <form action="{% url 'logout' %}" method="post">
+          {% csrf_token %}
+          <button type="submit" class="w-full text-left flex items-center gap-2 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50">
+            Đăng xuất
+          </button>
+        </form>
       </div>
     </div>
   </div>

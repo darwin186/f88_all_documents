@@ -28,6 +28,7 @@ urlpatterns = [
     #Create Package 
     path('quan-ly-thung-chung-tu', views.package_management_view, name='package_management'),
     path('package-list-management', views.package_list_management_view, name='package_list_management'),
+    path('package-list-management/export/', views.export_package_list_v2, name='package_list_export_v2'),
     path('package-list-management/detail/<int:package_id>/', views.package_list_detail_view, name='package_list_management_detail'),
     path('tao-thung-chung-tu/<int:user_id>', views.create_package_view, name = "create_package"),
     path('package/delete/<int:folder_id>/', views.clear_package_view, name='clear_package'),
@@ -62,6 +63,9 @@ urlpatterns = [
     path('yeu-cau-muon-chung-tu-v2/', views.borrow_request_management_v2, name='borrow_request_management_v2'),
     path('yeu-cau-muon-chung-tu-v2/<int:request_id>/', views.borrow_request_detail_v2, name='borrow_request_detail_v2'),
     path('api/borrow-requests/', views.api_borrow_request_create, name='api_borrow_request_create'),
+    path('api/heartbeat/', views.api_user_heartbeat, name='api_user_heartbeat'),
+    path('quan-ly-tai-khoan-ctv/', views.online_users_view, name='ctv_account_management_v2'),
+    path('thong-tin-ca-nhan/', views.user_profile_v2_view, name='user_profile_v2'),
     path('chi-tieu-chung-tu-v2', views.document_kpi_dashboard_v2, name='document_kpi_v2'),
     path('chi-tieu-chung-tu-v2/export-pgd', views.export_kpi_shop_detail, name='document_kpi_shop_export'),
     path('manage-borrow/return-or-report-lost/<int:document_id>/<str:action>/', views.manage_borrow_document, name='manage_borrow_document'),

@@ -50,5 +50,27 @@
   <main class="flex-1 overflow-y-auto p-8 {% block main_extra_class %}{% endblock %}">
     {% block content %}{% endblock %}
   </main>
+  <script>
+    window.CSRF_TOKEN = "{{ csrf_token }}";
+    (function () {
+      const intervalMs = 60000;
+      const sendHeartbeat = () => {
+        fetch("{% url 'api_user_heartbeat' %}", {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': window.CSRF_TOKEN || '',
+          },
+          keepalive: true,
+        }).catch(() => {});
+      };
+      sendHeartbeat();
+      setInterval(sendHeartbeat, intervalMs);
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          sendHeartbeat();
+        }
+      });
+    })();
+  </script>
 </body>
 </html>

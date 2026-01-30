@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "app_documents.apps.AppDocumentsConfig",
     "app_admindocuments.apps.AdmindocumentsConfig",
     "app_notification.apps.AppNotificationConfig",
+    "app_workshift.apps.AppWorkshiftConfig",
 ]
 
 MIDDLEWARE = [
@@ -197,6 +198,10 @@ GAPO_BOT_ID = os.getenv('BOT_ID')
 
 # Borrow request API key
 BORROW_REQUEST_API_KEY = (os.getenv('BORROW_REQUEST_API_KEY') or '').strip()
+
+USER_PRESENCE_ACTIVE_GAP = int(os.getenv('USER_PRESENCE_ACTIVE_GAP', '120'))
+USER_PRESENCE_ONLINE_WINDOW = int(os.getenv('USER_PRESENCE_ONLINE_WINDOW', '300'))
+USER_PRESENCE_HEARTBEAT_SECONDS = int(os.getenv('USER_PRESENCE_HEARTBEAT_SECONDS', '60'))
 
 AUTH_PASSWORD_RESET_SUBJECT = 'registration/password_reset_subject.txt'
 PASSWORD_RESET_EMAIL_TEMPLATE = 'registration/password_reset_email.html'

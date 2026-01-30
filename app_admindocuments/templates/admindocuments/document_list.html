@@ -38,14 +38,41 @@
 </form>
 
 <div class="mb-2">
-  <ul class="flex justify-center text-sm font-medium text-gray-600 border-b border-green-100 bg-green-50/70 rounded-lg overflow-hidden">
-    <li class="flex-1 text-center">
-      <a href="?q={{ q }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}" class="block px-4 py-2 {% if not active_company_id %}text-f88green bg-green-100{% else %}hover:bg-green-50{% endif %}">Tất cả</a>
+  <div class="sm:hidden">
+    <label for="company-tabs" class="sr-only">Chọn công ty</label>
+    <select id="company-tabs"
+            class="block w-full px-3 py-2.5 bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-2 focus:ring-green-200 focus:border-f88green shadow-sm"
+            onchange="if(this.value){ window.location = this.value; }">
+      <option value="?q={{ q }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}"
+              {% if not active_company_id %}selected{% endif %}>
+        Tất cả
+      </option>
+      {% for c in companies %}
+      <option value="?q={{ q }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}&company={{ c.id }}"
+              {% if active_company_id == c.id|stringformat:'s' %}selected{% endif %}>
+        {{ c.code }} - {{ c.name }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  <ul class="hidden sm:flex text-sm font-medium text-center text-gray-900 -space-x-px">
+    <li class="w-full focus-within:z-10">
+      <a href="?q={{ q }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}"
+         class="flex items-center justify-center gap-2 px-4 py-2 border rounded-l-lg {% if not active_company_id %}bg-f88green text-white border-f88green{% else %}bg-white text-gray-900 border-gray-200 hover:bg-gray-50{% endif %}">
+        <span>Tất cả</span>
+      </a>
     </li>
     {% for c in companies %}
-    <li class="flex-1 text-center">
+    <li class="w-full focus-within:z-10">
       {% with cid=c.id|stringformat:'s' %}
-      <a href="?q={{ q }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}&company={{ c.id }}" title="{{ c.name }}" class="block px-4 py-2 {% if active_company_id == cid %}text-f88green bg-green-100{% else %}hover:bg-green-50{% endif %}">{{ c.code }}</a>
+      <a href="?q={{ q }}&ctype={{ active_content_type_id }}&dtype={{ active_doc_type_id }}&start_date={{ start_date }}&end_date={{ end_date }}&sort={{ sort }}&dir={{ dir }}&company={{ c.id }}"
+         title="{{ c.name }}"
+         class="flex items-center justify-center gap-2 px-4 py-2 border {% if forloop.last %}rounded-r-lg{% endif %} {% if active_company_id == cid %}bg-f88green text-white border-f88green{% else %}bg-white text-gray-900 border-gray-200 hover:bg-gray-50{% endif %}">
+        {% if c.badge_logo_url %}
+          <img src="{{ c.badge_logo_url }}" alt="{{ c.code }}" class="w-4 h-4 object-contain" />
+        {% endif %}
+        <span>{{ c.code }}</span>
+      </a>
       {% endwith %}
     </li>
     {% endfor %}

@@ -89,6 +89,310 @@
       </div>
     </form>
   </div>
+  {% elif active_tab == 'borrow' %}
+  <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
+    <form method="get" class="grid grid-cols-1 lg:grid-cols-[1.1fr,1.1fr,1fr,auto] gap-3 items-end">
+      <input type="hidden" name="tab" value="borrow">
+      <div>
+        <label class="block text-[9px] text-gray-500 mb-1">Ngày mượn (từ)</label>
+        <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
+          <input type="date" name="start_date" value="{{ start_date }}" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none">
+        </div>
+      </div>
+      <div>
+        <label class="block text-[9px] text-gray-500 mb-1">Ngày mượn (đến)</label>
+        <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
+          <input type="date" name="end_date" value="{{ end_date }}" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none">
+        </div>
+      </div>
+      <div>
+        <label class="block text-[9px] text-gray-500 mb-1">Theo tháng</label>
+        <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
+          <input type="month" name="month" value="{{ month }}" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none">
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700">Lọc</button>
+        <a href="{% url 'document_kpi_v2' %}?tab=borrow" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 text-[10px] font-semibold hover:bg-gray-50">Xóa</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2">
+    <div class="kpi-card">
+      <div class="kpi-label">Tổng lượt mượn</div>
+      <div class="kpi-value">{{ borrow_total_count|intcomma }}</div>
+      <div class="kpi-sub">Theo ngày mượn</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Chứng từ đang mượn</div>
+      <div class="kpi-value text-amber-600">{{ borrow_active_count|intcomma }}</div>
+      <div class="kpi-sub">Chờ hoàn trả</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Đã hoàn trả</div>
+      <div class="kpi-value text-emerald-600">{{ borrow_returned_count|intcomma }}</div>
+      <div class="kpi-sub">Theo ngày mượn</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Thất lạc</div>
+      <div class="kpi-value text-red-600">{{ borrow_lost_count|intcomma }}</div>
+      <div class="kpi-sub">Chứng từ báo mất</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Tỷ lệ mượn quá hạn</div>
+      <div class="kpi-value text-red-600">{{ borrow_overdue_rate|floatformat:1 }}%</div>
+      <div class="kpi-sub">Quá hạn: {{ borrow_overdue_count|intcomma }} / {{ borrow_active_count|intcomma }}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Tỷ lệ trả đúng SLA</div>
+      <div class="kpi-value text-emerald-600">{{ borrow_on_time_rate|floatformat:1 }}%</div>
+      <div class="kpi-sub">Đúng hạn: {{ borrow_on_time_count|intcomma }} / {{ borrow_total_count|intcomma }}</div>
+      <div class="kpi-sub mt-1">Phiếu chờ trả: {{ borrow_pending_request_count|intcomma }}</div>
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4 text-[9px] text-gray-600 space-y-1">
+    <div class="font-semibold text-gray-800 text-[10px]">Ghi chú công thức</div>
+    <div>- Đang mượn = số lượt có trạng thái mượn (flag_is_borrowing=True) trong khoảng lọc.</div>
+    <div>- Đã hoàn trả = số lượt có trạng thái trả (flag_return=True).</div>
+    <div>- Thất lạc = số lượt có trạng thái mất (flag_is_lost=True).</div>
+    <div>- Tỷ lệ mượn quá hạn = (lượt đang mượn có hẹn trả &lt; ngày hiện tại) / (tổng lượt đang mượn).</div>
+    <div>- Tỷ lệ trả đúng SLA = (lượt trả có ngày trả ≤ ngày hẹn) / (tổng lượt mượn).</div>
+    <div>- Phiếu chờ hoàn trả = số phiếu ở trạng thái đã bàn giao / trả một phần.</div>
+    <div>- Pivot phòng ban theo tháng: nhóm theo phòng ban + tháng mượn, thống kê tổng lượt, trả đúng hạn, trả trễ hạn.</div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
+    <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+      <h3 class="text-[11px] font-semibold text-gray-800 mb-3">Tần suất mượn theo tháng</h3>
+      <div class="mb-4 rounded-xl border border-gray-100 bg-gray-50 p-3">
+        <div class="flex items-center gap-3 text-[9px] text-gray-600 mb-2">
+          <span class="inline-flex items-center gap-1"><span class="inline-block h-2 w-2 rounded-full bg-emerald-600"></span>Trả đúng hạn</span>
+          <span class="inline-flex items-center gap-1"><span class="inline-block h-2 w-2 rounded-full bg-amber-500"></span>Trả trễ</span>
+          <span class="inline-flex items-center gap-1"><span class="inline-block h-2 w-2 rounded-full bg-rose-500"></span>Quá hạn</span>
+        </div>
+        <div id="borrow-months-chart-empty" class="text-[9px] text-gray-500 hidden">Không có dữ liệu.</div>
+        <div id="borrow-months-chart-wrap" class="relative">
+          <svg id="borrow-months-chart" viewBox="0 0 520 220" class="w-full h-44"></svg>
+          <div id="borrow-months-chart-tooltip" class="absolute hidden rounded-lg border border-gray-200 bg-white px-2 py-1 text-[9px] text-gray-700 shadow-md"></div>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full table-xs">
+          <thead>
+            <tr>
+              <th>Tháng</th>
+              <th>Tổng lượt mượn</th>
+              <th>Trả đúng hạn</th>
+              <th>Trả trễ</th>
+              <th>Đang quá hạn</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for row in borrow_months_breakdown %}
+            <tr>
+              <td>{{ row.month }}</td>
+              <td>
+                <div class="flex items-center justify-center gap-1">
+                  <span>{{ row.total|intcomma }}</span>
+                  {% if row.total_change_pct is not None %}
+                  <span class="text-[8px] {% if row.total_change_pct > 0 %}text-emerald-600{% elif row.total_change_pct < 0 %}text-red-600{% else %}text-gray-400{% endif %}">
+                    {% if row.total_change_pct > 0 %}▲{% elif row.total_change_pct < 0 %}▼{% endif %}{{ row.total_change_pct|floatformat:1 }}%
+                  </span>
+                  {% endif %}
+                </div>
+              </td>
+              <td>
+                <div class="flex items-center justify-center gap-1">
+                  <span>{{ row.on_time|intcomma }}</span>
+                  {% if row.on_time_change_pct is not None %}
+                  <span class="text-[8px] {% if row.on_time_change_pct > 0 %}text-emerald-600{% elif row.on_time_change_pct < 0 %}text-red-600{% else %}text-gray-400{% endif %}">
+                    {% if row.on_time_change_pct > 0 %}▲{% elif row.on_time_change_pct < 0 %}▼{% endif %}{{ row.on_time_change_pct|floatformat:1 }}%
+                  </span>
+                  {% endif %}
+                </div>
+              </td>
+              <td>
+                <div class="flex items-center justify-center gap-1">
+                  <span>{{ row.late|intcomma }}</span>
+                  {% if row.late_change_pct is not None %}
+                  <span class="text-[8px] {% if row.late_change_pct > 0 %}text-emerald-600{% elif row.late_change_pct < 0 %}text-red-600{% else %}text-gray-400{% endif %}">
+                    {% if row.late_change_pct > 0 %}▲{% elif row.late_change_pct < 0 %}▼{% endif %}{{ row.late_change_pct|floatformat:1 }}%
+                  </span>
+                  {% endif %}
+                </div>
+              </td>
+              <td>
+                <div class="flex items-center justify-center gap-1">
+                  <span>{{ row.overdue|intcomma }}</span>
+                  {% if row.overdue_change_pct is not None %}
+                  <span class="text-[8px] {% if row.overdue_change_pct > 0 %}text-emerald-600{% elif row.overdue_change_pct < 0 %}text-red-600{% else %}text-gray-400{% endif %}">
+                    {% if row.overdue_change_pct > 0 %}▲{% elif row.overdue_change_pct < 0 %}▼{% endif %}{{ row.overdue_change_pct|floatformat:1 }}%
+                  </span>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-center text-gray-500">Chưa có dữ liệu.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+      <h3 class="text-[11px] font-semibold text-gray-800 mb-3">Pivot phòng ban theo tháng</h3>
+      <div class="overflow-x-auto">
+        <table class="min-w-full table-xs">
+          <thead>
+            <tr>
+              <th>Phòng ban</th>
+              <th>Tháng</th>
+              <th>Tổng lượt mượn</th>
+              <th>Trả đúng hạn</th>
+              <th>Trả trễ hạn</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for row in borrow_pivot_rows %}
+            <tr>
+              <td>{{ row.borrower }}</td>
+              <td>{{ row.month }}</td>
+              <td>{{ row.total|intcomma }}</td>
+              <td>{{ row.on_time|intcomma }}</td>
+              <td>{{ row.late|intcomma }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="text-center text-gray-500">Chưa có dữ liệu.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-[11px] font-semibold text-gray-800">Tần suất mượn theo phòng ban</h3>
+      <span class="text-[9px] text-gray-500">Theo ngày mượn trong khoảng lọc.</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full table-xs">
+        <thead>
+          <tr>
+            <th>Phòng ban mượn</th>
+            <th>Tổng lượt</th>
+            <th>Đúng hạn</th>
+            <th>Trễ hạn</th>
+            <th>Đang mượn</th>
+            <th>Quá hạn</th>
+            <th>Tỷ lệ quá hạn</th>
+            <th>Số HĐ</th>
+            <th>Số GNN</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for row in borrow_by_borrower %}
+          <tr>
+            <td>{{ row.borrower }}</td>
+            <td>{{ row.total|intcomma }}</td>
+            <td>{{ row.on_time|intcomma }}</td>
+            <td>{{ row.late|intcomma }}</td>
+            <td>{{ row.active|intcomma }}</td>
+            <td>{{ row.overdue|intcomma }}</td>
+            <td class="{% if row.overdue_rate > 0 %}text-red-600{% else %}text-gray-600{% endif %}">{{ row.overdue_rate|floatformat:1 }}%</td>
+            <td>{{ row.contract_count|intcomma }}</td>
+            <td>{{ row.loan_count|intcomma }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="9" class="text-center text-gray-500">Chưa có dữ liệu.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-[11px] font-semibold text-gray-800">Phòng ban không trả đúng hạn</h3>
+      <span class="text-[9px] text-gray-500">Dựa trên các lượt trả trễ hạn.</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full table-xs">
+        <thead>
+          <tr>
+            <th>Phòng ban</th>
+            <th>Lý do mượn</th>
+            <th>Mã chứng từ</th>
+            <th>HĐ/GNN</th>
+            <th>Hẹn trả</th>
+            <th>Ngày trả</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for row in borrow_late_rows %}
+          <tr>
+            <td>{{ row.borrower }}</td>
+            <td>{{ row.note|default:"" }}</td>
+            <td>{{ row.documents_code }}</td>
+            <td>{{ row.contract_code|default:row.loan_code }}</td>
+            <td>{{ row.appointment_date|date:"Y-m-d" }}</td>
+            <td class="text-red-600">{{ row.return_date|date:"Y-m-d" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-center text-gray-500">Chưa có dữ liệu.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-[11px] font-semibold text-gray-800">Báo cáo lượt mượn</h3>
+      <span class="text-[9px] text-gray-500">Ghi nhận phòng ban, lý do mượn, mã HĐ/GNN và chứng từ.</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full table-xs">
+        <thead>
+          <tr>
+            <th>Phòng ban</th>
+            <th>Lý do mượn</th>
+            <th>Mã chứng từ</th>
+            <th>Mã HĐ/GNN</th>
+            <th>Ngày mượn</th>
+            <th>Hẹn trả</th>
+            <th>Ngày trả</th>
+            <th>Trạng thái</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for row in borrow_detail_rows %}
+          <tr>
+            <td>{{ row.borrower }}</td>
+            <td>{{ row.note|default:"" }}</td>
+            <td>{{ row.documents_code }}</td>
+            <td>{{ row.contract_code|default:row.loan_code }}</td>
+            <td>{{ row.borrow_date|date:"Y-m-d" }}</td>
+            <td>{{ row.appointment_date|date:"Y-m-d" }}</td>
+            <td>
+              {% if row.return_date %}
+              <span class="{% if row.late %}text-red-600{% elif row.on_time %}text-emerald-600{% endif %}">{{ row.return_date|date:"Y-m-d" }}</span>
+              {% else %}
+              —
+              {% endif %}
+            </td>
+            <td>{{ row.status }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="8" class="text-center text-gray-500">Chưa có dữ liệu.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
   {% elif active_tab != 'receive' %}
   <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-6 text-center text-[11px] text-gray-600">
     Nội dung đang được cập nhật cho tab này.
@@ -422,6 +726,7 @@
 </div>
 {% endif %}
 <script type="application/json" id="months-chart-data">{{ months_chart_json|safe }}</script>
+<script type="application/json" id="borrow-months-chart-data">{{ borrow_months_chart_json|safe }}</script>
 <script>
   document.addEventListener('DOMContentLoaded', function () {
     const toggleButtons = document.querySelectorAll('[data-expand-toggle]');
@@ -492,207 +797,223 @@
 </script>
 <script>
   document.addEventListener('DOMContentLoaded', function () {
-    const dataEl = document.getElementById('months-chart-data');
-    const svg = document.getElementById('months-chart');
-    const emptyEl = document.getElementById('months-chart-empty');
-    const tooltip = document.getElementById('months-chart-tooltip');
-    const wrap = document.getElementById('months-chart-wrap');
-    if (!dataEl || !svg) return;
-    const data = JSON.parse(dataEl.textContent || '[]');
-    if (!data.length) {
-      if (emptyEl) emptyEl.classList.remove('hidden');
-      return;
-    }
-    const width = 520;
-    const height = 220;
-    const margin = { top: 14, right: 12, bottom: 28, left: 32 };
-    const plotW = width - margin.left - margin.right;
-    const plotH = height - margin.top - margin.bottom;
+    const renderRateChart = (config) => {
+      const dataEl = document.getElementById(config.dataElId);
+      const svg = document.getElementById(config.svgId);
+      const emptyEl = document.getElementById(config.emptyId);
+      const tooltip = document.getElementById(config.tooltipId);
+      const wrap = document.getElementById(config.wrapId);
+      if (!dataEl || !svg) return;
+      const data = JSON.parse(dataEl.textContent || '[]');
+      if (!data.length) {
+        if (emptyEl) emptyEl.classList.remove('hidden');
+        return;
+      }
+      const width = 520;
+      const height = 220;
+      const margin = { top: 14, right: 12, bottom: 28, left: 32 };
+      const plotW = width - margin.left - margin.right;
+      const plotH = height - margin.top - margin.bottom;
 
-    const xStep = data.length > 1 ? plotW / (data.length - 1) : plotW;
-    const yScale = (val) => margin.top + plotH * (1 - (val / 100));
+      const xStep = data.length > 1 ? plotW / (data.length - 1) : plotW;
+      const yScale = (val) => margin.top + plotH * (1 - (val / 100));
+      const makePath = (key) => {
+        return data.map((d, i) => {
+          const x = margin.left + (xStep * i);
+          const y = yScale(d[key] || 0);
+          return `${i === 0 ? 'M' : 'L'}${x},${y}`;
+        }).join(' ');
+      };
 
-    const makePath = (key) => {
-      return data.map((d, i) => {
-        const x = margin.left + (xStep * i);
-        const y = yScale(d[key] || 0);
-        return `${i === 0 ? 'M' : 'L'}${x},${y}`;
-      }).join(' ');
-    };
-
-    const gridLines = [0, 25, 50, 75, 100];
-    gridLines.forEach(val => {
-      const y = yScale(val);
-      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      line.setAttribute('x1', margin.left);
-      line.setAttribute('x2', width - margin.right);
-      line.setAttribute('y1', y);
-      line.setAttribute('y2', y);
-      line.setAttribute('stroke', '#e5e7eb');
-      line.setAttribute('stroke-width', '1');
-      svg.appendChild(line);
-
-      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      label.setAttribute('x', 6);
-      label.setAttribute('y', y + 3);
-      label.setAttribute('font-size', '9');
-      label.setAttribute('fill', '#6b7280');
-      label.textContent = `${val}%`;
-      svg.appendChild(label);
-    });
-
-    const axis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    axis.setAttribute('x1', margin.left);
-    axis.setAttribute('x2', width - margin.right);
-    axis.setAttribute('y1', margin.top + plotH);
-    axis.setAttribute('y2', margin.top + plotH);
-    axis.setAttribute('stroke', '#cbd5f5');
-    axis.setAttribute('stroke-width', '1');
-    svg.appendChild(axis);
-
-    const lines = [
-      { key: 'on_time_rate', color: '#16a34a' },
-      { key: 'late_rate', color: '#f59e0b' },
-      { key: 'not_received_rate', color: '#6b7280' },
-    ];
-    lines.forEach(lineDef => {
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', makePath(lineDef.key));
-      path.setAttribute('fill', 'none');
-      path.setAttribute('stroke', lineDef.color);
-      path.setAttribute('stroke-width', '2');
-      path.setAttribute('stroke-linejoin', 'round');
-      svg.appendChild(path);
-    });
-
-    data.forEach((d, i) => {
-      const x = margin.left + (xStep * i);
-      lines.forEach((lineDef, lineIdx) => {
-        const value = d[lineDef.key] || 0;
-        const y = yScale(value);
-        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        dot.setAttribute('cx', x);
-        dot.setAttribute('cy', y);
-        dot.setAttribute('r', '2.6');
-        dot.setAttribute('fill', lineDef.color);
-        svg.appendChild(dot);
+      const gridLines = [0, 25, 50, 75, 100];
+      gridLines.forEach(val => {
+        const y = yScale(val);
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', margin.left);
+        line.setAttribute('x2', width - margin.right);
+        line.setAttribute('y1', y);
+        line.setAttribute('y2', y);
+        line.setAttribute('stroke', '#e5e7eb');
+        line.setAttribute('stroke-width', '1');
+        svg.appendChild(line);
 
         const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        label.setAttribute('x', x);
-        label.setAttribute('y', y - 6 - (lineIdx * 10));
-        label.setAttribute('font-size', '8');
-        label.setAttribute('fill', lineDef.color);
-        label.setAttribute('text-anchor', 'middle');
-        label.textContent = `${value.toFixed(1)}%`;
+        label.setAttribute('x', 6);
+        label.setAttribute('y', y + 3);
+        label.setAttribute('font-size', '9');
+        label.setAttribute('fill', '#6b7280');
+        label.textContent = `${val}%`;
         svg.appendChild(label);
       });
-    });
 
-    data.forEach((d, i) => {
-      const x = margin.left + (xStep * i);
-      if (i % 2 === 1 && data.length > 8) return;
-      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      label.setAttribute('x', x);
-      label.setAttribute('y', height - 8);
-      label.setAttribute('font-size', '9');
-      label.setAttribute('fill', '#6b7280');
-      label.setAttribute('text-anchor', 'middle');
-      label.textContent = d.month || '';
-      svg.appendChild(label);
-    });
+      const axis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      axis.setAttribute('x1', margin.left);
+      axis.setAttribute('x2', width - margin.right);
+      axis.setAttribute('y1', margin.top + plotH);
+      axis.setAttribute('y2', margin.top + plotH);
+      axis.setAttribute('stroke', '#cbd5f5');
+      axis.setAttribute('stroke-width', '1');
+      svg.appendChild(axis);
 
-    const focusLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    focusLine.setAttribute('stroke', '#94a3b8');
-    focusLine.setAttribute('stroke-dasharray', '3 3');
-    focusLine.setAttribute('y1', margin.top);
-    focusLine.setAttribute('y2', margin.top + plotH);
-    focusLine.setAttribute('visibility', 'hidden');
-    svg.appendChild(focusLine);
-
-    const focusDots = lines.map(lineDef => {
-      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      dot.setAttribute('r', '3');
-      dot.setAttribute('fill', lineDef.color);
-      dot.setAttribute('stroke', '#fff');
-      dot.setAttribute('stroke-width', '1');
-      dot.setAttribute('visibility', 'hidden');
-      svg.appendChild(dot);
-      return dot;
-    });
-
-    const showTooltip = (idx, clientX, clientY) => {
-      if (!tooltip || !wrap) return;
-      const point = data[idx];
-      tooltip.innerHTML = `
-        <div class="font-semibold text-gray-900">${point.month || ''}</div>
-        <div>Đúng hạn: ${point.on_time_rate.toFixed(2)}%</div>
-        <div>Trễ hạn: ${point.late_rate.toFixed(2)}%</div>
-        <div>Chưa nhận: ${point.not_received_rate.toFixed(2)}%</div>
-      `;
-      tooltip.classList.remove('hidden');
-      const rect = wrap.getBoundingClientRect();
-      const maxLeft = rect.width - tooltip.offsetWidth - 8;
-      const maxTop = rect.height - tooltip.offsetHeight - 8;
-      const left = Math.min(maxLeft, Math.max(8, clientX - rect.left + 12));
-      const top = Math.min(maxTop, Math.max(8, clientY - rect.top - 12));
-      tooltip.style.left = `${left}px`;
-      tooltip.style.top = `${top}px`;
-    };
-
-    const hideTooltip = () => {
-      if (tooltip) tooltip.classList.add('hidden');
-      focusLine.setAttribute('visibility', 'hidden');
-      focusDots.forEach(dot => dot.setAttribute('visibility', 'hidden'));
-    };
-
-    const handleMove = (evt, rect) => {
-      const relX = evt.clientX - rect.left;
-      if (relX < 0 || relX > rect.width) {
-        hideTooltip();
-        return;
-      }
-      const scaleX = width / rect.width;
-      const x = relX * scaleX;
-      if (x < margin.left || x > (width - margin.right)) {
-        hideTooltip();
-        return;
-      }
-      let idx = Math.round((x - margin.left) / xStep);
-      idx = Math.max(0, Math.min(data.length - 1, idx));
-
-      const xPos = margin.left + (xStep * idx);
-      focusLine.setAttribute('x1', xPos);
-      focusLine.setAttribute('x2', xPos);
-      focusLine.setAttribute('visibility', 'visible');
-
-      const values = [
-        data[idx].on_time_rate,
-        data[idx].late_rate,
-        data[idx].not_received_rate,
-      ];
-      focusDots.forEach((dot, dIdx) => {
-        const y = yScale(values[dIdx] || 0);
-        dot.setAttribute('cx', xPos);
-        dot.setAttribute('cy', y);
-        dot.setAttribute('visibility', 'visible');
+      config.lines.forEach(lineDef => {
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', makePath(lineDef.key));
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', lineDef.color);
+        path.setAttribute('stroke-width', '2');
+        path.setAttribute('stroke-linejoin', 'round');
+        svg.appendChild(path);
       });
-      showTooltip(idx, evt.clientX, evt.clientY);
+
+      data.forEach((d, i) => {
+        const x = margin.left + (xStep * i);
+        config.lines.forEach((lineDef, lineIdx) => {
+          const value = d[lineDef.key] || 0;
+          const y = yScale(value);
+          const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          dot.setAttribute('cx', x);
+          dot.setAttribute('cy', y);
+          dot.setAttribute('r', '2.6');
+          dot.setAttribute('fill', lineDef.color);
+          svg.appendChild(dot);
+
+          const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          label.setAttribute('x', x);
+          label.setAttribute('y', y - 6 - (lineIdx * 10));
+          label.setAttribute('font-size', '8');
+          label.setAttribute('fill', lineDef.color);
+          label.setAttribute('text-anchor', 'middle');
+          label.textContent = `${value.toFixed(1)}%`;
+          svg.appendChild(label);
+        });
+      });
+
+      data.forEach((d, i) => {
+        const x = margin.left + (xStep * i);
+        if (i % 2 === 1 && data.length > 8) return;
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.setAttribute('x', x);
+        label.setAttribute('y', height - 8);
+        label.setAttribute('font-size', '9');
+        label.setAttribute('fill', '#6b7280');
+        label.setAttribute('text-anchor', 'middle');
+        label.textContent = d.month || '';
+        svg.appendChild(label);
+      });
+
+      const focusLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      focusLine.setAttribute('stroke', '#94a3b8');
+      focusLine.setAttribute('stroke-dasharray', '3 3');
+      focusLine.setAttribute('y1', margin.top);
+      focusLine.setAttribute('y2', margin.top + plotH);
+      focusLine.setAttribute('visibility', 'hidden');
+      svg.appendChild(focusLine);
+
+      const focusDots = config.lines.map(lineDef => {
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        dot.setAttribute('r', '3');
+        dot.setAttribute('fill', lineDef.color);
+        dot.setAttribute('stroke', '#fff');
+        dot.setAttribute('stroke-width', '1');
+        dot.setAttribute('visibility', 'hidden');
+        svg.appendChild(dot);
+        return dot;
+      });
+
+      const showTooltip = (idx, clientX, clientY) => {
+        if (!tooltip || !wrap) return;
+        const point = data[idx];
+        tooltip.innerHTML = `
+          <div class="font-semibold text-gray-900">${point.month || ''}</div>
+          ${config.lines.map(lineDef => `<div>${lineDef.label}: ${(point[lineDef.key] || 0).toFixed(2)}%</div>`).join('')}
+        `;
+        tooltip.classList.remove('hidden');
+        const rect = wrap.getBoundingClientRect();
+        const maxLeft = rect.width - tooltip.offsetWidth - 8;
+        const maxTop = rect.height - tooltip.offsetHeight - 8;
+        const left = Math.min(maxLeft, Math.max(8, clientX - rect.left + 12));
+        const top = Math.min(maxTop, Math.max(8, clientY - rect.top - 12));
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
+      };
+
+      const hideTooltip = () => {
+        if (tooltip) tooltip.classList.add('hidden');
+        focusLine.setAttribute('visibility', 'hidden');
+        focusDots.forEach(dot => dot.setAttribute('visibility', 'hidden'));
+      };
+
+      const handleMove = (evt, rect) => {
+        const relX = evt.clientX - rect.left;
+        if (relX < 0 || relX > rect.width) {
+          hideTooltip();
+          return;
+        }
+        const scaleX = width / rect.width;
+        const x = relX * scaleX;
+        if (x < margin.left || x > (width - margin.right)) {
+          hideTooltip();
+          return;
+        }
+        let idx = Math.round((x - margin.left) / xStep);
+        idx = Math.max(0, Math.min(data.length - 1, idx));
+
+        const xPos = margin.left + (xStep * idx);
+        focusLine.setAttribute('x1', xPos);
+        focusLine.setAttribute('x2', xPos);
+        focusLine.setAttribute('visibility', 'visible');
+
+        focusDots.forEach((dot, dIdx) => {
+          const value = data[idx][config.lines[dIdx].key] || 0;
+          const y = yScale(value);
+          dot.setAttribute('cx', xPos);
+          dot.setAttribute('cy', y);
+          dot.setAttribute('visibility', 'visible');
+        });
+        showTooltip(idx, evt.clientX, evt.clientY);
+      };
+
+      const overlay = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      overlay.setAttribute('x', margin.left);
+      overlay.setAttribute('y', margin.top);
+      overlay.setAttribute('width', plotW);
+      overlay.setAttribute('height', plotH);
+      overlay.setAttribute('fill', 'transparent');
+      overlay.style.cursor = 'crosshair';
+      svg.appendChild(overlay);
+
+      overlay.addEventListener('mousemove', (evt) => {
+        const rect = overlay.getBoundingClientRect();
+        handleMove(evt, rect);
+      });
+      overlay.addEventListener('mouseleave', hideTooltip);
     };
 
-    const overlay = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-    overlay.setAttribute('x', margin.left);
-    overlay.setAttribute('y', margin.top);
-    overlay.setAttribute('width', plotW);
-    overlay.setAttribute('height', plotH);
-    overlay.setAttribute('fill', 'transparent');
-    overlay.style.cursor = 'crosshair';
-    svg.appendChild(overlay);
-
-    overlay.addEventListener('mousemove', (evt) => {
-      const rect = overlay.getBoundingClientRect();
-      handleMove(evt, rect);
+    renderRateChart({
+      dataElId: 'months-chart-data',
+      svgId: 'months-chart',
+      emptyId: 'months-chart-empty',
+      tooltipId: 'months-chart-tooltip',
+      wrapId: 'months-chart-wrap',
+      lines: [
+        { key: 'on_time_rate', color: '#16a34a', label: 'Đúng hạn' },
+        { key: 'late_rate', color: '#f59e0b', label: 'Trễ hạn' },
+        { key: 'not_received_rate', color: '#6b7280', label: 'Chưa nhận' },
+      ],
     });
-    overlay.addEventListener('mouseleave', hideTooltip);
+
+    renderRateChart({
+      dataElId: 'borrow-months-chart-data',
+      svgId: 'borrow-months-chart',
+      emptyId: 'borrow-months-chart-empty',
+      tooltipId: 'borrow-months-chart-tooltip',
+      wrapId: 'borrow-months-chart-wrap',
+      lines: [
+        { key: 'on_time_rate', color: '#16a34a', label: 'Trả đúng hạn' },
+        { key: 'late_rate', color: '#f59e0b', label: 'Trả trễ' },
+        { key: 'overdue_rate', color: '#f43f5e', label: 'Quá hạn' },
+      ],
+    });
   });
 </script>
 {% endblock %}

@@ -1838,6 +1838,150 @@ def document_update(request, doc_id: int):
     return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
 
 
+def _build_update_form_data(doc):
+    def _fmt_date(value):
+        return value.strftime("%d/%m/%Y") if value else ""
+
+    return {
+        "doc_type": doc.doc_type_id,
+        "content_type": doc.content_type_id,
+        "reference_number": doc.reference_number or "",
+        "reference_document": doc.reference_document_id or "",
+        "is_reference_document": "true" if doc.is_reference_document else "",
+        "title": doc.title or "",
+        "signer_role": doc.signer_role_id,
+        "issuing_company": doc.issuing_company_id,
+        "issuing_department": doc.issuing_department_id,
+        "issue_date": _fmt_date(doc.issue_date),
+        "effective_date": _fmt_date(doc.effective_date),
+        "expiry_date": _fmt_date(doc.expiry_date),
+        "status": doc.status_id,
+        "ticket_code": doc.ticket_code or "",
+        "note": doc.note or "",
+    }
+
+
+@login_required
+@admin_staff_required
+def document_update_field(request, doc_id: int):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "Method not allowed."}, status=405)
+
+    try:
+        doc = AdmAdministrativeDocument.objects.select_related(
+            "content_type",
+            "signer_role",
+            "issuing_department",
+            "status",
+        ).get(pk=doc_id)
+    except AdmAdministrativeDocument.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "Document not found."}, status=404)
+
+    field = (request.POST.get("field") or "").strip()
+    value = request.POST.get("value", "")
+    allowed_fields = {
+        "title",
+        "content_type",
+        "signer_role",
+        "issuing_department",
+        "issue_date",
+        "effective_date",
+        "expiry_date",
+        "status",
+        "reference_number",
+        "note",
+    }
+    if field not in allowed_fields:
+        return JsonResponse({"ok": False, "error": "Field not allowed."}, status=400)
+
+    data = _build_update_form_data(doc)
+    data[field] = value
+
+    form = AdmAdministrativeDocumentUpdateForm(data, None, instance=doc)
+    if not form.is_valid():
+        first_error = None
+        for field_errors in form.errors.values():
+            if field_errors:
+                first_error = field_errors[0]
+                break
+        return JsonResponse(
+            {"ok": False, "error": first_error or "Invalid data."}, status=400
+        )
+
+    updated_doc = form.save(commit=False)
+    updated_doc.updated_by = request.user
+    updated_doc.save()
+
+    def _fmt_date(value):
+        return value.strftime("%d/%m/%Y") if value else "-"
+
+    if field == "title":
+        display = updated_doc.title
+    elif field == "content_type":
+        display = updated_doc.content_type.name if updated_doc.content_type_id else "-"
+    elif field == "signer_role":
+        display = updated_doc.signer_role.title if updated_doc.signer_role_id else "-"
+    elif field == "issuing_department":
+        display = (
+            updated_doc.issuing_department.name
+            if updated_doc.issuing_department_id
+            else "-"
+        )
+    elif field == "issue_date":
+        if updated_doc.issue_date:
+            display = _fmt_date(updated_doc.issue_date)
+        else:
+            display = _fmt_date(updated_doc.created_at.date())
+    elif field in {"effective_date", "expiry_date"}:
+        display = _fmt_date(getattr(updated_doc, field))
+    elif field == "status":
+        display = updated_doc.status.name if updated_doc.status_id else "-"
+    elif field == "reference_number":
+        display = updated_doc.reference_number or "-"
+    elif field == "note":
+        display = updated_doc.note or "-"
+    else:
+        display = value
+
+    payload = {"ok": True, "field": field, "display": display}
+    if field == "status" and updated_doc.status_id:
+        payload["status"] = {
+            "code": updated_doc.status.code,
+            "name": updated_doc.status.name,
+        }
+    return JsonResponse(payload)
+
+
+@login_required
+@admin_staff_required
+def document_attachment_upload(request, doc_id: int):
+    if request.method != "POST":
+        return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
+
+    try:
+        doc = AdmAdministrativeDocument.objects.get(pk=doc_id)
+    except AdmAdministrativeDocument.DoesNotExist:
+        messages.error(request, "Document not found.")
+        return redirect("admindocuments:admindocuments_list")
+
+    uploaded_file = request.FILES.get("attachment")
+    if not uploaded_file:
+        messages.error(request, "Vui lòng chọn file để tải lên.")
+        return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
+
+    try:
+        _create_attachment_version(document=doc, user=request.user, uploaded_file=uploaded_file)
+    except Exception:
+        messages.error(
+            request,
+            "Tải file thất bại. Vui lòng đổi tên file (không dùng ký tự lạ) và thử lại.",
+        )
+        return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
+
+    messages.success(request, "Đã tải file lên thành công.")
+    return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
+
+
 @login_required
 @admin_staff_required
 def document_delete(request, doc_id: int):
