@@ -17,7 +17,7 @@ from django.utils import timezone, dateparse
 from django.utils.dateparse import parse_datetime
 from django.conf import settings
 from django.db import IntegrityError, transaction, connection
-from django.db.models import Count, Max, Q, Min, Prefetch, F
+from django.db.models import Count, Max, Q, Min, Prefetch, F, Sum
 from django.forms.models import model_to_dict
 from django.core.serializers.json import DjangoJSONEncoder
 from urllib.parse import urlencode
@@ -78,9 +78,12 @@ from .models import (
     BorrowRequest,
     BorrowRequestItem,
     BorrowRequestLog,
+    UiScreen,
+    UiPermission,
     FolderIssueType,
     FolderIssue,
     UserPresenceDaily,
+    UserPresenceHourly,
     BorrowRequestStatus,
     BorrowRequestItemStatus,
     GapoScheduledMessage
@@ -89,9 +92,10 @@ from .models import (
 from .forms import PackageForm, GapoPasswordResetForm, GapoScheduleForm
 # Import các custom utilities
 from .access_controls import AccessControls
-from .utils import get_user_context, check_on_time
+from .utils import get_user_context, check_on_time, UI_SCREENS, ROLE_CODES, ensure_ui_screens, get_role_codes
 from .dashboard import parse_dates, get_dashboard_metrics, get_folder_received_metrics
 from .tasks import send_gapo_scheduled_message
+from .utils import require_ui_permission
 
 AI_STYLE_HINTS = {
     "formal": "Viết ngắn gọn, lịch sự, trang trọng, dùng đại từ phù hợp công việc.",
@@ -464,6 +468,8 @@ def checking_transaction_view_v2(request):
         choice_shop = request.GET.get('choice_shop')
         choice_loan_code = request.GET.get('choice_loan_code')
         choice_contract_code = request.GET.get('choice_contract_code')
+        choice_package_code = request.GET.get('filter_package', '').strip()
+        choice_partner_package_code = request.GET.get('filter_partner_package', '').strip()
         choice_user_duyet = request.GET.get('choice_user_duyet')
         choice_check_date = request.GET.get('filtercheckdate')
         choice_document_date = request.GET.get('filterdocumentdate')
@@ -525,6 +531,10 @@ def checking_transaction_view_v2(request):
             filters['loan_id__loan_code__icontains'] = choice_loan_code
         if choice_contract_code:
             filters['contract_id__contract_code__icontains'] = choice_contract_code
+        if choice_package_code:
+            filters['package_id__package_code__icontains'] = choice_package_code
+        if choice_partner_package_code:
+            filters['package_id__partnerpackage__partner_package_code__icontains'] = choice_partner_package_code
         if len(filters) == 0:
             documents_detail = DocumentsDetail.objects.none()
         else:
@@ -734,6 +744,8 @@ def checking_transaction_view_v2(request):
                 'choicedocumentstatus': request.POST.get('filter_choicedocumentstatus'),
                 'choicecheckstatus': request.POST.get('filter_choicecheckstatus'),
                 'choicebusinesstype': request.POST.get('filter_choicebusinesstype'),
+                'filter_package': request.POST.get('filter_package'),
+                'filter_partner_package': request.POST.get('filter_partner_package'),
                 'page': request.POST.get('filter_page'),
                 'sort': request.POST.get('filter_sort'),
             }
@@ -1361,6 +1373,7 @@ def receive_folder_view_v2(request):
     choice_folder_type = request.GET.get('choice_folder_type', '').strip()
     choice_lastest_receiver = request.GET.get('choice_lastest_receiver', '').strip()
     choice_package_code = request.GET.get('filter_package', '').strip()
+    choice_partner_package_code = request.GET.get('filter_partner_package', '').strip()
     choice_receive_date = request.GET.get('filter_receive_date', '').strip()
     choice_folder_date = request.GET.get('filter_folder_date', '').strip()
     sort_raw = request.GET.get('sort', '-folder_created_date').strip()
@@ -1414,6 +1427,8 @@ def receive_folder_view_v2(request):
         filters['lastest_received_by__username__icontains'] = choice_lastest_receiver
     if choice_package_code:
         filters['package_id__package_code__icontains'] = choice_package_code
+    if choice_partner_package_code:
+        filters['package_id__partnerpackage__partner_package_code__icontains'] = choice_partner_package_code
 
     def _apply_date_range(input_str, field_lookup):
         if not input_str:
@@ -1772,6 +1787,7 @@ def bulk_receive_folder_view(request):
         folder_status_choice = data.get('folder_status_choice')
         folder_note_choice = data.get('folder_note_choice')
         issue_type_ids = _normalize_issue_type_ids(data.get('issue_type_ids') or [])
+        require_issue_types = bool(data.get('require_issue_types'))
         lasted_received_date_submit  = data.get('trueLastestReceiveDate')
         if lasted_received_date_submit == '':
             lasted_received_date_submit = timezone.now()
@@ -1786,9 +1802,13 @@ def bulk_receive_folder_view(request):
                 return JsonResponse({'success': False, 'error': 'Vui lòng nhập mã thùng.'})
             if not folder_status_choice:
                 return JsonResponse({'success': False, 'error': 'Vui lòng chọn trạng thái nhận.'})
-            issue_types, issue_error = _get_valid_issue_types(issue_type_ids)
-            if issue_error:
-                return JsonResponse({'success': False, 'error': issue_error})
+            issue_types = []
+            if issue_type_ids:
+                issue_types, issue_error = _get_valid_issue_types(issue_type_ids)
+                if issue_error:
+                    return JsonResponse({'success': False, 'error': issue_error})
+            elif require_issue_types:
+                return JsonResponse({'success': False, 'error': 'Vui lòng chọn ít nhất 1 trạng thái lỗi.'})
 
             package_id_instance = Package.objects.select_related('package_type').get(package_code=package_choice)
             folder_status_instance = FolderStatus.objects.get(folder_status_id=folder_status_choice)
@@ -1845,7 +1865,8 @@ def bulk_receive_folder_view(request):
                             package_id = package_id_instance,
                             trans_created_date=receive_time,
                             trans_created_by=user )
-                    _replace_folder_issues(folder, issue_types, user)
+                    if issue_types:
+                        _replace_folder_issues(folder, issue_types, user)
                 # Không set messages cho JSON response để tránh tràn sang màn hình khác
         except Package.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Mã thùng không tồn tại.'})
@@ -3077,6 +3098,261 @@ def _parse_date_safe(val):
     return parsed.date()
 
 
+def _normalize_col_name(value):
+    if value is None:
+        return ""
+    text = str(value).strip().lower()
+    text = re.sub(r"\s+", "_", text)
+    return text
+
+
+def _base_col_name(value):
+    base = _normalize_col_name(value)
+    return re.sub(r"\.\d+$", "", base)
+
+
+def _pick_date_columns(columns):
+    day_cols = [c for c in columns if _base_col_name(c) in ("ngay", "ngày", "day")]
+    month_cols = [c for c in columns if _base_col_name(c) in ("thang", "tháng", "month")]
+    year_cols = [c for c in columns if _base_col_name(c) in ("nam", "năm", "year")]
+
+    def _pick_by_hint(cols, hint):
+        for col in cols:
+            base = _normalize_col_name(col)
+            if hint in base:
+                return col
+        return None
+
+    receive_day = _pick_by_hint(day_cols, "nhan") or (day_cols[0] if len(day_cols) >= 1 else None)
+    receive_month = _pick_by_hint(month_cols, "nhan") or (month_cols[0] if len(month_cols) >= 1 else None)
+    receive_year = _pick_by_hint(year_cols, "nhan") or (year_cols[0] if len(year_cols) >= 1 else None)
+
+    folder_day = _pick_by_hint(day_cols, "phat_sinh")
+    folder_month = _pick_by_hint(month_cols, "phat_sinh")
+    folder_year = _pick_by_hint(year_cols, "phat_sinh")
+
+    if not folder_day and len(day_cols) >= 2:
+        folder_day = day_cols[1]
+    if not folder_month and len(month_cols) >= 2:
+        folder_month = month_cols[1]
+    if not folder_year and len(year_cols) >= 2:
+        folder_year = year_cols[1]
+
+    return {
+        "receive_day": receive_day,
+        "receive_month": receive_month,
+        "receive_year": receive_year,
+        "folder_day": folder_day,
+        "folder_month": folder_month,
+        "folder_year": folder_year,
+    }
+
+
+def _build_date(day_val, month_val, year_val):
+    try:
+        if pd.isna(day_val) or pd.isna(month_val) or pd.isna(year_val):
+            return None
+        day = int(day_val)
+        month = int(month_val)
+        year = int(year_val)
+        return datetime(year, month, day).date()
+    except Exception:
+        return None
+
+
+def _resolve_shop_by_pgd(pgd_value):
+    if pd.isna(pgd_value):
+        return None, "Thiếu PGD."
+    raw = str(pgd_value).strip()
+    if not raw:
+        return None, "Thiếu PGD."
+    code = raw.split()[0].strip()
+    if not code:
+        return None, "PGD không hợp lệ."
+    candidates = Shop.objects.filter(shop_name__icontains=code)
+    if not candidates.exists():
+        return None, f"PGD '{raw}' không tồn tại."
+    if candidates.count() == 1:
+        return candidates.first(), ""
+    exact = candidates.filter(shop_name__iexact=raw)
+    if exact.count() == 1:
+        return exact.first(), ""
+    return None, f"PGD '{raw}' trùng lặp, không xác định được."
+
+
+def _validate_offline_receiving(df, uploader, upload_filename=""):
+    df = df.rename(columns={c: c for c in df.columns})
+    columns = list(df.columns)
+    date_cols = _pick_date_columns(columns)
+
+    pgd_col = None
+    for col in columns:
+        base = _base_col_name(col)
+        if base in ("pgd", "phong_giao_dich", "phong_giaodich"):
+            pgd_col = col
+            break
+
+    folder_type_col = None
+    for col in columns:
+        base = _base_col_name(col)
+        if base in ("folder_type", "foldertype", "folder_type_code", "foldertype_code"):
+            folder_type_col = col
+            break
+
+    package_col = None
+    for col in columns:
+        base = _base_col_name(col)
+        if base in ("ma_thung_f88", "ma_thung", "package_code", "ma_thung_f88"):
+            package_col = col
+            break
+
+    user_col = None
+    for col in columns:
+        base = _base_col_name(col)
+        if base in ("nhan_su", "nhan_sự", "username", "nhan_vien", "nhân_sự"):
+            user_col = col
+            break
+
+    if not all([date_cols["receive_day"], date_cols["receive_month"], date_cols["receive_year"]]):
+        raise ValidationError("Thiếu cột ngày/tháng/năm nhận.")
+    if not all([date_cols["folder_day"], date_cols["folder_month"], date_cols["folder_year"]]):
+        raise ValidationError("Thiếu cột ngày/tháng/năm phát sinh.")
+    if not pgd_col:
+        raise ValidationError("Thiếu cột PGD.")
+    if not folder_type_col:
+        raise ValidationError("Thiếu cột Folder type (folder_type_code).")
+    if not package_col:
+        raise ValidationError("Thiếu cột Mã thùng F88.")
+    if not user_col:
+        raise ValidationError("Thiếu cột Nhân sự (username).")
+
+    folder_type_map = {ft.folder_type_code.upper(): ft for ft in FolderType.objects.filter(is_valid=True) if ft.folder_type_code}
+    region_map = {r.region_code.upper(): r for r in Region.objects.all()}
+    status_received = FolderStatus.objects.filter(is_received=True).first()
+    if not status_received:
+        raise ValidationError("Chưa cấu hình trạng thái nhận.")
+
+    package_pattern = re.compile(r"^(?P<type>[A-Za-z0-9]+)-(?P<date>\d{6})-(?P<region>[A-Za-z0-9])(?P<seq>\d{2})$")
+
+    result_rows = []
+    valid_rows = []
+    package_cache = {}
+
+    for idx, row in df.iterrows():
+        errors = []
+        warnings = []
+
+        receive_date = _build_date(
+            row.get(date_cols["receive_day"]),
+            row.get(date_cols["receive_month"]),
+            row.get(date_cols["receive_year"]),
+        )
+        folder_date = _build_date(
+            row.get(date_cols["folder_day"]),
+            row.get(date_cols["folder_month"]),
+            row.get(date_cols["folder_year"]),
+        )
+
+        if not receive_date:
+            errors.append("Ngày nhận không hợp lệ.")
+        if not folder_date:
+            errors.append("Ngày phát sinh không hợp lệ.")
+
+        shop, shop_error = _resolve_shop_by_pgd(row.get(pgd_col))
+        if shop_error:
+            errors.append(shop_error)
+
+        folder_type_code = str(row.get(folder_type_col)).strip() if not pd.isna(row.get(folder_type_col)) else ""
+        folder_type_obj = folder_type_map.get(folder_type_code.upper()) if folder_type_code else None
+        if not folder_type_obj:
+            errors.append(f"Folder type '{folder_type_code}' không tồn tại.")
+
+        username = str(row.get(user_col)).strip() if not pd.isna(row.get(user_col)) else ""
+        receiver = User.objects.filter(username=username).first() if username else None
+        if not receiver:
+            errors.append(f"Nhân sự '{username}' không tồn tại.")
+
+        package_code = str(row.get(package_col)).strip() if not pd.isna(row.get(package_col)) else ""
+        package_obj = None
+        package_region = None
+        if not package_code:
+            errors.append("Thiếu mã thùng F88.")
+        else:
+            match = package_pattern.match(package_code)
+            if not match:
+                errors.append("Mã thùng F88 không đúng định dạng.")
+            else:
+                pkg_type = match.group("type").upper()
+                region_part = match.group("region").upper()
+                if folder_type_obj and folder_type_obj.folder_type_code and pkg_type != folder_type_obj.folder_type_code.upper():
+                    errors.append("Mã thùng không khớp folder_type_code.")
+                package_region = region_map.get(region_part)
+
+            if package_code in package_cache:
+                package_obj = package_cache[package_code]
+            else:
+                package_obj = Package.objects.filter(package_code=package_code).first()
+                if package_obj:
+                    package_cache[package_code] = package_obj
+
+        folder_obj = None
+        fallback_used = False
+        if shop and folder_type_obj and folder_date:
+            qs = Folder.objects.filter(
+                shop_id=shop,
+                folder_type_id=folder_type_obj,
+                folder_created_date=folder_date,
+            )
+            if qs.count() == 1:
+                folder_obj = qs.first()
+            elif qs.count() == 0:
+                fallback_qs = Folder.objects.filter(shop_id=shop, folder_type_id=folder_type_obj)
+                if fallback_qs.count() == 1:
+                    folder_obj = fallback_qs.first()
+                    fallback_used = True
+                    warnings.append("Không tìm thấy đúng ngày phát sinh, fallback toàn bộ theo PGD + loại quyển.")
+                elif fallback_qs.count() == 0:
+                    errors.append("Không tìm thấy quyển theo PGD + loại quyển.")
+                else:
+                    errors.append("Có nhiều quyển theo PGD + loại quyển, không thể fallback.")
+            else:
+                errors.append("Có nhiều quyển theo PGD + ngày phát sinh + loại quyển.")
+
+        status = "valid" if not errors else "invalid"
+        if not errors:
+            valid_rows.append(
+                {
+                    "folder": folder_obj,
+                    "receiver": receiver,
+                    "receive_date": receive_date,
+                    "folder_date": folder_date,
+                    "folder_type": folder_type_obj,
+                    "shop": shop,
+                    "package_code": package_code,
+                    "package_region": package_region,
+                    "package": package_obj,
+                    "fallback_used": fallback_used,
+                }
+            )
+
+        result_rows.append(
+            {
+                "row": idx + 2,
+                "pgd": str(row.get(pgd_col)).strip() if not pd.isna(row.get(pgd_col)) else "",
+                "folder_type_code": folder_type_code,
+                "username": username,
+                "package_code": package_code,
+                "receive_date": receive_date.strftime("%Y-%m-%d") if receive_date else "",
+                "folder_date": folder_date.strftime("%Y-%m-%d") if folder_date else "",
+                "status": status,
+                "warning": "; ".join(warnings),
+                "error": "; ".join(errors),
+            }
+        )
+
+    return result_rows, valid_rows, status_received
+
+
 def _validate_bulk_packages(df, user, user_context, upload_filename=""):
     def _clean_str(val):
         if pd.isna(val):
@@ -3362,6 +3638,161 @@ def package_bulk_save(request):
             "success": True,
             "created_packages": created,
             "created_partnerpackages": partner_created,
+        }
+    )
+
+
+def _load_receiving_import_df(file):
+    try:
+        df = pd.read_excel(file, header=1)
+    except Exception:
+        df = pd.read_excel(file)
+    if df is None or df.empty:
+        raise ValidationError("File không có dữ liệu.")
+    return df
+
+
+@login_required
+@require_ui_permission('receiving_import_v2')
+def receiving_import_v2(request):
+    user_context = get_user_context(request.user)
+    return render(request, 'app_documents/app_receiving_import_v2.html', {**user_context})
+
+
+@login_required
+@require_ui_permission('receiving_import_v2')
+@require_http_methods(["POST"])
+def receiving_import_validate(request):
+    file = request.FILES.get("file")
+    if not file:
+        return JsonResponse({"error": "Thiếu file upload."}, status=400)
+    if file.size > 30 * 1024 * 1024:
+        return JsonResponse({"error": "File vượt quá 30MB."}, status=400)
+    try:
+        df = _load_receiving_import_df(file)
+        result_rows, _, _ = _validate_offline_receiving(df, request.user, upload_filename=file.name)
+    except Exception as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        pd.DataFrame(result_rows).to_excel(writer, sheet_name="Result", index=False)
+    output.seek(0)
+    resp = HttpResponse(
+        output.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    resp["Content-Disposition"] = 'attachment; filename="receiving_import_validate_result.xlsx"'
+    return resp
+
+
+@login_required
+@require_ui_permission('receiving_import_v2')
+@require_http_methods(["POST"])
+def receiving_import_save(request):
+    file = request.FILES.get("file")
+    if not file:
+        return JsonResponse({"error": "Thiếu file upload."}, status=400)
+    if file.size > 30 * 1024 * 1024:
+        return JsonResponse({"error": "File vượt quá 30MB."}, status=400)
+    try:
+        df = _load_receiving_import_df(file)
+        result_rows, valid_rows, status_received = _validate_offline_receiving(df, request.user, upload_filename=file.name)
+    except Exception as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    invalid_count = len([r for r in result_rows if r["status"] == "invalid"])
+    if invalid_count > 0:
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            pd.DataFrame(result_rows).to_excel(writer, sheet_name="Result", index=False)
+        output.seek(0)
+        resp = HttpResponse(
+            output.read(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        resp["Content-Disposition"] = 'attachment; filename="receiving_import_errors.xlsx"'
+        return resp
+
+    created_packages = 0
+    updated_folders = 0
+    fallback_used = 0
+    package_cache = {}
+
+    with transaction.atomic():
+        for entry in valid_rows:
+            folder = entry["folder"]
+            receiver = entry["receiver"]
+            receive_date = entry["receive_date"]
+            package_code = entry["package_code"]
+            folder_type = entry["folder_type"]
+            package_region = entry["package_region"]
+            package_obj = entry["package"]
+            if entry.get("fallback_used"):
+                fallback_used += 1
+
+            if not package_obj:
+                package_obj = package_cache.get(package_code)
+            if not package_obj:
+                package_obj = Package.objects.filter(package_code=package_code).first()
+            if not package_obj:
+                created_dt = datetime.combine(receive_date, datetime.min.time())
+                if timezone.is_naive(created_dt):
+                    created_dt = timezone.make_aware(created_dt, timezone.get_current_timezone())
+                package_obj = Package.objects.create(
+                    package_code=package_code,
+                    package_type=folder_type,
+                    created_by=receiver,
+                    created_date=created_dt,
+                    region_id=package_region,
+                )
+                created_packages += 1
+            package_cache[package_code] = package_obj
+
+            received_dt = datetime.combine(receive_date, datetime.min.time())
+            if timezone.is_naive(received_dt):
+                received_dt = timezone.make_aware(received_dt, timezone.get_current_timezone())
+
+            folder.lastest_received_date = received_dt
+            folder.lastest_received_by = receiver
+            folder.folder_status_id = status_received
+            folder.package_id = package_obj
+            folder.save(update_fields=['lastest_received_date', 'lastest_received_by', 'folder_status_id', 'package_id'])
+            updated_folders += 1
+
+            check_on_time(folder, received_dt)
+
+            FoldersTransactionReceiving.objects.create(
+                folder_id=folder,
+                trans_updated_date=received_dt,
+                trans_created_by=receiver,
+                folder_status_id=status_received,
+            )
+
+            PackageFolderHistory.objects.create(
+                folder_id=folder,
+                package_id=package_obj,
+                trans_created_date=received_dt,
+                trans_created_by=receiver,
+            )
+
+            documents = DocumentsDetail.objects.select_for_update().filter(folder_id=folder.folder_id)
+            for document in documents:
+                document.package_id = package_obj
+                document.save(update_fields=['package_id'])
+                PackageDocumentHistory.objects.create(
+                    document_id=document,
+                    package_id=package_obj,
+                    trans_created_date=received_dt,
+                    trans_created_by=receiver,
+                )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "updated_folders": updated_folders,
+            "created_packages": created_packages,
+            "fallback_used": fallback_used,
         }
     )
 
@@ -4052,6 +4483,112 @@ def document_kpi_dashboard_v2(request):
             'late': late,
         })
 
+    def build_productivity_payload(start_date, end_date):
+        daily_qs = UserPresenceDaily.objects.filter(work_date__range=[start_date, end_date])
+        total_minutes = daily_qs.aggregate(total=Sum('total_active_minutes')).get('total') or 0
+        active_users = daily_qs.values('user_id').distinct().count()
+        active_days = daily_qs.values('work_date').distinct().count()
+        summary = {
+            'total_minutes': int(total_minutes),
+            'total_hours': round(total_minutes / 60, 2) if total_minutes else 0,
+            'active_users': active_users,
+            'active_days': active_days,
+            'avg_minutes_per_user': round(total_minutes / active_users, 1) if active_users else 0,
+            'avg_minutes_per_day': round(total_minutes / active_days, 1) if active_days else 0,
+            'peak_hour': None,
+            'peak_minutes': 0,
+        }
+        users = list(
+            daily_qs.select_related('user')
+            .values('user__username', 'user__first_name', 'user__last_name', 'user__userprofile__department')
+            .annotate(
+                total_minutes=Sum('total_active_minutes'),
+                active_days=Count('work_date', distinct=True),
+            )
+            .order_by('-total_minutes')
+        )
+
+        hourly_qs = UserPresenceHourly.objects.filter(work_date__range=[start_date, end_date]).values('hour').annotate(
+            total_seconds=Sum('active_seconds'),
+            user_count=Count('user', distinct=True),
+        ).order_by('hour')
+        hour_map = {row['hour']: row for row in hourly_qs}
+        hours = []
+        for hour in range(24):
+            row = hour_map.get(hour, {})
+            minutes = int((row.get('total_seconds') or 0) // 60)
+            hours.append({
+                'hour': hour,
+                'minutes': minutes,
+                'user_count': row.get('user_count') or 0,
+            })
+        if hours:
+            peak_row = max(hours, key=lambda x: x['minutes'])
+            summary['peak_hour'] = peak_row['hour']
+            summary['peak_minutes'] = peak_row['minutes']
+
+        group_qs = UserPresenceHourly.objects.filter(work_date__range=[start_date, end_date]).values(
+            'user__userprofile__department', 'hour'
+        ).annotate(total_seconds=Sum('active_seconds')).order_by('user__userprofile__department', 'hour')
+        group_map = {}
+        for row in group_qs:
+            group_name = row['user__userprofile__department'] or 'Không xác định'
+            group_map.setdefault(group_name, {h: 0 for h in range(24)})
+            group_map[group_name][row['hour']] = int((row['total_seconds'] or 0) // 60)
+        heatmap_rows = []
+        max_minutes = 0
+        for group_name, hour_dict in group_map.items():
+            for h in range(24):
+                max_minutes = max(max_minutes, hour_dict.get(h, 0))
+        for group_name, hour_dict in group_map.items():
+            cells = []
+            for h in range(24):
+                minutes = hour_dict.get(h, 0)
+                if minutes == 0 or max_minutes == 0:
+                    opacity = 0
+                else:
+                    opacity = round(0.15 + (minutes / max_minutes) * 0.65, 2)
+                cells.append({'minutes': minutes, 'opacity': opacity})
+            heatmap_rows.append({'group': group_name, 'cells': cells})
+        heatmap_rows = sorted(heatmap_rows, key=lambda x: x['group'])
+
+        top_hours = sorted(hours, key=lambda x: x['minutes'], reverse=True)[:5]
+        bottom_hours = sorted(hours, key=lambda x: x['minutes'])[:5]
+
+        return summary, users, hours, top_hours, bottom_hours, heatmap_rows
+
+    productivity_summary = {
+        'total_minutes': 0,
+        'total_hours': 0,
+        'active_users': 0,
+        'active_days': 0,
+        'avg_minutes_per_user': 0,
+        'avg_minutes_per_day': 0,
+        'peak_hour': None,
+        'peak_minutes': 0,
+    }
+    productivity_users = []
+    productivity_hours = []
+    productivity_top_hours = []
+    productivity_bottom_hours = []
+    productivity_heatmap_rows = []
+    productivity_suggestions = []
+    productivity_hour_labels = list(range(24))
+
+    if tab == 'productivity':
+        (
+            productivity_summary,
+            productivity_users_all,
+            productivity_hours,
+            productivity_top_hours,
+            productivity_bottom_hours,
+            productivity_heatmap_rows,
+        ) = build_productivity_payload(start_date, end_date)
+        productivity_users = productivity_users_all[:10]
+        active_window = [row for row in productivity_hours if 7 <= row['hour'] <= 20]
+        productivity_top_hours = sorted(active_window, key=lambda x: x['minutes'], reverse=True)[:5]
+        productivity_bottom_hours = sorted(active_window, key=lambda x: x['minutes'])[:5]
+
     context = {
         **user_context,
         'user': user,
@@ -4102,8 +4639,111 @@ def document_kpi_dashboard_v2(request):
         'borrow_months_breakdown': borrow_month_rows,
         'borrow_late_rows': borrow_late_rows,
         'borrow_detail_rows': borrow_detail_rows,
+        'productivity_summary': productivity_summary,
+        'productivity_users': productivity_users,
+        'productivity_hours_json': json.dumps(productivity_hours, cls=DjangoJSONEncoder, ensure_ascii=False),
+        'productivity_top_hours': productivity_top_hours,
+        'productivity_bottom_hours': productivity_bottom_hours,
+        'productivity_heatmap_rows': productivity_heatmap_rows,
+        'productivity_suggestions': productivity_suggestions,
+        'productivity_hour_labels': productivity_hour_labels,
     }
     return render(request, "app_documents/app_document_kpi_v2.html", context)
+
+
+@login_required
+def export_productivity_report(request):
+    user = request.user
+    user_context = get_user_context(user)
+    if not user_context.get("is_admin"):
+        messages.error(request, "Bạn không có quyền truy cập dữ liệu.")
+        return redirect("document_kpi_v2")
+
+    start_date_str = request.GET.get("start_date")
+    end_date_str = request.GET.get("end_date")
+    month_str = request.GET.get("month")
+    fmt = request.GET.get("format", "xlsx").lower()
+
+    today = timezone.now().date()
+    if month_str:
+        try:
+            year, month = [int(part) for part in month_str.split("-")]
+            last_day = calendar.monthrange(year, month)[1]
+            start_date = datetime(year, month, 1).date()
+            end_date = datetime(year, month, last_day).date()
+        except (ValueError, IndexError):
+            start_date, end_date = parse_dates(start_date_str, end_date_str)
+    else:
+        start_date, end_date = parse_dates(start_date_str, end_date_str)
+    start_date = start_date or today.replace(day=1)
+    end_date = end_date or today
+
+    daily_qs = UserPresenceDaily.objects.filter(work_date__range=[start_date, end_date])
+    user_rows = list(
+        daily_qs.select_related('user')
+        .values('user__username', 'user__first_name', 'user__last_name', 'user__userprofile__department')
+        .annotate(
+            total_minutes=Sum('total_active_minutes'),
+            active_days=Count('work_date', distinct=True),
+        )
+        .order_by('-total_minutes')
+    )
+    for row in user_rows:
+        row['full_name'] = f"{row.get('user__last_name') or ''} {row.get('user__first_name') or ''}".strip() or row.get('user__username')
+        row['department'] = row.get('user__userprofile__department') or 'Không xác định'
+        row['total_hours'] = round((row.get('total_minutes') or 0) / 60, 2)
+
+    hourly_qs = UserPresenceHourly.objects.filter(work_date__range=[start_date, end_date]).values('hour').annotate(
+        total_seconds=Sum('active_seconds'),
+        user_count=Count('user', distinct=True),
+    ).order_by('hour')
+    hourly_map = {row['hour']: row for row in hourly_qs}
+    hourly_rows = []
+    for hour in range(24):
+        row = hourly_map.get(hour, {})
+        minutes = int((row.get('total_seconds') or 0) // 60)
+        hourly_rows.append({
+            'hour': hour,
+            'total_minutes': minutes,
+            'user_count': row.get('user_count') or 0,
+        })
+
+    if fmt == "csv":
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="productivity_report.csv"'
+        writer = csv.writer(response)
+        writer.writerow(['username', 'full_name', 'department', 'total_minutes', 'total_hours', 'active_days'])
+        for row in user_rows:
+            writer.writerow([
+                row.get('user__username'),
+                row.get('full_name'),
+                row.get('department'),
+                row.get('total_minutes') or 0,
+                row.get('total_hours') or 0,
+                row.get('active_days') or 0,
+            ])
+        return response
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        pd.DataFrame(user_rows).rename(columns={
+            'user__username': 'username',
+            'full_name': 'full_name',
+            'department': 'department',
+            'total_minutes': 'total_minutes',
+            'total_hours': 'total_hours',
+            'active_days': 'active_days',
+        })[['username', 'full_name', 'department', 'total_minutes', 'total_hours', 'active_days']].to_excel(
+            writer, sheet_name="Summary", index=False
+        )
+        pd.DataFrame(hourly_rows).to_excel(writer, sheet_name="Hourly", index=False)
+    output.seek(0)
+    resp = HttpResponse(
+        output.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    resp["Content-Disposition"] = 'attachment; filename="productivity_report.xlsx"'
+    return resp
 
 @login_required
 def export_kpi_shop_detail(request):
@@ -5073,14 +5713,33 @@ def api_user_heartbeat(request):
     presence, created = UserPresenceDaily.objects.get_or_create(
         user=request.user,
         work_date=work_date,
-        defaults={'last_seen_at': now},
+        defaults={'last_seen_at': now, 'first_seen_at': now},
     )
     if not created and presence.last_seen_at:
         delta = (now - presence.last_seen_at).total_seconds()
         if 0 < delta <= active_gap:
             presence.total_active_seconds += int(delta)
+    if not presence.first_seen_at:
+        presence.first_seen_at = now
     presence.last_seen_at = now
-    presence.save(update_fields=['last_seen_at', 'total_active_seconds', 'updated_at'])
+    presence.total_active_minutes = int(presence.total_active_seconds // 60)
+    presence.save(update_fields=['first_seen_at', 'last_seen_at', 'total_active_seconds', 'total_active_minutes', 'updated_at'])
+
+    hour_bucket = now.hour
+    hourly, created_hourly = UserPresenceHourly.objects.get_or_create(
+        user=request.user,
+        work_date=work_date,
+        hour=hour_bucket,
+        defaults={'first_seen_at': now, 'last_seen_at': now},
+    )
+    if not created_hourly and hourly.last_seen_at:
+        delta = (now - hourly.last_seen_at).total_seconds()
+        if 0 < delta <= active_gap:
+            hourly.active_seconds += int(delta)
+    if not hourly.first_seen_at:
+        hourly.first_seen_at = now
+    hourly.last_seen_at = now
+    hourly.save(update_fields=['first_seen_at', 'last_seen_at', 'active_seconds', 'updated_at'])
     return JsonResponse({'success': True})
 
 
@@ -5331,3 +5990,42 @@ def user_profile_v2_view(request):
         'profile': profile,
     }
     return render(request, 'app_documents/user_profile_v2.html', context)
+
+
+@login_required
+def ui_permission_v2_view(request):
+    user_context = get_user_context(request.user)
+    is_admin = user_context.get('is_admin') or user_context.get('is_super_admin')
+    if not is_admin:
+        messages.error(request, 'Bạn không có quyền truy cập.')
+        return redirect('home')
+
+    ensure_ui_screens()
+    roles = [{'key': code, 'label': label} for code, label in ROLE_CODES]
+    screens = list(UiScreen.objects.filter(is_active=True).order_by('screen_group', 'screen_name'))
+
+    if request.method == 'POST':
+        for screen in screens:
+            for role in roles:
+                checkbox = f"perm_{screen.screen_key}_{role['key']}"
+                can_view = request.POST.get(checkbox) == '1'
+                UiPermission.objects.update_or_create(
+                    screen=screen,
+                    role_code=role['key'],
+                    defaults={'can_view': can_view, 'updated_by': request.user},
+                )
+        messages.success(request, 'Đã lưu phân quyền UI.')
+        return redirect('ui_permission_v2')
+
+    permissions = UiPermission.objects.filter(screen__in=screens)
+    permission_map = {}
+    for perm in permissions:
+        permission_map.setdefault(perm.screen.screen_key, {})[perm.role_code] = perm.can_view
+
+    context = {
+        **user_context,
+        'roles': roles,
+        'screens': screens,
+        'permission_map': permission_map,
+    }
+    return render(request, 'app_documents/ui_permission_v2.html', context)

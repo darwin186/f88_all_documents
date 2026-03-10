@@ -1,10 +1,110 @@
 # utils.py
 from django.contrib.auth.models import User
-from .models import UserProfile 
+from .models import UserProfile, UiScreen, UiPermission
 from datetime import datetime, timedelta
 from app_documents.models import Folder,FolderGroup 
 from calendar import monthrange
 from django.utils import timezone
+from django.db import transaction
+
+UI_SCREENS = [
+    {'key': 'receiving_v2', 'name': 'Nhận chứng từ v2', 'path': '/nhan-chung-tu-v2', 'group': 'documents'},
+    {'key': 'receiving_import_v2', 'name': 'Import nhận chứng từ', 'path': '/nhan-chung-tu-v2/import', 'group': 'documents'},
+    {'key': 'checking_v2', 'name': 'Duyệt chứng từ v2', 'path': '/duyet-chung-tu-v2', 'group': 'documents'},
+    {'key': 'kpi_v2', 'name': 'Chỉ tiêu chứng từ v2', 'path': '/chi-tieu-chung-tu-v2', 'group': 'kpi'},
+    {'key': 'package_v2', 'name': 'Quản lý thùng v2', 'path': '/package-list-management', 'group': 'package'},
+    {'key': 'borrow_request_v2', 'name': 'Yêu cầu mượn v2', 'path': '/yeu-cau-muon-chung-tu-v2/', 'group': 'borrow'},
+    {'key': 'borrow_manage_v2', 'name': 'Quản lý mượn v2', 'path': '/quan-ly-muon-chung-tu-v2/', 'group': 'borrow'},
+    {'key': 'ctv_accounts', 'name': 'Quản lý tài khoản CTV', 'path': '/quan-ly-tai-khoan-ctv/', 'group': 'admin'},
+    {'key': 'workshift_register', 'name': 'Lịch làm việc', 'path': '/lich-lam-viec/', 'group': 'workshift'},
+    {'key': 'workshift_tasks', 'name': 'Phân công công việc', 'path': '/lich-lam-viec/tasks/', 'group': 'workshift'},
+    {'key': 'workshift_policy', 'name': 'Cấu hình ca làm việc', 'path': '/lich-lam-viec/policy/', 'group': 'workshift'},
+    {'key': 'profile', 'name': 'Thông tin cá nhân', 'path': '/thong-tin-ca-nhan/', 'group': 'account'},
+    {'key': 'ui_permission', 'name': 'Phân quyền UI', 'path': '/phan-quyen-ui-v2/', 'group': 'admin'},
+]
+
+ROLE_CODES = [
+    ('super_admin', 'Super Admin'),
+    ('admin', 'Admin'),
+    ('checker', 'Checker'),
+    ('shop', 'PGD'),
+    ('supervisor', 'Supervisor'),
+    ('risk', 'Risk'),
+]
+
+
+def get_role_codes(user):
+    roles = []
+    if user.is_superuser:
+        roles.append('super_admin')
+    if user.groups.filter(name='admin').exists():
+        roles.append('admin')
+    if user.groups.filter(name='checker').exists():
+        roles.append('checker')
+    if user.groups.filter(name='shop').exists():
+        roles.append('shop')
+    if user.groups.filter(name='supervisor').exists():
+        roles.append('supervisor')
+    if user.groups.filter(name='risk').exists():
+        roles.append('risk')
+    return roles
+
+
+def ensure_ui_screens():
+    existing = {s.screen_key: s for s in UiScreen.objects.all()}
+    to_create = []
+    for screen in UI_SCREENS:
+        if screen['key'] not in existing:
+            to_create.append(UiScreen(
+                screen_key=screen['key'],
+                screen_name=screen['name'],
+                screen_path=screen.get('path'),
+                screen_group=screen.get('group'),
+            ))
+    if to_create:
+        UiScreen.objects.bulk_create(to_create)
+    if not UiPermission.objects.exists():
+        screens = UiScreen.objects.all()
+        perms = []
+        for screen in screens:
+            for code, _ in ROLE_CODES:
+                perms.append(UiPermission(
+                    screen=screen,
+                    role_code=code,
+                    can_view=code in ('admin', 'super_admin'),
+                ))
+        if perms:
+            UiPermission.objects.bulk_create(perms)
+
+
+def get_allowed_screens(user):
+    if user.is_superuser:
+        return {s['key'] for s in UI_SCREENS}
+    ensure_ui_screens()
+    role_codes = get_role_codes(user)
+    if not role_codes:
+        return set()
+    permissions = UiPermission.objects.filter(role_code__in=role_codes, can_view=True).select_related('screen')
+    if UiPermission.objects.exists() and not permissions.exists():
+        return set()
+    if not UiPermission.objects.exists() and not permissions.exists():
+        # fallback: allow all if no permission configured yet
+        return {s['key'] for s in UI_SCREENS}
+    return {p.screen.screen_key for p in permissions}
+
+
+def require_ui_permission(screen_key):
+    def decorator(view_func):
+        def _wrapped(request, *args, **kwargs):
+            allowed = get_allowed_screens(request.user)
+            if screen_key not in allowed:
+                from django.contrib import messages
+                from django.shortcuts import redirect
+                messages.error(request, 'Bạn không có quyền truy cập màn hình này.')
+                return redirect('home')
+            return view_func(request, *args, **kwargs)
+        return _wrapped
+    return decorator
 
 def get_user_context(user):
     profile = UserProfile.objects.get(user=user)
@@ -15,6 +115,7 @@ def get_user_context(user):
     is_risk = user.groups.filter(name='risk').exists()
     is_supervisor = user.groups.filter(name='supervisor').exists()
     
+    allowed_screens = get_allowed_screens(user)
     context = {
         'is_super_admin': is_super_admin, # Quyền bự nhất
         'is_admin': is_admin, # Quyền quản trị viên
@@ -24,6 +125,7 @@ def get_user_context(user):
         'is_supervisor': is_supervisor, # Tài khoản của qlkv qlv 
         'user': user,
         'profile': profile,
+        'allowed_screens': allowed_screens,
     }
     return context
 

@@ -18,8 +18,14 @@
     .topnav a { color: var(--f88-green); text-decoration: none; font-weight: 600; }
     .header { text-align: center; margin: 0 auto 2.75rem; max-width: 780px; }
     .eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: #eaf7f0; color: var(--f88-green); font-weight: 600; letter-spacing: 0.3px; }
-    .header h1 { color: #0b1f17; font-size: 2.4rem; font-weight: 800; letter-spacing: -0.4px; margin: 0.75rem 0 0.4rem; }
+    .header h1 { color: #0b1f17; font-size: 2.28rem; font-weight: 800; letter-spacing: -0.4px; margin: 0.75rem 0 0.35rem; }
     .header p { color: #4b5563; font-size: 1.02rem; margin: 0; }
+    .user-menu { position: relative; display: inline-flex; align-items: center; }
+    .user-menu summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; border: 1px solid #e5e7eb; border-radius: 999px; padding: 6px 12px; font-weight: 600; color: #0b1f17; }
+    .user-menu summary::-webkit-details-marker { display: none; }
+    .user-dropdown { position: absolute; right: 0; top: calc(100% + 8px); background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); min-width: 180px; padding: 8px; z-index: 20; }
+    .user-dropdown a, .user-dropdown button { display: block; width: 100%; text-align: left; padding: 8px 10px; border-radius: 8px; color: #0f172a; text-decoration: none; font-weight: 600; border: 0; background: transparent; }
+    .user-dropdown a:hover, .user-dropdown button:hover { background: #f3f4f6; }
     .hero-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; margin-bottom: 2rem; }
     .hero-card { position: relative; padding: 1.6rem; border-radius: 22px; background: linear-gradient(135deg, #f8fbf9, #eaf7f0); color: #0f172a; box-shadow: 0 16px 34px rgba(0,0,0,0.08); overflow: hidden; min-height: 210px; border: 1px solid #d7efe2; display: flex; flex-direction: column; text-decoration: none; transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease; }
     .hero-card:hover { transform: translateY(-4px); box-shadow: 0 18px 38px rgba(0,0,0,0.1); border-color: rgba(0,132,74,0.4); }
@@ -53,11 +59,18 @@
     </div>
     <div>
     {% if user.is_authenticated %}
-      <span class="muted">Xin chào, {% if user.last_name or user.first_name %}{{ user.last_name }} {{ user.first_name }}{% else %}{{ user.username }}{% endif %}</span>
-      <form action="{% url 'logout' %}" method="post" style="display:inline; margin:0;">
-        {% csrf_token %}
-        <button type="submit" class="cta danger">Đăng xuất</button>
-      </form>
+      <details class="user-menu">
+        <summary>
+          {% if is_admin %}Admin{% elif is_risk %}Risk{% elif is_supervisor %}Supervisor{% elif is_checker %}CTV{% elif is_shop_user %}PGD{% else %}User{% endif %}
+        </summary>
+        <div class="user-dropdown">
+          <a href="{% url 'user_profile_v2' %}">Cài đặt thông tin user</a>
+          <form action="{% url 'logout' %}" method="post" style="margin:0;">
+            {% csrf_token %}
+            <button type="submit">Đăng xuất</button>
+          </form>
+        </div>
+      </details>
     {% else %}
       <a href="{% url 'login' %}">Đăng nhập</a>
     {% endif %}
@@ -65,7 +78,8 @@
   </div>
   <div class="wrap">
     <div class="header">
-      <h1>Hệ thống quản lý văn bản và chứng từ</h1>
+      <h1>Hệ thống chứng từ</h1>
+      <p>Xin chào, {% if user.last_name or user.first_name %}{{ user.last_name }} {{ user.first_name }}{% else %}{{ user.username }}{% endif %}!</p>
     </div>
 
     <div class="hero-grid">

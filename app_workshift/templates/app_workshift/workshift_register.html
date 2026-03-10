@@ -196,6 +196,7 @@
     const maxShiftsPerDay = parseInt("{{ policy_values.max_shifts_per_day }}", 10) || 1;
     const maxHoursPerDay = parseFloat("{{ policy_values.max_hours_per_day }}") || 0;
     const maxShiftHours = maxShiftsPerDay ? (maxHoursPerDay / maxShiftsPerDay) : 0;
+    const minShiftHours = parseFloat("{{ policy_values.min_hours_per_shift }}") || 4;
     const maxShiftSlots = maxShiftHours ? Math.max(1, Math.floor((maxShiftHours * 60) / policy.stepMinutes)) : 0;
     const assignments = JSON.parse(document.getElementById('workshift-assignments')?.textContent || '{}');
     const daySelections = new Map();
@@ -426,6 +427,7 @@
       const blocks = buildBlocks(activeDay);
       const dayHours = blocks.reduce((sum, block) => sum + block.hours, 0);
       const continuousCount = countContinuousBlocks(activeDay);
+      const hasShortShift = blocks.some(block => block.hours < minShiftHours);
       if (totalLabelEl) totalLabelEl.textContent = 'Tổng giờ ngày';
       if (dayTotalEl) {
         dayTotalEl.textContent = dayHours.toFixed(2);
@@ -455,6 +457,9 @@
       if (warningEl) {
         if (continuousCount > 1) {
           warningEl.textContent = 'Chỉ được chọn ca liên tục trong ngày.';
+          warningEl.classList.remove('hidden');
+        } else if (hasShortShift) {
+          warningEl.textContent = `Mỗi ca tối thiểu ${minShiftHours} giờ.`;
           warningEl.classList.remove('hidden');
         } else if (blocks.length > maxShiftsPerDay) {
           warningEl.textContent = 'Bạn đã chọn quá số ca cho phép trong ngày.';

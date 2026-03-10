@@ -479,6 +479,38 @@ class FolderIssue(models.Model):
     def __str__(self):
         return f"{self.folder.folder_code} - {self.issue_type.issue_type_name}"
 
+
+class UiScreen(models.Model):
+    screen_id = models.AutoField(primary_key=True)
+    screen_key = models.CharField(max_length=100, unique=True)
+    screen_name = models.CharField(max_length=255)
+    screen_path = models.CharField(max_length=255, null=True, blank=True)
+    screen_group = models.CharField(max_length=100, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = 'd_UiScreen'
+        ordering = ['screen_group', 'screen_name']
+
+    def __str__(self):
+        return self.screen_name
+
+
+class UiPermission(models.Model):
+    permission_id = models.AutoField(primary_key=True)
+    screen = models.ForeignKey(UiScreen, db_column='screen_id', on_delete=models.CASCADE)
+    role_code = models.CharField(max_length=50)
+    can_view = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(User, db_column='updated_by', on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        db_table = 'f_UiPermission'
+        unique_together = ('screen', 'role_code')
+
+    def __str__(self):
+        return f"{self.role_code} - {self.screen.screen_key}"
+
 # Chi tiết chứng từ 
 class DocumentsDetail(models.Model):
     documents_id = models.AutoField(primary_key=True)
@@ -786,8 +818,10 @@ class DocumentKpiSetting(models.Model):
 class UserPresenceDaily(models.Model):
     user = models.ForeignKey(User, db_column='user_id', on_delete=models.CASCADE, related_name='presence_daily')
     work_date = models.DateField()
+    first_seen_at = models.DateTimeField(null=True, blank=True)
     last_seen_at = models.DateTimeField(null=True, blank=True)
     total_active_seconds = models.PositiveIntegerField(default=0)
+    total_active_minutes = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -798,4 +832,23 @@ class UserPresenceDaily(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.work_date}"
+
+
+class UserPresenceHourly(models.Model):
+    user = models.ForeignKey(User, db_column='user_id', on_delete=models.CASCADE, related_name='presence_hourly')
+    work_date = models.DateField()
+    hour = models.PositiveSmallIntegerField()
+    active_seconds = models.PositiveIntegerField(default=0)
+    first_seen_at = models.DateTimeField(null=True, blank=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'f_UserPresenceHourly'
+        unique_together = ('user', 'work_date', 'hour')
+        ordering = ['-work_date', '-hour']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.work_date} {self.hour:02d}:00"
     

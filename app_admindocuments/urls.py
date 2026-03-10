@@ -7,6 +7,17 @@ app_name = "admindocuments"
 urlpatterns = [
     path("", views.dashboard, name="admindocuments_dashboard"),
     path("dashboard/export/", views.dashboard_export, name="admindocuments_dashboard_export"),
+    path("incoming-dispatches/", views.incoming_dispatch_list, name="incoming_dispatch_list"),
+    path(
+        "incoming-dispatches/<int:doc_id>/status/",
+        views.incoming_dispatch_change_status,
+        name="incoming_dispatch_change_status",
+    ),
+    path(
+        "incoming-dispatches/<int:doc_id>/images/upload/",
+        views.incoming_dispatch_upload_images,
+        name="incoming_dispatch_upload_images",
+    ),
     path("master-data/", views.master_data, name="master_data"),
     path("documents/", views.document_list, name="admindocuments_list"),
     path("documents/export/", views.document_list_export, name="admindocuments_list_export"),

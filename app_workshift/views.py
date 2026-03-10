@@ -12,7 +12,7 @@ from django.utils import timezone
 from django.core.serializers.json import DjangoJSONEncoder
 import json
 
-from app_documents.utils import get_user_context
+from app_documents.utils import get_user_context, require_ui_permission
 
 from .models import (
     WorkPolicy,
@@ -34,6 +34,7 @@ DEFAULT_POLICY = {
     'max_hours_per_day': Decimal('8'),
     'max_hours_per_week': Decimal('40'),
     'max_hours_per_month': Decimal('160'),
+    'min_hours_per_shift': Decimal('4'),
 }
 
 
@@ -62,6 +63,7 @@ def _get_policy_values(policy):
             'max_hours_per_day': DEFAULT_POLICY['max_hours_per_day'],
             'max_hours_per_week': DEFAULT_POLICY['max_hours_per_week'],
             'max_hours_per_month': DEFAULT_POLICY['max_hours_per_month'],
+            'min_hours_per_shift': DEFAULT_POLICY['min_hours_per_shift'],
         }
     working_days = []
     if policy.working_days:
@@ -82,6 +84,7 @@ def _get_policy_values(policy):
         'max_hours_per_day': policy.max_hours_per_day,
         'max_hours_per_week': policy.max_hours_per_week,
         'max_hours_per_month': policy.max_hours_per_month,
+        'min_hours_per_shift': policy.min_hours_per_shift,
     }
 
 
@@ -182,6 +185,7 @@ def _build_week_context(user, week_start, policy_values, selected_user=None):
 
 
 @login_required
+@require_ui_permission('workshift_register')
 def workshift_register_view(request):
     user_context = get_user_context(request.user)
     is_admin = user_context.get('is_admin') or user_context.get('is_super_admin')
@@ -194,6 +198,7 @@ def workshift_register_view(request):
             max_shift_hours = (policy_values['max_hours_per_day'] / Decimal(policy_values['max_shifts_per_day'])).quantize(Decimal('0.01'))
         except Exception:
             max_shift_hours = Decimal('0')
+    min_shift_hours = policy_values.get('min_hours_per_shift') or Decimal('4')
 
     selected_user = request.user
     user_id = request.GET.get('user_id')
@@ -289,6 +294,9 @@ def workshift_register_view(request):
                 hours = _calc_hours(day, start_time, end_time, policy_values['lunch_start'], policy_values['lunch_end'])
                 if hours is None:
                     errors.append(f'{day.strftime("%d/%m")} ca {idx}: ca làm việc không hợp lệ.')
+                    continue
+                if min_shift_hours and hours < min_shift_hours:
+                    errors.append(f'{day.strftime("%d/%m")} ca {idx} tối thiểu {min_shift_hours} giờ.')
                     continue
                 if max_shift_hours and hours > max_shift_hours:
                     errors.append(f'{day.strftime("%d/%m")} ca {idx} vượt quá {max_shift_hours} giờ/ca.')
@@ -453,6 +461,7 @@ def workshift_register_view(request):
 
 
 @login_required
+@require_ui_permission('workshift_tasks')
 def workshift_tasks_view(request):
     user_context = get_user_context(request.user)
     is_admin = user_context.get('is_admin') or user_context.get('is_super_admin')
@@ -569,6 +578,7 @@ def workshift_tasks_view(request):
 
 
 @login_required
+@require_ui_permission('workshift_policy')
 def workshift_policy_view(request):
     user_context = get_user_context(request.user)
     is_admin = user_context.get('is_admin') or user_context.get('is_super_admin')
@@ -616,6 +626,10 @@ def workshift_policy_view(request):
             max_hours_per_month = Decimal(request.POST.get('max_hours_per_month') or '0')
         except (ValueError, ArithmeticError):
             max_hours_per_month = Decimal('0')
+        try:
+            min_hours_per_shift = Decimal(request.POST.get('min_hours_per_shift') or '0')
+        except (ValueError, ArithmeticError):
+            min_hours_per_shift = Decimal('0')
 
         effective_from = None
         if effective_from_raw:
@@ -636,6 +650,8 @@ def workshift_policy_view(request):
             errors.append('Số ca/ngày không hợp lệ.')
         if max_hours_per_day <= 0 or max_hours_per_week <= 0 or max_hours_per_month <= 0:
             errors.append('Hạn mức giờ không hợp lệ.')
+        if min_hours_per_shift <= 0:
+            errors.append('Giờ tối thiểu/ca không hợp lệ.')
 
         form_data = {
             'policy_id': policy_id,
@@ -649,6 +665,7 @@ def workshift_policy_view(request):
             'max_hours_per_day': max_hours_per_day,
             'max_hours_per_week': max_hours_per_week,
             'max_hours_per_month': request.POST.get('max_hours_per_month') or '',
+            'min_hours_per_shift': request.POST.get('min_hours_per_shift') or '',
             'effective_from': effective_from_raw or '',
             'is_active': is_active,
         }
@@ -667,6 +684,7 @@ def workshift_policy_view(request):
                 selected_policy.max_hours_per_day = max_hours_per_day
                 selected_policy.max_hours_per_week = max_hours_per_week
                 selected_policy.max_hours_per_month = max_hours_per_month
+                selected_policy.min_hours_per_shift = min_hours_per_shift
                 selected_policy.effective_from = effective_from
                 selected_policy.updated_by = request.user
                 selected_policy.is_active = is_active
@@ -683,6 +701,7 @@ def workshift_policy_view(request):
                     max_hours_per_day=max_hours_per_day,
                     max_hours_per_week=max_hours_per_week,
                     max_hours_per_month=max_hours_per_month,
+                    min_hours_per_shift=min_hours_per_shift,
                     effective_from=effective_from,
                     is_active=is_active,
                     created_by=request.user,
@@ -707,6 +726,7 @@ def workshift_policy_view(request):
             'max_hours_per_day': selected_policy.max_hours_per_day,
             'max_hours_per_week': selected_policy.max_hours_per_week,
             'max_hours_per_month': selected_policy.max_hours_per_month,
+            'min_hours_per_shift': selected_policy.min_hours_per_shift,
             'effective_from': selected_policy.effective_from.strftime('%Y-%m-%d') if selected_policy.effective_from else '',
             'is_active': selected_policy.is_active,
         }

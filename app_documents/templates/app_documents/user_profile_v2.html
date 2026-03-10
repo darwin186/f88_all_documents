@@ -3,7 +3,13 @@
 {% block title %}Thông tin cá nhân{% endblock %}
 
 {% block top_nav %}
-  {% include "app_documents/components/top_nav_v2.html" %}
+<nav class="fixed top-0 inset-x-0 z-30 px-2 lg:px-4 bg-white/95 backdrop-blur border-b border-gray-200 shadow-sm">
+  <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
+    <a href="{% url 'home' %}" class="flex items-center gap-2">
+      <img src="https://f88.vn/images/root/logo-f88-primary.svg" alt="F88" class="h-8">
+    </a>
+  </div>
+</nav>
 {% endblock %}
 
 {% block main_extra_class %}pt-14{% endblock %}
@@ -17,6 +23,7 @@
         <h1 class="text-[12px] font-semibold text-gray-900">Thông tin cá nhân</h1>
         <p class="text-[9px] text-gray-500">Cập nhật ngày sinh và ảnh đại diện.</p>
       </div>
+      <a href="{% url 'home' %}" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-600 text-[9px] hover:bg-gray-50">Về trang chủ</a>
     </div>
 
     {% if messages %}

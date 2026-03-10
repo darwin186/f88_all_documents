@@ -94,6 +94,12 @@
         <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
           <input name="choice_contract_code" value="{{ request.GET.choice_contract_code|default:'' }}" placeholder="Mã HĐCC" class="w-full bg-transparent focus:outline-none text-[10px]" />
         </label>
+        <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+          <input name="filter_package" value="{{ request.GET.filter_package|default:'' }}" placeholder="Mã thùng F88" class="w-full bg-transparent focus:outline-none text-[10px]" />
+        </label>
+        <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+          <input name="filter_partner_package" value="{{ request.GET.filter_partner_package|default:'' }}" placeholder="Mã thùng đối tác" class="w-full bg-transparent focus:outline-none text-[10px]" />
+        </label>
         <div class="relative" x-data="{ open: false, search: '{{ request.GET.choice_user_duyet|default_if_none:'' }}' }">
           <input type="hidden" name="choice_user_duyet" x-model="search">
           <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
@@ -456,6 +462,8 @@
           <input type="hidden" name="filter_choicedocumentstatus" value="{{ request.GET.choicedocumentstatus|default:'' }}">
           <input type="hidden" name="filter_choicecheckstatus" value="{{ request.GET.choicecheckstatus|default:'' }}">
           <input type="hidden" name="filter_choicebusinesstype" value="{{ request.GET.choicebusinesstype|default:'' }}">
+          <input type="hidden" name="filter_filter_package" value="{{ request.GET.filter_package|default:'' }}">
+          <input type="hidden" name="filter_filter_partner_package" value="{{ request.GET.filter_partner_package|default:'' }}">
           <input type="hidden" name="filter_page" value="{{ documents_detail.number }}">
           <input type="hidden" name="filter_sort" value="{{ sort_param }}">
           <div>
@@ -496,6 +504,8 @@
           <input type="hidden" name="filter_choicedocumentstatus" value="{{ request.GET.choicedocumentstatus|default:'' }}">
           <input type="hidden" name="filter_choicecheckstatus" value="{{ request.GET.choicecheckstatus|default:'' }}">
           <input type="hidden" name="filter_choicebusinesstype" value="{{ request.GET.choicebusinesstype|default:'' }}">
+          <input type="hidden" name="filter_filter_package" value="{{ request.GET.filter_package|default:'' }}">
+          <input type="hidden" name="filter_filter_partner_package" value="{{ request.GET.filter_partner_package|default:'' }}">
           <input type="hidden" name="filter_page" value="{{ documents_detail.number }}">
           <input type="hidden" name="filter_sort" value="{{ sort_param }}">
           <div>

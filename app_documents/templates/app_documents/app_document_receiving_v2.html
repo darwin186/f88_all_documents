@@ -179,6 +179,9 @@
         <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
           <input name="filter_package" value="{% if request.GET.filter_package %}{{ request.GET.filter_package }}{% endif %}" placeholder="Tìm theo mã thùng F88" class="w-full bg-transparent focus:outline-none text-[10px]" />
         </label>
+        <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+          <input name="filter_partner_package" value="{% if request.GET.filter_partner_package %}{{ request.GET.filter_partner_package }}{% endif %}" placeholder="Tìm theo mã thùng đối tác" class="w-full bg-transparent focus:outline-none text-[10px]" />
+        </label>
       </div>
     </form>
   </div>
@@ -360,6 +363,11 @@
         <div id="drawer-issue-chips" class="mt-2 flex flex-wrap gap-2"></div>
         <div id="drawer-issue-error" class="text-[9px] text-red-600 hidden"></div>
       </div>
+    <div>
+      <p class="text-[9px] text-gray-500 mb-1">Ghi chú</p>
+      <textarea id="drawer-note" class="w-full rounded-lg border border-gray-200 text-[10px] px-3 py-2" rows="3" placeholder="Nhập ghi chú..."></textarea>
+      <p id="drawer-note-status" class="text-[9px] text-gray-500 mt-1"></p>
+    </div>
     <div class="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-2">
       <p class="text-[9px] uppercase text-gray-500">Cập nhật nhận</p>
       <div class="grid grid-cols-2 gap-3">
@@ -386,11 +394,6 @@
         <button id="drawer-clear-package-btn" class="px-3 py-2 rounded-lg border border-red-200 text-red-600 text-[10px] font-semibold hover:bg-red-50">Gỡ thùng</button>
         <button id="drawer-save-btn" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700">Nhận</button>
       </div>
-    </div>
-    <div>
-      <p class="text-[9px] text-gray-500 mb-1">Ghi chú</p>
-      <textarea id="drawer-note" class="w-full rounded-lg border border-gray-200 text-[10px] px-3 py-2" rows="3" placeholder="Nhập ghi chú..."></textarea>
-      <p id="drawer-note-status" class="text-[9px] text-gray-500 mt-1"></p>
     </div>
     </div>
     <div id="drawer-tab-history" class="space-y-4 hidden">
@@ -1271,6 +1274,10 @@
       <div>
         <label class="block text-[10px] font-semibold text-gray-700 mb-1">Các quyển đã chọn</label>
         <ul id="bulk-selected-list" class="max-h-32 overflow-y-auto space-y-1 rounded-lg border border-gray-200 bg-gray-50 p-2"></ul>
+        <div class="mt-2 grid grid-cols-2 gap-2 text-[9px] text-gray-600">
+          <div><span class="text-gray-500">Phòng giao dịch:</span> <span id="bulk-selected-shop">—</span></div>
+          <div><span class="text-gray-500">Loại chứng từ:</span> <span id="bulk-selected-type">—</span></div>
+        </div>
       </div>
       <div>
         <label class="block text-[10px] font-semibold text-gray-700 mb-1">Trạng thái nhận</label>
@@ -1324,7 +1331,7 @@
     </div>
     <div class="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200">
       <button type="button" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-[9px] font-semibold hover:bg-gray-50" data-modal-hide="bulkReceiveModal">Hủy</button>
-      <button type="button" data-modal-toggle="createPackageModal" class="px-3 py-2 rounded-lg border border-emerald-200 text-emerald-700 text-[9px] font-semibold hover:bg-emerald-50">Tạo thùng</button>
+      <button type="button" data-modal-toggle="createPackageModal" data-return-target="bulk" class="px-3 py-2 rounded-lg border border-emerald-200 text-emerald-700 text-[9px] font-semibold hover:bg-emerald-50">Tạo thùng</button>
       <button type="button" id="bulk-receive-submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[9px] font-semibold hover:bg-emerald-700">Nhận quyển</button>
     </div>
   </div>
@@ -1361,6 +1368,8 @@
     const showBulk = () => bulkModal.classList.remove('hidden');
     const hideBulk = () => bulkModal.classList.add('hidden');
     const listEl = document.getElementById('bulk-selected-list');
+    const bulkShopEl = document.getElementById('bulk-selected-shop');
+    const bulkTypeEl = document.getElementById('bulk-selected-type');
     const statusEl = document.getElementById('bulk-status-select');
     const dateEl = document.getElementById('bulk-receive-date');
     const codeEl = document.getElementById('bulk-package-code');
@@ -1391,11 +1400,15 @@
       if (!listEl) return;
       listEl.innerHTML = '';
       const selected = Array.from(document.querySelectorAll('.row-checkbox:checked'));
+      const shops = new Set();
+      const types = new Set();
       if (!selected.length) {
         const li = document.createElement('li');
         li.className = 'text-gray-500 text-[9px]';
         li.textContent = 'Chưa chọn quyển nào.';
         listEl.appendChild(li);
+        if (bulkShopEl) bulkShopEl.textContent = '—';
+        if (bulkTypeEl) bulkTypeEl.textContent = '—';
         return;
       }
       selected.forEach(cb => {
@@ -1405,7 +1418,32 @@
         const created = cb.dataset.folderCreatedDate || '';
         li.textContent = `${code} • ${created}`;
         listEl.appendChild(li);
+        const tr = cb.closest('tr');
+        if (tr) {
+          const shop = tr.dataset.shop;
+          const type = tr.dataset.type;
+          if (shop) shops.add(shop);
+          if (type) types.add(type);
+        }
       });
+      if (bulkShopEl) {
+        if (shops.size === 1) {
+          bulkShopEl.textContent = Array.from(shops)[0];
+        } else if (shops.size > 1) {
+          bulkShopEl.textContent = `Nhiều PGD (${shops.size})`;
+        } else {
+          bulkShopEl.textContent = '—';
+        }
+      }
+      if (bulkTypeEl) {
+        if (types.size === 1) {
+          bulkTypeEl.textContent = Array.from(types)[0];
+        } else if (types.size > 1) {
+          bulkTypeEl.textContent = `Nhiều loại (${types.size})`;
+        } else {
+          bulkTypeEl.textContent = '—';
+        }
+      }
     };
 
     const syncBulkValidation = () => {
@@ -1537,6 +1575,7 @@
             folder_status_choice: statusVal,
             folder_note_choice: noteVal,
             issue_type_ids: issueIds,
+            require_issue_types: true,
           }),
         });
         const data = await resp.json();
@@ -1630,11 +1669,17 @@
     }
     const showModal = () => modalEl.classList.remove('hidden');
     const hideModal = () => modalEl.classList.add('hidden');
+    let returnTarget = 'page';
 
     document.addEventListener('click', (e) => {
       const openBtn = e.target.closest('[data-modal-toggle="createPackageModal"]');
       const closeBtn = e.target.closest('[data-modal-hide="createPackageModal"]');
-      if (openBtn) { e.preventDefault(); showModal(); }
+      if (openBtn) {
+        e.preventDefault();
+        returnTarget = openBtn.dataset.returnTarget || 'page';
+        modalEl.dataset.returnTarget = returnTarget;
+        showModal();
+      }
       if (closeBtn) { e.preventDefault(); hideModal(); }
     });
     modalEl.addEventListener('click', (e) => { if (e.target === modalEl) hideModal(); });
@@ -1819,6 +1864,15 @@
           throw new Error(data.error || 'Tạo thùng thất bại.');
         }
         setMessage('Tạo thùng thành công.', false);
+        if (modalEl.dataset.returnTarget === 'bulk') {
+          const bulkCodeEl = document.getElementById('bulk-package-code');
+          if (bulkCodeEl) {
+            bulkCodeEl.value = codeInput.value;
+            bulkCodeEl.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+          setTimeout(() => hideModal(), 300);
+          return;
+        }
         setTimeout(() => window.location.reload(), 500);
       } catch (err) {
         setMessage(err.message || 'Tạo thùng thất bại.');

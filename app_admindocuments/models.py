@@ -273,18 +273,16 @@ class AdmAdministrativeDocument(models.Model):
         return f"{self.title} ({self.document_number_full})"
 
     def save(self, *args, **kwargs):
-        """Auto increment per document type + generate official number and log history."""
+        """Generate immutable document number; only allow VOID suffix on first void."""
         is_create = self.pk is None
         previous = None
-        update_fields = kwargs.get("update_fields")
-        preserve_number = update_fields is not None and "document_number_full" in update_fields
         if not is_create:
             try:
                 previous = AdmAdministrativeDocument.objects.get(pk=self.pk)
             except AdmAdministrativeDocument.DoesNotExist:
                 previous = None
 
-        if not self.running_number:
+        if is_create and not self.running_number:
             current_year = date.today().year
             last_doc = (
                 AdmAdministrativeDocument.objects.filter(
@@ -297,14 +295,26 @@ class AdmAdministrativeDocument(models.Model):
             )
             self.running_number = last_doc.running_number + 1 if last_doc else 1
 
-        year_now = date.today().year
-        company_code = self.issuing_company.code if self.issuing_company else "UNK"
-        signer_code = self.signer_role.code if self.signer_role else "NA"
-        doc_type_code = self.doc_type.code if self.doc_type else "NA"
-        if not preserve_number:
+        if is_create:
+            year_now = date.today().year
+            company_code = self.issuing_company.code if self.issuing_company else "UNK"
+            signer_code = self.signer_role.code if self.signer_role else "NA"
+            doc_type_code = self.doc_type.code if self.doc_type else "NA"
             self.document_number_full = (
                 f"{self.running_number:03d}/{year_now}/{doc_type_code}-{company_code}/{signer_code}"
             )
+        elif previous:
+            # Running number is immutable after first creation.
+            self.running_number = previous.running_number
+
+            # Number is immutable, except one valid transition to VOID.
+            valid_void_transition = (
+                (not previous.is_void)
+                and self.is_void
+                and self.document_number_full == f"{previous.document_number_full}-VOID"
+            )
+            if not valid_void_transition:
+                self.document_number_full = previous.document_number_full
 
         super().save(*args, **kwargs)
 
@@ -455,6 +465,174 @@ class AdmPaperDocument(models.Model):
 
     def __str__(self):
         return f"{self.paper_type} - {self.summary}"
+
+
+class AdmIncomingDispatchType(models.Model):
+    code = models.CharField(max_length=50, primary_key=True)
+    name = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "adm_incoming_dispatch_type"
+        verbose_name = "Incoming Dispatch Type"
+        verbose_name_plural = "Incoming Dispatch Types"
+        ordering = ["sort_order", "name"]
+
+    def __str__(self):
+        return self.name
+
+
+class AdmIncomingDispatchStatus(models.Model):
+    code = models.CharField(max_length=50, primary_key=True)
+    name = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "adm_incoming_dispatch_status"
+        verbose_name = "Incoming Dispatch Status"
+        verbose_name_plural = "Incoming Dispatch Statuses"
+        ordering = ["sort_order", "name"]
+
+    def __str__(self):
+        return self.name
+
+
+class AdmIncomingGapoGroup(models.Model):
+    code = models.CharField(max_length=80, primary_key=True)
+    name = models.CharField(max_length=255)
+    gapo_group_id = models.CharField(max_length=255, unique=True)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "adm_incoming_gapo_group"
+        verbose_name = "Incoming Gapo Group"
+        verbose_name_plural = "Incoming Gapo Groups"
+        ordering = ["sort_order", "name"]
+
+    def __str__(self):
+        return self.name
+
+
+class AdmIncomingDispatch(models.Model):
+
+    document_number = models.CharField(max_length=255, unique=True, null=True, blank=True)
+    responsible_user = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="adm_incoming_dispatch_responsible",
+    )
+    sending_unit = models.CharField(max_length=255)
+    received_date = models.DateField(default=date.today, editable=False, db_index=True)
+    signer_name = models.CharField(max_length=255)
+    summary = models.TextField()
+    processing_departments = models.ManyToManyField(
+        AdmDepartment,
+        related_name="incoming_dispatches",
+    )
+    incoming_item_type = models.ForeignKey(
+        AdmIncomingDispatchType,
+        to_field="code",
+        db_column="incoming_item_type",
+        on_delete=models.PROTECT,
+        related_name="incoming_dispatches",
+        null=True,
+        blank=True,
+    )
+    receiving_company = models.ForeignKey(
+        AdmCompany,
+        to_field="code",
+        db_column="receiving_company",
+        on_delete=models.PROTECT,
+        related_name="incoming_dispatches_received",
+    )
+    status = models.ForeignKey(
+        AdmIncomingDispatchStatus,
+        to_field="code",
+        db_column="status",
+        on_delete=models.PROTECT,
+        related_name="incoming_dispatches",
+    )
+    gapo_group = models.ForeignKey(
+        AdmIncomingGapoGroup,
+        to_field="code",
+        db_column="gapo_group",
+        on_delete=models.PROTECT,
+        related_name="incoming_dispatches",
+        null=True,
+        blank=True,
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="adm_incoming_dispatch_created_by",
+    )
+    updated_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="adm_incoming_dispatch_updated_by",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "adm_incoming_dispatch"
+        verbose_name = "Incoming Dispatch"
+        verbose_name_plural = "Incoming Dispatches"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.document_number or '-'} - {self.sending_unit}"
+
+    def save(self, *args, **kwargs):
+        """Responsible user and received date are immutable after creation."""
+        if self.pk:
+            try:
+                previous = AdmIncomingDispatch.objects.get(pk=self.pk)
+            except AdmIncomingDispatch.DoesNotExist:
+                previous = None
+            if previous:
+                self.responsible_user_id = previous.responsible_user_id
+                self.received_date = previous.received_date
+        super().save(*args, **kwargs)
+
+
+def _incoming_dispatch_image_upload_path(instance, filename):
+    dispatch_part = instance.dispatch_id or "tmp"
+    unique = uuid.uuid4().hex[:8]
+    return f"admindocuments/incoming_dispatch/{dispatch_part}/{timezone.now():%Y/%m}/{unique}_{filename}"
+
+
+class AdmIncomingDispatchImage(models.Model):
+    dispatch = models.ForeignKey(
+        AdmIncomingDispatch,
+        on_delete=models.CASCADE,
+        related_name="images",
+    )
+    image = models.FileField(upload_to=_incoming_dispatch_image_upload_path)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="adm_incoming_dispatch_images_uploaded",
+    )
+
+    class Meta:
+        db_table = "adm_incoming_dispatch_image"
+        verbose_name = "Incoming Dispatch Image"
+        verbose_name_plural = "Incoming Dispatch Images"
+        ordering = ["-uploaded_at"]
+
+    def __str__(self):
+        return f"Dispatch {self.dispatch_id} image {self.id}"
 
 
 def _attachment_upload_path(instance, filename):

@@ -1,0 +1,427 @@
+{% extends "admindocuments/base.html" %}
+{% block title %}Tiếp nhận thư từ đến{% endblock %}
+
+{% block content %}
+{% if messages %}
+<div class="fixed bottom-4 right-4 space-y-2 z-50">
+  {% for message in messages %}
+    <div class="px-4 py-3 rounded-lg shadow text-xs
+      {% if message.tags == 'error' %}bg-red-50 text-red-700 border border-red-200
+      {% elif message.tags == 'warning' %}bg-amber-50 text-amber-700 border border-amber-200
+      {% else %}bg-emerald-50 text-emerald-700 border border-emerald-200{% endif %}">
+      {{ message }}
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="text-[13px]">
+<div class="flex justify-between items-center mb-5">
+  <div>
+    <h1 class="text-xl font-semibold text-gray-700">Tiếp nhận thư từ đến</h1>
+    <p class="text-xs text-gray-500">Bao gồm công văn, bưu phẩm, bưu kiện.</p>
+  </div>
+  {% if can_create %}
+  <div class="flex items-center gap-2">
+    <div class="relative" x-data="{open:false}">
+      <button type="button" @click="open = !open"
+              class="bg-f88green hover:bg-f88dark text-white px-3 py-1.5 rounded-lg shadow text-xs">
+        Tiếp nhận Công văn đến
+      </button>
+      <div x-show="open" @click.outside="open=false" x-transition
+           class="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+        <div class="px-3 py-2 border-b border-gray-100 text-[11px] text-gray-500">Chọn công ty nhận</div>
+        <ul class="max-h-64 overflow-y-auto py-1">
+          {% for company in companies %}
+          <li>
+            <button type="button"
+                    class="w-full text-left px-3 py-2 hover:bg-gray-50 text-xs"
+                    @click="open=false; openIncomingDispatchModal('{{ company.code }}', '{{ company.code }} - {{ company.name|escapejs }}', 'cong_van')">
+              {{ company.code }} - {{ company.name }}
+            </button>
+          </li>
+          {% empty %}
+          <li class="px-3 py-2 text-xs text-gray-500">Chưa có công ty hoạt động.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+
+    <div class="relative" x-data="{open:false}">
+      <button type="button" @click="open = !open"
+              class="bg-gray-700 hover:bg-gray-800 text-white px-3 py-1.5 rounded-lg shadow text-xs">
+        Tiếp nhận Bưu phẩm/Bưu kiện
+      </button>
+      <div x-show="open" @click.outside="open=false" x-transition
+           class="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+        <div class="px-3 py-2 border-b border-gray-100 text-[11px] text-gray-500">Chọn công ty nhận</div>
+        <ul class="max-h-64 overflow-y-auto py-1">
+          {% for company in companies %}
+          <li>
+            <button type="button"
+                    class="w-full text-left px-3 py-2 hover:bg-gray-50 text-xs"
+                    @click="open=false; openIncomingDispatchModal('{{ company.code }}', '{{ company.code }} - {{ company.name|escapejs }}', 'buu_pham_buu_kien')">
+              {{ company.code }} - {{ company.name }}
+            </button>
+          </li>
+          {% empty %}
+          <li class="px-3 py-2 text-xs text-gray-500">Chưa có công ty hoạt động.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<form method="get" class="mb-4 bg-white rounded-lg shadow p-3 grid lg:grid-cols-5 gap-2 items-end">
+  <div class="lg:col-span-2">
+    <label class="block text-[11px] text-gray-500 mb-1">Tìm kiếm</label>
+    <input type="text" name="q" value="{{ q }}" placeholder="Số hiệu hoặc tên trích yếu..."
+           class="border border-gray-300 rounded-lg px-3 py-1.5 w-full text-xs focus:outline-none focus:ring focus:ring-green-300" />
+  </div>
+  <div>
+    <label class="block text-[11px] text-gray-500 mb-1">Tình trạng</label>
+    <select name="status" class="border border-gray-300 rounded-lg px-3 py-1.5 w-full text-xs">
+      <option value="">Tất cả</option>
+      {% for st in status_options %}
+      <option value="{{ st.code }}" {% if selected_status == st.code %}selected{% endif %}>{{ st.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="block text-[11px] text-gray-500 mb-1">Phòng ban xử lý</label>
+    <select name="department" class="border border-gray-300 rounded-lg px-3 py-1.5 w-full text-xs">
+      <option value="">Tất cả</option>
+      {% for d in departments %}
+      <option value="{{ d.id }}" {% if selected_department == d.id|stringformat:'s' %}selected{% endif %}>
+        {{ d.name }} ({{ d.company.code }})
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label class="block text-[11px] text-gray-500 mb-1">Công ty nhận</label>
+    <select name="company" class="border border-gray-300 rounded-lg px-3 py-1.5 w-full text-xs">
+      <option value="">Tất cả</option>
+      {% for company in companies %}
+      <option value="{{ company.code }}" {% if selected_company == company.code %}selected{% endif %}>
+        {{ company.code }} - {{ company.name }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="lg:col-span-5 flex gap-2">
+    <button type="submit" class="bg-f88green hover:bg-f88dark text-white px-3 py-1.5 rounded-lg text-xs">Lọc dữ liệu</button>
+    <a href="{% url 'admindocuments:incoming_dispatch_list' %}" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs">Xóa bộ lọc</a>
+  </div>
+</form>
+
+<div class="bg-white rounded-lg shadow overflow-hidden">
+  <table class="min-w-full text-xs">
+    <thead class="bg-gray-100 text-gray-700 uppercase text-[11px] font-semibold">
+      <tr>
+        <th class="px-4 py-3 text-left">STT</th>
+        <th class="px-4 py-3 text-left">Ngày nhập dữ liệu</th>
+        <th class="px-4 py-3 text-left">Người phụ trách</th>
+        <th class="px-4 py-3 text-left">Loại</th>
+        <th class="px-4 py-3 text-left">Số hiệu</th>
+        <th class="px-4 py-3 text-left">Đơn vị gửi</th>
+        <th class="px-4 py-3 text-left">Tên trích yếu, nội dung</th>
+        <th class="px-4 py-3 text-left">Công ty nhận</th>
+        <th class="px-4 py-3 text-left">Nhóm GAPO</th>
+        <th class="px-4 py-3 text-left">Tình trạng</th>
+        <th class="px-4 py-3 text-left">Thao tác</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-200">
+      {% for doc in dispatches %}
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-3">{{ page_obj.start_index|add:forloop.counter0 }}</td>
+        <td class="px-4 py-3">{{ doc.received_date|date:"d/m/Y" }}</td>
+        <td class="px-4 py-3">{{ doc.responsible_user.get_full_name|default:doc.responsible_user.username }}</td>
+        <td class="px-4 py-3">{{ doc.incoming_item_type.name|default:"-" }}</td>
+        <td class="px-4 py-3 font-mono">{{ doc.document_number|default:"-" }}</td>
+        <td class="px-4 py-3">{{ doc.sending_unit }}</td>
+        <td class="px-4 py-3">{{ doc.summary|truncatechars:120 }}</td>
+        <td class="px-4 py-3">{{ doc.receiving_company.code }} - {{ doc.receiving_company.name }}</td>
+        <td class="px-4 py-3">{{ doc.gapo_group.name|default:"-" }}</td>
+        <td class="px-4 py-3">
+          {% if can_edit_status and doc.available_statuses %}
+          <form method="post" action="{% url 'admindocuments:incoming_dispatch_change_status' doc.id %}" class="flex items-center gap-1">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <select name="status" class="border border-gray-300 rounded px-2 py-1 text-xs">
+              {% for st in doc.available_statuses %}
+              <option value="{{ st.code }}" {% if st.code == doc.status_id %}selected{% endif %}>{{ st.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="px-2 py-1 text-xs rounded bg-f88green hover:bg-f88dark text-white">Cập nhật</button>
+          </form>
+          {% else %}
+          <span class="inline-flex px-2 py-1 text-xs font-semibold rounded bg-gray-100 text-gray-700">{{ doc.status.name|default:"-" }}</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3">
+          <div class="flex items-center gap-2">
+            <a href="?q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&company={{ selected_company }}&page={{ page_obj.number }}&open={{ doc.id }}"
+               class="px-2 py-1 text-xs rounded border border-gray-300 bg-white hover:bg-gray-100 text-gray-700">
+              Xem
+            </a>
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="11" class="px-4 py-8 text-center text-gray-500">Chưa có thư từ đến nào.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if is_paginated %}
+  <div class="p-3 border-t border-gray-200">
+    <nav class="flex justify-end">
+      <ul class="inline-flex items-center -space-x-px text-xs">
+        {% if page_obj.has_previous %}
+        <li><a href="?q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&company={{ selected_company }}&page={{ page_obj.previous_page_number }}" class="px-3 py-2 border border-gray-300 rounded-l-lg bg-white hover:bg-gray-100">‹</a></li>
+        {% else %}
+        <li><span class="px-3 py-2 border border-gray-200 rounded-l-lg bg-white text-gray-400">‹</span></li>
+        {% endif %}
+
+        {% for num in paginator.page_range %}
+          {% if num >= page_obj.number|add:'-2' and num <= page_obj.number|add:'2' %}
+            {% if num == page_obj.number %}
+            <li><span class="px-3 py-2 border border-f88green bg-f88green text-white">{{ num }}</span></li>
+            {% else %}
+            <li><a href="?q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&company={{ selected_company }}&page={{ num }}" class="px-3 py-2 border border-gray-300 bg-white hover:bg-gray-100">{{ num }}</a></li>
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+
+        {% if page_obj.has_next %}
+        <li><a href="?q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&company={{ selected_company }}&page={{ page_obj.next_page_number }}" class="px-3 py-2 border border-gray-300 rounded-r-lg bg-white hover:bg-gray-100">›</a></li>
+        {% else %}
+        <li><span class="px-3 py-2 border border-gray-200 rounded-r-lg bg-white text-gray-400">›</span></li>
+        {% endif %}
+      </ul>
+    </nav>
+  </div>
+  {% endif %}
+</div>
+
+{% if can_create %}
+<div id="incomingDispatchModal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/40" onclick="closeIncomingDispatchModal()"></div>
+  <div class="relative p-4 w-full max-w-3xl mx-auto mt-12">
+    <div class="relative bg-white rounded-lg shadow max-h-[90vh] flex flex-col">
+      <div class="flex justify-between items-center p-4 border-b rounded-t">
+        <h3 class="text-base font-semibold text-gray-900">Tiếp nhận thư từ</h3>
+        <button type="button" onclick="closeIncomingDispatchModal()"
+                class="text-gray-400 hover:text-gray-900 rounded-lg text-xs p-2 ml-auto inline-flex items-center">×</button>
+      </div>
+      <div class="p-5 overflow-y-auto text-[13px]">
+        <div class="mb-4 text-xs rounded-lg border border-blue-100 bg-blue-50 text-blue-700 p-3">
+          Người phụ trách, ngày nhận và trạng thái "Đã tiếp nhận" được hệ thống tự động ghi nhận.
+        </div>
+        <form method="post" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {% csrf_token %}
+          <input type="hidden" id="incomingReceivingCompanyCode" name="receiving_company" value="{{ prefill_company.code|default:'' }}">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Công ty nhận</label>
+            <input type="text" id="incomingReceivingCompanyLabel"
+                   value="{% if prefill_company %}{{ prefill_company.code }} - {{ prefill_company.name }}{% endif %}"
+                   readonly
+                   class="block w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs text-gray-700" />
+            {% if form.receiving_company.errors %}<p class="text-xs text-red-600 mt-1">{{ form.receiving_company.errors.0 }}</p>{% endif %}
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">{{ form.incoming_item_type.label }}</label>
+            <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 space-y-2">
+              {% for choice in form.incoming_item_type %}
+              <label class="flex items-center gap-2 text-xs text-gray-700">
+                {{ choice.tag }}
+                <span>{{ choice.choice_label }}</span>
+              </label>
+              {% empty %}
+              <span class="text-xs text-gray-500">Chưa có loại tiếp nhận hoạt động.</span>
+              {% endfor %}
+            </div>
+            {% if form.incoming_item_type.errors %}<p class="text-xs text-red-600 mt-1">{{ form.incoming_item_type.errors.0 }}</p>{% endif %}
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">{{ form.document_number.label }}</label>
+            {{ form.document_number }}
+            {% if form.document_number.errors %}<p class="text-xs text-red-600 mt-1">{{ form.document_number.errors.0 }}</p>{% endif %}
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">{{ form.sending_unit.label }}</label>
+            {{ form.sending_unit }}
+            {% if form.sending_unit.errors %}<p class="text-xs text-red-600 mt-1">{{ form.sending_unit.errors.0 }}</p>{% endif %}
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">{{ form.signer_name.label }}</label>
+            {{ form.signer_name }}
+            {% if form.signer_name.errors %}<p class="text-xs text-red-600 mt-1">{{ form.signer_name.errors.0 }}</p>{% endif %}
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">{{ form.gapo_group.label }}</label>
+            {{ form.gapo_group }}
+            {% if form.gapo_group.errors %}<p class="text-xs text-red-600 mt-1">{{ form.gapo_group.errors.0 }}</p>{% endif %}
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs font-medium text-gray-700 mb-1">{{ form.summary.label }}</label>
+            {{ form.summary }}
+            {% if form.summary.errors %}<p class="text-xs text-red-600 mt-1">{{ form.summary.errors.0 }}</p>{% endif %}
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">{{ form.processing_department.label }}</label>
+            {{ form.processing_department }}
+            {% if form.processing_department.errors %}<p class="text-xs text-red-600 mt-1">{{ form.processing_department.errors.0 }}</p>{% endif %}
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Ảnh đính kèm</label>
+            <input type="file" name="images" accept="image/*" multiple
+                   class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-xs file:mr-2 file:rounded file:border-0 file:bg-gray-100 file:px-2 file:py-1 file:text-xs">
+            <p class="text-[11px] text-gray-500 mt-1">Có thể chọn nhiều ảnh một lần.</p>
+          </div>
+          <div class="md:col-span-2 flex justify-end gap-2 mt-2">
+            <button type="button" onclick="closeIncomingDispatchModal()"
+                    class="px-3 py-1.5 bg-gray-300 rounded hover:bg-gray-400 text-xs">Hủy</button>
+            <button type="submit"
+                    class="px-3 py-1.5 bg-f88green text-white rounded hover:bg-f88dark text-xs">Lưu tiếp nhận</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const incomingCompanyLabelMap = {
+    {% for company in companies %}
+      "{{ company.code }}": "{{ company.code }} - {{ company.name|escapejs }}",
+    {% endfor %}
+  };
+
+  function openIncomingDispatchModal(companyCode, companyLabel, incomingTypeCode = "") {
+    const codeInput = document.getElementById("incomingReceivingCompanyCode");
+    const labelInput = document.getElementById("incomingReceivingCompanyLabel");
+    const modal = document.getElementById("incomingDispatchModal");
+    if (codeInput) codeInput.value = companyCode || "";
+    if (labelInput) labelInput.value = companyLabel || "";
+    if (incomingTypeCode) {
+      const typeRadio = document.querySelector(
+        `input[name="incoming_item_type"][value="${incomingTypeCode}"]`
+      );
+      if (typeRadio) {
+        typeRadio.checked = true;
+      }
+    }
+    if (modal) modal.classList.remove("hidden");
+  }
+
+  function closeIncomingDispatchModal() {
+    const modal = document.getElementById("incomingDispatchModal");
+    if (modal) modal.classList.add("hidden");
+  }
+
+  {% if form.errors and can_create %}
+    window.addEventListener("DOMContentLoaded", function () {
+      const currentCode = document.getElementById("incomingReceivingCompanyCode")?.value || "";
+      const currentLabel = document.getElementById("incomingReceivingCompanyLabel")?.value || incomingCompanyLabelMap[currentCode] || "";
+      const selectedType = document.querySelector("input[name='incoming_item_type']:checked")?.value || "";
+      openIncomingDispatchModal(currentCode, currentLabel, selectedType);
+    });
+  {% endif %}
+</script>
+{% endif %}
+
+{% if selected_dispatch %}
+<div class="fixed inset-0 z-40">
+  <a href="?q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&company={{ selected_company }}&page={{ page_obj.number }}"
+     class="absolute inset-0 bg-black/25"></a>
+  <aside class="absolute top-0 right-0 h-full w-full max-w-xl bg-white shadow-2xl border-l border-gray-200 overflow-y-auto">
+    <div class="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+      <h3 class="text-sm font-semibold text-gray-800">Chi tiết tiếp nhận</h3>
+      <a href="?q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&company={{ selected_company }}&page={{ page_obj.number }}"
+         class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100">Đóng</a>
+    </div>
+
+    <div class="p-4 space-y-4 text-xs text-gray-700">
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <div class="text-[11px] text-gray-500">Số hiệu</div>
+          <div class="font-semibold">{{ selected_dispatch.document_number|default:"-" }}</div>
+        </div>
+        <div>
+          <div class="text-[11px] text-gray-500">Loại tiếp nhận</div>
+          <div class="font-semibold">{{ selected_dispatch.incoming_item_type.name|default:"-" }}</div>
+        </div>
+        <div class="col-span-2">
+          <div class="text-[11px] text-gray-500">Tóm tắt</div>
+          <div>{{ selected_dispatch.summary }}</div>
+        </div>
+        <div>
+          <div class="text-[11px] text-gray-500">Người ký</div>
+          <div class="font-semibold">{{ selected_dispatch.signer_name|default:"-" }}</div>
+        </div>
+        <div>
+          <div class="text-[11px] text-gray-500">Công ty nhận</div>
+          <div class="font-semibold">{{ selected_dispatch.receiving_company.code }} - {{ selected_dispatch.receiving_company.name }}</div>
+        </div>
+      </div>
+
+      <div class="rounded-lg border border-gray-200 p-3">
+        <div class="text-[11px] uppercase tracking-wide text-gray-500 mb-2">Tiến trình xử lý</div>
+        <ol class="space-y-2">
+          {% for step in selected_workflow_steps %}
+          <li class="flex items-center gap-2">
+            {% if step.is_current %}
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-f88green text-white text-[11px]">●</span>
+            <span class="font-semibold text-f88green">{{ step.label }}</span>
+            {% elif step.is_done %}
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white text-[11px]">✓</span>
+            <span class="text-gray-700">{{ step.label }}</span>
+            {% else %}
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 text-gray-500 text-[11px]">•</span>
+            <span class="text-gray-500">{{ step.label }}</span>
+            {% endif %}
+          </li>
+          {% empty %}
+          <li class="text-gray-500">Chưa có dữ liệu tiến trình.</li>
+          {% endfor %}
+        </ol>
+      </div>
+
+      <div class="rounded-lg border border-gray-200 p-3">
+        <div class="flex items-center gap-2 text-[11px] uppercase tracking-wide text-gray-500 mb-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          Ảnh đính kèm
+        </div>
+        <form method="post" action="{% url 'admindocuments:incoming_dispatch_upload_images' selected_dispatch.id %}" enctype="multipart/form-data" class="mb-3 flex items-center gap-2">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <input type="file" name="images" accept="image/*" multiple class="block w-full rounded border border-gray-300 px-2 py-1 text-xs">
+          <button type="submit" class="px-2 py-1 text-xs rounded border border-gray-300 bg-white hover:bg-gray-100">Tải lên</button>
+        </form>
+        {% if selected_dispatch.images.all %}
+        <div class="grid grid-cols-2 gap-2">
+          {% for img in selected_dispatch.images.all %}
+          <a href="{{ img.image.url }}" target="_blank" class="block border border-gray-200 rounded overflow-hidden bg-gray-50">
+            <img src="{{ img.image.url }}" alt="Ảnh đính kèm {{ forloop.counter }}" class="w-full h-28 object-cover">
+          </a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-gray-500">Chưa có ảnh đính kèm.</p>
+        {% endif %}
+      </div>
+    </div>
+  </aside>
+</div>
+{% endif %}
+</div>
+{% endblock %}

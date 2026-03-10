@@ -42,6 +42,8 @@
       <span class="text-gray-300">›</span>
       <a href="{% url 'document_kpi_v2' %}?tab=feedback{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'feedback' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Phản hồi lỗi</a>
       <span class="text-gray-300">›</span>
+      <a href="{% url 'document_kpi_v2' %}?tab=productivity{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'productivity' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Productivity</a>
+      <span class="text-gray-300">›</span>
       <a href="{% url 'document_kpi_v2' %}?tab=config" class="{% if tab == 'config' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Cấu hình KPI</a>
       {% endwith %}
     </nav>
@@ -393,9 +395,198 @@
       </table>
     </div>
   </div>
-  {% elif active_tab != 'receive' %}
+  {% elif active_tab != 'receive' and active_tab != 'productivity' %}
   <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-6 text-center text-[11px] text-gray-600">
     Nội dung đang được cập nhật cho tab này.
+  </div>
+  {% elif active_tab == 'productivity' %}
+  <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
+    <form method="get" class="grid grid-cols-1 lg:grid-cols-[1.1fr,1.1fr,1fr,auto] gap-3 items-end">
+      <input type="hidden" name="tab" value="productivity">
+      <div>
+        <label class="block text-[9px] text-gray-500 mb-1">Ngày (từ)</label>
+        <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
+          <input type="date" name="start_date" value="{{ start_date }}" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none">
+        </div>
+      </div>
+      <div>
+        <label class="block text-[9px] text-gray-500 mb-1">Ngày (đến)</label>
+        <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
+          <input type="date" name="end_date" value="{{ end_date }}" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none">
+        </div>
+      </div>
+      <div>
+        <label class="block text-[9px] text-gray-500 mb-1">Theo tháng</label>
+        <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
+          <input type="month" name="month" value="{{ month }}" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none">
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700">Lọc</button>
+        <a href="{% url 'document_kpi_v2' %}?tab=productivity" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 text-[10px] font-semibold hover:bg-gray-50">Xóa</a>
+      </div>
+    </form>
+    <div class="mt-3 flex flex-wrap items-center gap-2 text-[9px]">
+      <span class="text-gray-500">Xuất báo cáo:</span>
+      <a href="{% url 'export_productivity_report' %}?format=xlsx&start_date={{ start_date }}&end_date={{ end_date }}&month={{ month }}" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700">XLSX</a>
+      <a href="{% url 'export_productivity_report' %}?format=csv&start_date={{ start_date }}&end_date={{ end_date }}&month={{ month }}" class="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50">CSV</a>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-5 gap-3">
+    <div class="kpi-card">
+      <div class="kpi-label">Tổng phút hoạt động</div>
+      <div class="kpi-value">{{ productivity_summary.total_minutes|intcomma }}</div>
+      <div class="kpi-sub">Tổng giờ: {{ productivity_summary.total_hours }}</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">CTV hoạt động</div>
+      <div class="kpi-value">{{ productivity_summary.active_users|intcomma }}</div>
+      <div class="kpi-sub">Trong khoảng lọc</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Số ngày có hoạt động</div>
+      <div class="kpi-value">{{ productivity_summary.active_days|intcomma }}</div>
+      <div class="kpi-sub">Theo work_date</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">TB phút/CTV</div>
+      <div class="kpi-value">{{ productivity_summary.avg_minutes_per_user }}</div>
+      <div class="kpi-sub">Trung bình theo user</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">TB phút/ngày</div>
+      <div class="kpi-value">{{ productivity_summary.avg_minutes_per_day }}</div>
+      <div class="kpi-sub">Trung bình theo ngày</div>
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4 space-y-3">
+    <div class="flex items-center justify-between">
+      <div>
+        <h3 class="text-[11px] font-semibold text-gray-800">Phổ hoạt động theo giờ</h3>
+        <p class="text-[9px] text-gray-500">Tổng phút hoạt động theo giờ (bucket 1h).</p>
+      </div>
+      {% if productivity_summary.peak_hour != None %}
+      <div class="text-[9px] text-gray-500">Giờ cao điểm: {{ productivity_summary.peak_hour }}h ({{ productivity_summary.peak_minutes }} phút)</div>
+      {% endif %}
+    </div>
+    <div id="productivity-hourly-empty" class="text-[9px] text-gray-500 hidden">Không có dữ liệu.</div>
+    <div id="productivity-hourly-wrap" class="relative">
+      <svg id="productivity-hourly-chart" viewBox="0 0 520 220" class="w-full h-44"></svg>
+      <div id="productivity-hourly-tooltip" class="absolute hidden rounded-lg border border-gray-200 bg-white px-2 py-1 text-[9px] text-gray-700 shadow-md"></div>
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+    <div class="flex items-center justify-between">
+      <h3 class="text-[11px] font-semibold text-gray-800">Heatmap theo giờ (phân nhóm CTV)</h3>
+      <span class="text-[9px] text-gray-500">Đơn vị: phút</span>
+    </div>
+    <div class="mt-3 overflow-x-auto">
+      <table class="min-w-full table-xs">
+        <thead>
+          <tr>
+            <th>Nhóm</th>
+            {% for h in productivity_hour_labels %}
+            <th>{{ h }}h</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for row in productivity_heatmap_rows %}
+          <tr>
+            <td class="text-left font-semibold text-gray-700">{{ row.group }}</td>
+            {% for cell in row.cells %}
+            <td style="background: rgba(16,185,129,{{ cell.opacity }});" title="{{ cell.minutes }} phút"></td>
+            {% endfor %}
+          </tr>
+          {% empty %}
+          <tr><td colspan="25" class="text-center text-gray-500">Chưa có dữ liệu.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="mt-2 text-[9px] text-gray-500">Màu đậm hơn nghĩa là hoạt động nhiều hơn.</div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+    <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+      <h3 class="text-[11px] font-semibold text-gray-800">Top giờ hoạt động</h3>
+      <div class="mt-2">
+        <table class="min-w-full table-xs">
+          <thead>
+            <tr>
+              <th>Giờ</th>
+              <th>Tổng phút</th>
+              <th>CTV hoạt động</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for row in productivity_top_hours %}
+            <tr>
+              <td>{{ row.hour }}h</td>
+              <td>{{ row.minutes|intcomma }}</td>
+              <td>{{ row.user_count|intcomma }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3" class="text-center text-gray-500">Chưa có dữ liệu.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+      <h3 class="text-[11px] font-semibold text-gray-800">Giờ hoạt động thấp</h3>
+      <div class="mt-2">
+        <table class="min-w-full table-xs">
+          <thead>
+            <tr>
+              <th>Giờ</th>
+              <th>Tổng phút</th>
+              <th>CTV hoạt động</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for row in productivity_bottom_hours %}
+            <tr>
+              <td>{{ row.hour }}h</td>
+              <td>{{ row.minutes|intcomma }}</td>
+              <td>{{ row.user_count|intcomma }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3" class="text-center text-gray-500">Chưa có dữ liệu.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
+    <h3 class="text-[11px] font-semibold text-gray-800">Top CTV theo tổng phút</h3>
+    <div class="mt-2 overflow-x-auto">
+      <table class="min-w-full table-xs">
+        <thead>
+          <tr>
+            <th>CTV</th>
+            <th>Tổng phút</th>
+            <th>Ngày hoạt động</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for row in productivity_users %}
+          <tr>
+            <td>{{ row.user__last_name }} {{ row.user__first_name }}{% if not row.user__first_name and not row.user__last_name %}{{ row.user__username }}{% endif %}</td>
+            <td>{{ row.total_minutes|intcomma }}</td>
+            <td>{{ row.active_days|intcomma }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="3" class="text-center text-gray-500">Chưa có dữ liệu.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
   {% else %}
   <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
@@ -727,6 +918,7 @@
 {% endif %}
 <script type="application/json" id="months-chart-data">{{ months_chart_json|safe }}</script>
 <script type="application/json" id="borrow-months-chart-data">{{ borrow_months_chart_json|safe }}</script>
+<script type="application/json" id="productivity-hourly-data">{{ productivity_hours_json|safe }}</script>
 <script>
   document.addEventListener('DOMContentLoaded', function () {
     const toggleButtons = document.querySelectorAll('[data-expand-toggle]');
@@ -1014,6 +1206,59 @@
         { key: 'overdue_rate', color: '#f43f5e', label: 'Quá hạn' },
       ],
     });
+
+    const renderHourlyChart = () => {
+      const dataEl = document.getElementById('productivity-hourly-data');
+      const svg = document.getElementById('productivity-hourly-chart');
+      const emptyEl = document.getElementById('productivity-hourly-empty');
+      const tooltip = document.getElementById('productivity-hourly-tooltip');
+      const wrap = document.getElementById('productivity-hourly-wrap');
+      if (!dataEl || !svg) return;
+      let data = [];
+      try { data = JSON.parse(dataEl.textContent || '[]'); } catch (e) { data = []; }
+      if (!data.length) {
+        if (emptyEl) emptyEl.classList.remove('hidden');
+        if (wrap) wrap.classList.add('hidden');
+        return;
+      }
+      const width = 520;
+      const height = 220;
+      const padding = { top: 12, right: 8, bottom: 28, left: 28 };
+      const chartW = width - padding.left - padding.right;
+      const chartH = height - padding.top - padding.bottom;
+      const maxVal = Math.max(...data.map(d => d.minutes), 1);
+      const barW = chartW / data.length;
+      let svgContent = '';
+      data.forEach((d, idx) => {
+        const barH = Math.round((d.minutes / maxVal) * chartH);
+        const x = padding.left + idx * barW + 2;
+        const y = padding.top + chartH - barH;
+        const w = Math.max(2, barW - 4);
+        svgContent += `<rect x="${x}" y="${y}" width="${w}" height="${barH}" fill="#10b981" rx="2"></rect>`;
+        if (idx % 2 === 0) {
+          svgContent += `<text x="${x + w / 2}" y="${height - 8}" font-size="9" text-anchor="middle" fill="#6b7280">${d.hour}h</text>`;
+        }
+      });
+      svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      svg.innerHTML = svgContent;
+
+      if (tooltip && wrap) {
+        const rects = svg.querySelectorAll('rect');
+        rects.forEach((rect, idx) => {
+          rect.addEventListener('mousemove', (e) => {
+            const d = data[idx];
+            tooltip.textContent = `${d.hour}h • ${d.minutes} phút • ${d.user_count} CTV`;
+            tooltip.classList.remove('hidden');
+            const wrapRect = wrap.getBoundingClientRect();
+            tooltip.style.left = `${e.clientX - wrapRect.left + 8}px`;
+            tooltip.style.top = `${e.clientY - wrapRect.top - 28}px`;
+          });
+          rect.addEventListener('mouseleave', () => tooltip.classList.add('hidden'));
+        });
+      }
+    };
+
+    renderHourlyChart();
   });
 </script>
 {% endblock %}

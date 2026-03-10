@@ -9,6 +9,11 @@ from .models import (
     AdmDocumentStatus,
     AdmDocumentType,
     AdmDocumentCounter,
+    AdmIncomingDispatchStatus,
+    AdmIncomingDispatchType,
+    AdmIncomingGapoGroup,
+    AdmIncomingDispatch,
+    AdmIncomingDispatchImage,
     AdmPaperDocument,
     AdmPaperType,
     AdmSignerRole,
@@ -29,7 +34,9 @@ class AdmContentTypeAdmin(admin.ModelAdmin):
 
 @admin.register(AdmSignerRole)
 class AdmSignerRoleAdmin(admin.ModelAdmin):
-    list_display = ("code", "title")
+    list_display = ("code", "title", "is_active")
+    list_filter = ("is_active",)
+    search_fields = ("code", "title")
     verbose_name_plural = "Signer Roles (Người ký)"
 
 
@@ -76,6 +83,52 @@ class AdmPaperDocumentAdmin(admin.ModelAdmin):
     list_display = ("document_number_full", "paper_type", "requested_department", "status", "created_at")
     list_filter = ("paper_type", "requested_department", "status")
     search_fields = ("ticket_code", "courier_tracking_code", "summary")
+
+
+@admin.register(AdmIncomingDispatch)
+class AdmIncomingDispatchAdmin(admin.ModelAdmin):
+    list_display = (
+        "document_number",
+        "incoming_item_type",
+        "responsible_user",
+        "sending_unit",
+        "signer_name",
+        "received_date",
+        "receiving_company",
+        "gapo_group",
+        "status",
+    )
+    list_filter = ("incoming_item_type", "status", "receiving_company", "gapo_group", "processing_departments")
+    search_fields = ("document_number", "sending_unit", "summary", "signer_name")
+    readonly_fields = ("responsible_user", "received_date", "created_at")
+
+
+@admin.register(AdmIncomingDispatchType)
+class AdmIncomingDispatchTypeAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "is_active", "sort_order")
+    list_filter = ("is_active",)
+    search_fields = ("code", "name")
+
+
+@admin.register(AdmIncomingDispatchStatus)
+class AdmIncomingDispatchStatusAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "is_active", "sort_order")
+    list_filter = ("is_active",)
+    search_fields = ("code", "name")
+
+
+@admin.register(AdmIncomingGapoGroup)
+class AdmIncomingGapoGroupAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "gapo_group_id", "is_active", "sort_order")
+    list_filter = ("is_active",)
+    search_fields = ("code", "name", "gapo_group_id")
+
+
+@admin.register(AdmIncomingDispatchImage)
+class AdmIncomingDispatchImageAdmin(admin.ModelAdmin):
+    list_display = ("id", "dispatch", "uploaded_by", "uploaded_at")
+    list_filter = ("uploaded_at",)
+    search_fields = ("dispatch__document_number", "dispatch__sending_unit")
 
 
 @admin.register(AdmPaperType)

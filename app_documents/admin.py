@@ -14,8 +14,11 @@ from .models import (
     BorrowRequest, BorrowRequestItem, BorrowRequestLog,
     DocumentKpiSetting,
     UserPresenceDaily,
+    UserPresenceHourly,
     FolderIssueType,
-    FolderIssue
+    FolderIssue,
+    UiScreen,
+    UiPermission
 )
 # Register your models here.
 admin.site.site_header = "Chứng từ F88"  
@@ -125,6 +128,14 @@ class UserPresenceDailyAdmin(admin.ModelAdmin):
 admin.site.register(UserPresenceDaily, UserPresenceDailyAdmin)
 
 
+class UserPresenceHourlyAdmin(admin.ModelAdmin):
+    list_display = ('user', 'work_date', 'hour', 'active_seconds', 'last_seen_at')
+    search_fields = ('user__username', 'user__first_name', 'user__last_name')
+    list_filter = ('work_date', 'hour')
+    list_per_page = 25
+admin.site.register(UserPresenceHourly, UserPresenceHourlyAdmin)
+
+
 class FolderIssueTypeAdmin(admin.ModelAdmin):
     list_display = ('issue_type_name', 'is_active', 'is_no_issue', 'badge_color', 'sort_order')
     list_filter = ('is_active', 'is_no_issue')
@@ -139,6 +150,8 @@ class FolderIssueAdmin(admin.ModelAdmin):
     list_filter = ('issue_type',)
     list_per_page = 25
 admin.site.register(FolderIssue, FolderIssueAdmin)
+admin.site.register(UiScreen)
+admin.site.register(UiPermission)
 
 class PartnerAdmin(admin.ModelAdmin):
     list_display = ('partner_code', 'partner_name', 'require_partner_selection', 'require_partner_code', 'is_active')

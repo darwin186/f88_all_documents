@@ -5,6 +5,9 @@ from app_documents.models import Region, Shop
 
 from .models import (
     AdmAdministrativeDocument,
+    AdmIncomingDispatchType,
+    AdmIncomingGapoGroup,
+    AdmIncomingDispatch,
     AdmPaperDocument,
     AdmPaperType,
     AdmCourierCompany,
@@ -258,7 +261,7 @@ class AdmPaperDocumentForm(forms.ModelForm):
             for region in Region.objects.exclude(pk=3).order_by("region_name")
         ]
         self.fields["region"].choices = region_choices
-        base_classes = "block w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green"
+        base_classes = "block w-full rounded-lg border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green"
         for name, field in self.fields.items():
             existing = field.widget.attrs.get("class", "")
             field.widget.attrs["class"] = f"{existing} {base_classes}".strip()
@@ -308,6 +311,107 @@ class AdmPaperDocumentForm(forms.ModelForm):
         return cleaned
 
 
+class AdmIncomingDispatchForm(forms.ModelForm):
+    signer_name = forms.CharField(
+        required=True,
+        label="Người ký",
+    )
+    processing_department = forms.ModelChoiceField(
+        queryset=AdmDepartment.objects.select_related("company")
+        .filter(is_active=True)
+        .order_by("company__code", "name"),
+        required=True,
+        label="Phòng ban xử lý",
+    )
+    incoming_item_type = forms.ModelChoiceField(
+        queryset=AdmIncomingDispatchType.objects.none(),
+        required=True,
+        label="Loại tiếp nhận",
+        widget=forms.RadioSelect,
+    )
+
+    class Meta:
+        model = AdmIncomingDispatch
+        fields = [
+            "document_number",
+            "sending_unit",
+            "signer_name",
+            "summary",
+            "incoming_item_type",
+            "receiving_company",
+            "gapo_group",
+        ]
+        labels = {
+            "document_number": "Số hiệu văn bản",
+            "sending_unit": "Đơn vị gửi",
+            "signer_name": "Người ký",
+            "summary": "Tên trích yếu, nội dung",
+            "receiving_company": "Công ty nhận",
+            "gapo_group": "Nhóm GAPO nhận thông báo",
+        }
+        widgets = {
+            "summary": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        base_classes = "block w-full rounded-lg border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green"
+        for field in self.fields.values():
+            if isinstance(field.widget, forms.RadioSelect):
+                continue
+            existing = field.widget.attrs.get("class", "")
+            field.widget.attrs["class"] = f"{existing} {base_classes}".strip()
+
+        self.fields["incoming_item_type"].queryset = (
+            AdmIncomingDispatchType.objects.filter(
+                is_active=True, code__in=["cong_van", "buu_pham_buu_kien"]
+            )
+            .order_by("sort_order", "name")
+        )
+        self.fields["receiving_company"].queryset = (
+            AdmCompany.objects.filter(is_active=True).order_by("name")
+        )
+        self.fields["gapo_group"].queryset = (
+            AdmIncomingGapoGroup.objects.filter(is_active=True).order_by(
+                "sort_order", "name"
+            )
+        )
+        self.fields["receiving_company"].empty_label = "Chọn công ty nhận"
+        self.fields["gapo_group"].empty_label = "Chọn nhóm GAPO"
+        self.fields["processing_department"].empty_label = "Chọn phòng ban xử lý"
+        self.fields["incoming_item_type"].widget.attrs["class"] = "space-y-2"
+
+    def clean_processing_department(self):
+        department = self.cleaned_data.get("processing_department")
+        if not department:
+            raise forms.ValidationError("Cần chọn phòng ban xử lý.")
+        return department
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        department = self.cleaned_data.get("processing_department")
+        if not (instance.document_number or "").strip():
+            instance.document_number = None
+
+        self._selected_processing_department = department
+
+        if commit:
+            instance.save()
+            self._save_processing_department_m2m()
+        else:
+            self.save_m2m = self._save_m2m_with_processing_department
+        return instance
+
+    def _save_m2m_with_processing_department(self):
+        self._save_m2m()
+        self._save_processing_department_m2m()
+
+    def _save_processing_department_m2m(self):
+        department = getattr(self, "_selected_processing_department", None)
+        if self.instance.pk and department is not None:
+            self.instance.processing_departments.set([department])
+
+
 class _MasterBaseForm(forms.ModelForm):
     """Add consistent styling for small master data forms."""
 
@@ -337,7 +441,11 @@ class AdmSignerRoleForm(_MasterBaseForm):
     class Meta:
         model = AdmSignerRole
         fields = ["code", "title", "is_active"]
-        labels = {"code": "Mã", "title": "Chức danh", "is_active": "Đang dùng"}
+        labels = {
+            "code": "Mã",
+            "title": "Người ký",
+            "is_active": "Đang dùng",
+        }
 
 
 class AdmDocumentStatusForm(_MasterBaseForm):

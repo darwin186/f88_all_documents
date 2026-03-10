@@ -5,23 +5,45 @@
         <img src="https://f88.vn/images/root/logo-f88-primary.svg" alt="F88" class="h-8">
       </a>
       <div class="hidden md:flex items-center gap-2 text-[10px] text-gray-600">
+        {% if 'receiving_v2' in allowed_screens %}
         <a href="{% url 'receiving_transaction_v2' %}" class="{% if request.resolver_match.url_name == 'receiving_transaction_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Nhận chứng từ</a>
         <span class="text-gray-300">•</span>
+        {% endif %}
+        {% if 'checking_v2' in allowed_screens %}
         <a href="{% url 'checking_transaction_v2' %}" class="{% if request.resolver_match.url_name == 'checking_transaction_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Duyệt chứng từ</a>
         <span class="text-gray-300">•</span>
-        {% if is_admin %}
+        {% endif %}
+        {% if 'kpi_v2' in allowed_screens %}
         <a href="{% url 'document_kpi_v2' %}" class="{% if request.resolver_match.url_name == 'document_kpi_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Chỉ tiêu chứng từ</a>
         <span class="text-gray-300">•</span>
         {% endif %}
-        {% if is_admin or is_super_admin %}
+        {% if 'ctv_accounts' in allowed_screens %}
         <a href="{% url 'ctv_account_management_v2' %}" class="{% if request.resolver_match.url_name == 'ctv_account_management_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Quản lý tài khoản CTV</a>
         <span class="text-gray-300">•</span>
         {% endif %}
+        {% if 'package_v2' in allowed_screens %}
         <a href="{% url 'package_list_management' %}" class="{% if request.resolver_match.url_name == 'package_list_management' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Quản lý thùng</a>
         <span class="text-gray-300">•</span>
+        {% endif %}
+        {% if 'borrow_request_v2' in allowed_screens or 'borrow_manage_v2' in allowed_screens %}
         <a href="{% url 'borrow_request_management_v2' %}" class="{% if request.resolver_match.url_name == 'borrow_request_management_v2' or request.resolver_match.url_name == 'borrow_request_detail_v2' or request.resolver_match.url_name == 'borrow_management_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Mượn chứng từ</a>
         <span class="text-gray-300">•</span>
-        <a href="{% url 'workshift_register' %}" class="{% if request.resolver_match.url_name == 'workshift_register' or request.resolver_match.url_name == 'workshift_tasks' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Lịch làm việc</a>
+        {% endif %}
+        {% if 'workshift_register' in allowed_screens or 'workshift_tasks' in allowed_screens %}
+        <a href="{% url 'workshift_register' %}" class="{% if request.resolver_match.url_name == 'workshift_register' or request.resolver_match.url_name == 'workshift_tasks' or request.resolver_match.url_name == 'workshift_policy' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Lịch làm việc</a>
+        {% endif %}
+        {% if 'receiving_import_v2' in allowed_screens %}
+        <span class="text-gray-300">•</span>
+        <div class="relative group inline-flex items-center">
+          <span class="cursor-pointer {% if request.resolver_match.url_name == 'receiving_import_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Khác</span>
+          <div class="absolute left-0 top-full mt-1 min-w-[180px] rounded-xl border border-gray-200 bg-white shadow-lg py-1 hidden group-hover:block">
+            <div class="absolute -top-2 left-0 right-0 h-2"></div>
+            <a href="{% url 'receiving_import_v2' %}" class="flex items-center gap-2 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50">
+              Import nhận chứng từ
+            </a>
+          </div>
+        </div>
+        {% endif %}
       </div>
     </div>
     <div class="relative text-[9px] text-gray-700" data-user-menu>
@@ -47,10 +69,12 @@
         <a href="{% url 'user_profile_v2' %}" class="flex items-center gap-2 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50">
           Thông tin cá nhân
         </a>
-        {% if is_admin or is_super_admin %}
+        {% if 'ctv_accounts' in allowed_screens %}
         <a href="{% url 'ctv_account_management_v2' %}" class="flex items-center gap-2 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50">
           Quản lý tài khoản CTV
         </a>
+        {% endif %}
+        {% if is_admin or is_super_admin %}
         <a href="/admin/" class="flex items-center gap-2 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50">
           Admin portal
         </a>

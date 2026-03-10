@@ -29,6 +29,7 @@ from app_documents.models import Shop, Region
 from .forms import (
     AdmAdministrativeDocumentForm,
     AdmAdministrativeDocumentUpdateForm,
+    AdmIncomingDispatchForm,
     AdmPaperDocumentForm,
     AdmDocumentTypeForm,
     AdmContentTypeForm,
@@ -49,12 +50,16 @@ from .models import (
     AdmDocumentType,
     AdmDocumentAttachment,
     AdmDocumentCounter,
+    AdmIncomingDispatchStatus,
+    AdmIncomingDispatchType,
+    AdmIncomingGapoGroup,
+    AdmIncomingDispatch,
+    AdmIncomingDispatchImage,
     AdmPaperCounter,
     AdmPaperDocument,
     AdmPaperType,
     AdmSignerRole,
     AdmAdministrativeDocumentHistory,
-    AdmDepartment,
 )
 from .services import allocate_running_number, allocate_paper_running_number
 
@@ -68,6 +73,115 @@ def _has_admin_docs_access(user) -> bool:
     if is_checker:
         return False
     return user.groups.filter(name__in=allowed_groups).exists()
+
+
+def _has_incoming_dispatch_create_access(user) -> bool:
+    return bool(getattr(user, "is_authenticated", False))
+
+
+def _has_incoming_dispatch_status_edit_access(user) -> bool:
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_superuser", False):
+        return True
+    if user.has_perm("app_admindocuments.change_admincomingdispatch"):
+        return True
+    return _has_admin_docs_access(user)
+
+
+INCOMING_TYPE_DOC = "cong_van"
+INCOMING_TYPE_PARCEL = "buu_pham_buu_kien"
+
+INCOMING_DOC_FLOW = [
+    ("doc_received", "Đã tiếp nhận"),
+    ("doc_at_clerical", "Đang ở Văn thư"),
+    ("doc_at_assistant", "Đang ở Ban trợ lý"),
+    ("doc_pending_signer", "Trình ký"),
+    ("doc_archived", "Lưu trữ"),
+]
+
+INCOMING_PARCEL_FLOW = [
+    ("pkg_received", "Lễ tân tiếp nhận"),
+    ("pkg_at_clerical", "Đã thông báo"),
+    ("pkg_processing", "Đã bàn giao"),
+]
+
+INCOMING_ARCHIVED_STATUS_CODES = {"doc_archived", "pkg_archived", "archived"}
+INCOMING_VISIBLE_STATUS_CODES = [
+    code
+    for code, _ in (INCOMING_DOC_FLOW + INCOMING_PARCEL_FLOW)
+    if code not in INCOMING_ARCHIVED_STATUS_CODES
+]
+
+
+def _save_incoming_dispatch_images(dispatch, files, user):
+    for image_file in files:
+        content_type = getattr(image_file, "content_type", "") or ""
+        if not content_type.startswith("image/"):
+            continue
+        AdmIncomingDispatchImage.objects.create(
+            dispatch=dispatch,
+            image=image_file,
+            uploaded_by=user,
+        )
+
+
+def _incoming_flow_by_type(item_type_code, signer_label="Người ký"):
+    if item_type_code == INCOMING_TYPE_DOC:
+        flow = []
+        for code, label in INCOMING_DOC_FLOW:
+            if code == "doc_pending_signer":
+                flow.append((code, f"{label} ({signer_label})"))
+            else:
+                flow.append((code, label))
+        return flow
+    if item_type_code == INCOMING_TYPE_PARCEL:
+        return list(INCOMING_PARCEL_FLOW)
+    return list(INCOMING_DOC_FLOW)
+
+
+def _resolve_initial_incoming_status_code(item_type_code):
+    flow = _incoming_flow_by_type(item_type_code)
+    if flow:
+        first_code = flow[0][0]
+        if AdmIncomingDispatchStatus.objects.filter(code=first_code, is_active=True).exists():
+            return first_code
+    fallback = (
+        AdmIncomingDispatchStatus.objects.filter(is_active=True)
+        .order_by("sort_order", "name")
+        .values_list("code", flat=True)
+        .first()
+    )
+    return fallback
+
+
+def _allowed_status_codes_for_dispatch(dispatch):
+    signer_label = (dispatch.signer_name or "").strip() or "Người ký"
+    flow = _incoming_flow_by_type(dispatch.incoming_item_type_id, signer_label=signer_label)
+    codes = [code for code, _ in flow]
+    if dispatch.status_id and dispatch.status_id not in codes:
+        codes.append(dispatch.status_id)
+    return codes
+
+
+
+def _build_incoming_workflow_steps(dispatch):
+    current_status = dispatch.status_id
+    signer_label = (dispatch.signer_name or "").strip() or "Người ký"
+    flow = _incoming_flow_by_type(dispatch.incoming_item_type_id, signer_label=signer_label)
+    index_map = {code: idx for idx, (code, _) in enumerate(flow)}
+    current_index = index_map.get(current_status, -1)
+    steps = []
+    for idx, (code, label) in enumerate(flow):
+        steps.append(
+            {
+                "code": code,
+                "label": label,
+                "is_current": idx == current_index,
+                "is_done": current_index > idx,
+            }
+        )
+    return steps
 
 
 def _create_attachment_version(document, user, uploaded_file=None, link=None, note=None):
@@ -536,6 +650,221 @@ def dashboard_export(request):
             ]
         )
     return response
+
+
+@login_required
+def incoming_dispatch_list(request):
+    can_create = _has_incoming_dispatch_create_access(request.user)
+    can_edit_status = _has_incoming_dispatch_status_edit_access(request.user)
+
+    query = request.GET.get("q", "").strip()
+    status_filter = request.GET.get("status", "")
+    department_filter = request.GET.get("department", "")
+    company_filter = request.GET.get("company", "")
+    receive_company = (request.GET.get("receive_company") or "").strip()
+    open_dispatch_id = (request.GET.get("open") or "").strip()
+    companies = AdmCompany.objects.filter(is_active=True).order_by("name")
+    prefill_company = None
+
+    if receive_company:
+        prefill_company = companies.filter(code=receive_company).first()
+
+    if request.method == "POST":
+        form = AdmIncomingDispatchForm(request.POST)
+        receive_company = (request.POST.get("receiving_company") or "").strip()
+        prefill_company = companies.filter(code=receive_company).first()
+        if form.is_valid():
+            dispatch = form.save(commit=False)
+            dispatch.responsible_user = request.user
+            dispatch.created_by = request.user
+            dispatch.updated_by = request.user
+            initial_status = _resolve_initial_incoming_status_code(
+                dispatch.incoming_item_type_id
+            )
+            if not initial_status:
+                messages.error(
+                    request,
+                    "Chưa có cấu hình trạng thái khởi tạo cho tiếp nhận thư từ.",
+                )
+                return redirect("admindocuments:incoming_dispatch_list")
+            dispatch.status_id = initial_status
+            dispatch.save()
+            form.save_m2m()
+            _save_incoming_dispatch_images(
+                dispatch,
+                request.FILES.getlist("images"),
+                request.user,
+            )
+            messages.success(request, "Đã nhập công văn đến thành công.")
+            return redirect("admindocuments:incoming_dispatch_list")
+        messages.error(request, "Dữ liệu không hợp lệ, vui lòng kiểm tra lại.")
+    else:
+        form = AdmIncomingDispatchForm()
+        if prefill_company:
+            form.initial["receiving_company"] = prefill_company.code
+
+    dispatches_qs = (
+        AdmIncomingDispatch.objects.select_related(
+            "responsible_user",
+            "receiving_company",
+            "incoming_item_type",
+            "status",
+            "gapo_group",
+        )
+        .prefetch_related(
+            "processing_departments",
+            "processing_departments__company",
+            "images",
+        )
+        .order_by("-created_at")
+    )
+    dispatches_qs = dispatches_qs.exclude(status_id__in=INCOMING_ARCHIVED_STATUS_CODES)
+    if query:
+        dispatches_qs = dispatches_qs.filter(
+            Q(document_number__icontains=query) | Q(summary__icontains=query)
+        )
+    if status_filter:
+        dispatches_qs = dispatches_qs.filter(status=status_filter)
+    if department_filter:
+        dispatches_qs = dispatches_qs.filter(
+            processing_departments__id=department_filter
+        )
+    if company_filter:
+        dispatches_qs = dispatches_qs.filter(receiving_company_id=company_filter)
+
+    dispatches_qs = dispatches_qs.distinct()
+    paginator = Paginator(dispatches_qs, 25)
+    page_number = request.GET.get("page", "1")
+    try:
+        dispatches = paginator.page(page_number)
+    except PageNotAnInteger:
+        dispatches = paginator.page(1)
+    except EmptyPage:
+        dispatches = paginator.page(paginator.num_pages)
+    active_status_map = {
+        status.code: status
+        for status in AdmIncomingDispatchStatus.objects.filter(is_active=True)
+    }
+    for dispatch in dispatches.object_list:
+        dispatch.available_statuses = [
+            active_status_map[code]
+            for code in _allowed_status_codes_for_dispatch(dispatch)
+            if code in active_status_map
+        ]
+
+    departments = AdmDepartment.objects.select_related("company").filter(
+        is_active=True
+    ).order_by("company__code", "name")
+    status_options = AdmIncomingDispatchStatus.objects.filter(
+        is_active=True, code__in=INCOMING_VISIBLE_STATUS_CODES
+    ).order_by("sort_order", "name")
+    type_options = AdmIncomingDispatchType.objects.filter(is_active=True).order_by(
+        "sort_order", "name"
+    )
+    gapo_groups = AdmIncomingGapoGroup.objects.filter(is_active=True).order_by(
+        "sort_order", "name"
+    )
+    selected_dispatch = None
+    selected_workflow_steps = []
+    if open_dispatch_id.isdigit():
+        selected_dispatch = (
+            dispatches_qs.filter(pk=int(open_dispatch_id))
+            .select_related(
+                "responsible_user",
+                "receiving_company",
+                "incoming_item_type",
+                "status",
+                "gapo_group",
+            )
+            .prefetch_related(
+                "processing_departments",
+                "processing_departments__company",
+                "images",
+            )
+            .first()
+        )
+        if selected_dispatch:
+            selected_workflow_steps = _build_incoming_workflow_steps(selected_dispatch)
+
+    context = {
+        "dispatches": dispatches,
+        "page_obj": dispatches,
+        "paginator": paginator,
+        "is_paginated": paginator.num_pages > 1,
+        "form": form,
+        "q": query,
+        "selected_status": status_filter,
+        "selected_department": department_filter,
+        "selected_company": company_filter,
+        "status_options": status_options,
+        "type_options": type_options,
+        "gapo_groups": gapo_groups,
+        "companies": companies,
+        "departments": departments,
+        "prefill_company": prefill_company,
+        "selected_dispatch": selected_dispatch,
+        "selected_workflow_steps": selected_workflow_steps,
+        "can_create": can_create,
+        "can_edit_status": can_edit_status,
+        "has_admin_docs_access": _has_admin_docs_access(request.user),
+    }
+    return render(request, "admindocuments/incoming_dispatch_list.html", context)
+
+
+@login_required
+def incoming_dispatch_change_status(request, doc_id: int):
+    if request.method != "POST":
+        return redirect("admindocuments:incoming_dispatch_list")
+    if not _has_incoming_dispatch_status_edit_access(request.user):
+        messages.error(request, "Bạn không có quyền thay đổi tình trạng.")
+        return render(request, "403.html", status=403)
+
+    dispatch = get_object_or_404(AdmIncomingDispatch, pk=doc_id)
+    new_status = (request.POST.get("status") or "").strip()
+    valid_statuses = set(
+        AdmIncomingDispatchStatus.objects.filter(is_active=True).values_list(
+            "code", flat=True
+        )
+    )
+    allowed_statuses = set(_allowed_status_codes_for_dispatch(dispatch))
+    if new_status and new_status not in allowed_statuses:
+        messages.error(request, "Bước xử lý không hợp lệ cho loại tiếp nhận này.")
+        return redirect("admindocuments:incoming_dispatch_list")
+    if new_status not in valid_statuses:
+        messages.error(request, "Tình trạng không hợp lệ.")
+        return redirect("admindocuments:incoming_dispatch_list")
+    if dispatch.status_id == new_status:
+        messages.info(request, "Tình trạng đã ở giá trị này.")
+        return redirect("admindocuments:incoming_dispatch_list")
+
+    dispatch.status_id = new_status
+    dispatch.updated_by = request.user
+    dispatch.save(update_fields=["status", "updated_by", "updated_at"])
+    messages.success(request, "Cập nhật tình trạng thành công.")
+
+    next_url = request.POST.get("next", "")
+    if next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect("admindocuments:incoming_dispatch_list")
+
+
+@login_required
+def incoming_dispatch_upload_images(request, doc_id: int):
+    if request.method != "POST":
+        return redirect("admindocuments:incoming_dispatch_list")
+
+    dispatch = get_object_or_404(AdmIncomingDispatch, pk=doc_id)
+    files = request.FILES.getlist("images")
+    if not files:
+        messages.warning(request, "Bạn chưa chọn ảnh để tải lên.")
+    else:
+        _save_incoming_dispatch_images(dispatch, files, request.user)
+        messages.success(request, "Đã tải ảnh đính kèm.")
+
+    next_url = request.POST.get("next", "")
+    if next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect(f"{reverse('admindocuments:incoming_dispatch_list')}?open={dispatch.id}")
 
 
 @login_required

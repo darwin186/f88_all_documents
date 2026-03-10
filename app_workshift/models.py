@@ -14,6 +14,7 @@ class WorkPolicy(models.Model):
     max_hours_per_day = models.DecimalField(max_digits=5, decimal_places=2, default=8)
     max_hours_per_week = models.DecimalField(max_digits=5, decimal_places=2, default=40)
     max_hours_per_month = models.DecimalField(max_digits=6, decimal_places=2, default=160)
+    min_hours_per_shift = models.DecimalField(max_digits=4, decimal_places=2, default=4)
     effective_from = models.DateField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -47,6 +47,9 @@ urlpatterns = [
     path('api/package/<int:package_id>/note/', views.api_package_note, name='api_package_note'),
     path('package/bulk-validate/', views.package_bulk_validate, name='package_bulk_validate'),
     path('package/bulk-save/', views.package_bulk_save, name='package_bulk_save'),
+    path('nhan-chung-tu-v2/import', views.receiving_import_v2, name='receiving_import_v2'),
+    path('nhan-chung-tu-v2/import/validate', views.receiving_import_validate, name='receiving_import_validate'),
+    path('nhan-chung-tu-v2/import/save', views.receiving_import_save, name='receiving_import_save'),
     #Historical Data
     path('historical/folders/', views.historical_folder_view, name='historical_folder_view'),
     path('historical/documents/', views.historical_documents_view, name='historical_documents_view'),
@@ -54,6 +57,7 @@ urlpatterns = [
     path('dashboard', views.documents_dashboard, name = 'dashboard'),
     path('dashboard/folder-received', views.folder_received_dashboard, name='dashboard_folder_received'),
     path('export-excel-folder-fail/', views.export_excel_folder_fail, name='export_excel_folder_fail'),
+    path('chi-tieu-chung-tu-v2/productivity/export', views.export_productivity_report, name='export_productivity_report'),
     #Request Change
     path('request-change-folder/<int:folder_id>/', views.request_change_folder_view, name='request_change_folder'),
     path('request-change-document/<int:document_id>/', views.request_change_document_view, name='request_change_document'),
@@ -66,6 +70,7 @@ urlpatterns = [
     path('api/heartbeat/', views.api_user_heartbeat, name='api_user_heartbeat'),
     path('quan-ly-tai-khoan-ctv/', views.online_users_view, name='ctv_account_management_v2'),
     path('thong-tin-ca-nhan/', views.user_profile_v2_view, name='user_profile_v2'),
+    path('phan-quyen-ui-v2/', views.ui_permission_v2_view, name='ui_permission_v2'),
     path('chi-tieu-chung-tu-v2', views.document_kpi_dashboard_v2, name='document_kpi_v2'),
     path('chi-tieu-chung-tu-v2/export-pgd', views.export_kpi_shop_detail, name='document_kpi_shop_export'),
     path('manage-borrow/return-or-report-lost/<int:document_id>/<str:action>/', views.manage_borrow_document, name='manage_borrow_document'),

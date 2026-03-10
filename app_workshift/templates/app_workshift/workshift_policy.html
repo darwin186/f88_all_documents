@@ -89,10 +89,14 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div>
             <label class="block text-[9px] text-gray-500 mb-1">Số ca/ngày</label>
             <input type="number" min="1" name="max_shifts_per_day" value="{{ form_data.max_shifts_per_day }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
+          </div>
+          <div>
+            <label class="block text-[9px] text-gray-500 mb-1">Giờ/ca tối thiểu</label>
+            <input type="number" step="0.25" name="min_hours_per_shift" value="{{ form_data.min_hours_per_shift }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
           </div>
           <div>
             <label class="block text-[9px] text-gray-500 mb-1">Giờ/ngày tối đa</label>
@@ -133,7 +137,7 @@
                   <span class="rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 text-[8px] font-semibold">Đang dùng</span>
                 {% endif %}
               </div>
-              <div class="text-gray-500 mt-1">{{ policy.open_time }} - {{ policy.close_time }} • {{ policy.max_hours_per_week }}h/tuần</div>
+              <div class="text-gray-500 mt-1">{{ policy.open_time }} - {{ policy.close_time }} • {{ policy.min_hours_per_shift }}h/ca • {{ policy.max_hours_per_week }}h/tuần</div>
             </a>
           {% endfor %}
         {% endif %}
