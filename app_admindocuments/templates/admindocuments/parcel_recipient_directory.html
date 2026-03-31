@@ -1,0 +1,208 @@
+{% extends "admindocuments/base.html" %}
+{% block title %}Danh bạ người nhận bưu phẩm{% endblock %}
+
+{% block content %}
+<div class="mb-6 flex items-start justify-between gap-4">
+  <div>
+    <h1 class="text-2xl font-semibold text-gray-700">Danh bạ người nhận bưu phẩm</h1>
+    <p class="mt-1 text-sm text-gray-500">Tải file Excel từ IT, chuẩn hóa dữ liệu người nhận và dùng trực tiếp cho màn tiếp nhận bưu phẩm.</p>
+  </div>
+  <a href="{% url 'admindocuments:parcel_receipt_list' %}" class="text-sm text-gray-600 hover:underline">← Về màn bưu phẩm</a>
+</div>
+
+{% if messages %}
+<div class="mb-4 space-y-2">
+  {% for message in messages %}
+  <div class="rounded-lg border px-4 py-3 text-sm
+    {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-700
+    {% elif message.tags == 'warning' %}border-amber-200 bg-amber-50 text-amber-700
+    {% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="grid gap-5 xl:grid-cols-[380px,minmax(0,1fr)]">
+  <div class="space-y-5">
+    <section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div class="mb-4">
+        <h2 class="text-lg font-semibold text-gray-800">Upload file mới</h2>
+        <p class="mt-1 text-sm text-gray-500">File được lưu trữ thành snapshot. Batch import mới sẽ tự trở thành dữ liệu hiện hành nếu import thành công.</p>
+      </div>
+      <form method="post" enctype="multipart/form-data" class="space-y-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="upload">
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700">{{ form.file.label }}</label>
+          {{ form.file }}
+          {% if form.file.errors %}<p class="mt-1 text-xs text-red-600">{{ form.file.errors.0 }}</p>{% endif %}
+        </div>
+        <button type="submit" class="w-full rounded-lg bg-f88green px-4 py-2.5 text-sm font-semibold text-white hover:bg-f88dark">Upload và làm mới danh bạ</button>
+      </form>
+    </section>
+
+    <section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div class="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-semibold text-gray-800">Batch hiện hành</h2>
+          <p class="mt-1 text-sm text-gray-500">Batch này đang được form tiếp nhận bưu phẩm sử dụng.</p>
+        </div>
+        {% if current_batch %}
+        <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Đang dùng</span>
+        {% endif %}
+      </div>
+      {% if current_batch %}
+      <div class="space-y-3 text-sm text-gray-600">
+        <div>
+          <div class="font-medium text-gray-800">{{ current_batch.original_name }}</div>
+          <div class="mt-1 text-xs text-gray-500">Sheet: {{ current_batch.sheet_name|default:"-" }} · Import lúc {{ current_batch.created_at|date:"d/m/Y H:i" }}</div>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+          <div class="rounded-lg bg-gray-50 px-3 py-3">
+            <div class="text-xs uppercase tracking-wide text-gray-400">Tổng dòng</div>
+            <div class="mt-1 text-lg font-semibold text-gray-800">{{ current_batch.total_rows }}</div>
+          </div>
+          <div class="rounded-lg bg-gray-50 px-3 py-3">
+            <div class="text-xs uppercase tracking-wide text-gray-400">Import được</div>
+            <div class="mt-1 text-lg font-semibold text-gray-800">{{ current_batch.imported_rows }}</div>
+          </div>
+          <div class="rounded-lg bg-gray-50 px-3 py-3">
+            <div class="text-xs uppercase tracking-wide text-gray-400">Đang hoạt động</div>
+            <div class="mt-1 text-lg font-semibold text-gray-800">{{ current_batch.active_rows }}</div>
+          </div>
+        </div>
+        <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-xs text-gray-600">
+          Merge ranges: {{ current_batch.summary.merged_ranges|default:0 }} · Thiếu GAPO ID: {{ current_batch.summary.missing_gapo|default:0 }} · Thiếu phòng ban: {{ current_batch.summary.missing_department|default:0 }} · Inactive: {{ current_batch.summary.inactive_rows|default:0 }}
+        </div>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="reimport">
+          <input type="hidden" name="batch_id" value="{{ current_batch.id }}">
+          <button type="submit" class="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Làm mới lại từ file hiện hành</button>
+        </form>
+      </div>
+      {% else %}
+      <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-sm text-gray-500">
+        Chưa có batch nào được kích hoạt.
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div class="mb-4">
+        <h2 class="text-lg font-semibold text-gray-800">Lịch sử file</h2>
+        <p class="mt-1 text-sm text-gray-500">Các file cũ vẫn được lưu để đối chiếu hoặc kích hoạt lại.</p>
+      </div>
+      <div class="space-y-3">
+        {% for batch in recent_batches %}
+        <div class="rounded-lg border border-gray-200 px-4 py-3">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="truncate text-sm font-medium text-gray-800">{{ batch.original_name }}</div>
+              <div class="mt-1 text-xs text-gray-500">{{ batch.created_at|date:"d/m/Y H:i" }} · {{ batch.imported_rows }} dòng hợp lệ</div>
+            </div>
+            {% if batch.is_current %}
+            <span class="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700">Current</span>
+            {% endif %}
+          </div>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <a href="{{ batch.file.url }}" class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">Tải file</a>
+            {% if not batch.is_current %}
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="activate">
+              <input type="hidden" name="batch_id" value="{{ batch.id }}">
+              <button type="submit" class="rounded-md bg-f88green px-3 py-1.5 text-xs font-semibold text-white hover:bg-f88dark">Kích hoạt lại</button>
+            </form>
+            {% endif %}
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="reimport">
+              <input type="hidden" name="batch_id" value="{{ batch.id }}">
+              <button type="submit" class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">Reimport</button>
+            </form>
+          </div>
+        </div>
+        {% empty %}
+        <div class="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-sm text-gray-500">
+          Chưa có file nào.
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+
+  <div class="space-y-5">
+    <section class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-semibold text-gray-800">Preview người nhận</h2>
+          <p class="mt-1 text-sm text-gray-500">Kiểm tra nhanh dữ liệu đã chuẩn hóa từ batch hiện hành trước khi dùng ở màn tiếp nhận.</p>
+        </div>
+        <div class="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-600">{{ recipient_total }} người</div>
+      </div>
+
+      <form method="get" class="mt-4 flex flex-col gap-3 md:flex-row">
+        <input type="text" name="q" value="{{ query }}" placeholder="Tìm tên, mã nhân viên, GAPO ID, phòng ban"
+               class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-f88green focus:outline-none focus:ring-2 focus:ring-green-200">
+        <button type="submit" class="rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">Tìm</button>
+      </form>
+
+      {% if departments %}
+      <div class="mt-4 flex flex-wrap gap-2">
+        {% for department in departments %}
+        <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">{{ department }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="mt-4 overflow-hidden rounded-lg border border-gray-200">
+        <div class="max-h-[720px] overflow-auto">
+          <table class="min-w-full text-sm">
+            <thead class="sticky top-0 bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+              <tr>
+                <th class="px-3 py-2 text-left">Người nhận</th>
+                <th class="px-3 py-2 text-left">Phòng ban</th>
+                <th class="px-3 py-2 text-left">Liên hệ</th>
+                <th class="px-3 py-2 text-left">Ngày sinh</th>
+                <th class="px-3 py-2 text-left">GAPO ID</th>
+                <th class="px-3 py-2 text-left">Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              {% for recipient in recipient_preview %}
+              <tr>
+                <td class="px-3 py-2">
+                  <div class="font-medium text-gray-800">{{ recipient.full_name|default:"-" }}</div>
+                  <div class="mt-1 text-xs text-gray-500">{{ recipient.employee_code|default:"Không có mã NV" }} · {{ recipient.email|default:"-" }}</div>
+                </td>
+                <td class="px-3 py-2 text-gray-600">
+                  <div>{{ recipient.department_name|default:"-" }}</div>
+                  <div class="mt-1 text-xs text-gray-400">{{ recipient.position_name|default:"-" }}</div>
+                </td>
+                <td class="px-3 py-2 text-gray-600">
+                  <div>{{ recipient.phone_number|default:"-" }}</div>
+                  <div class="mt-1 text-xs text-gray-400">{{ recipient.email|default:"-" }}</div>
+                </td>
+                <td class="px-3 py-2 text-gray-600">{{ recipient.birth_date|default:"-" }}</td>
+                <td class="px-3 py-2 font-mono text-xs text-gray-700">{{ recipient.gapo_user_id|default:"-" }}</td>
+                <td class="px-3 py-2">
+                  <span class="rounded-full px-2 py-1 text-xs font-semibold {% if recipient.is_active_member %}bg-emerald-50 text-emerald-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                    {% if recipient.is_active_member %}Đang hoạt động{% else %}Không hoạt động{% endif %}
+                  </span>
+                </td>
+              </tr>
+              {% empty %}
+              <tr>
+                <td colspan="6" class="px-4 py-8 text-center text-sm text-gray-500">Chưa có dữ liệu preview.</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}

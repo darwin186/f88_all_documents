@@ -16,7 +16,7 @@
       </div>
       <div>
         <h2 class="text-2xl font-semibold text-f88dark">GAPO Scheduler</h2>
-        <p class="text-sm text-slate-600">Soạn tin nhắn và lên lịch gửi đến GAPO user</p>
+        <p class="text-sm text-slate-600">Soạn tin text hoặc dynamic và lên lịch gửi qua receiver, thread hoặc collab</p>
       </div>
     </div>
 
@@ -62,16 +62,29 @@
           <form method="post" class="space-y-4">
             {% csrf_token %}
             <div>
-              <label class="block text-sm font-medium text-slate-700 mb-1">GAPO User ID</label>
-              {{ form.receiver_id }}
+              <label class="block text-sm font-medium text-slate-700 mb-1">{{ form.target_type.label }}</label>
+              {{ form.target_type }}
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">{{ form.target_value.label }}</label>
+              {{ form.target_value }}
             </div>
             <div>
               <label class="block text-sm font-medium text-slate-700 mb-1">Thời gian gửi</label>
               {{ form.schedule_at }}
             </div>
             <div>
-              <label class="block text-sm font-medium text-slate-700 mb-1">Nội dung tin nhắn</label>
+              <label class="block text-sm font-medium text-slate-700 mb-1">{{ form.body_type.label }}</label>
+              {{ form.body_type }}
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">{{ form.message.label }}</label>
               {{ form.message }}
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">{{ form.body_metadata.label }}</label>
+              {{ form.body_metadata }}
+              <p class="mt-1 text-xs text-slate-500">Dynamic message cần JSON có `metadata.layout` theo tài liệu Gapo.</p>
             </div>
             <button type="submit" class="w-full bg-f88 hover:bg-f88dark text-white font-semibold py-2.5 rounded-lg shadow-sm transition">Hẹn giờ gửi tin</button>
           </form>
@@ -91,7 +104,8 @@
             <table class="min-w-full text-sm">
               <thead>
                 <tr class="text-left text-slate-500 border-b">
-                  <th class="py-2">Receiver ID</th>
+                  <th class="py-2">Đích nhận</th>
+                  <th class="py-2">Loại</th>
                   <th class="py-2">Thời gian</th>
                   <th class="py-2">Trạng thái</th>
                   <th class="py-2">Lỗi</th>
@@ -101,7 +115,8 @@
               <tbody class="divide-y">
                 {% for s in schedules %}
                 <tr class="text-slate-700">
-                  <td class="py-2 font-semibold">{{ s.receiver_id }}</td>
+                  <td class="py-2 font-semibold">{{ s.get_target_type_display }}: {{ s.target_value }}</td>
+                  <td class="py-2">{{ s.body_type }}</td>
                   <td class="py-2">{{ s.schedule_at }}</td>
                   <td class="py-2">
                     {% if s.status == 'sent' %}
@@ -135,7 +150,7 @@
                   </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="5" class="py-4 text-center text-slate-500">Chưa có lịch gửi</td></tr>
+                <tr><td colspan="6" class="py-4 text-center text-slate-500">Chưa có lịch gửi</td></tr>
                 {% endfor %}
               </tbody>
             </table>

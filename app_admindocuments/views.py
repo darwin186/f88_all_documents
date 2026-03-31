@@ -1,11 +1,13 @@
 import csv
+import hashlib
 import os
 import uuid
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from io import BytesIO
 from functools import wraps
 
 from django.contrib import messages
+from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
@@ -15,7 +17,9 @@ from django.db.models import Count, Q, Max
 from django.db.models.functions import TruncDay, ExtractYear
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
+from django.templatetags.static import static
 from django.utils import timezone
 from django.conf import settings
 from django.http import JsonResponse
@@ -24,12 +28,17 @@ from django.core.files.base import ContentFile
 from openpyxl import Workbook
 from openpyxl import load_workbook
 
-from app_documents.models import Shop, Region
+from app_documents.models import GapoScheduledMessage, Shop, Region, UserProfile
+from app_documents.tasks import send_gapo_scheduled_message
+from app_notification.services import send_via_gapo, NotificationSendError
 
 from .forms import (
     AdmAdministrativeDocumentForm,
     AdmAdministrativeDocumentUpdateForm,
     AdmIncomingDispatchForm,
+    AdmParcelRecipientImportForm,
+    AdmParcelAutoNotifySettingForm,
+    AdmParcelReceiptForm,
     AdmPaperDocumentForm,
     AdmDocumentTypeForm,
     AdmContentTypeForm,
@@ -52,9 +61,18 @@ from .models import (
     AdmDocumentCounter,
     AdmIncomingDispatchStatus,
     AdmIncomingDispatchType,
-    AdmIncomingGapoGroup,
     AdmIncomingDispatch,
     AdmIncomingDispatchImage,
+    AdmIncomingDispatchStatusLog,
+    AdmParcelAutoNotifySetting,
+    AdmParcelDynamicTemplate,
+    AdmParcelNotificationBatch,
+    AdmParcelRecipientCatalog,
+    AdmParcelRecipientImportBatch,
+    AdmParcelReceipt,
+    AdmParcelReceiptImage,
+    AdmParcelReceiptLog,
+    AdmParcelSenderSuggestion,
     AdmPaperCounter,
     AdmPaperDocument,
     AdmPaperType,
@@ -96,45 +114,755 @@ INCOMING_DOC_FLOW = [
     ("doc_received", "Đã tiếp nhận"),
     ("doc_at_clerical", "Đang ở Văn thư"),
     ("doc_at_assistant", "Đang ở Ban trợ lý"),
-    ("doc_pending_signer", "Trình ký"),
     ("doc_archived", "Lưu trữ"),
 ]
+
+LEGACY_INCOMING_DOC_STATUS_MAP = {
+    "doc_pending_signer": "doc_at_assistant",
+    "in_progress": "doc_at_clerical",
+    "to_btl": "doc_at_assistant",
+    "done": "doc_archived",
+    "archived": "doc_archived",
+}
 
 INCOMING_PARCEL_FLOW = [
     ("pkg_received", "Lễ tân tiếp nhận"),
     ("pkg_at_clerical", "Đã thông báo"),
-    ("pkg_processing", "Đã bàn giao"),
+    ("pkg_processing", "Đã xác nhận"),
+    ("pkg_done", "Đã bàn giao toàn bộ"),
 ]
 
 INCOMING_ARCHIVED_STATUS_CODES = {"doc_archived", "pkg_archived", "archived"}
+PARCEL_HIDDEN_LIST_STATUS_CODES = INCOMING_ARCHIVED_STATUS_CODES | {"pkg_done"}
 INCOMING_VISIBLE_STATUS_CODES = [
     code
     for code, _ in (INCOMING_DOC_FLOW + INCOMING_PARCEL_FLOW)
     if code not in INCOMING_ARCHIVED_STATUS_CODES
 ]
 
+PARCEL_RECIPIENT_IMPORT_HEADERS = {
+    "stt": "stt",
+    "gapo user id": "gapo_user_id",
+    "mã nhân viên": "employee_code",
+    "tên thành viên": "full_name",
+    "email": "email",
+    "số điện thoại": "phone_number",
+    "trạng thái": "employment_status",
+    "quyền": "permission_name",
+    "sơ đồ tổ chức": "org_chart",
+    "chức vụ": "position_name",
+    "phòng ban đầy đủ": "department_full",
+    "vùng miền": "region_name",
+    "ngày sinh": "birth_date",
+    "ngày vào công ty": "company_join_date",
+    "ngày ký hợp đồng chính thức đầu tiên": "contract_start_date",
+    "ngày nghỉ việc": "leave_date",
+    "thời gian tạo": "source_created_at",
+}
+
+INCOMING_SCREEN_META = {
+    INCOMING_TYPE_DOC: {
+        "route_name": "incoming_document_list",
+        "page_title": "Công văn đến",
+        "page_description": "Tiếp nhận và theo dõi công văn đến.",
+        "create_button_label": "Tiếp nhận Công văn đến",
+        "modal_title": "Tiếp nhận công văn đến",
+        "success_message": "Đã nhập công văn đến thành công.",
+        "empty_message": "Chưa có công văn đến nào.",
+        "search_placeholder": "Số hiệu hoặc tên trích yếu...",
+        "auto_status_note": 'Người phụ trách, ngày nhận và trạng thái "Đã tiếp nhận" được hệ thống tự động ghi nhận.',
+    },
+    INCOMING_TYPE_PARCEL: {
+        "route_name": "parcel_receipt_list",
+        "page_title": "Bưu phẩm/Bưu kiện",
+        "page_description": "Tiếp nhận và theo dõi bưu phẩm, bưu kiện.",
+        "create_button_label": "Tiếp nhận Bưu phẩm/Bưu kiện",
+        "modal_title": "Tiếp nhận bưu phẩm/bưu kiện",
+        "success_message": "Đã tiếp nhận bưu phẩm/bưu kiện thành công.",
+        "empty_message": "Chưa có bưu phẩm hoặc bưu kiện nào.",
+        "search_placeholder": "Số hiệu hoặc nội dung...",
+        "auto_status_note": 'Người phụ trách, ngày nhận và trạng thái khởi tạo được hệ thống tự động ghi nhận.',
+    },
+}
+
+
+def _incoming_dispatch_route_name(item_type_code):
+    meta = INCOMING_SCREEN_META.get(item_type_code) or INCOMING_SCREEN_META[INCOMING_TYPE_DOC]
+    return f"admindocuments:{meta['route_name']}"
+
+
+def _incoming_dispatch_list_url(item_type_code):
+    return reverse(_incoming_dispatch_route_name(item_type_code))
+
 
 def _save_incoming_dispatch_images(dispatch, files, user):
+    saved_count = 0
     for image_file in files:
-        content_type = getattr(image_file, "content_type", "") or ""
-        if not content_type.startswith("image/"):
-            continue
         AdmIncomingDispatchImage.objects.create(
             dispatch=dispatch,
             image=image_file,
             uploaded_by=user,
         )
+        saved_count += 1
+    return saved_count
+
+
+def _save_parcel_receipt_images(parcel_receipt, files, user):
+    for image_file in files:
+        AdmParcelReceiptImage.objects.create(
+            parcel_receipt=parcel_receipt,
+            image=image_file,
+            uploaded_by=user,
+        )
+
+
+def _validate_parcel_images(files):
+    if len(files) > 5:
+        return "Chỉ được tải tối đa 5 tệp."
+    for attachment in files:
+        if getattr(attachment, "size", 0) > 30 * 1024 * 1024:
+            return f"Tệp '{attachment.name}' vượt quá 30MB."
+    return ""
+
+
+def _validate_incoming_dispatch_files(files):
+    for attachment in files:
+        if getattr(attachment, "size", 0) > 30 * 1024 * 1024:
+            return f"Tệp '{attachment.name}' vượt quá 30MB."
+    return ""
+
+
+def _log_parcel_event(parcel_receipt, action, actor=None, from_status=None, to_status=None, note="", metadata=None):
+    AdmParcelReceiptLog.objects.create(
+        parcel_receipt=parcel_receipt,
+        action=action,
+        actor=actor,
+        from_status_id=from_status,
+        to_status_id=to_status,
+        note=note,
+        metadata=metadata or {},
+    )
+
+
+def _legacy_recipient_display_name(user):
+    profile = getattr(user, "userprofile", None)
+    full_name = user.get_full_name() or user.username
+    employee_code = (getattr(profile, "employee_code", "") or "").strip()
+    if employee_code:
+        return f"{full_name} - {employee_code}"
+    return full_name
+
+
+def _parcel_recipient_display(parcel_receipt):
+    full_name = (getattr(parcel_receipt, "recipient_name", "") or "").strip()
+    employee_code = (getattr(parcel_receipt, "recipient_employee_code", "") or "").strip()
+    if full_name:
+        return f"{full_name} - {employee_code}" if employee_code else full_name
+    if getattr(parcel_receipt, "recipient_user_id", None):
+        return _legacy_recipient_display_name(parcel_receipt.recipient_user)
+    return "Chưa gán người nhận"
+
+
+def _parcel_group_key(parcel_receipt):
+    if getattr(parcel_receipt, "recipient_directory_id", None):
+        return f"dir-{parcel_receipt.recipient_directory_id}"
+    fallback_name = (
+        getattr(parcel_receipt, "recipient_name", "")
+        or _parcel_recipient_display(parcel_receipt)
+        or "unknown"
+    )
+    return f"name-{fallback_name.strip()}"
+
+
+def _parcel_recipient_receiver_id(parcel_receipt):
+    gapo_user_id = (getattr(parcel_receipt, "recipient_gapo_user_id", "") or "").strip()
+    if gapo_user_id:
+        return gapo_user_id
+    profile = getattr(parcel_receipt.recipient_user, "userprofile", None)
+    return (getattr(profile, "gapo_user_id", None) or "").strip()
+
+
+def _build_parcel_confirmation_url(request, token):
+    return request.build_absolute_uri(
+        reverse("admindocuments:parcel_receipt_confirm", args=[token])
+    )
+
+
+def _build_parcel_batch_confirmation_url(request, token):
+    return request.build_absolute_uri(
+        reverse("admindocuments:parcel_batch_confirm", args=[token])
+    )
+
+
+def _build_parcel_dynamic_image_url(request):
+    relative_path = "admindocuments/parcel-notify-card.svg"
+    try:
+        asset_url = static(relative_path)
+    except ValueError:
+        asset_url = f"{settings.STATIC_URL.rstrip('/')}/{relative_path}"
+    return request.build_absolute_uri(asset_url)
+
+
+def _get_active_parcel_dynamic_template():
+    return AdmParcelDynamicTemplate.objects.filter(
+        template_type=AdmParcelDynamicTemplate.TEMPLATE_PARCEL_NOTIFY_CONFIRM,
+        is_active=True,
+    ).first()
+
+
+def _normalize_gapo_hex(value, *, fallback):
+    text = (value or fallback or "").strip()
+    if not text:
+        return fallback
+    return text if text.startswith("#") else f"#{text}"
+
+
+def _build_parcel_dynamic_context(parcels, first_parcel, confirm_url):
+    company_name = getattr(getattr(first_parcel, "receiving_company", None), "name", "") or ""
+    return {
+        "recipient_name": _parcel_recipient_display(first_parcel),
+        "parcel_count": str(len(parcels)),
+        "primary_sender": first_parcel.sender_unit or "Lễ tân tòa nhà",
+        "company_name": company_name,
+        "confirm_url": confirm_url,
+    }
+
+
+def _get_active_parcel_auto_notify_setting():
+    return (
+        AdmParcelAutoNotifySetting.objects.filter(is_active=True)
+        .order_by("updated_at", "id")
+        .last()
+    )
+
+
+def _next_parcel_reminder_at(base_time, setting):
+    threshold = base_time + timedelta(hours=24)
+    skip_weekends = getattr(setting, "skip_weekends", True)
+    send_slots = getattr(setting, "get_reminder_time_slots", lambda: [])()
+    if not send_slots:
+        send_slots = [datetime.strptime("09:00", "%H:%M").time()]
+
+    candidate_date = threshold.date()
+    while True:
+        if skip_weekends and candidate_date.weekday() >= 5:
+            candidate_date += timedelta(days=1)
+            continue
+        for send_time in send_slots:
+            candidate = datetime.combine(candidate_date, send_time)
+            if timezone.is_aware(threshold):
+                candidate = timezone.make_aware(candidate, timezone.get_current_timezone())
+            if candidate > threshold:
+                return candidate
+        candidate_date += timedelta(days=1)
+
+
+def _cancel_batch_reminder(batch):
+    reminder = getattr(batch, "reminder_schedule", None)
+    if reminder and reminder.status == GapoScheduledMessage.Status.PENDING:
+        reminder.status = GapoScheduledMessage.Status.CANCELLED
+        reminder.save(update_fields=["status", "updated_at"])
+
+
+def _schedule_parcel_batch_reminder(batch, parcels, request_user, request, *, confirm_url):
+    setting = _get_active_parcel_auto_notify_setting()
+    if not setting:
+        return None
+
+    first = parcels[0]
+    receiver_id = _parcel_recipient_receiver_id(first)
+    if not receiver_id:
+        return None
+
+    schedule_at = _next_parcel_reminder_at(timezone.now(), setting)
+    template = _get_active_parcel_dynamic_template() or AdmParcelDynamicTemplate()
+    context = _build_parcel_dynamic_context(parcels, first, confirm_url)
+    title_text = template.render_text(template.title_template, context)
+    body_text = template.render_text(template.body_template, context)
+    button_text = template.render_text(template.button_text, context)
+    image_url = template.hero_image_url or _build_parcel_dynamic_image_url(request)
+    reminder_message = (
+        f"Nhắc lại: bạn có {len(parcels)} kiện hàng chưa được nhận. "
+        "Liên hệ lễ tân tòa nhà để được hỗ trợ."
+    )
+    body_metadata = {
+        "metadata": {
+            "layout": {
+                "type": "container",
+                "direction": "vertical",
+                "width": 0,
+                "height": 0,
+                "alignment": "fill",
+                "background": "",
+                "item_spacing": 0,
+                "insets": "",
+                "deep_link": "",
+                "border": {
+                    "color": _normalize_gapo_hex(template.card_border_color, fallback="#DADDE1"),
+                    "corner_radius": 16,
+                    "width": 1,
+                },
+                "photo_url": "",
+                "children": [
+                    {
+                        "type": "photo",
+                        "photo_url": image_url,
+                        "height": 200,
+                        "width": 0,
+                    },
+                    {
+                        "type": "container",
+                        "direction": "vertical",
+                        "width": 0,
+                        "height": 0,
+                        "alignment": "fill",
+                        "background": "",
+                        "item_spacing": 8,
+                        "insets": "16,16,12,16",
+                        "children": [
+                            {
+                                "type": "text",
+                                "photo_url": "",
+                                "text_object": {
+                                    "text": title_text,
+                                    "font": {"name": "SF Pro Text", "style": "semibold", "size": 16},
+                                    "number_of_lines": 0,
+                                    "color": "#10203A",
+                                },
+                                "width": 0,
+                                "height": 0,
+                                "item_spacing": 0,
+                            },
+                            {
+                                "type": "text",
+                                "photo_url": "",
+                                "text_object": {
+                                    "text": f"Nhắc lại: {body_text}",
+                                    "font": {"name": "SF Pro Text", "style": "regular", "size": 14},
+                                    "number_of_lines": 0,
+                                    "color": "#5B667A",
+                                },
+                                "width": 0,
+                                "height": 0,
+                                "item_spacing": 0,
+                            },
+                        ],
+                    },
+                    {
+                        "type": "container",
+                        "direction": "vertical",
+                        "width": 0,
+                        "height": 0,
+                        "alignment": "fill",
+                        "background": "",
+                        "item_spacing": 8,
+                        "insets": "0,16,16,16",
+                        "children": [
+                            {
+                                "type": "button",
+                                "direction": "vertical",
+                                "deep_link": confirm_url,
+                                "text_object": {
+                                    "text": button_text,
+                                    "color": _normalize_gapo_hex(
+                                        template.button_text_color, fallback="#FFFFFF"
+                                    ).lstrip("#"),
+                                    "font": {"name": "SF Pro Text", "style": "semibold", "size": 16},
+                                    "number_of_lines": 0,
+                                },
+                                "alignment": "fill",
+                                "height": 44,
+                                "width": 0,
+                                "border": {"width": 0, "color": "", "corner_radius": 10},
+                                "background": _normalize_gapo_hex(
+                                    template.button_bg_color, fallback="#16A34A"
+                                ).lstrip("#"),
+                                "photo_url": "",
+                            }
+                        ],
+                    },
+                ],
+            }
+        }
+    }
+    schedule = GapoScheduledMessage.objects.create(
+        receiver_id=str(receiver_id),
+        message=reminder_message,
+        body_type=GapoScheduledMessage.BodyType.DYNAMIC,
+        body_metadata=body_metadata,
+        schedule_at=schedule_at,
+        created_by=request_user,
+    )
+    send_gapo_scheduled_message.apply_async(args=[schedule.id], eta=schedule_at)
+    batch.reminder_schedule = schedule
+    batch.reminder_scheduled_at = schedule_at
+    batch.save(update_fields=["reminder_schedule", "reminder_scheduled_at", "updated_at"])
+    return schedule
+
+
+def _parcel_batch_group_key(batch):
+    if getattr(batch, "recipient_directory_id", None):
+        return f"dir-{batch.recipient_directory_id}"
+    return f"name-{(getattr(batch, 'recipient_name', '') or 'unknown').strip()}"
+
+
+def _cancel_parcel_reminder(parcel_receipt):
+    reminder = parcel_receipt.reminder_schedule
+    if reminder and reminder.status == GapoScheduledMessage.Status.PENDING:
+        reminder.status = GapoScheduledMessage.Status.CANCELLED
+        reminder.save(update_fields=["status", "updated_at"])
+
+
+def _build_parcel_notification_message(parcel_receipt, request):
+    receiver_id = _parcel_recipient_receiver_id(parcel_receipt)
+    if not receiver_id:
+        raise ValueError("Người nhận chưa có GAPO ID.")
+
+    confirm_url = _build_parcel_confirmation_url(request, parcel_receipt.confirmation_token)
+    recipient_name = _parcel_recipient_display(parcel_receipt)
+    parcel_type_label = parcel_receipt.get_parcel_type_display()
+    body = (
+        f"Bạn có {parcel_type_label.lower()} mới từ '{parcel_receipt.sender_unit}'. "
+        f"Người nhận: {recipient_name}. "
+        f"Xác nhận nhận hàng tại: {confirm_url}"
+    )
+    return str(receiver_id), body, confirm_url
+
+
+def _schedule_parcel_reminder(parcel_receipt, request_user, request, *, confirm_url=None):
+    receiver_id, _, resolved_confirm_url = _build_parcel_notification_message(parcel_receipt, request)
+    confirm_url = confirm_url or resolved_confirm_url
+    now = timezone.now()
+    reminder_schedule = GapoScheduledMessage.objects.create(
+        receiver_id=str(receiver_id),
+        message=(
+            f"Nhắc lại: bạn chưa xác nhận bưu phẩm từ '{parcel_receipt.sender_unit}'. "
+            f"Vui lòng xác nhận tại: {confirm_url}"
+        ),
+        schedule_at=now + timedelta(hours=24),
+        created_by=request_user,
+    )
+    send_gapo_scheduled_message.apply_async(
+        args=[reminder_schedule.id],
+        eta=reminder_schedule.schedule_at,
+    )
+    parcel_receipt.reminder_schedule = reminder_schedule
+    parcel_receipt.reminder_scheduled_at = reminder_schedule.schedule_at
+    parcel_receipt.save(update_fields=["reminder_schedule", "reminder_scheduled_at", "updated_at"])
+    return reminder_schedule
+
+
+def _create_parcel_notification_batch(parcels, request_user):
+    first = parcels[0]
+    batch = AdmParcelNotificationBatch.objects.create(
+        recipient_directory=first.recipient_directory,
+        recipient_name=(first.recipient_name or _parcel_recipient_display(first) or "").strip(),
+        recipient_employee_code=(first.recipient_employee_code or "").strip(),
+        recipient_gapo_user_id=_parcel_recipient_receiver_id(first),
+        recipient_department=(first.recipient_department or "").strip(),
+        parcel_count=len(parcels),
+        created_by=request_user,
+        updated_by=request_user,
+    )
+    batch.parcels.set([parcel.id for parcel in parcels])
+    return batch
+
+
+def _serialize_selected_parcel_ids(value):
+    ids = []
+    for raw in (value or "").split(","):
+        raw = raw.strip()
+        if raw.isdigit():
+            ids.append(int(raw))
+    return ids
+
+
+def _selected_parcels_for_group(request):
+    selected_ids = _serialize_selected_parcel_ids(request.POST.get("selected_parcels"))
+    if not selected_ids:
+        raise ValueError("Cần chọn ít nhất một bưu kiện.")
+    parcels = list(
+        AdmParcelReceipt.objects.select_related(
+            "recipient_directory",
+            "recipient_user",
+            "recipient_user__userprofile",
+            "status",
+        ).filter(pk__in=selected_ids)
+    )
+    if len(parcels) != len(set(selected_ids)):
+        raise ValueError("Có bưu kiện không còn tồn tại.")
+    group_keys = {_parcel_group_key(parcel) for parcel in parcels}
+    if len(group_keys) != 1:
+        raise ValueError("Chỉ được thao tác các bưu kiện của cùng một người nhận.")
+    return parcels
+
+
+def _send_parcel_group_notification_now(parcels, request_user, request):
+    if not parcels:
+        raise ValueError("Không có bưu kiện để gửi thông báo.")
+    invalid_statuses = [
+        parcel for parcel in parcels if parcel.status_id not in {"pkg_received", "pkg_at_clerical"}
+    ]
+    if invalid_statuses:
+        raise ValueError("Chỉ gửi thông báo cho các bưu kiện chưa xác nhận.")
+
+    first = parcels[0]
+    receiver_id = _parcel_recipient_receiver_id(first)
+    if not receiver_id:
+        raise ValueError("Người nhận chưa có GAPO ID.")
+
+    batch = _create_parcel_notification_batch(parcels, request_user)
+    confirm_url = _build_parcel_batch_confirmation_url(request, batch.token)
+    parcel_label = "kiện hàng" if len(parcels) > 1 else "kiện hàng"
+    message = (
+        f"Bạn có {len(parcels)} {parcel_label} chưa được nhận. "
+        "Liên hệ lễ tân tòa nhà để được hỗ trợ."
+    )
+    template = _get_active_parcel_dynamic_template() or AdmParcelDynamicTemplate()
+    context = _build_parcel_dynamic_context(parcels, first, confirm_url)
+    image_url = template.hero_image_url or _build_parcel_dynamic_image_url(request)
+    title_text = template.render_text(template.title_template, context)
+    body_text = template.render_text(template.body_template, context)
+    button_text = template.render_text(template.button_text, context)
+    card_border_color = _normalize_gapo_hex(
+        template.card_border_color, fallback="#DADDE1"
+    )
+    button_bg_color = _normalize_gapo_hex(
+        template.button_bg_color, fallback="#16A34A"
+    )
+    button_text_color = _normalize_gapo_hex(
+        template.button_text_color, fallback="#FFFFFF"
+    )
+    body_metadata = {
+        "metadata": {
+            "layout": {
+                "type": "container",
+                "direction": "vertical",
+                "width": 0,
+                "height": 0,
+                "alignment": "fill",
+                "background": "",
+                "item_spacing": 0,
+                "insets": "",
+                "deep_link": "",
+                "border": {
+                    "color": card_border_color,
+                    "corner_radius": 16,
+                    "width": 1,
+                },
+                "photo_url": "",
+                "children": [
+                    {
+                        "type": "photo",
+                        "photo_url": image_url,
+                        "height": 200,
+                        "width": 0,
+                    },
+                    {
+                        "type": "container",
+                        "direction": "vertical",
+                        "width": 0,
+                        "height": 0,
+                        "alignment": "fill",
+                        "background": "",
+                        "item_spacing": 8,
+                        "insets": "16,16,12,16",
+                        "children": [
+                            {
+                                "type": "text",
+                                "photo_url": "",
+                                "text_object": {
+                                    "text": title_text,
+                                    "font": {
+                                        "name": "SF Pro Text",
+                                        "style": "semibold",
+                                        "size": 16,
+                                    },
+                                    "number_of_lines": 0,
+                                    "color": "#10203A",
+                                },
+                                "width": 0,
+                                "height": 0,
+                                "item_spacing": 0,
+                            },
+                            {
+                                "type": "text",
+                                "photo_url": "",
+                                "text_object": {
+                                    "text": body_text,
+                                    "font": {
+                                        "name": "SF Pro Text",
+                                        "style": "regular",
+                                        "size": 14,
+                                    },
+                                    "number_of_lines": 0,
+                                    "color": "#5B667A",
+                                },
+                                "width": 0,
+                                "height": 0,
+                                "item_spacing": 0,
+                            },
+                        ],
+                    },
+                    {
+                        "type": "container",
+                        "direction": "vertical",
+                        "width": 0,
+                        "height": 0,
+                        "alignment": "fill",
+                        "background": "",
+                        "item_spacing": 8,
+                        "insets": "0,16,16,16",
+                        "children": [
+                            {
+                                "type": "button",
+                                "direction": "vertical",
+                                "deep_link": confirm_url,
+                                "text_object": {
+                                    "text": button_text,
+                                    "color": button_text_color.lstrip("#"),
+                                    "font": {
+                                        "name": "SF Pro Text",
+                                        "style": "semibold",
+                                        "size": 16,
+                                    },
+                                    "number_of_lines": 0,
+                                },
+                                "alignment": "fill",
+                                "height": 44,
+                                "width": 0,
+                                "border": {
+                                    "width": 0,
+                                    "color": "",
+                                    "corner_radius": 10,
+                                },
+                                "background": button_bg_color.lstrip("#"),
+                                "photo_url": "",
+                            }
+                        ],
+                    },
+                ],
+            }
+        }
+    }
+    response = send_via_gapo(
+        str(receiver_id),
+        message,
+        target_type="receiver",
+        body_type="dynamic",
+        body_metadata=body_metadata,
+    )
+    now = timezone.now()
+    batch.message_text = message
+    batch.status = AdmParcelNotificationBatch.Status.SENT
+    batch.notified_at = now
+    batch.notification_send_count = 1
+    batch.updated_by = request_user
+    batch.save(
+        update_fields=[
+            "message_text",
+            "status",
+            "notified_at",
+            "notification_send_count",
+            "updated_by",
+            "updated_at",
+        ]
+    )
+    _schedule_parcel_batch_reminder(batch, parcels, request_user, request, confirm_url=confirm_url)
+
+    for parcel in parcels:
+        previous_status = parcel.status_id
+        parcel.notified_at = now
+        if parcel.status_id == "pkg_received":
+            parcel.status_id = "pkg_at_clerical"
+        parcel.updated_by = request_user
+        parcel.save(update_fields=["notified_at", "status", "updated_by", "updated_at"])
+        _log_parcel_event(
+            parcel,
+            AdmParcelReceiptLog.ACTION_NOTIFIED,
+            actor=request_user,
+            from_status=previous_status,
+            to_status=parcel.status_id,
+            note=f"Đã gửi thông báo nhận theo lô #{batch.id}.",
+            metadata={"batch_id": batch.id, "parcel_count": len(parcels)},
+        )
+    return batch, response
+
+
+def _send_parcel_notification_now(parcel_receipt, request_user, request):
+    receiver_id, body, confirm_url = _build_parcel_notification_message(parcel_receipt, request)
+    response = send_via_gapo(str(receiver_id), body, target_type="receiver")
+    now = timezone.now()
+    notification_schedule = parcel_receipt.notification_schedule
+    if notification_schedule:
+        notification_schedule.receiver_id = str(receiver_id)
+        notification_schedule.message = body
+        notification_schedule.schedule_at = now
+        notification_schedule.status = GapoScheduledMessage.Status.SENT
+        notification_schedule.sent_at = now
+        notification_schedule.last_error = ""
+        notification_schedule.created_by = request_user
+        notification_schedule.save(
+            update_fields=[
+                "receiver_id",
+                "message",
+                "schedule_at",
+                "status",
+                "sent_at",
+                "last_error",
+                "created_by",
+                "updated_at",
+            ]
+        )
+    else:
+        notification_schedule = GapoScheduledMessage.objects.create(
+            receiver_id=str(receiver_id),
+            message=body,
+            schedule_at=now,
+            status=GapoScheduledMessage.Status.SENT,
+            sent_at=now,
+            created_by=request_user,
+        )
+
+    reminder_error = ""
+    try:
+        _cancel_parcel_reminder(parcel_receipt)
+        _schedule_parcel_reminder(
+            parcel_receipt,
+            request_user,
+            request,
+            confirm_url=confirm_url,
+        )
+    except Exception as exc:
+        reminder_error = str(exc)
+    parcel_receipt.notification_schedule = notification_schedule
+    parcel_receipt.notified_at = now
+    from_status = parcel_receipt.status_id
+    parcel_receipt.status_id = "pkg_at_clerical"
+    parcel_receipt.updated_by = request_user
+    parcel_receipt.save(
+        update_fields=[
+            "notification_schedule",
+            "notified_at",
+            "status",
+            "updated_by",
+            "updated_at",
+        ]
+    )
+    _log_parcel_event(
+        parcel_receipt,
+        AdmParcelReceiptLog.ACTION_NOTIFIED,
+        actor=request_user,
+        from_status=from_status,
+        to_status=parcel_receipt.status_id,
+        note="Đã gửi thông báo GAPO cho người nhận.",
+    )
+    return response, reminder_error
 
 
 def _incoming_flow_by_type(item_type_code, signer_label="Người ký"):
     if item_type_code == INCOMING_TYPE_DOC:
-        flow = []
-        for code, label in INCOMING_DOC_FLOW:
-            if code == "doc_pending_signer":
-                flow.append((code, f"{label} ({signer_label})"))
-            else:
-                flow.append((code, label))
-        return flow
+        return list(INCOMING_DOC_FLOW)
     if item_type_code == INCOMING_TYPE_PARCEL:
         return list(INCOMING_PARCEL_FLOW)
     return list(INCOMING_DOC_FLOW)
@@ -155,18 +883,46 @@ def _resolve_initial_incoming_status_code(item_type_code):
     return fallback
 
 
+def _normalize_incoming_dispatch_status_code(item_type_code, status_code):
+    if item_type_code == INCOMING_TYPE_DOC:
+        return LEGACY_INCOMING_DOC_STATUS_MAP.get(status_code, status_code)
+    return status_code
+
+
+def _incoming_flow_label(item_type_code, status_code, signer_label="Người ký"):
+    normalized_code = _normalize_incoming_dispatch_status_code(item_type_code, status_code)
+    for code, label in _incoming_flow_by_type(item_type_code, signer_label=signer_label):
+        if code == normalized_code:
+            return label
+    return ""
+
+
 def _allowed_status_codes_for_dispatch(dispatch):
     signer_label = (dispatch.signer_name or "").strip() or "Người ký"
     flow = _incoming_flow_by_type(dispatch.incoming_item_type_id, signer_label=signer_label)
     codes = [code for code, _ in flow]
-    if dispatch.status_id and dispatch.status_id not in codes:
-        codes.append(dispatch.status_id)
+    normalized_current = _normalize_incoming_dispatch_status_code(
+        dispatch.incoming_item_type_id,
+        dispatch.status_id,
+    )
+    if normalized_current and normalized_current not in codes:
+        codes.append(normalized_current)
+    return codes
+
+
+def _allowed_status_codes_for_parcel(parcel_receipt):
+    codes = [code for code, _ in INCOMING_PARCEL_FLOW]
+    if parcel_receipt.status_id and parcel_receipt.status_id not in codes:
+        codes.append(parcel_receipt.status_id)
     return codes
 
 
 
 def _build_incoming_workflow_steps(dispatch):
-    current_status = dispatch.status_id
+    current_status = _normalize_incoming_dispatch_status_code(
+        dispatch.incoming_item_type_id,
+        dispatch.status_id,
+    )
     signer_label = (dispatch.signer_name or "").strip() or "Người ký"
     flow = _incoming_flow_by_type(dispatch.incoming_item_type_id, signer_label=signer_label)
     index_map = {code: idx for idx, (code, _) in enumerate(flow)}
@@ -182,6 +938,81 @@ def _build_incoming_workflow_steps(dispatch):
             }
         )
     return steps
+
+
+def _build_parcel_workflow_steps(parcel_receipt):
+    current_status = parcel_receipt.status_id
+    flow = list(INCOMING_PARCEL_FLOW)
+    index_map = {code: idx for idx, (code, _) in enumerate(flow)}
+    current_index = index_map.get(current_status, -1)
+    timestamp_map = {
+        "pkg_received": parcel_receipt.received_at,
+        "pkg_at_clerical": parcel_receipt.notified_at,
+        "pkg_processing": parcel_receipt.confirmed_at,
+        "pkg_done": parcel_receipt.completed_at,
+    }
+    steps = []
+    for idx, (code, label) in enumerate(flow):
+        steps.append(
+            {
+                "code": code,
+                "label": label,
+                "is_current": idx == current_index,
+                "is_done": current_index > idx,
+                "timestamp": timestamp_map.get(code),
+            }
+        )
+    return steps
+
+
+def _parcel_status_tone(parcel_receipt):
+    if parcel_receipt.status_id == "pkg_received":
+        return "received"
+    if parcel_receipt.status_id == "pkg_done":
+        return "done"
+    return "notified"
+
+
+def _parcel_actual_receiver_display(parcel_receipt):
+    actual_name = (parcel_receipt.actual_receiver_name or "").strip()
+    actual_code = (parcel_receipt.actual_receiver_employee_code or "").strip()
+    if not actual_name:
+        return _parcel_recipient_display(parcel_receipt) or "Chưa xác nhận"
+    intended_name = (parcel_receipt.recipient_name or "").strip()
+    intended_code = (parcel_receipt.recipient_employee_code or "").strip()
+    is_proxy = (
+        (actual_code and intended_code and actual_code != intended_code)
+        or (actual_name and intended_name and actual_name != intended_name)
+        or (bool(parcel_receipt.proxy_receiver_name) and actual_name == parcel_receipt.proxy_receiver_name)
+    )
+    label = actual_name
+    if actual_code:
+        label = f"{label} - {actual_code}"
+    if is_proxy:
+        label = f"{label} (nhận hộ)"
+    return label
+
+
+def _parcel_extra_audit_logs(parcel_receipt):
+    duplicate_actions = {
+        AdmParcelReceiptLog.ACTION_CREATED,
+        AdmParcelReceiptLog.ACTION_NOTIFIED,
+        AdmParcelReceiptLog.ACTION_CONFIRMED,
+        AdmParcelReceiptLog.ACTION_HANDED_OVER,
+    }
+    return [log for log in parcel_receipt.audit_logs.all() if log.action not in duplicate_actions]
+
+
+def _prepare_parcel_receipt_view_state(parcel_receipt):
+    parcel_receipt.workflow_steps = _build_parcel_workflow_steps(parcel_receipt)
+    parcel_receipt.extra_audit_logs = _parcel_extra_audit_logs(parcel_receipt)
+    parcel_receipt.actual_receiver_display = _parcel_actual_receiver_display(parcel_receipt)
+    parcel_receipt.status_tone = _parcel_status_tone(parcel_receipt)
+    parcel_receipt.recipient_label = _parcel_recipient_display(parcel_receipt)
+    parcel_receipt.is_unassigned = not bool(
+        (parcel_receipt.recipient_name or "").strip() or parcel_receipt.recipient_directory_id
+    )
+    return parcel_receipt
 
 
 def _create_attachment_version(document, user, uploaded_file=None, link=None, note=None):
@@ -368,6 +1199,180 @@ def admin_staff_required(view_func):
         return render(request, "403.html", status=403)
 
     return _wrapped
+
+
+def superuser_required(view_func):
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated or not request.user.is_superuser:
+            messages.error(request, "Chỉ super admin mới có quyền truy cập mục này.")
+            return render(request, "403.html", status=403)
+        return view_func(request, *args, **kwargs)
+
+    return _wrapped
+
+
+def _safe_sheet_cell_value(ws, row_idx, col_idx, merged_lookup):
+    cell = ws.cell(row_idx, col_idx)
+    if cell.value is not None:
+        return cell.value
+    anchor = merged_lookup.get((row_idx, col_idx))
+    if anchor:
+        return ws.cell(*anchor).value
+    return None
+
+
+def _normalize_excel_text(value):
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.strftime("%d/%m/%Y %H:%M")
+    if isinstance(value, date):
+        return value.strftime("%d/%m/%Y")
+    text = str(value).strip()
+    if text.lower() == "none":
+        return ""
+    return text
+
+
+def _normalize_phone_number(value):
+    return "".join(ch for ch in _normalize_excel_text(value) if ch.isdigit())
+
+
+def _parcel_department_leaf(department_full):
+    parts = [part.strip() for part in (department_full or "").split("||") if part.strip()]
+    return parts[-1] if parts else ""
+
+
+def _parse_parcel_recipient_workbook(file_path):
+    workbook = load_workbook(file_path, data_only=True)
+    worksheet = workbook[workbook.sheetnames[0]]
+    merged_lookup = {}
+    for cell_range in worksheet.merged_cells.ranges:
+        anchor = (cell_range.min_row, cell_range.min_col)
+        for row_idx in range(cell_range.min_row, cell_range.max_row + 1):
+            for col_idx in range(cell_range.min_col, cell_range.max_col + 1):
+                merged_lookup[(row_idx, col_idx)] = anchor
+
+    raw_headers = [
+        _normalize_excel_text(_safe_sheet_cell_value(worksheet, 1, col_idx, merged_lookup)).lower()
+        for col_idx in range(1, worksheet.max_column + 1)
+    ]
+    header_map = {}
+    for idx, header in enumerate(raw_headers, 1):
+        key = PARCEL_RECIPIENT_IMPORT_HEADERS.get(header)
+        if key:
+            header_map[idx] = key
+
+    rows = []
+    stats = {
+        "merged_ranges": len(list(worksheet.merged_cells.ranges)),
+        "missing_gapo": 0,
+        "missing_department": 0,
+        "inactive_rows": 0,
+    }
+    for row_idx in range(2, worksheet.max_row + 1):
+        record = {}
+        for col_idx, field_name in header_map.items():
+            record[field_name] = _normalize_excel_text(
+                _safe_sheet_cell_value(worksheet, row_idx, col_idx, merged_lookup)
+            )
+
+        if not any(record.values()):
+            continue
+
+        full_name = record.get("full_name", "")
+        gapo_user_id = record.get("gapo_user_id", "")
+        department_full = record.get("department_full", "")
+        employment_status = record.get("employment_status", "")
+        is_active_member = employment_status.lower() == "đang hoạt động"
+        department_name = _parcel_department_leaf(department_full)
+
+        if not gapo_user_id:
+            stats["missing_gapo"] += 1
+        if not department_name:
+            stats["missing_department"] += 1
+        if not is_active_member:
+            stats["inactive_rows"] += 1
+
+        if not full_name and not gapo_user_id:
+            continue
+
+        record["department_name"] = department_name
+        record["is_active_member"] = is_active_member
+        record["row_number"] = row_idx
+        rows.append(record)
+
+    return {
+        "sheet_name": worksheet.title,
+        "total_rows": max(worksheet.max_row - 1, 0),
+        "rows": rows,
+        "summary": stats,
+    }
+
+
+def _activate_parcel_recipient_batch(batch):
+    AdmParcelRecipientImportBatch.objects.filter(is_current=True).exclude(
+        pk=batch.pk
+    ).update(is_current=False)
+    batch.is_current = True
+    batch.activated_at = timezone.now()
+    batch.save(update_fields=["is_current", "activated_at", "updated_at"])
+
+
+def _import_parcel_recipient_batch(batch):
+    parsed = _parse_parcel_recipient_workbook(batch.file.path)
+    rows = parsed["rows"]
+    batch.sheet_name = parsed["sheet_name"]
+    batch.total_rows = parsed["total_rows"]
+    batch.imported_rows = len(rows)
+    batch.active_rows = sum(1 for row in rows if row["is_active_member"])
+    batch.has_errors = False
+    batch.summary = parsed["summary"]
+    batch.save(
+        update_fields=[
+            "sheet_name",
+            "total_rows",
+            "imported_rows",
+            "active_rows",
+            "has_errors",
+            "summary",
+            "updated_at",
+        ]
+    )
+    batch.recipients.all().delete()
+    AdmParcelRecipientCatalog.objects.bulk_create(
+        [
+            AdmParcelRecipientCatalog(
+                import_batch=batch,
+                row_number=row["row_number"],
+                gapo_user_id=row.get("gapo_user_id", ""),
+                employee_code=row.get("employee_code", ""),
+                full_name=row.get("full_name", ""),
+                email=row.get("email", ""),
+                phone_number=row.get("phone_number", ""),
+                phone_number_normalized=_normalize_phone_number(row.get("phone_number", "")),
+                employment_status=row.get("employment_status", ""),
+                permission_name=row.get("permission_name", ""),
+                org_chart=row.get("org_chart", ""),
+                position_name=row.get("position_name", ""),
+                department_full=row.get("department_full", ""),
+                department_name=row.get("department_name", ""),
+                region_name=row.get("region_name", ""),
+                birth_date=row.get("birth_date", ""),
+                company_join_date=row.get("company_join_date", ""),
+                contract_start_date=row.get("contract_start_date", ""),
+                leave_date=row.get("leave_date", ""),
+                source_created_at=row.get("source_created_at", ""),
+                is_active_member=row.get("is_active_member", False),
+                raw_data=row,
+            )
+            for row in rows
+        ],
+        batch_size=500,
+    )
+    _activate_parcel_recipient_batch(batch)
+    return batch
 
 
 def _parse_filters(request):
@@ -652,10 +1657,10 @@ def dashboard_export(request):
     return response
 
 
-@login_required
-def incoming_dispatch_list(request):
+def _incoming_dispatch_list(request, item_type_code):
     can_create = _has_incoming_dispatch_create_access(request.user)
     can_edit_status = _has_incoming_dispatch_status_edit_access(request.user)
+    screen_meta = INCOMING_SCREEN_META.get(item_type_code, INCOMING_SCREEN_META[INCOMING_TYPE_DOC])
 
     query = request.GET.get("q", "").strip()
     status_filter = request.GET.get("status", "")
@@ -670,7 +1675,7 @@ def incoming_dispatch_list(request):
         prefill_company = companies.filter(code=receive_company).first()
 
     if request.method == "POST":
-        form = AdmIncomingDispatchForm(request.POST)
+        form = AdmIncomingDispatchForm(request.POST, item_type_code=item_type_code)
         receive_company = (request.POST.get("receiving_company") or "").strip()
         prefill_company = companies.filter(code=receive_company).first()
         if form.is_valid():
@@ -686,20 +1691,21 @@ def incoming_dispatch_list(request):
                     request,
                     "Chưa có cấu hình trạng thái khởi tạo cho tiếp nhận thư từ.",
                 )
-                return redirect("admindocuments:incoming_dispatch_list")
+                return redirect(_incoming_dispatch_route_name(item_type_code))
             dispatch.status_id = initial_status
             dispatch.save()
             form.save_m2m()
-            _save_incoming_dispatch_images(
-                dispatch,
-                request.FILES.getlist("images"),
-                request.user,
-            )
-            messages.success(request, "Đã nhập công văn đến thành công.")
-            return redirect("admindocuments:incoming_dispatch_list")
+            files = request.FILES.getlist("images")
+            file_error = _validate_incoming_dispatch_files(files) if files else ""
+            if file_error:
+                messages.error(request, file_error)
+                return redirect(_incoming_dispatch_route_name(item_type_code))
+            _save_incoming_dispatch_images(dispatch, files, request.user)
+            messages.success(request, screen_meta["success_message"])
+            return redirect(_incoming_dispatch_route_name(item_type_code))
         messages.error(request, "Dữ liệu không hợp lệ, vui lòng kiểm tra lại.")
     else:
-        form = AdmIncomingDispatchForm()
+        form = AdmIncomingDispatchForm(item_type_code=item_type_code)
         if prefill_company:
             form.initial["receiving_company"] = prefill_company.code
 
@@ -709,7 +1715,6 @@ def incoming_dispatch_list(request):
             "receiving_company",
             "incoming_item_type",
             "status",
-            "gapo_group",
         )
         .prefetch_related(
             "processing_departments",
@@ -718,12 +1723,19 @@ def incoming_dispatch_list(request):
         )
         .order_by("-created_at")
     )
-    dispatches_qs = dispatches_qs.exclude(status_id__in=INCOMING_ARCHIVED_STATUS_CODES)
+    dispatches_qs = dispatches_qs.filter(incoming_item_type_id=item_type_code)
+    if item_type_code == INCOMING_TYPE_DOC:
+        if status_filter:
+            dispatches_qs = dispatches_qs.filter(status=status_filter)
+        else:
+            dispatches_qs = dispatches_qs.exclude(status_id__in=INCOMING_ARCHIVED_STATUS_CODES)
+    else:
+        dispatches_qs = dispatches_qs.exclude(status_id__in=PARCEL_HIDDEN_LIST_STATUS_CODES)
     if query:
         dispatches_qs = dispatches_qs.filter(
             Q(document_number__icontains=query) | Q(summary__icontains=query)
         )
-    if status_filter:
+    if status_filter and item_type_code != INCOMING_TYPE_DOC:
         dispatches_qs = dispatches_qs.filter(status=status_filter)
     if department_filter:
         dispatches_qs = dispatches_qs.filter(
@@ -746,6 +1758,20 @@ def incoming_dispatch_list(request):
         for status in AdmIncomingDispatchStatus.objects.filter(is_active=True)
     }
     for dispatch in dispatches.object_list:
+        dispatch.normalized_status_id = _normalize_incoming_dispatch_status_code(
+            dispatch.incoming_item_type_id,
+            dispatch.status_id,
+        )
+        normalized_flow_label = _incoming_flow_label(
+            dispatch.incoming_item_type_id,
+            dispatch.status_id,
+            signer_label=(dispatch.signer_name or "").strip() or "Người ký",
+        )
+        dispatch.normalized_status_name = (
+            active_status_map.get(dispatch.normalized_status_id).name
+            if dispatch.normalized_status_id in active_status_map
+            else normalized_flow_label or dispatch.status.name
+        )
         dispatch.available_statuses = [
             active_status_map[code]
             for code in _allowed_status_codes_for_dispatch(dispatch)
@@ -755,17 +1781,20 @@ def incoming_dispatch_list(request):
     departments = AdmDepartment.objects.select_related("company").filter(
         is_active=True
     ).order_by("company__code", "name")
+    if item_type_code == INCOMING_TYPE_DOC:
+        allowed_codes = [code for code, _ in _incoming_flow_by_type(item_type_code)]
+    else:
+        allowed_codes = [
+            code
+            for code, _ in _incoming_flow_by_type(item_type_code)
+            if code not in INCOMING_ARCHIVED_STATUS_CODES
+        ]
     status_options = AdmIncomingDispatchStatus.objects.filter(
-        is_active=True, code__in=INCOMING_VISIBLE_STATUS_CODES
+        is_active=True, code__in=allowed_codes
     ).order_by("sort_order", "name")
-    type_options = AdmIncomingDispatchType.objects.filter(is_active=True).order_by(
-        "sort_order", "name"
-    )
-    gapo_groups = AdmIncomingGapoGroup.objects.filter(is_active=True).order_by(
-        "sort_order", "name"
-    )
     selected_dispatch = None
     selected_workflow_steps = []
+    selected_recipient_group_key = ""
     if open_dispatch_id.isdigit():
         selected_dispatch = (
             dispatches_qs.filter(pk=int(open_dispatch_id))
@@ -774,7 +1803,6 @@ def incoming_dispatch_list(request):
                 "receiving_company",
                 "incoming_item_type",
                 "status",
-                "gapo_group",
             )
             .prefetch_related(
                 "processing_departments",
@@ -784,6 +1812,31 @@ def incoming_dispatch_list(request):
             .first()
         )
         if selected_dispatch:
+            selected_dispatch.normalized_status_id = _normalize_incoming_dispatch_status_code(
+                selected_dispatch.incoming_item_type_id,
+                selected_dispatch.status_id,
+            )
+            selected_dispatch.normalized_status_name = (
+                active_status_map.get(selected_dispatch.normalized_status_id).name
+                if selected_dispatch.normalized_status_id in active_status_map
+                else _incoming_flow_label(
+                    selected_dispatch.incoming_item_type_id,
+                    selected_dispatch.status_id,
+                    signer_label=(selected_dispatch.signer_name or "").strip() or "Người ký",
+                ) or selected_dispatch.status.name
+            )
+            selected_dispatch.available_statuses = [
+                active_status_map[code]
+                for code in _allowed_status_codes_for_dispatch(selected_dispatch)
+                if code in active_status_map
+            ]
+            selected_dispatch.status_logs_display = list(
+                selected_dispatch.status_logs.select_related(
+                    "from_status",
+                    "to_status",
+                    "changed_by",
+                ).all()
+            )
             selected_workflow_steps = _build_incoming_workflow_steps(selected_dispatch)
 
     context = {
@@ -792,13 +1845,12 @@ def incoming_dispatch_list(request):
         "paginator": paginator,
         "is_paginated": paginator.num_pages > 1,
         "form": form,
+        "incoming_item_type_field": form["incoming_item_type"] if "incoming_item_type" in form.fields else None,
         "q": query,
         "selected_status": status_filter,
         "selected_department": department_filter,
         "selected_company": company_filter,
         "status_options": status_options,
-        "type_options": type_options,
-        "gapo_groups": gapo_groups,
         "companies": companies,
         "departments": departments,
         "prefill_company": prefill_company,
@@ -807,14 +1859,643 @@ def incoming_dispatch_list(request):
         "can_create": can_create,
         "can_edit_status": can_edit_status,
         "has_admin_docs_access": _has_admin_docs_access(request.user),
+        "screen_key": screen_meta["route_name"],
+        "page_title": screen_meta["page_title"],
+        "page_description": screen_meta["page_description"],
+        "create_button_label": screen_meta["create_button_label"],
+        "modal_title": screen_meta["modal_title"],
+        "empty_message": screen_meta["empty_message"],
+        "search_placeholder": screen_meta["search_placeholder"],
+        "auto_status_note": screen_meta["auto_status_note"],
+        "current_route_name": screen_meta["route_name"],
+        "current_url_name": _incoming_dispatch_route_name(item_type_code),
+        "status_action_name": "admindocuments:incoming_dispatch_change_status",
+        "upload_action_name": "admindocuments:incoming_dispatch_upload_images",
+        "item_type_code": item_type_code,
+        "item_type_name": (
+            AdmIncomingDispatchType.objects.filter(code=item_type_code)
+            .values_list("name", flat=True)
+            .first()
+            or screen_meta["page_title"]
+        ),
     }
     return render(request, "admindocuments/incoming_dispatch_list.html", context)
 
 
 @login_required
+def incoming_dispatch_list(request):
+    return redirect("admindocuments:incoming_document_list")
+
+
+@login_required
+def incoming_document_list(request):
+    return _incoming_dispatch_list(request, INCOMING_TYPE_DOC)
+
+
+@login_required
+def parcel_receipt_list(request):
+    can_create = _has_incoming_dispatch_create_access(request.user)
+    can_edit_status = _has_incoming_dispatch_status_edit_access(request.user)
+    can_notify = _has_incoming_dispatch_create_access(request.user)
+    screen_meta = INCOMING_SCREEN_META[INCOMING_TYPE_PARCEL]
+
+    query = request.GET.get("q", "").strip()
+    status_filter = request.GET.get("status", "")
+    department_filter = request.GET.get("department", "").strip()
+    company_filter = request.GET.get("company", "")
+    recipient_filter = request.GET.get("recipient", "").strip()
+    unnotified_only = request.GET.get("unnotified") == "1"
+    unassigned_only = request.GET.get("unassigned") == "1"
+    split_by_day = request.GET.get("split_by_day") == "1"
+    start_date = (request.GET.get("start_date") or "").strip()
+    end_date = (request.GET.get("end_date") or "").strip()
+    receive_company = (request.GET.get("receive_company") or "").strip()
+    open_dispatch_id = (request.GET.get("open") or "").strip()
+    highlight_dispatch_id = (request.GET.get("highlight") or "").strip()
+    companies = AdmCompany.objects.filter(is_active=True).order_by("name")
+    prefill_company = None
+
+    if receive_company:
+        prefill_company = companies.filter(code=receive_company).first()
+
+    if request.method == "POST":
+        form = AdmParcelReceiptForm(request.POST)
+        receive_company = (request.POST.get("receiving_company") or "").strip()
+        prefill_company = companies.filter(code=receive_company).first()
+        if form.is_valid():
+            image_error = _validate_parcel_images(request.FILES.getlist("images"))
+            if image_error:
+                form.add_error(None, image_error)
+            else:
+                parcel_receipt = None
+                try:
+                    with transaction.atomic():
+                        parcel_receipt = form.save(commit=False)
+                        parcel_receipt.received_by = request.user
+                        parcel_receipt.created_by = request.user
+                        parcel_receipt.updated_by = request.user
+                        parcel_receipt.received_at = timezone.now()
+                        initial_status = _resolve_initial_incoming_status_code(INCOMING_TYPE_PARCEL)
+                        if not initial_status:
+                            raise ValueError("Chưa có cấu hình trạng thái khởi tạo cho bưu phẩm.")
+                        parcel_receipt.status_id = initial_status
+                        parcel_receipt.save()
+                        sender_name = (parcel_receipt.sender_unit or "").strip()
+                        if sender_name and not AdmParcelSenderSuggestion.objects.filter(
+                            name__iexact=sender_name
+                        ).exists():
+                            AdmParcelSenderSuggestion.objects.create(name=sender_name)
+                        _save_parcel_receipt_images(
+                            parcel_receipt,
+                            request.FILES.getlist("images"),
+                            request.user,
+                        )
+                        _log_parcel_event(
+                            parcel_receipt,
+                            AdmParcelReceiptLog.ACTION_CREATED,
+                            actor=request.user,
+                            to_status=parcel_receipt.status_id,
+                            note="Lễ tân tiếp nhận.",
+                        )
+                except Exception as exc:
+                    messages.error(request, f"Lưu tiếp nhận thất bại: {exc}")
+                else:
+                    messages.success(
+                        request,
+                        "Đã tiếp nhận bưu phẩm/bưu kiện.",
+                    )
+                    return redirect(
+                        f"{reverse('admindocuments:parcel_receipt_list')}?open={parcel_receipt.id}&highlight={parcel_receipt.id}&pane=list"
+                    )
+        if form.errors:
+            error_parts = []
+            for field_errors in form.errors.values():
+                if isinstance(field_errors, (list, tuple)):
+                    error_parts.extend(str(item) for item in field_errors if str(item))
+            if error_parts:
+                messages.error(request, "Dữ liệu không hợp lệ: " + " | ".join(error_parts))
+            else:
+                messages.error(request, "Dữ liệu không hợp lệ, vui lòng kiểm tra lại.")
+        else:
+            messages.error(request, "Dữ liệu không hợp lệ, vui lòng kiểm tra lại.")
+    else:
+        form = AdmParcelReceiptForm()
+        if prefill_company:
+            form.initial["receiving_company"] = prefill_company.code
+
+    dispatches_qs = (
+        AdmParcelReceipt.objects.select_related(
+            "received_by",
+            "receiving_company",
+            "status",
+            "recipient_directory",
+            "recipient_user",
+            "recipient_user__userprofile",
+        )
+        .prefetch_related("images", "audit_logs", "audit_logs__actor")
+        .order_by("-received_at", "-id")
+    )
+    dispatches_qs = dispatches_qs.exclude(status_id__in=PARCEL_HIDDEN_LIST_STATUS_CODES)
+    if query:
+        dispatches_qs = dispatches_qs.filter(
+            Q(sender_unit__icontains=query)
+            | Q(tracking_code__icontains=query)
+            | Q(recipient_name__icontains=query)
+            | Q(recipient_employee_code__icontains=query)
+            | Q(recipient_directory__full_name__icontains=query)
+            | Q(recipient_directory__employee_code__icontains=query)
+            | Q(recipient_user__first_name__icontains=query)
+            | Q(recipient_user__last_name__icontains=query)
+            | Q(recipient_user__username__icontains=query)
+            | Q(recipient_user__userprofile__employee_code__icontains=query)
+        )
+    if status_filter:
+        dispatches_qs = dispatches_qs.filter(status=status_filter)
+    if department_filter:
+        dispatches_qs = dispatches_qs.filter(recipient_department=department_filter)
+    if company_filter:
+        dispatches_qs = dispatches_qs.filter(receiving_company_id=company_filter)
+    if recipient_filter.isdigit():
+        dispatches_qs = dispatches_qs.filter(recipient_directory_id=recipient_filter)
+    if unnotified_only:
+        dispatches_qs = dispatches_qs.filter(notified_at__isnull=True)
+    if unassigned_only:
+        dispatches_qs = dispatches_qs.filter(
+            Q(recipient_directory__isnull=True) & Q(recipient_name__exact="")
+        )
+    if start_date:
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+            try:
+                dispatches_qs = dispatches_qs.filter(received_at__date__gte=datetime.strptime(start_date, fmt).date())
+                break
+            except ValueError:
+                continue
+    if end_date:
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+            try:
+                dispatches_qs = dispatches_qs.filter(received_at__date__lte=datetime.strptime(end_date, fmt).date())
+                break
+            except ValueError:
+                continue
+
+    dispatches_qs = dispatches_qs.distinct()
+    paginator = Paginator(dispatches_qs, 25)
+    page_number = request.GET.get("page", "1")
+    try:
+        dispatches = paginator.page(page_number)
+    except PageNotAnInteger:
+        dispatches = paginator.page(1)
+    except EmptyPage:
+        dispatches = paginator.page(paginator.num_pages)
+
+    active_status_map = {
+        status.code: status
+        for status in AdmIncomingDispatchStatus.objects.filter(is_active=True)
+    }
+    for parcel_receipt in dispatches.object_list:
+        parcel_receipt.available_statuses = [
+            active_status_map[code]
+            for code in _allowed_status_codes_for_parcel(parcel_receipt)
+            if code in active_status_map
+        ]
+        _prepare_parcel_receipt_view_state(parcel_receipt)
+
+    recipient_group_map = {}
+    recipient_groups = []
+    grouping_mode = "day" if split_by_day else "recipient"
+    for parcel_receipt in dispatches.object_list:
+        recipient_key = _parcel_group_key(parcel_receipt)
+        day_key = (
+            parcel_receipt.received_at.date().isoformat()
+            if parcel_receipt.received_at
+            else "unknown"
+        )
+        group_key = day_key if split_by_day else recipient_key
+        group = recipient_group_map.get(group_key)
+        if not group:
+            group = {
+                "key": group_key,
+                "recipient_label": _parcel_recipient_display(parcel_receipt),
+                "department": (parcel_receipt.recipient_department or "").strip() or "Chưa có phòng ban",
+                "parcels": [],
+                "received_day": parcel_receipt.received_at.date() if parcel_receipt.received_at else None,
+                "recipient_keys": set(),
+            }
+            recipient_group_map[group_key] = group
+            recipient_groups.append(group)
+        group["parcels"].append(parcel_receipt)
+        group["recipient_keys"].add(recipient_key)
+
+    for group in recipient_groups:
+        group["parcel_ids"] = [parcel.id for parcel in group["parcels"]]
+        group["count"] = len(group["parcels"])
+        group["parcel_ids_set"] = set(group["parcel_ids"])
+        group["recipient_count"] = len(group["recipient_keys"])
+        group["notified_count"] = sum(
+            1 for parcel in group["parcels"] if parcel.status_id == "pkg_at_clerical"
+        )
+        group["confirmed_count"] = sum(
+            1 for parcel in group["parcels"] if parcel.status_id == "pkg_processing"
+        )
+        group["notifiable_parcel_ids"] = [
+            parcel.id
+            for parcel in group["parcels"]
+            if parcel.status_id in {"pkg_received", "pkg_at_clerical"}
+        ]
+        group["handover_parcel_ids"] = [
+            parcel.id
+            for parcel in group["parcels"]
+            if parcel.status_id == "pkg_processing"
+        ]
+        group["notifiable_count"] = len(group["notifiable_parcel_ids"])
+        group["handover_count"] = len(group["handover_parcel_ids"])
+        group["status_label"] = (
+            "Chờ bàn giao"
+            if group["confirmed_count"] and group["notifiable_count"] == 0
+            else "Chưa nhận"
+        )
+        group["status_tone"] = "notified" if (
+            group["status_label"] == "Chờ bàn giao" or group["notified_count"]
+        ) else "received"
+        group["supports_batch_actions"] = group["recipient_count"] == 1
+        if grouping_mode == "day":
+            group["recipient_label"] = (
+                f"Nhận ngày {group['received_day']:%d/%m/%Y}"
+                if group["received_day"]
+                else "Chưa rõ ngày nhận"
+            )
+            group["department"] = (
+                f"{group['recipient_count']} người nhận · {group['count']} kiện"
+            )
+
+    batch_queryset = (
+        AdmParcelNotificationBatch.objects.filter(parcels__in=dispatches.object_list)
+        .select_related("reminder_schedule")
+        .prefetch_related("parcels")
+        .distinct()
+        .order_by("-created_at")
+    )
+    for group in recipient_groups:
+        related_batches = []
+        for batch in batch_queryset:
+            batch_parcel_ids = {parcel.id for parcel in batch.parcels.all()}
+            if batch_parcel_ids & group["parcel_ids_set"]:
+                related_batches.append(batch)
+            if len(related_batches) >= 5:
+                break
+        group["notification_batches"] = related_batches
+        group["notification_send_count"] = sum(
+            batch.notification_send_count or 1 for batch in related_batches
+        )
+        group["latest_notified_at"] = (
+            group["notification_batches"][0].notified_at
+            if group["notification_batches"]
+            else None
+        )
+
+    current_recipient_batch = (
+        AdmParcelRecipientImportBatch.objects.filter(is_current=True)
+        .order_by("-created_at")
+        .first()
+    )
+    recipient_options = AdmParcelRecipientCatalog.objects.none()
+    departments = []
+    if current_recipient_batch:
+        recipient_options = current_recipient_batch.recipients.filter(
+            is_active_member=True
+        ).exclude(department_name__exact="").order_by(
+            "department_name", "full_name", "employee_code"
+        )
+        departments = (
+            current_recipient_batch.recipients.filter(is_active_member=True)
+            .exclude(department_name__exact="")
+            .values_list("department_name", flat=True)
+            .distinct()
+            .order_by("department_name")
+        )
+    allowed_codes = [
+        code
+        for code, _ in INCOMING_PARCEL_FLOW
+        if code not in PARCEL_HIDDEN_LIST_STATUS_CODES
+    ]
+    status_options = AdmIncomingDispatchStatus.objects.filter(
+        is_active=True, code__in=allowed_codes
+    ).order_by("sort_order", "name")
+    selected_dispatch = None
+    selected_workflow_steps = []
+    selected_recipient_group_key = ""
+    if open_dispatch_id.isdigit():
+        selected_dispatch = (
+            dispatches_qs.filter(pk=int(open_dispatch_id))
+            .select_related(
+                "received_by",
+                "receiving_company",
+                "status",
+                "recipient_directory",
+                "recipient_user",
+                "recipient_user__userprofile",
+                "notification_schedule",
+                "reminder_schedule",
+            )
+            .prefetch_related("images", "audit_logs", "audit_logs__actor")
+            .first()
+        )
+        if selected_dispatch:
+            _prepare_parcel_receipt_view_state(selected_dispatch)
+            selected_workflow_steps = selected_dispatch.workflow_steps
+            selected_recipient_group_key = (
+                selected_dispatch.received_at.date().isoformat()
+                if split_by_day and selected_dispatch.received_at
+                else _parcel_group_key(selected_dispatch)
+            )
+
+    auto_notify_setting = _get_active_parcel_auto_notify_setting()
+
+    context = {
+        "dispatches": dispatches,
+        "page_obj": dispatches,
+        "paginator": paginator,
+        "is_paginated": paginator.num_pages > 1,
+        "form": form,
+        "incoming_item_type_field": form["incoming_item_type"] if "incoming_item_type" in form.fields else None,
+        "q": query,
+        "selected_status": status_filter,
+        "selected_department": department_filter,
+        "selected_company": company_filter,
+        "selected_recipient": recipient_filter,
+        "selected_unnotified": unnotified_only,
+        "selected_unassigned": unassigned_only,
+        "split_by_day": split_by_day,
+        "grouping_mode": grouping_mode,
+        "selected_start_date": start_date,
+        "selected_end_date": end_date,
+        "status_options": status_options,
+        "companies": companies,
+        "departments": departments,
+        "recipient_options": recipient_options,
+        "recipient_groups": recipient_groups,
+        "current_recipient_batch": current_recipient_batch,
+        "sender_suggestions": getattr(form, "sender_suggestions", []),
+        "auto_notify_setting": auto_notify_setting,
+        "prefill_company": prefill_company,
+        "selected_dispatch": selected_dispatch,
+        "selected_recipient_group_key": selected_recipient_group_key,
+        "highlight_dispatch_id": highlight_dispatch_id or open_dispatch_id,
+        "selected_workflow_steps": selected_workflow_steps,
+        "can_create": can_create,
+        "can_edit_status": can_edit_status,
+        "can_notify": can_notify,
+        "has_admin_docs_access": _has_admin_docs_access(request.user),
+        "screen_key": screen_meta["route_name"],
+        "page_title": screen_meta["page_title"],
+        "page_description": screen_meta["page_description"],
+        "create_button_label": screen_meta["create_button_label"],
+        "modal_title": screen_meta["modal_title"],
+        "empty_message": screen_meta["empty_message"],
+        "search_placeholder": screen_meta["search_placeholder"],
+        "auto_status_note": screen_meta["auto_status_note"],
+        "current_route_name": screen_meta["route_name"],
+        "current_url_name": "admindocuments:parcel_receipt_list",
+        "status_action_name": "admindocuments:parcel_receipt_change_status",
+        "notify_action_name": "admindocuments:parcel_receipt_send_notification",
+        "upload_action_name": "admindocuments:parcel_receipt_upload_images",
+        "parcel_confirm_base_url": request.build_absolute_uri(
+            reverse("admindocuments:parcel_receipt_confirm", args=["TOKEN"])
+        ).replace("TOKEN", ""),
+        "item_type_code": INCOMING_TYPE_PARCEL,
+        "item_type_name": screen_meta["page_title"],
+    }
+    return render(request, "admindocuments/parcel_receipt_list.html", context)
+
+
+@login_required
+@superuser_required
+def parcel_recipient_directory(request):
+    form = AdmParcelRecipientImportForm()
+
+    if request.method == "POST":
+        action = (request.POST.get("action") or "upload").strip()
+        if action == "upload":
+            form = AdmParcelRecipientImportForm(request.POST, request.FILES)
+            if form.is_valid():
+                upload = form.cleaned_data["file"]
+                checksum = hashlib.sha256(upload.read()).hexdigest()
+                upload.seek(0)
+                batch = AdmParcelRecipientImportBatch.objects.create(
+                    original_name=upload.name,
+                    file=upload,
+                    checksum=checksum,
+                    imported_by=request.user,
+                )
+                try:
+                    _import_parcel_recipient_batch(batch)
+                except Exception as exc:
+                    batch.has_errors = True
+                    batch.summary = {"error": str(exc)}
+                    batch.save(update_fields=["has_errors", "summary", "updated_at"])
+                    messages.error(request, f"Import file thất bại: {exc}")
+                else:
+                    messages.success(
+                        request,
+                        f"Đã nhập {batch.imported_rows} người nhận từ file {batch.original_name}.",
+                    )
+                    return redirect("admindocuments:parcel_recipient_directory")
+            else:
+                messages.error(request, "File upload không hợp lệ.")
+        elif action == "activate":
+            batch_id = request.POST.get("batch_id")
+            batch = get_object_or_404(AdmParcelRecipientImportBatch, pk=batch_id)
+            _activate_parcel_recipient_batch(batch)
+            messages.success(request, f"Đã kích hoạt dữ liệu từ file {batch.original_name}.")
+            return redirect("admindocuments:parcel_recipient_directory")
+        elif action == "reimport":
+            batch_id = request.POST.get("batch_id")
+            batch = get_object_or_404(AdmParcelRecipientImportBatch, pk=batch_id)
+            try:
+                _import_parcel_recipient_batch(batch)
+            except Exception as exc:
+                batch.has_errors = True
+                batch.summary = {"error": str(exc)}
+                batch.save(update_fields=["has_errors", "summary", "updated_at"])
+                messages.error(request, f"Làm mới dữ liệu thất bại: {exc}")
+            else:
+                messages.success(request, f"Đã làm mới dữ liệu từ file {batch.original_name}.")
+                return redirect("admindocuments:parcel_recipient_directory")
+
+    query = (request.GET.get("q") or "").strip()
+    current_batch = (
+        AdmParcelRecipientImportBatch.objects.filter(is_current=True)
+        .order_by("-created_at")
+        .first()
+    )
+    recipients_qs = AdmParcelRecipientCatalog.objects.none()
+    if current_batch:
+        recipients_qs = current_batch.recipients.all()
+        if query:
+            recipients_qs = recipients_qs.filter(
+                Q(full_name__icontains=query)
+                | Q(employee_code__icontains=query)
+                | Q(gapo_user_id__icontains=query)
+                | Q(department_name__icontains=query)
+            )
+    recipients_qs = recipients_qs.order_by("department_name", "full_name", "employee_code")
+    recipient_preview = recipients_qs[:50]
+    departments = []
+    if current_batch:
+        departments = list(
+            current_batch.recipients.exclude(department_name__exact="")
+            .values_list("department_name", flat=True)
+            .distinct()
+            .order_by("department_name")[:20]
+        )
+
+    context = {
+        "form": form,
+        "current_batch": current_batch,
+        "recipient_preview": recipient_preview,
+        "recipient_total": recipients_qs.count() if current_batch else 0,
+        "query": query,
+        "departments": departments,
+        "recent_batches": AdmParcelRecipientImportBatch.objects.all()[:8],
+        "has_admin_docs_access": _has_admin_docs_access(request.user),
+    }
+    return render(request, "admindocuments/parcel_recipient_directory.html", context)
+
+
+@login_required
+def parcel_auto_notify_settings(request):
+    if not _has_admin_docs_access(request.user):
+        return render(request, "403.html", status=403)
+
+    setting, _ = AdmParcelAutoNotifySetting.objects.get_or_create(
+        code="default",
+        defaults={"name": "Nhắc lại bưu kiện"},
+    )
+    if request.method == "POST":
+        form = AdmParcelAutoNotifySettingForm(request.POST, instance=setting)
+        if form.is_valid():
+            setting = form.save(commit=False)
+            setting.updated_by = request.user
+            setting.save()
+            messages.success(request, "Đã lưu cấu hình nhắc lại bưu kiện.")
+            return redirect("admindocuments:parcel_auto_notify_settings")
+        messages.error(request, "Cấu hình không hợp lệ.")
+    else:
+        form = AdmParcelAutoNotifySettingForm(instance=setting)
+
+    return render(
+        request,
+        "admindocuments/parcel_auto_notify_settings.html",
+        {
+            "form": form,
+            "setting": setting,
+            "has_admin_docs_access": _has_admin_docs_access(request.user),
+        },
+    )
+
+
+@login_required
+def parcel_receipt_item_partial(request, doc_id: int):
+    parcel_receipt = get_object_or_404(
+        AdmParcelReceipt.objects.select_related(
+            "received_by",
+            "receiving_company",
+            "status",
+            "recipient_directory",
+            "recipient_user",
+            "recipient_user__userprofile",
+        ).prefetch_related("images", "audit_logs", "audit_logs__actor"),
+        pk=doc_id,
+    )
+    _prepare_parcel_receipt_view_state(parcel_receipt)
+    html = render_to_string(
+        "admindocuments/includes/parcel_receipt_list_item.html",
+        {
+            "doc": parcel_receipt,
+            "highlight_dispatch_id": "",
+            "upload_action_name": "admindocuments:parcel_receipt_upload_images",
+            "request": request,
+        },
+        request=request,
+    )
+    return JsonResponse({"html": html, "status": parcel_receipt.status.name})
+
+
+@login_required
+def parcel_recipient_search(request):
+    current_batch = (
+        AdmParcelRecipientImportBatch.objects.filter(is_current=True)
+        .order_by("-created_at")
+        .first()
+    )
+    if not current_batch:
+        return JsonResponse({"results": []})
+
+    query = (request.GET.get("q") or "").strip()
+    department = (request.GET.get("department") or "").strip()
+    selected_id = (request.GET.get("selected_id") or "").strip()
+    queryset = current_batch.recipients.filter(is_active_member=True)
+
+    if selected_id.isdigit():
+        queryset = queryset.filter(pk=int(selected_id))
+    else:
+        if department:
+            queryset = queryset.filter(department_name=department)
+        if not query:
+            return JsonResponse({"results": []})
+
+        phone_query = "".join(ch for ch in query if ch.isdigit())
+        looks_like_phone = phone_query and all(
+            ch.isdigit() or ch in " +-.()"
+            for ch in query
+        )
+        if looks_like_phone:
+            queryset = queryset.filter(phone_number_normalized=phone_query)
+        else:
+            queryset = queryset.filter(
+                Q(full_name__icontains=query)
+                | Q(employee_code__icontains=query)
+                | Q(email__icontains=query)
+            )
+
+    queryset = queryset.order_by("full_name", "employee_code")[:20]
+    results = []
+    for recipient in queryset:
+        # Parcel search is an operational UI, so sensitive fields stay masked
+        # even when the current session belongs to a superuser.
+        contact_phone = recipient.mask_phone_number(recipient.phone_number)
+        contact_email = recipient.mask_email(recipient.email)
+        birth_date = recipient.mask_birth_date(recipient.birth_date)
+        results.append(
+            {
+                "id": recipient.id,
+                "full_name": recipient.full_name,
+                "employee_code": recipient.employee_code,
+                "department_name": recipient.department_name,
+                "phone_number": contact_phone,
+                "email": contact_email,
+                "birth_date": birth_date,
+                "label": " - ".join(
+                    [
+                        part
+                        for part in [
+                            recipient.full_name,
+                            recipient.employee_code,
+                            contact_phone,
+                            contact_email,
+                        ]
+                        if part
+                    ]
+                ),
+            }
+        )
+    return JsonResponse({"results": results})
+
+
+@login_required
 def incoming_dispatch_change_status(request, doc_id: int):
     if request.method != "POST":
-        return redirect("admindocuments:incoming_dispatch_list")
+        return redirect("admindocuments:incoming_document_list")
     if not _has_incoming_dispatch_status_edit_access(request.user):
         messages.error(request, "Bạn không có quyền thay đổi tình trạng.")
         return render(request, "403.html", status=403)
@@ -829,42 +2510,466 @@ def incoming_dispatch_change_status(request, doc_id: int):
     allowed_statuses = set(_allowed_status_codes_for_dispatch(dispatch))
     if new_status and new_status not in allowed_statuses:
         messages.error(request, "Bước xử lý không hợp lệ cho loại tiếp nhận này.")
-        return redirect("admindocuments:incoming_dispatch_list")
+        return redirect(_incoming_dispatch_route_name(dispatch.incoming_item_type_id))
     if new_status not in valid_statuses:
         messages.error(request, "Tình trạng không hợp lệ.")
-        return redirect("admindocuments:incoming_dispatch_list")
+        return redirect(_incoming_dispatch_route_name(dispatch.incoming_item_type_id))
     if dispatch.status_id == new_status:
         messages.info(request, "Tình trạng đã ở giá trị này.")
-        return redirect("admindocuments:incoming_dispatch_list")
+        return redirect(_incoming_dispatch_route_name(dispatch.incoming_item_type_id))
 
+    previous_status = dispatch.status_id
     dispatch.status_id = new_status
     dispatch.updated_by = request.user
     dispatch.save(update_fields=["status", "updated_by", "updated_at"])
+    AdmIncomingDispatchStatusLog.objects.create(
+        dispatch=dispatch,
+        from_status_id=previous_status,
+        to_status_id=new_status,
+        changed_by=request.user,
+    )
     messages.success(request, "Cập nhật tình trạng thành công.")
 
     next_url = request.POST.get("next", "")
     if next_url.startswith("/"):
         return redirect(next_url)
-    return redirect("admindocuments:incoming_dispatch_list")
+    return redirect(_incoming_dispatch_route_name(dispatch.incoming_item_type_id))
 
 
 @login_required
 def incoming_dispatch_upload_images(request, doc_id: int):
     if request.method != "POST":
-        return redirect("admindocuments:incoming_dispatch_list")
+        return redirect("admindocuments:incoming_document_list")
 
     dispatch = get_object_or_404(AdmIncomingDispatch, pk=doc_id)
     files = request.FILES.getlist("images")
     if not files:
+        messages.warning(request, "Bạn chưa chọn tệp để tải lên.")
+    else:
+        error = _validate_incoming_dispatch_files(files)
+        if error:
+            messages.error(request, error)
+        else:
+            saved_count = _save_incoming_dispatch_images(dispatch, files, request.user)
+            if saved_count:
+                messages.success(request, "Đã tải tệp đính kèm.")
+            else:
+                messages.warning(request, "Không có tệp hợp lệ để tải lên.")
+
+    next_url = request.POST.get("next", "")
+    if next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect(f"{_incoming_dispatch_list_url(dispatch.incoming_item_type_id)}?open={dispatch.id}")
+
+
+@login_required
+def parcel_receipt_change_status(request, doc_id: int):
+    if request.method != "POST":
+        return redirect("admindocuments:parcel_receipt_list")
+    if not _has_incoming_dispatch_status_edit_access(request.user):
+        messages.error(request, "Bạn không có quyền thay đổi tình trạng.")
+        return render(request, "403.html", status=403)
+
+    parcel_receipt = get_object_or_404(AdmParcelReceipt, pk=doc_id)
+    new_status = (request.POST.get("status") or "").strip()
+    valid_statuses = set(
+        AdmIncomingDispatchStatus.objects.filter(is_active=True).values_list(
+            "code", flat=True
+        )
+    )
+    allowed_statuses = set(_allowed_status_codes_for_parcel(parcel_receipt))
+    if new_status and new_status not in allowed_statuses:
+        messages.error(request, "Bước xử lý không hợp lệ cho bưu phẩm/bưu kiện.")
+        return redirect("admindocuments:parcel_receipt_list")
+    if new_status not in valid_statuses:
+        messages.error(request, "Tình trạng không hợp lệ.")
+        return redirect("admindocuments:parcel_receipt_list")
+    if parcel_receipt.status_id == new_status:
+        messages.info(request, "Tình trạng đã ở giá trị này.")
+        return redirect("admindocuments:parcel_receipt_list")
+
+    from_status = parcel_receipt.status_id
+    parcel_receipt.status_id = new_status
+    parcel_receipt.updated_by = request.user
+    update_fields = ["status", "updated_by", "updated_at"]
+    if new_status == "pkg_processing" and parcel_receipt.confirmed_at is None:
+        parcel_receipt.confirmed_at = timezone.now()
+        update_fields.append("confirmed_at")
+    if new_status == "pkg_done" and parcel_receipt.completed_at is None:
+        parcel_receipt.completed_at = timezone.now()
+        update_fields.append("completed_at")
+        _cancel_parcel_reminder(parcel_receipt)
+    parcel_receipt.save(update_fields=update_fields)
+    _log_parcel_event(
+        parcel_receipt,
+        AdmParcelReceiptLog.ACTION_UPDATED,
+        actor=request.user,
+        from_status=from_status,
+        to_status=new_status,
+        note="Cập nhật tình trạng thủ công.",
+    )
+    messages.success(request, "Cập nhật tình trạng thành công.")
+
+    next_url = request.POST.get("next", "")
+    if next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect("admindocuments:parcel_receipt_list")
+
+
+@login_required
+def parcel_receipt_send_notification(request, doc_id: int):
+    if request.method != "POST":
+        return redirect("admindocuments:parcel_receipt_list")
+    if not _has_incoming_dispatch_create_access(request.user):
+        messages.error(request, "Bạn không có quyền gửi thông báo.")
+        return render(request, "403.html", status=403)
+
+    parcel_receipt = get_object_or_404(AdmParcelReceipt, pk=doc_id)
+    if parcel_receipt.status_id != "pkg_received":
+        messages.info(request, "Bưu kiện này đã được gửi thông báo trước đó.")
+        next_url = request.POST.get("next", "")
+        if next_url.startswith("/"):
+            return redirect(next_url)
+        return redirect("admindocuments:parcel_receipt_list")
+
+    try:
+        _, reminder_error = _send_parcel_notification_now(parcel_receipt, request.user, request)
+    except (ValueError, NotificationSendError) as exc:
+        messages.error(request, f"Gửi thông báo nhận thất bại: {exc}")
+    except Exception as exc:
+        messages.error(request, f"Gửi thông báo nhận thất bại: {exc}")
+    else:
+        messages.success(request, "Đã gửi thông báo nhận thành công.")
+        if reminder_error:
+            messages.warning(request, f"Đã gửi thông báo nhưng chưa lên lịch nhắc lại: {reminder_error}")
+
+    next_url = request.POST.get("next", "")
+    if next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect("admindocuments:parcel_receipt_list")
+
+
+@login_required
+def parcel_receipt_send_group_notification(request):
+    if request.method != "POST":
+        return redirect("admindocuments:parcel_receipt_list")
+    if not _has_incoming_dispatch_create_access(request.user):
+        messages.error(request, "Bạn không có quyền gửi thông báo.")
+        return render(request, "403.html", status=403)
+    try:
+        parcels = _selected_parcels_for_group(request)
+        batch, _ = _send_parcel_group_notification_now(parcels, request.user, request)
+    except (ValueError, NotificationSendError) as exc:
+        messages.error(request, f"Gửi thông báo nhận thất bại: {exc}")
+    except Exception as exc:
+        messages.error(request, f"Gửi thông báo nhận thất bại: {exc}")
+    else:
+        messages.success(
+            request,
+            f"Đã gửi thông báo cho {batch.parcel_count} bưu kiện của {batch.recipient_name or 'người nhận'}.",
+        )
+
+    next_url = request.POST.get("next", "")
+    if next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect("admindocuments:parcel_receipt_list")
+
+
+@login_required
+def parcel_receipt_mark_handed_over(request):
+    if request.method != "POST":
+        return redirect("admindocuments:parcel_receipt_list")
+    if not _has_incoming_dispatch_create_access(request.user):
+        messages.error(request, "Bạn không có quyền cập nhật bàn giao.")
+        return render(request, "403.html", status=403)
+
+    try:
+        parcels = _selected_parcels_for_group(request)
+    except ValueError as exc:
+        messages.error(request, str(exc))
+    else:
+        invalid = [parcel for parcel in parcels if parcel.status_id != "pkg_processing"]
+        if invalid:
+            messages.error(request, "Chỉ bàn giao các bưu kiện đã được người nhận xác nhận.")
+        else:
+            now = timezone.now()
+            for parcel in parcels:
+                from_status = parcel.status_id
+                parcel.status_id = "pkg_done"
+                parcel.completed_at = now
+                parcel.updated_by = request.user
+                parcel.save(update_fields=["status", "completed_at", "updated_by", "updated_at"])
+                _cancel_parcel_reminder(parcel)
+                _log_parcel_event(
+                    parcel,
+                    AdmParcelReceiptLog.ACTION_HANDED_OVER,
+                    actor=request.user,
+                    from_status=from_status,
+                    to_status=parcel.status_id,
+                    note="Hành chính xác nhận đã bàn giao toàn bộ.",
+                )
+                for batch in parcel.notification_batches.select_related("reminder_schedule").all():
+                    _cancel_batch_reminder(batch)
+            messages.success(request, f"Đã bàn giao {len(parcels)} bưu kiện.")
+
+    next_url = request.POST.get("next", "")
+    if next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect("admindocuments:parcel_receipt_list")
+
+
+@login_required
+def parcel_receipt_upload_images(request, doc_id: int):
+    if request.method != "POST":
+        return redirect("admindocuments:parcel_receipt_list")
+
+    parcel_receipt = get_object_or_404(AdmParcelReceipt, pk=doc_id)
+    files = request.FILES.getlist("images")
+    if not files:
         messages.warning(request, "Bạn chưa chọn ảnh để tải lên.")
     else:
-        _save_incoming_dispatch_images(dispatch, files, request.user)
+        _save_parcel_receipt_images(parcel_receipt, files, request.user)
         messages.success(request, "Đã tải ảnh đính kèm.")
 
     next_url = request.POST.get("next", "")
     if next_url.startswith("/"):
         return redirect(next_url)
-    return redirect(f"{reverse('admindocuments:incoming_dispatch_list')}?open={dispatch.id}")
+    return redirect(f"{reverse('admindocuments:parcel_receipt_list')}?open={parcel_receipt.id}")
+
+
+def parcel_receipt_confirm(request, token: str):
+    parcel_receipt = get_object_or_404(
+        AdmParcelReceipt.objects.select_related(
+            "recipient_directory",
+            "recipient_user",
+            "recipient_user__userprofile",
+            "receiving_company",
+            "status",
+        ).prefetch_related("images"),
+        confirmation_token=token,
+    )
+    if request.method == "POST":
+        if parcel_receipt.status_id in {"pkg_processing", "pkg_done"}:
+            messages.info(request, "Bưu phẩm đã được xác nhận trước đó.")
+            return redirect(request.path)
+        confirmed = request.POST.get("confirmed") == "1"
+        claim_mode = (request.POST.get("claim_mode") or "self").strip()
+        actual_receiver_name = (request.POST.get("actual_receiver_name") or "").strip()
+        actual_receiver_employee_code = (request.POST.get("actual_receiver_employee_code") or "").strip()
+        if not confirmed:
+            messages.error(request, "Cần xác nhận đã nhận hàng.")
+        elif claim_mode == "proxy" and not actual_receiver_name:
+            messages.error(request, "Cần nhập tên người nhận hộ.")
+        else:
+            from_status = parcel_receipt.status_id
+            if claim_mode != "proxy" and not actual_receiver_name:
+                actual_receiver_name = _parcel_recipient_display(parcel_receipt)
+            parcel_receipt.actual_receiver_name = actual_receiver_name
+            parcel_receipt.actual_receiver_employee_code = actual_receiver_employee_code
+            parcel_receipt.status_id = "pkg_processing"
+            parcel_receipt.confirmed_at = timezone.now()
+            parcel_receipt.save(
+                update_fields=[
+                    "actual_receiver_name",
+                    "actual_receiver_employee_code",
+                    "status",
+                    "confirmed_at",
+                    "updated_at",
+                ]
+            )
+            _cancel_parcel_reminder(parcel_receipt)
+            _log_parcel_event(
+                parcel_receipt,
+                AdmParcelReceiptLog.ACTION_CONFIRMED,
+                from_status=from_status,
+                to_status=parcel_receipt.status_id,
+                note="Người nhận xác nhận đã nhận hàng.",
+                metadata={"actual_receiver_name": actual_receiver_name},
+            )
+            messages.success(request, "Đã xác nhận nhận hàng.")
+            return redirect(request.path)
+    return render(
+        request,
+        "admindocuments/parcel_receipt_confirm.html",
+        {"parcel": parcel_receipt},
+    )
+
+
+def parcel_batch_confirm(request, token: str):
+    batch = get_object_or_404(
+        AdmParcelNotificationBatch.objects.prefetch_related(
+            "parcels",
+            "parcels__status",
+            "parcels__receiving_company",
+            "parcels__images",
+        ),
+        token=token,
+    )
+    parcels = list(batch.parcels.all().order_by("-received_at", "-id"))
+    if request.method == "POST":
+        confirmed = request.POST.get("confirmed") == "1"
+        claim_mode = (request.POST.get("claim_mode") or "self").strip()
+        actual_receiver_name = (request.POST.get("actual_receiver_name") or "").strip()
+        actual_receiver_employee_code = (request.POST.get("actual_receiver_employee_code") or "").strip()
+        if not confirmed:
+            messages.error(request, "Cần xác nhận đã nhận hàng.")
+        else:
+            if claim_mode == "proxy" and not actual_receiver_name:
+                messages.error(request, "Cần nhập tên người nhận hộ.")
+                return render(
+                    request,
+                    "admindocuments/parcel_batch_confirm.html",
+                    {"batch": batch, "parcels": parcels},
+                )
+            if claim_mode != "proxy" and not actual_receiver_name:
+                actual_receiver_name = batch.recipient_name or "Người nhận"
+            now = timezone.now()
+            with transaction.atomic():
+                batch.status = AdmParcelNotificationBatch.Status.CONFIRMED
+                batch.confirmed_at = now
+                batch.actual_receiver_name = actual_receiver_name
+                batch.actual_receiver_employee_code = actual_receiver_employee_code
+                batch.save(
+                    update_fields=[
+                        "status",
+                        "confirmed_at",
+                        "actual_receiver_name",
+                        "actual_receiver_employee_code",
+                        "updated_at",
+                    ]
+                )
+                for parcel in parcels:
+                    if parcel.status_id == "pkg_done":
+                        continue
+                    from_status = parcel.status_id
+                    parcel.actual_receiver_name = actual_receiver_name
+                    parcel.actual_receiver_employee_code = actual_receiver_employee_code
+                    parcel.status_id = "pkg_processing"
+                    parcel.confirmed_at = now
+                    parcel.save(
+                        update_fields=[
+                            "actual_receiver_name",
+                            "actual_receiver_employee_code",
+                            "status",
+                            "confirmed_at",
+                            "updated_at",
+                        ]
+                    )
+                    _cancel_parcel_reminder(parcel)
+                    _log_parcel_event(
+                        parcel,
+                        AdmParcelReceiptLog.ACTION_CONFIRMED,
+                        from_status=from_status,
+                        to_status=parcel.status_id,
+                        note=f"Người nhận xác nhận theo lô #{batch.id}.",
+                        metadata={
+                            "batch_id": batch.id,
+                            "actual_receiver_name": actual_receiver_name,
+                        },
+                    )
+                _cancel_batch_reminder(batch)
+            messages.success(request, "Đã xác nhận nhận hàng cho các bưu kiện đã chọn.")
+            return redirect(request.path)
+    return render(
+        request,
+        "admindocuments/parcel_batch_confirm.html",
+        {"batch": batch, "parcels": parcels},
+    )
+
+
+@login_required
+def parcel_receipt_register_proxy(request, doc_id: int):
+    if request.method != "POST":
+        return redirect("admindocuments:parcel_receipt_list")
+    parcel_receipt = get_object_or_404(AdmParcelReceipt, pk=doc_id)
+    claim_mode = (request.POST.get("claim_mode") or "self").strip()
+    proxy_receiver_name = (request.POST.get("proxy_receiver_name") or "").strip()
+    if claim_mode == "proxy" and not proxy_receiver_name:
+        messages.error(request, "Cần nhập tên người nhận hộ.")
+        return redirect(f"{reverse('admindocuments:parcel_receipt_list')}?open={parcel_receipt.id}")
+    if claim_mode == "proxy":
+        if not parcel_receipt.proxy_qr_token:
+            parcel_receipt.proxy_qr_token = uuid.uuid4().hex
+        parcel_receipt.proxy_receiver_name = proxy_receiver_name
+        parcel_receipt.proxy_receiver_employee_code = ""
+    else:
+        parcel_receipt.proxy_receiver_name = ""
+        parcel_receipt.proxy_receiver_employee_code = ""
+    parcel_receipt.updated_by = request.user
+    parcel_receipt.save(
+        update_fields=[
+            "proxy_receiver_name",
+            "proxy_receiver_employee_code",
+            "proxy_qr_token",
+            "updated_by",
+            "updated_at",
+        ]
+    )
+    _log_parcel_event(
+        parcel_receipt,
+        AdmParcelReceiptLog.ACTION_PROXY_REGISTERED,
+        actor=request.user,
+        to_status=parcel_receipt.status_id,
+        note="Cập nhật hình thức nhận hàng.",
+        metadata={
+            "proxy_receiver_name": proxy_receiver_name,
+            "claim_mode": claim_mode,
+        },
+    )
+    if claim_mode == "proxy":
+        messages.success(request, "Đã đăng ký người nhận hộ.")
+    else:
+        messages.success(request, "Đã cập nhật nhận chính chủ.")
+    return redirect(f"{reverse('admindocuments:parcel_receipt_list')}?open={parcel_receipt.id}")
+
+
+@login_required
+def parcel_receipt_proxy_claim(request, token: str):
+    parcel_receipt = get_object_or_404(
+        AdmParcelReceipt.objects.select_related(
+            "recipient_directory", "recipient_user", "recipient_user__userprofile"
+        ),
+        proxy_qr_token=token,
+    )
+    if request.method == "POST":
+        actual_receiver_name = (request.POST.get("actual_receiver_name") or "").strip()
+        actual_receiver_employee_code = (request.POST.get("actual_receiver_employee_code") or "").strip()
+        if not actual_receiver_name:
+            messages.error(request, "Cần nhập họ tên người thực tế đến nhận.")
+        else:
+            from_status = parcel_receipt.status_id
+            parcel_receipt.actual_receiver_name = actual_receiver_name
+            parcel_receipt.actual_receiver_employee_code = actual_receiver_employee_code
+            parcel_receipt.status_id = "pkg_processing"
+            parcel_receipt.confirmed_at = timezone.now()
+            parcel_receipt.updated_by = request.user
+            parcel_receipt.save(
+                update_fields=[
+                    "actual_receiver_name",
+                    "actual_receiver_employee_code",
+                    "status",
+                    "confirmed_at",
+                    "updated_by",
+                    "updated_at",
+                ]
+            )
+            _cancel_parcel_reminder(parcel_receipt)
+            _log_parcel_event(
+                parcel_receipt,
+                AdmParcelReceiptLog.ACTION_CONFIRMED,
+                actor=request.user,
+                from_status=from_status,
+                to_status=parcel_receipt.status_id,
+                note="Xác nhận nhận hộ bằng mã QR/token.",
+                metadata={"actual_receiver_name": actual_receiver_name, "proxy_receiver_name": parcel_receipt.proxy_receiver_name},
+            )
+            messages.success(request, "Đã ghi nhận nhận hộ thành công.")
+            return redirect("admindocuments:parcel_receipt_list")
+    return render(
+        request,
+        "admindocuments/parcel_receipt_proxy_claim.html",
+        {"parcel": parcel_receipt},
+    )
 
 
 @login_required

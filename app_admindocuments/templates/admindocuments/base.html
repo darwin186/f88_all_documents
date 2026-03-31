@@ -84,11 +84,23 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6h16M4 12h16M4 18h16"/></svg>
         <span>Giấy hành chính</span>
       </a>
-      <a href="{% url 'admindocuments:incoming_dispatch_list' %}"
-         class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'incoming_dispatch_list' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">
+      <a href="{% url 'admindocuments:incoming_document_list' %}"
+         class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'incoming_document_list' or active == 'incoming_dispatch_list' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 8h10M7 12h10m-10 4h6"/><rect x="3.75" y="4.75" width="16.5" height="14.5" rx="1.5" stroke-width="1.5"/></svg>
-        <span>Tiếp nhận thư từ</span>
+        <span>Công văn đến</span>
       </a>
+      <a href="{% url 'admindocuments:parcel_receipt_list' %}"
+         class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'parcel_receipt_list' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4.75 7.75h14.5v8.5H4.75z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 11.25h8m-8 3h5"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 7.75V6.5A1.5 1.5 0 018.5 5h7A1.5 1.5 0 0117 6.5v1.25"/></svg>
+        <span>Bưu phẩm/Bưu kiện</span>
+      </a>
+      {% if request.user.is_superuser %}
+      <a href="{% url 'admindocuments:parcel_recipient_directory' %}"
+         class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'parcel_recipient_directory' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 7.5A2.5 2.5 0 016.5 5h11A2.5 2.5 0 0120 7.5v9a2.5 2.5 0 01-2.5 2.5h-11A2.5 2.5 0 014 16.5v-9Z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 10h8M8 14h5"/></svg>
+        <span>Danh bạ người nhận</span>
+      </a>
+      {% endif %}
       <a href="{% url 'admindocuments:master_data' %}" 
          class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'master_data' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

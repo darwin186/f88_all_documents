@@ -1,0 +1,70 @@
+<div id="parcel-item-{{ doc.id }}"
+     data-dispatch-card="{{ doc.id }}"
+     class="overflow-hidden rounded-[20px] border border-slate-200 bg-slate-50/70 p-3 transition {% if highlight_dispatch_id == doc.id|stringformat:'s' %}parcel-card-highlight{% endif %}"
+     :class="openDispatchId === '{{ doc.id }}' ? 'border-emerald-300 bg-white' : ''">
+  <div class="flex items-start gap-3">
+    <label class="mt-1 flex shrink-0 items-center">
+      <input type="checkbox"
+             class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+             :checked="isParcelSelected('{{ doc.id }}')"
+             @click.stop
+             @change="toggleParcelSelection('{{ doc.id }}')">
+    </label>
+    <div role="button"
+         tabindex="0"
+         @click="toggleDispatch('{{ doc.id }}')"
+         @keydown.enter.prevent="toggleDispatch('{{ doc.id }}')"
+         @keydown.space.prevent="toggleDispatch('{{ doc.id }}')"
+         class="group flex min-w-0 flex-1 items-start justify-between gap-3 text-left">
+      <div class="min-w-0 flex-1">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="parcel-safe-text text-[11px] font-semibold leading-4 text-slate-900">
+              {{ doc.tracking_code|default:"Chưa có mã đơn hàng" }}
+            </div>
+            <div class="parcel-line-clamp-1 mt-0.5 text-[9px] font-medium leading-4 text-slate-500">
+              {{ doc.sender_unit|default:"Chưa có đơn vị gửi" }}
+            </div>
+          </div>
+          <div class="flex items-center gap-2 pl-2">
+            <span class="parcel-status-pill inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[8px] font-semibold md:shrink-0"
+                  data-tone="{{ doc.status_tone }}">
+              <span class="h-1.5 w-1.5 rounded-full bg-current"></span>
+              {{ doc.status.name }}
+            </span>
+            <button type="button"
+                    class="rounded-full border border-slate-200 bg-white p-1.5 text-slate-500 transition hover:border-emerald-300 hover:text-emerald-600"
+                    @click.stop="refreshParcelItem('{{ doc.id }}')"
+                    :disabled="refreshingDispatchId === '{{ doc.id }}'"
+                    title="Làm mới trạng thái">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" :class="refreshingDispatchId === '{{ doc.id }}' ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M16.023 9.348h4.992V4.356m-1.338 14.29A9 9 0 1 1 21 12.75"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="parcel-safe-text mt-1.5 text-[8px] text-slate-500">
+          {% if grouping_mode == 'day' %}
+          <span>{{ doc.recipient_label }}</span>
+          <span class="text-slate-400"> / </span>
+          {% endif %}
+          <span>{{ doc.received_at|date:"d/m/Y H:i" }}</span>
+          <span class="text-slate-400"> / </span>
+          <span>{{ doc.receiving_company_id }}</span>
+          <span class="text-slate-400"> / </span>
+          <span>{{ doc.get_parcel_type_display }}</span>
+          {% if doc.notified_at %}
+          <span class="text-slate-400"> / </span>
+          <span>Đã báo {{ doc.notified_at|date:"d/m H:i" }}</span>
+          {% endif %}
+        </div>
+      </div>
+      <svg xmlns="http://www.w3.org/2000/svg" class="mt-1 h-4 w-4 shrink-0 text-slate-300 transition duration-200 group-hover:text-slate-500" :class="openDispatchId === '{{ doc.id }}' ? 'rotate-90 text-slate-500' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m9 6 6 6-6 6"/>
+      </svg>
+    </div>
+  </div>
+  <div x-cloak x-show="openDispatchId === '{{ doc.id }}'" x-transition.opacity.duration.150ms class="mt-3 rounded-[18px] border border-slate-100 bg-[linear-gradient(180deg,#f8fbff_0%,#f3f7fb_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+    {% include "admindocuments/includes/parcel_receipt_detail_content.html" with selected_dispatch=doc selected_workflow_steps=doc.workflow_steps %}
+  </div>
+</div>

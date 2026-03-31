@@ -1,5 +1,5 @@
 {% extends "admindocuments/base.html" %}
-{% block title %}Tiếp nhận thư từ đến{% endblock %}
+{% block title %}{{ page_title }}{% endblock %}
 
 {% block content %}
 {% if messages %}
@@ -18,15 +18,15 @@
 <div class="text-[13px]">
 <div class="flex justify-between items-center mb-5">
   <div>
-    <h1 class="text-xl font-semibold text-gray-700">Tiếp nhận thư từ đến</h1>
-    <p class="text-xs text-gray-500">Bao gồm công văn, bưu phẩm, bưu kiện.</p>
+    <h1 class="text-xl font-semibold text-gray-700">{{ page_title }}</h1>
+    <p class="text-xs text-gray-500">{{ page_description }}</p>
   </div>
   {% if can_create %}
   <div class="flex items-center gap-2">
     <div class="relative" x-data="{open:false}">
       <button type="button" @click="open = !open"
               class="bg-f88green hover:bg-f88dark text-white px-3 py-1.5 rounded-lg shadow text-xs">
-        Tiếp nhận Công văn đến
+        {{ create_button_label }}
       </button>
       <div x-show="open" @click.outside="open=false" x-transition
            class="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
@@ -36,31 +36,7 @@
           <li>
             <button type="button"
                     class="w-full text-left px-3 py-2 hover:bg-gray-50 text-xs"
-                    @click="open=false; openIncomingDispatchModal('{{ company.code }}', '{{ company.code }} - {{ company.name|escapejs }}', 'cong_van')">
-              {{ company.code }} - {{ company.name }}
-            </button>
-          </li>
-          {% empty %}
-          <li class="px-3 py-2 text-xs text-gray-500">Chưa có công ty hoạt động.</li>
-          {% endfor %}
-        </ul>
-      </div>
-    </div>
-
-    <div class="relative" x-data="{open:false}">
-      <button type="button" @click="open = !open"
-              class="bg-gray-700 hover:bg-gray-800 text-white px-3 py-1.5 rounded-lg shadow text-xs">
-        Tiếp nhận Bưu phẩm/Bưu kiện
-      </button>
-      <div x-show="open" @click.outside="open=false" x-transition
-           class="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
-        <div class="px-3 py-2 border-b border-gray-100 text-[11px] text-gray-500">Chọn công ty nhận</div>
-        <ul class="max-h-64 overflow-y-auto py-1">
-          {% for company in companies %}
-          <li>
-            <button type="button"
-                    class="w-full text-left px-3 py-2 hover:bg-gray-50 text-xs"
-                    @click="open=false; openIncomingDispatchModal('{{ company.code }}', '{{ company.code }} - {{ company.name|escapejs }}', 'buu_pham_buu_kien')">
+                    @click="open=false; openIncomingDispatchModal('{{ company.code }}', '{{ company.code }} - {{ company.name|escapejs }}')">
               {{ company.code }} - {{ company.name }}
             </button>
           </li>
@@ -77,7 +53,7 @@
 <form method="get" class="mb-4 bg-white rounded-lg shadow p-3 grid lg:grid-cols-5 gap-2 items-end">
   <div class="lg:col-span-2">
     <label class="block text-[11px] text-gray-500 mb-1">Tìm kiếm</label>
-    <input type="text" name="q" value="{{ q }}" placeholder="Số hiệu hoặc tên trích yếu..."
+    <input type="text" name="q" value="{{ q }}" placeholder="{{ search_placeholder }}"
            class="border border-gray-300 rounded-lg px-3 py-1.5 w-full text-xs focus:outline-none focus:ring focus:ring-green-300" />
   </div>
   <div>
@@ -113,7 +89,7 @@
   </div>
   <div class="lg:col-span-5 flex gap-2">
     <button type="submit" class="bg-f88green hover:bg-f88dark text-white px-3 py-1.5 rounded-lg text-xs">Lọc dữ liệu</button>
-    <a href="{% url 'admindocuments:incoming_dispatch_list' %}" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs">Xóa bộ lọc</a>
+    <a href="{% url current_url_name %}" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs">Xóa bộ lọc</a>
   </div>
 </form>
 
@@ -129,7 +105,6 @@
         <th class="px-4 py-3 text-left">Đơn vị gửi</th>
         <th class="px-4 py-3 text-left">Tên trích yếu, nội dung</th>
         <th class="px-4 py-3 text-left">Công ty nhận</th>
-        <th class="px-4 py-3 text-left">Nhóm GAPO</th>
         <th class="px-4 py-3 text-left">Tình trạng</th>
         <th class="px-4 py-3 text-left">Thao tác</th>
       </tr>
@@ -140,27 +115,19 @@
         <td class="px-4 py-3">{{ page_obj.start_index|add:forloop.counter0 }}</td>
         <td class="px-4 py-3">{{ doc.received_date|date:"d/m/Y" }}</td>
         <td class="px-4 py-3">{{ doc.responsible_user.get_full_name|default:doc.responsible_user.username }}</td>
-        <td class="px-4 py-3">{{ doc.incoming_item_type.name|default:"-" }}</td>
+        <td class="px-4 py-3">
+          {% if doc.incoming_item_type_id %}
+          {{ doc.incoming_item_type.name|default:"-" }}
+          {% else %}
+          {{ item_type_name }}
+          {% endif %}
+        </td>
         <td class="px-4 py-3 font-mono">{{ doc.document_number|default:"-" }}</td>
         <td class="px-4 py-3">{{ doc.sending_unit }}</td>
         <td class="px-4 py-3">{{ doc.summary|truncatechars:120 }}</td>
         <td class="px-4 py-3">{{ doc.receiving_company.code }} - {{ doc.receiving_company.name }}</td>
-        <td class="px-4 py-3">{{ doc.gapo_group.name|default:"-" }}</td>
         <td class="px-4 py-3">
-          {% if can_edit_status and doc.available_statuses %}
-          <form method="post" action="{% url 'admindocuments:incoming_dispatch_change_status' doc.id %}" class="flex items-center gap-1">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.get_full_path }}">
-            <select name="status" class="border border-gray-300 rounded px-2 py-1 text-xs">
-              {% for st in doc.available_statuses %}
-              <option value="{{ st.code }}" {% if st.code == doc.status_id %}selected{% endif %}>{{ st.name }}</option>
-              {% endfor %}
-            </select>
-            <button type="submit" class="px-2 py-1 text-xs rounded bg-f88green hover:bg-f88dark text-white">Cập nhật</button>
-          </form>
-          {% else %}
-          <span class="inline-flex px-2 py-1 text-xs font-semibold rounded bg-gray-100 text-gray-700">{{ doc.status.name|default:"-" }}</span>
-          {% endif %}
+          <span class="inline-flex px-2 py-1 text-xs font-semibold rounded bg-gray-100 text-gray-700">{{ doc.normalized_status_name|default:doc.status.name|default:"-" }}</span>
         </td>
         <td class="px-4 py-3">
           <div class="flex items-center gap-2">
@@ -168,12 +135,24 @@
                class="px-2 py-1 text-xs rounded border border-gray-300 bg-white hover:bg-gray-100 text-gray-700">
               Xem
             </a>
+          {% if can_edit_status and doc.available_statuses %}
+          <form method="post" action="{% url status_action_name doc.id %}" class="flex items-center gap-1">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <select name="status" class="border border-gray-300 rounded px-2 py-1 text-xs">
+              {% for st in doc.available_statuses %}
+              <option value="{{ st.code }}" {% if st.code == doc.normalized_status_id|default:doc.status_id %}selected{% endif %}>{{ st.name }}</option>
+              {% endfor %}
+            </select>
+            <button type="submit" class="px-2 py-1 text-xs rounded bg-f88green hover:bg-f88dark text-white">Cập nhật</button>
+          </form>
+          {% endif %}
           </div>
         </td>
       </tr>
       {% empty %}
       <tr>
-        <td colspan="11" class="px-4 py-8 text-center text-gray-500">Chưa có thư từ đến nào.</td>
+        <td colspan="10" class="px-4 py-8 text-center text-gray-500">{{ empty_message }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -216,17 +195,20 @@
   <div class="relative p-4 w-full max-w-3xl mx-auto mt-12">
     <div class="relative bg-white rounded-lg shadow max-h-[90vh] flex flex-col">
       <div class="flex justify-between items-center p-4 border-b rounded-t">
-        <h3 class="text-base font-semibold text-gray-900">Tiếp nhận thư từ</h3>
+        <h3 class="text-base font-semibold text-gray-900">{{ modal_title }}</h3>
         <button type="button" onclick="closeIncomingDispatchModal()"
                 class="text-gray-400 hover:text-gray-900 rounded-lg text-xs p-2 ml-auto inline-flex items-center">×</button>
       </div>
       <div class="p-5 overflow-y-auto text-[13px]">
         <div class="mb-4 text-xs rounded-lg border border-blue-100 bg-blue-50 text-blue-700 p-3">
-          Người phụ trách, ngày nhận và trạng thái "Đã tiếp nhận" được hệ thống tự động ghi nhận.
+          {{ auto_status_note }}
         </div>
         <form method="post" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-2 gap-4">
           {% csrf_token %}
           <input type="hidden" id="incomingReceivingCompanyCode" name="receiving_company" value="{{ prefill_company.code|default:'' }}">
+          {% if incoming_item_type_field %}
+          {{ incoming_item_type_field }}
+          {% endif %}
           <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">Công ty nhận</label>
             <input type="text" id="incomingReceivingCompanyLabel"
@@ -236,18 +218,12 @@
             {% if form.receiving_company.errors %}<p class="text-xs text-red-600 mt-1">{{ form.receiving_company.errors.0 }}</p>{% endif %}
           </div>
           <div>
-            <label class="block text-xs font-medium text-gray-700 mb-1">{{ form.incoming_item_type.label }}</label>
-            <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 space-y-2">
-              {% for choice in form.incoming_item_type %}
-              <label class="flex items-center gap-2 text-xs text-gray-700">
-                {{ choice.tag }}
-                <span>{{ choice.choice_label }}</span>
-              </label>
-              {% empty %}
-              <span class="text-xs text-gray-500">Chưa có loại tiếp nhận hoạt động.</span>
-              {% endfor %}
-            </div>
-            {% if form.incoming_item_type.errors %}<p class="text-xs text-red-600 mt-1">{{ form.incoming_item_type.errors.0 }}</p>{% endif %}
+            <label class="block text-xs font-medium text-gray-700 mb-1">Loại tiếp nhận</label>
+            <input type="text"
+                   value="{{ item_type_name }}"
+                   readonly
+                   class="block w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs text-gray-700" />
+            {% if incoming_item_type_field and incoming_item_type_field.errors %}<p class="text-xs text-red-600 mt-1">{{ incoming_item_type_field.errors.0 }}</p>{% endif %}
           </div>
           <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">{{ form.document_number.label }}</label>
@@ -264,11 +240,6 @@
             {{ form.signer_name }}
             {% if form.signer_name.errors %}<p class="text-xs text-red-600 mt-1">{{ form.signer_name.errors.0 }}</p>{% endif %}
           </div>
-          <div>
-            <label class="block text-xs font-medium text-gray-700 mb-1">{{ form.gapo_group.label }}</label>
-            {{ form.gapo_group }}
-            {% if form.gapo_group.errors %}<p class="text-xs text-red-600 mt-1">{{ form.gapo_group.errors.0 }}</p>{% endif %}
-          </div>
           <div class="md:col-span-2">
             <label class="block text-xs font-medium text-gray-700 mb-1">{{ form.summary.label }}</label>
             {{ form.summary }}
@@ -280,10 +251,21 @@
             {% if form.processing_department.errors %}<p class="text-xs text-red-600 mt-1">{{ form.processing_department.errors.0 }}</p>{% endif %}
           </div>
           <div>
-            <label class="block text-xs font-medium text-gray-700 mb-1">Ảnh đính kèm</label>
-            <input type="file" name="images" accept="image/*" multiple
-                   class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-xs file:mr-2 file:rounded file:border-0 file:bg-gray-100 file:px-2 file:py-1 file:text-xs">
-            <p class="text-[11px] text-gray-500 mt-1">Có thể chọn nhiều ảnh một lần.</p>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Tệp đính kèm</label>
+            <div class="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/40 p-3">
+              <input type="file" id="incomingDispatchFiles" name="images" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" multiple class="hidden">
+              <div class="flex flex-wrap items-center gap-2">
+                <label for="incomingDispatchFiles"
+                       class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 12l-3.5-3.5M12 16l3.5-3.5M5 20h14" />
+                  </svg>
+                  Chọn tệp
+                </label>
+                <span id="incomingDispatchFilesSummary" class="text-[11px] text-gray-500">Chưa chọn tệp nào</span>
+              </div>
+              <p class="text-[11px] text-gray-500 mt-2">Có thể chọn nhiều tệp một lần, gồm ảnh và PDF.</p>
+            </div>
           </div>
           <div class="md:col-span-2 flex justify-end gap-2 mt-2">
             <button type="button" onclick="closeIncomingDispatchModal()"
@@ -304,20 +286,12 @@
     {% endfor %}
   };
 
-  function openIncomingDispatchModal(companyCode, companyLabel, incomingTypeCode = "") {
+  function openIncomingDispatchModal(companyCode, companyLabel) {
     const codeInput = document.getElementById("incomingReceivingCompanyCode");
     const labelInput = document.getElementById("incomingReceivingCompanyLabel");
     const modal = document.getElementById("incomingDispatchModal");
     if (codeInput) codeInput.value = companyCode || "";
     if (labelInput) labelInput.value = companyLabel || "";
-    if (incomingTypeCode) {
-      const typeRadio = document.querySelector(
-        `input[name="incoming_item_type"][value="${incomingTypeCode}"]`
-      );
-      if (typeRadio) {
-        typeRadio.checked = true;
-      }
-    }
     if (modal) modal.classList.remove("hidden");
   }
 
@@ -326,12 +300,31 @@
     if (modal) modal.classList.add("hidden");
   }
 
+  function bindIncomingFileSummary(inputId, summaryId) {
+    const input = document.getElementById(inputId);
+    const summary = document.getElementById(summaryId);
+    if (!input || !summary || input.dataset.bound === "1") return;
+    input.dataset.bound = "1";
+    input.addEventListener("change", function () {
+      const count = input.files ? input.files.length : 0;
+      if (!count) {
+        summary.textContent = "Chưa chọn tệp nào";
+        return;
+      }
+      summary.textContent = count === 1 ? input.files[0].name : `${count} tệp đã chọn`;
+    });
+  }
+
+  window.addEventListener("DOMContentLoaded", function () {
+    bindIncomingFileSummary("incomingDispatchFiles", "incomingDispatchFilesSummary");
+    bindIncomingFileSummary("incomingDrawerFiles", "incomingDrawerFilesSummary");
+  });
+
   {% if form.errors and can_create %}
     window.addEventListener("DOMContentLoaded", function () {
       const currentCode = document.getElementById("incomingReceivingCompanyCode")?.value || "";
       const currentLabel = document.getElementById("incomingReceivingCompanyLabel")?.value || incomingCompanyLabelMap[currentCode] || "";
-      const selectedType = document.querySelector("input[name='incoming_item_type']:checked")?.value || "";
-      openIncomingDispatchModal(currentCode, currentLabel, selectedType);
+      openIncomingDispatchModal(currentCode, currentLabel);
     });
   {% endif %}
 </script>
@@ -339,12 +332,12 @@
 
 {% if selected_dispatch %}
 <div class="fixed inset-0 z-40">
-  <a href="?q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&company={{ selected_company }}&page={{ page_obj.number }}"
+  <a href="{% url current_url_name %}?q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&company={{ selected_company }}&page={{ page_obj.number }}"
      class="absolute inset-0 bg-black/25"></a>
   <aside class="absolute top-0 right-0 h-full w-full max-w-xl bg-white shadow-2xl border-l border-gray-200 overflow-y-auto">
     <div class="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
       <h3 class="text-sm font-semibold text-gray-800">Chi tiết tiếp nhận</h3>
-      <a href="?q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&company={{ selected_company }}&page={{ page_obj.number }}"
+      <a href="{% url current_url_name %}?q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&company={{ selected_company }}&page={{ page_obj.number }}"
          class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-100">Đóng</a>
     </div>
 
@@ -356,7 +349,13 @@
         </div>
         <div>
           <div class="text-[11px] text-gray-500">Loại tiếp nhận</div>
-          <div class="font-semibold">{{ selected_dispatch.incoming_item_type.name|default:"-" }}</div>
+          <div class="font-semibold">
+            {% if selected_dispatch.incoming_item_type_id %}
+            {{ selected_dispatch.incoming_item_type.name|default:"-" }}
+            {% else %}
+            {{ item_type_name }}
+            {% endif %}
+          </div>
         </div>
         <div class="col-span-2">
           <div class="text-[11px] text-gray-500">Tóm tắt</div>
@@ -395,28 +394,99 @@
       </div>
 
       <div class="rounded-lg border border-gray-200 p-3">
+        <div class="flex items-center justify-between gap-3 mb-2">
+          <div class="text-[11px] uppercase tracking-wide text-gray-500">Thay đổi trạng thái</div>
+          <span class="inline-flex px-2 py-1 text-[11px] font-semibold rounded bg-gray-100 text-gray-700">
+            {{ selected_dispatch.normalized_status_name|default:selected_dispatch.status.name|default:"-" }}
+          </span>
+        </div>
+        {% if can_edit_status and selected_dispatch.available_statuses %}
+        <form method="post" action="{% url status_action_name selected_dispatch.id %}" class="flex items-center gap-2">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <select name="status" class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-xs">
+            {% for st in selected_dispatch.available_statuses %}
+            <option value="{{ st.code }}" {% if st.code == selected_dispatch.normalized_status_id|default:selected_dispatch.status_id %}selected{% endif %}>{{ st.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="px-3 py-2 text-xs rounded-lg bg-f88green hover:bg-f88dark text-white">Cập nhật</button>
+        </form>
+        {% else %}
+        <p class="text-[11px] text-gray-500">Bạn không có quyền thay đổi trạng thái.</p>
+        {% endif %}
+      </div>
+
+      <div class="rounded-lg border border-gray-200 p-3">
+        <div class="text-[11px] uppercase tracking-wide text-gray-500 mb-2">Lịch sử thay đổi trạng thái</div>
+        {% if selected_dispatch.status_logs_display %}
+        <div class="space-y-2">
+          {% for log in selected_dispatch.status_logs_display %}
+          <div class="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+            <div class="flex items-center justify-between gap-3">
+              <div class="font-medium text-gray-800">
+                {{ log.from_status.name|default:"-" }} -> {{ log.to_status.name|default:"-" }}
+              </div>
+              <div class="text-[11px] text-gray-500">{{ log.changed_at|date:"d/m/Y H:i" }}</div>
+            </div>
+            <div class="mt-1 text-[11px] text-gray-500">
+              {% if log.changed_by %}
+              {{ log.changed_by.get_full_name|default:log.changed_by.username }}
+              {% else %}
+              Hệ thống
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-[11px] text-gray-500">Chưa có lịch sử thay đổi trạng thái.</p>
+        {% endif %}
+      </div>
+
+      <div class="rounded-lg border border-gray-200 p-3">
         <div class="flex items-center gap-2 text-[11px] uppercase tracking-wide text-gray-500 mb-2">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
           </svg>
-          Ảnh đính kèm
+          Tệp đính kèm
         </div>
-        <form method="post" action="{% url 'admindocuments:incoming_dispatch_upload_images' selected_dispatch.id %}" enctype="multipart/form-data" class="mb-3 flex items-center gap-2">
+        <form method="post" action="{% url upload_action_name selected_dispatch.id %}" enctype="multipart/form-data" class="mb-3 rounded-xl border border-dashed border-gray-200 bg-gray-50/70 p-3">
           {% csrf_token %}
           <input type="hidden" name="next" value="{{ request.get_full_path }}">
-          <input type="file" name="images" accept="image/*" multiple class="block w-full rounded border border-gray-300 px-2 py-1 text-xs">
-          <button type="submit" class="px-2 py-1 text-xs rounded border border-gray-300 bg-white hover:bg-gray-100">Tải lên</button>
+          <input type="file" id="incomingDrawerFiles" name="images" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" multiple class="hidden">
+          <div class="flex flex-wrap items-center gap-2">
+            <label for="incomingDrawerFiles"
+                   class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 12l-3.5-3.5M12 16l3.5-3.5M5 20h14" />
+              </svg>
+              Chọn tệp
+            </label>
+            <span id="incomingDrawerFilesSummary" class="text-[11px] text-gray-500">Chưa chọn tệp nào</span>
+            <button type="submit" class="px-3 py-2 text-xs rounded-lg border border-gray-300 bg-white hover:bg-gray-100 text-gray-700">Tải lên</button>
+          </div>
         </form>
         {% if selected_dispatch.images.all %}
-        <div class="grid grid-cols-2 gap-2">
+        <div class="space-y-2">
           {% for img in selected_dispatch.images.all %}
           <a href="{{ img.image.url }}" target="_blank" class="block border border-gray-200 rounded overflow-hidden bg-gray-50">
-            <img src="{{ img.image.url }}" alt="Ảnh đính kèm {{ forloop.counter }}" class="w-full h-28 object-cover">
+            {% if img.is_image_preview %}
+            <img src="{{ img.image.url }}" alt="Tệp đính kèm {{ forloop.counter }}" class="w-full h-28 object-cover">
+            <div class="px-3 py-2 text-[11px] text-gray-600 truncate">{{ img.filename }}</div>
+            {% else %}
+            <div class="flex items-center justify-between gap-3 px-3 py-3">
+              <div class="min-w-0">
+                <div class="font-semibold text-gray-800 truncate">{{ img.filename }}</div>
+                <div class="mt-1 text-[11px] text-gray-500 uppercase">{{ img.file_extension|default:"file" }}</div>
+              </div>
+              <span class="shrink-0 text-[11px] text-blue-600 font-medium">Mở</span>
+            </div>
+            {% endif %}
           </a>
           {% endfor %}
         </div>
         {% else %}
-        <p class="text-gray-500">Chưa có ảnh đính kèm.</p>
+        <p class="text-gray-500">Chưa có tệp đính kèm.</p>
         {% endif %}
       </div>
     </div>

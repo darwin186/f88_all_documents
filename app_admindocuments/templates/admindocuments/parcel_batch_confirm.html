@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Xác nhận nhận bưu kiện</title>
+  <script src="https://cdn.tailwindcss.com/3.4.10"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@600;700&display=swap');
+
+    body {
+      font-family: 'Manrope', sans-serif;
+      color: #10203a;
+      background:
+        radial-gradient(circle at top left, rgba(13, 148, 92, 0.18), transparent 24%),
+        radial-gradient(circle at top right, rgba(15, 23, 42, 0.08), transparent 28%),
+        linear-gradient(180deg, #f4f6fb 0%, #eef2f7 100%);
+    }
+
+    .confirm-title {
+      font-family: 'Sora', sans-serif;
+    }
+
+    .confirm-panel {
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 26px 60px rgba(15, 23, 42, 0.08);
+    }
+
+    .confirm-safe-text {
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .confirm-radio input:checked + span {
+      border-color: #10b981;
+      background: rgba(16, 185, 129, 0.08);
+      color: #065f46;
+      box-shadow: 0 10px 24px rgba(16, 185, 129, 0.12);
+    }
+  </style>
+</head>
+<body class="min-h-screen px-4 py-6 sm:px-6 sm:py-10">
+  <div class="mx-auto max-w-4xl">
+    <div class="confirm-panel rounded-[30px] border border-white/70 p-5 text-[11px] text-slate-600 sm:p-7">
+      <div class="flex items-start justify-between gap-4">
+        <div>
+          <h1 class="confirm-title mt-2 text-[24px] font-bold text-slate-900 sm:text-[28px]">Xác nhận nhận bưu kiện</h1>
+          <p class="mt-2 text-[13px] text-slate-500">{{ batch.recipient_name|default:"Người nhận" }} có {{ batch.parcel_count }} kiện chờ xác nhận.</p>
+        </div>
+        <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 shadow-inner shadow-emerald-100">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M20 7.5 12 3 4 7.5m16 0V16.5L12 21m8-13.5L12 12m-8-4.5V16.5L12 21m0-9 8-4.5M12 12 4 7.5"/>
+          </svg>
+        </div>
+      </div>
+
+      {% if messages %}
+      <div class="mt-5 space-y-2">
+        {% for message in messages %}
+        <div class="rounded-2xl border px-4 py-3 text-[11px] {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
+          {{ message }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.2fr),minmax(300px,0.9fr)]">
+        <section class="space-y-4">
+          <div class="rounded-[24px] border border-white/80 bg-white/80 p-4 shadow-[0_14px_30px_rgba(15,23,42,0.05)]">
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div class="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Đơn hàng của</div>
+                <div class="mt-1 text-[13px] font-semibold text-slate-800">{{ batch.recipient_name|default:"-" }}</div>
+              </div>
+              <div class="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Phòng ban</div>
+                <div class="mt-1 text-[13px] font-semibold text-slate-800">{{ batch.recipient_department|default:"-" }}</div>
+              </div>
+              <div class="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Số kiện</div>
+                <div class="mt-1 text-[13px] font-semibold text-slate-800">{{ batch.parcel_count }}</div>
+              </div>
+              <div class="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Trạng thái vật lý của đơn</div>
+                <div class="mt-1 text-[13px] font-semibold text-slate-800">{% if batch.status == 'confirmed' %}Đã xác nhận{% elif batch.status == 'sent' %}Đã thông báo{% else %}Đã tạo{% endif %}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            {% for parcel in parcels %}
+            <div class="rounded-[24px] border border-white/80 bg-white/80 p-4 shadow-[0_14px_30px_rgba(15,23,42,0.05)]">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="confirm-safe-text text-[14px] font-bold text-slate-900">{{ parcel.tracking_code|default:"Chưa có mã đơn hàng" }}</div>
+                  <div class="mt-1 text-[12px] font-medium text-slate-500">{{ parcel.sender_unit|default:"Chưa có đơn vị gửi" }}</div>
+                </div>
+                <span class="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-[10px] font-semibold text-blue-700">{{ parcel.status.name }}</span>
+              </div>
+              <div class="mt-3 text-[11px] text-slate-500">{{ parcel.get_parcel_type_display }} · {{ parcel.received_at|date:"d/m/Y H:i" }}</div>
+              {% if parcel.images.all %}
+              <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                {% for image in parcel.images.all %}
+                <a href="{{ image.image.url }}" target="_blank" class="overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
+                  <img src="{{ image.image.url }}" alt="Ảnh bưu kiện" class="h-32 w-full object-cover">
+                </a>
+                {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section>
+          {% if batch.status == 'confirmed' %}
+          <div class="rounded-[24px] border border-emerald-200 bg-emerald-50 px-4 py-4 text-[12px] text-emerald-700 shadow-[0_14px_30px_rgba(16,185,129,0.10)]">
+            Đã xác nhận lúc {{ batch.confirmed_at|date:"d/m/Y H:i" }}.
+          </div>
+          {% else %}
+          <form method="post" class="space-y-4 rounded-[24px] border border-white/80 bg-white/80 p-4 shadow-[0_14px_30px_rgba(15,23,42,0.05)]">
+            {% csrf_token %}
+            <label class="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-[12px] text-slate-700">
+              <input type="checkbox" name="confirmed" value="1" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+              <span>Tôi xác nhận đã nhận các bưu kiện này.</span>
+            </label>
+
+            <div class="grid gap-3 sm:grid-cols-2">
+              <label class="confirm-radio cursor-pointer">
+                <input type="radio" name="claim_mode" value="self" class="sr-only" checked>
+                <span class="flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[12px] font-semibold text-slate-700 transition">Chính chủ</span>
+              </label>
+              <label class="confirm-radio cursor-pointer">
+                <input type="radio" name="claim_mode" value="proxy" class="sr-only">
+                <span class="flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[12px] font-semibold text-slate-700 transition">Nhận hộ</span>
+              </label>
+            </div>
+
+            <div class="space-y-3">
+              <div>
+                <label class="mb-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Tên người nhận hộ</label>
+                <input type="text" name="actual_receiver_name" class="block w-full rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 placeholder:text-[11px] placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100" placeholder="Chỉ nhập khi nhận hộ">
+              </div>
+              <div>
+                <label class="mb-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Mã nhân viên người nhận thực tế</label>
+                <input type="text" name="actual_receiver_employee_code" class="block w-full rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 placeholder:text-[11px] placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100" placeholder="Không bắt buộc">
+              </div>
+            </div>
+
+            <button type="submit" class="flex w-full items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#0f8a53_0%,#19b35b_100%)] px-4 py-3.5 text-[12px] font-bold text-white shadow-[0_18px_34px_rgba(15,138,83,0.28)] transition hover:translate-y-[-1px]">
+              Xác nhận nhận hàng
+            </button>
+          </form>
+          {% endif %}
+        </section>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

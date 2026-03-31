@@ -7,6 +7,23 @@ app_name = "admindocuments"
 urlpatterns = [
     path("", views.dashboard, name="admindocuments_dashboard"),
     path("dashboard/export/", views.dashboard_export, name="admindocuments_dashboard_export"),
+    path("incoming-documents/", views.incoming_document_list, name="incoming_document_list"),
+    path("parcel-receipts/", views.parcel_receipt_list, name="parcel_receipt_list"),
+    path(
+        "parcel-recipients/search/",
+        views.parcel_recipient_search,
+        name="parcel_recipient_search",
+    ),
+    path(
+        "parcel-recipient-directory/",
+        views.parcel_recipient_directory,
+        name="parcel_recipient_directory",
+    ),
+    path(
+        "parcel-notify-settings/",
+        views.parcel_auto_notify_settings,
+        name="parcel_auto_notify_settings",
+    ),
     path("incoming-dispatches/", views.incoming_dispatch_list, name="incoming_dispatch_list"),
     path(
         "incoming-dispatches/<int:doc_id>/status/",
@@ -17,6 +34,56 @@ urlpatterns = [
         "incoming-dispatches/<int:doc_id>/images/upload/",
         views.incoming_dispatch_upload_images,
         name="incoming_dispatch_upload_images",
+    ),
+    path(
+        "parcel-receipts/<int:doc_id>/status/",
+        views.parcel_receipt_change_status,
+        name="parcel_receipt_change_status",
+    ),
+    path(
+        "parcel-receipts/<int:doc_id>/notify/",
+        views.parcel_receipt_send_notification,
+        name="parcel_receipt_send_notification",
+    ),
+    path(
+        "parcel-receipts/notify-selected/",
+        views.parcel_receipt_send_group_notification,
+        name="parcel_receipt_send_group_notification",
+    ),
+    path(
+        "parcel-receipts/handed-over/",
+        views.parcel_receipt_mark_handed_over,
+        name="parcel_receipt_mark_handed_over",
+    ),
+    path(
+        "parcel-receipts/<int:doc_id>/images/upload/",
+        views.parcel_receipt_upload_images,
+        name="parcel_receipt_upload_images",
+    ),
+    path(
+        "parcel-receipts/<int:doc_id>/item/",
+        views.parcel_receipt_item_partial,
+        name="parcel_receipt_item_partial",
+    ),
+    path(
+        "parcel-receipts/batches/confirm/<str:token>/",
+        views.parcel_batch_confirm,
+        name="parcel_batch_confirm",
+    ),
+    path(
+        "parcel-receipts/confirm/<str:token>/",
+        views.parcel_receipt_confirm,
+        name="parcel_receipt_confirm",
+    ),
+    path(
+        "parcel-receipts/<int:doc_id>/proxy/",
+        views.parcel_receipt_register_proxy,
+        name="parcel_receipt_register_proxy",
+    ),
+    path(
+        "parcel-receipts/proxy/<str:token>/claim/",
+        views.parcel_receipt_proxy_claim,
+        name="parcel_receipt_proxy_claim",
     ),
     path("master-data/", views.master_data, name="master_data"),
     path("documents/", views.document_list, name="admindocuments_list"),

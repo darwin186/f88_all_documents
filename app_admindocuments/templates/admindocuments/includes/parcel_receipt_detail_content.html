@@ -1,0 +1,126 @@
+<div class="flex items-center justify-between gap-2">
+  <p class="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">Xử lý bưu kiện</p>
+  <button type="button"
+          @click="openDispatchId = null"
+          class="w-fit rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600">Thu gọn</button>
+</div>
+
+<div class="mt-3 grid grid-cols-1 gap-2 text-[10px] text-slate-500 sm:grid-cols-2">
+  <div class="rounded-2xl border border-white/80 bg-white/80 px-3 py-2"><div class="text-[9px] uppercase tracking-[0.14em] text-slate-400">Lễ tân</div><div class="parcel-safe-text mt-1 font-semibold text-slate-700">{% if selected_dispatch.received_by %}{{ selected_dispatch.received_by.get_full_name|default:selected_dispatch.received_by.username }}{% else %}Chưa ghi nhận{% endif %}</div></div>
+  <div class="rounded-2xl border border-white/80 bg-white/80 px-3 py-2"><div class="text-[9px] uppercase tracking-[0.14em] text-slate-400">Người nhận</div><div class="parcel-safe-text mt-1 font-semibold text-slate-700">{{ selected_dispatch.actual_receiver_display }}</div></div>
+</div>
+
+<div class="mt-3 rounded-[22px] border border-white/80 bg-white/80 px-3 py-3">
+  <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Tiến trình xử lý</div>
+  <div class="mt-3 space-y-2.5">
+    {% for step in selected_workflow_steps %}
+    <div class="parcel-track-line relative flex gap-3">
+      <div class="relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full {% if step.is_current %}bg-emerald-500 text-white{% elif step.is_done %}bg-slate-900 text-white{% else %}bg-slate-100 text-slate-400{% endif %}">
+        {% if step.is_done %}
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m5 13 4 4L19 7"/></svg>
+        {% elif step.is_current %}
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6l4 2"/></svg>
+        {% else %}
+        <span class="text-[13px]">•</span>
+        {% endif %}
+      </div>
+      <div class="pb-1">
+        <div class="text-[11px] font-bold {% if step.is_current %}text-slate-900{% elif step.is_done %}text-slate-700{% else %}text-slate-400{% endif %}">{{ step.label }}</div>
+        <div class="text-[10px] {% if step.is_current %}text-emerald-600{% else %}text-slate-400{% endif %}">
+          {% if step.timestamp %}{{ step.timestamp|date:"d/m/Y H:i" }}{% elif step.is_current %}Đang là bước xử lý hiện tại{% elif step.is_done %}Đã đi qua bước này{% else %}Chờ hoàn tất bước trước{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="mt-4 space-y-3">
+  <div class="rounded-[22px] border border-white/80 bg-white/80 px-3 py-3">
+    <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Hình thức nhận</div>
+    <form method="post" action="{% url 'admindocuments:parcel_receipt_register_proxy' selected_dispatch.id %}" class="mt-3 space-y-3">
+      {% csrf_token %}
+      <div class="flex flex-wrap gap-2">
+        <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-700">
+          <input type="radio" name="claim_mode" value="self" {% if not selected_dispatch.proxy_receiver_name %}checked{% endif %}>
+          <span>Chính chủ</span>
+        </label>
+        <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-700">
+          <input type="radio" name="claim_mode" value="proxy" {% if selected_dispatch.proxy_receiver_name %}checked{% endif %}>
+          <span>Nhận hộ</span>
+        </label>
+      </div>
+      <input type="text"
+             name="proxy_receiver_name"
+             value="{{ selected_dispatch.proxy_receiver_name }}"
+             placeholder="Nhập tên người nhận hộ nếu có"
+             class="block w-full rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-2.5 text-[12px] text-slate-700 placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
+      <button type="submit" class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold text-slate-700">Lưu hình thức nhận</button>
+    </form>
+  </div>
+
+  <div class="rounded-[22px] border border-white/80 bg-white/80 px-3 py-3">
+    <div class="flex items-center justify-between gap-3">
+      <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Tệp đính kèm</div>
+      <span class="text-[10px] text-slate-400">{{ selected_dispatch.images.all|length }} tệp</span>
+    </div>
+    <form method="post" action="{% url upload_action_name selected_dispatch.id %}" enctype="multipart/form-data" class="mt-3 space-y-3">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <div class="grid gap-3 sm:grid-cols-2">
+        <label class="flex cursor-pointer items-center justify-between rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/70 px-4 py-2.5 text-[12px] text-emerald-700 transition hover:bg-emerald-50">
+          <span class="inline-flex items-center gap-3">
+            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-emerald-600 shadow-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M9.75 7.5h4.5m-7.5 9h10.5A1.5 1.5 0 0 0 18.75 15V9A1.5 1.5 0 0 0 17.25 7.5h-1.129a1.5 1.5 0 0 1-1.06-.44l-.621-.62a1.5 1.5 0 0 0-1.06-.44h-2.76a1.5 1.5 0 0 0-1.06.44l-.62.62a1.5 1.5 0 0 1-1.061.44H6.75A1.5 1.5 0 0 0 5.25 9v6A1.5 1.5 0 0 0 6.75 16.5Z"/></svg>
+            </span>
+            <span>Chụp ảnh</span>
+          </span>
+          <input type="file" name="images" accept="image/*" capture="environment" multiple class="hidden">
+        </label>
+        <label class="flex cursor-pointer items-center justify-between rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-2.5 text-[12px] text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50/40">
+          <span class="inline-flex items-center gap-3">
+            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-600 shadow-sm">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="m18.375 12.739-5.69 5.69a3 3 0 1 1-4.243-4.243l6.396-6.397a2 2 0 1 1 2.829 2.829l-6.364 6.364a1 1 0 0 1-1.415-1.414l5.657-5.657"/></svg>
+            </span>
+            <span>Tải tệp</span>
+          </span>
+          <input type="file" name="images" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" multiple class="hidden">
+        </label>
+      </div>
+      <button type="submit" class="rounded-2xl bg-emerald-600 px-4 py-2.5 text-[11px] font-semibold text-white">Tải lên</button>
+    </form>
+    <div class="mt-2 text-[10px] text-slate-400">Tối đa 5 tệp, mỗi tệp không quá 30MB.</div>
+    {% if selected_dispatch.images.all %}
+    <div class="mt-3 space-y-2">
+      {% for img in selected_dispatch.images.all %}
+      <a href="{{ img.image.url }}" target="_blank" class="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2.5 shadow-sm">
+        <span class="inline-flex items-center gap-3">
+          <span class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-600 shadow-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M19.5 14.25v-8.25A2.25 2.25 0 0 0 17.25 3.75h-10.5A2.25 2.25 0 0 0 4.5 6v12A2.25 2.25 0 0 0 6.75 20.25h6.75"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M15.75 18.75h4.5m0 0-2.25-2.25m2.25 2.25-2.25 2.25"/></svg>
+          </span>
+          <span class="parcel-safe-text text-[11px] font-medium text-slate-700">{{ img.image.name }}</span>
+        </span>
+        <span class="text-[10px] text-slate-400">Mở</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="mt-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-[11px] text-slate-400">Chưa có tệp đính kèm.</div>
+    {% endif %}
+  </div>
+
+  {% if selected_dispatch.extra_audit_logs %}
+  <details class="rounded-[22px] border border-white/80 bg-white/80 px-3 py-3">
+    <summary class="cursor-pointer list-none text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Lịch sử bổ sung</summary>
+    <div class="mt-3 space-y-2">
+      {% for log in selected_dispatch.extra_audit_logs %}
+      <div class="rounded-2xl bg-slate-50 px-3 py-2.5">
+        <div class="text-[11px] font-bold text-slate-800">{{ log.get_action_display }}</div>
+        <div class="mt-1 text-[10px] text-slate-400">{{ log.created_at|date:"d/m/Y H:i" }}{% if log.actor %} · {{ log.actor.get_full_name|default:log.actor.username }}{% endif %}</div>
+        {% if log.note %}<div class="mt-2 text-[11px] text-slate-500">{{ log.note }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endif %}
+</div>

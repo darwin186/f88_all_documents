@@ -1,0 +1,35 @@
+{% extends "admindocuments/base.html" %}
+{% block title %}Xác nhận Nhận Hộ{% endblock %}
+
+{% block content %}
+<div class="max-w-xl mx-auto bg-white rounded-xl shadow p-6 text-sm text-gray-700">
+  <h1 class="text-lg font-semibold text-gray-800 mb-4">Xác nhận nhận hộ bưu phẩm</h1>
+  {% if messages %}
+  <div class="mb-4 space-y-2">
+    {% for message in messages %}
+    <div class="rounded border px-3 py-2 {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
+      {{ message }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <dl class="grid grid-cols-2 gap-3 mb-4">
+    <div><dt class="text-xs text-gray-500">Người nhận gốc</dt><dd class="font-medium">{% if parcel.recipient_user %}{{ parcel.recipient_user.get_full_name|default:parcel.recipient_user.username }}{% else %}-{% endif %}</dd></div>
+    <div><dt class="text-xs text-gray-500">Người nhận hộ đã đăng ký</dt><dd class="font-medium">{{ parcel.proxy_receiver_name|default:"-" }}</dd></div>
+    <div><dt class="text-xs text-gray-500">Đơn vị gửi</dt><dd class="font-medium">{{ parcel.sender_unit }}</dd></div>
+    <div><dt class="text-xs text-gray-500">Loại</dt><dd class="font-medium">{{ parcel.get_parcel_type_display }}</dd></div>
+  </dl>
+  <form method="post" class="space-y-3">
+    {% csrf_token %}
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Họ tên người thực tế đến nhận</label>
+      <input type="text" name="actual_receiver_name" required class="w-full rounded border border-gray-300 px-3 py-2 text-sm">
+    </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">Mã nhân viên người thực tế đến nhận</label>
+      <input type="text" name="actual_receiver_employee_code" class="w-full rounded border border-gray-300 px-3 py-2 text-sm">
+    </div>
+    <button type="submit" class="rounded bg-green-700 px-4 py-2 text-white hover:bg-green-800">Hoàn tất bàn giao</button>
+  </form>
+</div>
+{% endblock %}

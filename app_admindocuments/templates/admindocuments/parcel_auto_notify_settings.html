@@ -1,0 +1,45 @@
+{% extends "admindocuments/base.html" %}
+
+{% block title %}Cài giờ nhắc bưu kiện{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold text-slate-900">Cài giờ nhắc bưu kiện</h1>
+    <p class="mt-2 text-sm text-slate-500">Áp dụng cho các bưu kiện đã thông báo nhưng sau 24 giờ vẫn chưa được nhận.</p>
+  </div>
+
+  <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <form method="post" class="space-y-5">
+      {% csrf_token %}
+      <div class="grid gap-5 md:grid-cols-2">
+        <div>
+          <label class="mb-2 block text-sm font-medium text-slate-700">{{ form.name.label }}</label>
+          {{ form.name }}
+        </div>
+      </div>
+      <div>
+        <label class="mb-2 block text-sm font-medium text-slate-700">{{ form.reminder_send_times.label }}</label>
+        {{ form.reminder_send_times }}
+        <p class="mt-2 text-xs text-slate-500">{{ form.reminder_send_times.help_text }}</p>
+        {% if form.reminder_send_times.errors %}<p class="mt-2 text-xs text-red-600">{{ form.reminder_send_times.errors.0 }}</p>{% endif %}
+      </div>
+      <label class="flex items-center gap-2 text-sm text-slate-700">
+        {{ form.skip_weekends }}
+        <span>{{ form.skip_weekends.label }}</span>
+      </label>
+      <label class="flex items-center gap-2 text-sm text-slate-700">
+        {{ form.is_active }}
+        <span>{{ form.is_active.label }}</span>
+      </label>
+      <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        Hệ thống chỉ lên lịch nhắc lại 1 lần cho mỗi đợt thông báo. Nếu chọn bỏ qua cuối tuần, lịch nhắc sẽ tự dời sang ngày làm việc kế tiếp.
+      </div>
+      <div class="flex gap-3">
+        <button type="submit" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white">Lưu cấu hình</button>
+        <a href="{% url 'admindocuments:parcel_receipt_list' %}" class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-600">Quay lại danh sách</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

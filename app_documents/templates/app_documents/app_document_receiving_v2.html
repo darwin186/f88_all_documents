@@ -252,7 +252,16 @@
             <td class="px-3 py-2 text-gray-700">{{ folder_dtl.shop_id.shop_name }}</td>
             <td class="px-3 py-2 text-gray-700">{{ folder_dtl.folder_type_id.folder_type_name }}</td>
             <td class="px-3 py-2 text-gray-700">
-              {% if folder_dtl.is_original %}<span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-semibold">Gốc</span>{% else %}<span class="px-2 py-1 rounded-full bg-orange-100 text-orange-700 text-[9px] font-semibold">Bổ sung</span>{% endif %}
+              <div class="flex flex-wrap items-center gap-1">
+                {% if folder_dtl.is_original %}
+                <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-semibold">Gốc</span>
+                {% else %}
+                <span class="px-2 py-1 rounded-full bg-orange-100 text-orange-700 text-[9px] font-semibold">Bổ sung</span>
+                {% endif %}
+                {% if folder_dtl.is_issue %}
+                <span class="px-2 py-1 rounded-full bg-amber-100 text-gray-900 text-[9px] font-semibold border border-amber-200">PSCT</span>
+                {% endif %}
+              </div>
             </td>
             <td class="px-3 py-2 text-gray-700">{{ folder_dtl.folder_created_date|date:"Y-m-d" }}</td>
             <td class="px-3 py-2 text-gray-700">{{ folder_dtl.lastest_received_date|date:"Y-m-d H:i" }}</td>
