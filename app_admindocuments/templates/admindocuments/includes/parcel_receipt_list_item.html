@@ -25,6 +25,14 @@
             <div class="parcel-line-clamp-1 mt-0.5 text-[9px] font-medium leading-4 text-slate-500">
               {{ doc.sender_unit|default:"Chưa có đơn vị gửi" }}
             </div>
+            {% if doc.is_unassigned %}
+            <div class="mt-1">
+              <span class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[8px] font-semibold text-amber-700">
+                <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                Chưa xác định người nhận
+              </span>
+            </div>
+            {% endif %}
           </div>
           <div class="flex items-center gap-2 pl-2">
             <span class="parcel-status-pill inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[8px] font-semibold md:shrink-0"

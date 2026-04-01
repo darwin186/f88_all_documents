@@ -195,6 +195,7 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL')
 GAPO_API_URL = os.getenv('GAPO_API_URL')
 GAPO_BOT_API_KEY = (os.getenv('BOT_API_KEY') or '').strip()
 GAPO_BOT_ID = os.getenv('BOT_ID')
+PUBLIC_APP_BASE_URL = (os.getenv('PUBLIC_APP_BASE_URL') or '').strip().rstrip('/')
 
 # Borrow request API key
 BORROW_REQUEST_API_KEY = (os.getenv('BORROW_REQUEST_API_KEY') or '').strip()

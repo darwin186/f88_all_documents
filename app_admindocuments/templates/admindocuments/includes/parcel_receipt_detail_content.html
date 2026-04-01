@@ -37,6 +37,28 @@
 
 <div class="mt-4 space-y-3">
   <div class="rounded-[22px] border border-white/80 bg-white/80 px-3 py-3">
+    <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Điều chỉnh người nhận</div>
+    <form method="post" action="{% url 'admindocuments:parcel_receipt_assign_recipient' selected_dispatch.id %}" class="mt-3 space-y-3">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+      <input type="hidden" id="assignRecipientId-{{ selected_dispatch.id }}" name="recipient_directory_id" value="{{ selected_dispatch.recipient_directory_id|default:'' }}">
+      <input type="hidden" id="assignRecipientDepartment-{{ selected_dispatch.id }}" name="recipient_department" value="{{ selected_dispatch.recipient_department|default:'' }}">
+      <div>
+        <input type="text"
+               id="assignRecipientSearchInput-{{ selected_dispatch.id }}"
+               oninput="queueAssignRecipientSearch('{{ selected_dispatch.id }}')"
+               placeholder="Tìm theo tên, mã nhân viên, email hoặc số điện thoại đầy đủ"
+               class="block w-full rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-2.5 text-[11px] text-slate-700 placeholder:text-[11px] placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
+      </div>
+      <div id="assignRecipientSelectedLabel-{{ selected_dispatch.id }}" class="rounded-2xl border {% if selected_dispatch.recipient_directory_id %}border-slate-200 bg-white text-slate-800 font-medium{% else %}border-dashed border-slate-200 bg-slate-50 text-slate-400{% endif %} px-4 py-3 text-[11px]">
+        {% if selected_dispatch.recipient_directory_id %}{{ selected_dispatch.recipient_label }}{% else %}Chưa chọn người nhận{% endif %}
+      </div>
+      <div id="assignRecipientResults-{{ selected_dispatch.id }}" class="space-y-2"></div>
+      <button type="submit" class="rounded-2xl bg-emerald-600 px-4 py-2 text-[11px] font-semibold text-white">{% if selected_dispatch.recipient_directory_id %}Cập nhật người nhận{% else %}Lưu người nhận{% endif %}</button>
+    </form>
+  </div>
+
+  <div class="rounded-[22px] border border-white/80 bg-white/80 px-3 py-3">
     <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Hình thức nhận</div>
     <form method="post" action="{% url 'admindocuments:parcel_receipt_register_proxy' selected_dispatch.id %}" class="mt-3 space-y-3">
       {% csrf_token %}

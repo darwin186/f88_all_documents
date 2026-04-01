@@ -129,6 +129,9 @@
           {% else %}
           <form method="post" class="space-y-4 rounded-[24px] border border-white/80 bg-white/80 p-4 shadow-[0_14px_30px_rgba(15,23,42,0.05)]">
             {% csrf_token %}
+            <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] text-amber-700">
+              Chỉ bấm xác nhận khi bạn chắc chắn đã nhận được bưu kiện trực tiếp từ lễ tân.
+            </div>
             <label class="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-[12px] text-slate-700">
               <input type="checkbox" name="confirmed" value="1" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
               <span>Tôi xác nhận đã nhận bưu kiện này.</span>

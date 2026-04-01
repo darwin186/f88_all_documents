@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, date, timedelta
 from io import BytesIO
 from functools import wraps
+from urllib.parse import urljoin
 
 from django.contrib import messages
 from django.contrib.auth.models import User
@@ -128,12 +129,11 @@ LEGACY_INCOMING_DOC_STATUS_MAP = {
 INCOMING_PARCEL_FLOW = [
     ("pkg_received", "Lễ tân tiếp nhận"),
     ("pkg_at_clerical", "Đã thông báo"),
-    ("pkg_processing", "Đã xác nhận"),
-    ("pkg_done", "Đã bàn giao toàn bộ"),
+    ("pkg_done", "Hoàn tất"),
 ]
 
 INCOMING_ARCHIVED_STATUS_CODES = {"doc_archived", "pkg_archived", "archived"}
-PARCEL_HIDDEN_LIST_STATUS_CODES = INCOMING_ARCHIVED_STATUS_CODES | {"pkg_done"}
+PARCEL_HIDDEN_LIST_STATUS_CODES = INCOMING_ARCHIVED_STATUS_CODES | {"pkg_processing", "pkg_done"}
 INCOMING_VISIBLE_STATUS_CODES = [
     code
     for code, _ in (INCOMING_DOC_FLOW + INCOMING_PARCEL_FLOW)
@@ -263,6 +263,14 @@ def _parcel_recipient_display(parcel_receipt):
     return "Chưa gán người nhận"
 
 
+def _parcel_is_unassigned(parcel_receipt):
+    recipient_name = (getattr(parcel_receipt, "recipient_name", "") or "").strip()
+    return not getattr(parcel_receipt, "recipient_directory_id", None) and recipient_name in {
+        "",
+        AdmParcelReceiptForm.UNKNOWN_RECIPIENT_LABEL,
+    }
+
+
 def _parcel_group_key(parcel_receipt):
     if getattr(parcel_receipt, "recipient_directory_id", None):
         return f"dir-{parcel_receipt.recipient_directory_id}"
@@ -282,15 +290,28 @@ def _parcel_recipient_receiver_id(parcel_receipt):
     return (getattr(profile, "gapo_user_id", None) or "").strip()
 
 
+def _build_public_absolute_url(request, path):
+    if not path:
+        return ""
+    if str(path).startswith(("http://", "https://")):
+        return str(path)
+    base_url = (getattr(settings, "PUBLIC_APP_BASE_URL", "") or "").strip().rstrip("/")
+    if base_url:
+        return urljoin(f"{base_url}/", str(path).lstrip("/"))
+    return request.build_absolute_uri(path)
+
+
 def _build_parcel_confirmation_url(request, token):
-    return request.build_absolute_uri(
-        reverse("admindocuments:parcel_receipt_confirm", args=[token])
+    return _build_public_absolute_url(
+        request,
+        reverse("admindocuments:parcel_receipt_confirm", args=[token]),
     )
 
 
 def _build_parcel_batch_confirmation_url(request, token):
-    return request.build_absolute_uri(
-        reverse("admindocuments:parcel_batch_confirm", args=[token])
+    return _build_public_absolute_url(
+        request,
+        reverse("admindocuments:parcel_batch_confirm", args=[token]),
     )
 
 
@@ -300,7 +321,7 @@ def _build_parcel_dynamic_image_url(request):
         asset_url = static(relative_path)
     except ValueError:
         asset_url = f"{settings.STATIC_URL.rstrip('/')}/{relative_path}"
-    return request.build_absolute_uri(asset_url)
+    return _build_public_absolute_url(request, asset_url)
 
 
 def _get_active_parcel_dynamic_template():
@@ -577,7 +598,7 @@ def _serialize_selected_parcel_ids(value):
     return ids
 
 
-def _selected_parcels_for_group(request):
+def _selected_parcels_from_request(request):
     selected_ids = _serialize_selected_parcel_ids(request.POST.get("selected_parcels"))
     if not selected_ids:
         raise ValueError("Cần chọn ít nhất một bưu kiện.")
@@ -591,6 +612,11 @@ def _selected_parcels_for_group(request):
     )
     if len(parcels) != len(set(selected_ids)):
         raise ValueError("Có bưu kiện không còn tồn tại.")
+    return parcels
+
+
+def _selected_parcels_for_group(request):
+    parcels = _selected_parcels_from_request(request)
     group_keys = {_parcel_group_key(parcel) for parcel in parcels}
     if len(group_keys) != 1:
         raise ValueError("Chỉ được thao tác các bưu kiện của cùng một người nhận.")
@@ -941,15 +967,14 @@ def _build_incoming_workflow_steps(dispatch):
 
 
 def _build_parcel_workflow_steps(parcel_receipt):
-    current_status = parcel_receipt.status_id
+    current_status = "pkg_done" if parcel_receipt.status_id in {"pkg_processing", "pkg_done"} else parcel_receipt.status_id
     flow = list(INCOMING_PARCEL_FLOW)
     index_map = {code: idx for idx, (code, _) in enumerate(flow)}
     current_index = index_map.get(current_status, -1)
     timestamp_map = {
         "pkg_received": parcel_receipt.received_at,
         "pkg_at_clerical": parcel_receipt.notified_at,
-        "pkg_processing": parcel_receipt.confirmed_at,
-        "pkg_done": parcel_receipt.completed_at,
+        "pkg_done": parcel_receipt.completed_at or parcel_receipt.confirmed_at,
     }
     steps = []
     for idx, (code, label) in enumerate(flow):
@@ -966,9 +991,10 @@ def _build_parcel_workflow_steps(parcel_receipt):
 
 
 def _parcel_status_tone(parcel_receipt):
-    if parcel_receipt.status_id == "pkg_received":
+    normalized_status = "pkg_done" if parcel_receipt.status_id in {"pkg_processing", "pkg_done"} else parcel_receipt.status_id
+    if normalized_status == "pkg_received":
         return "received"
-    if parcel_receipt.status_id == "pkg_done":
+    if normalized_status == "pkg_done":
         return "done"
     return "notified"
 
@@ -1009,10 +1035,96 @@ def _prepare_parcel_receipt_view_state(parcel_receipt):
     parcel_receipt.actual_receiver_display = _parcel_actual_receiver_display(parcel_receipt)
     parcel_receipt.status_tone = _parcel_status_tone(parcel_receipt)
     parcel_receipt.recipient_label = _parcel_recipient_display(parcel_receipt)
-    parcel_receipt.is_unassigned = not bool(
-        (parcel_receipt.recipient_name or "").strip() or parcel_receipt.recipient_directory_id
-    )
+    parcel_receipt.is_unassigned = _parcel_is_unassigned(parcel_receipt)
+    parcel_receipt.recipient_group_key = _parcel_group_key(parcel_receipt)
     return parcel_receipt
+
+
+def _build_parcel_recipient_groups(parcel_receipts, *, split_by_day=False):
+    recipient_group_map = {}
+    recipient_groups = []
+    grouping_mode = "day" if split_by_day else "recipient"
+    batch_queryset = (
+        AdmParcelNotificationBatch.objects.filter(parcels__in=parcel_receipts)
+        .select_related("reminder_schedule")
+        .prefetch_related("parcels")
+        .distinct()
+        .order_by("-created_at")
+    )
+
+    for parcel_receipt in parcel_receipts:
+        recipient_key = _parcel_group_key(parcel_receipt)
+        day_key = (
+            parcel_receipt.received_at.date().isoformat()
+            if parcel_receipt.received_at
+            else "unknown"
+        )
+        group_key = day_key if split_by_day else recipient_key
+        group = recipient_group_map.get(group_key)
+        if not group:
+            group = {
+                "key": group_key,
+                "recipient_label": _parcel_recipient_display(parcel_receipt),
+                "department": (parcel_receipt.recipient_department or "").strip() or "Chưa có phòng ban",
+                "parcels": [],
+                "received_day": parcel_receipt.received_at.date() if parcel_receipt.received_at else None,
+                "recipient_keys": set(),
+            }
+            recipient_group_map[group_key] = group
+            recipient_groups.append(group)
+        group["parcels"].append(parcel_receipt)
+        group["recipient_keys"].add(recipient_key)
+
+    for group in recipient_groups:
+        group["parcel_ids"] = [parcel.id for parcel in group["parcels"]]
+        group["count"] = len(group["parcels"])
+        group["parcel_ids_set"] = set(group["parcel_ids"])
+        group["recipient_count"] = len(group["recipient_keys"])
+        group["notified_count"] = sum(
+            1 for parcel in group["parcels"] if parcel.status_id == "pkg_at_clerical"
+        )
+        group["confirmed_count"] = sum(
+            1 for parcel in group["parcels"] if parcel.status_id in {"pkg_processing", "pkg_done"}
+        )
+        group["notifiable_parcel_ids"] = [
+            parcel.id
+            for parcel in group["parcels"]
+            if parcel.status_id in {"pkg_received", "pkg_at_clerical"}
+        ]
+        group["notifiable_count"] = len(group["notifiable_parcel_ids"])
+        group["status_label"] = (
+            "Đã thông báo"
+            if group["notified_count"] and group["notifiable_count"] == 0
+            else "Chưa nhận"
+        )
+        group["status_tone"] = "notified" if group["notified_count"] else "received"
+        group["supports_batch_actions"] = True
+        group["has_unassigned"] = any(parcel.is_unassigned for parcel in group["parcels"])
+        if grouping_mode == "day":
+            group["recipient_label"] = (
+                f"Nhận ngày {group['received_day']:%d/%m/%Y}"
+                if group["received_day"]
+                else "Chưa rõ ngày nhận"
+            )
+            group["department"] = f"{group['recipient_count']} người nhận · {group['count']} kiện"
+
+        related_batches = []
+        for batch in batch_queryset:
+            batch_parcel_ids = {parcel.id for parcel in batch.parcels.all()}
+            if batch_parcel_ids & group["parcel_ids_set"]:
+                related_batches.append(batch)
+            if len(related_batches) >= 5:
+                break
+        group["notification_batches"] = related_batches
+        group["notification_send_count"] = sum(
+            batch.notification_send_count or 1 for batch in related_batches
+        )
+        group["latest_notified_at"] = (
+            group["notification_batches"][0].notified_at
+            if group["notification_batches"]
+            else None
+        )
+    return recipient_groups
 
 
 def _create_attachment_version(document, user, uploaded_file=None, link=None, note=None):
@@ -2021,7 +2133,8 @@ def parcel_receipt_list(request):
         dispatches_qs = dispatches_qs.filter(notified_at__isnull=True)
     if unassigned_only:
         dispatches_qs = dispatches_qs.filter(
-            Q(recipient_directory__isnull=True) & Q(recipient_name__exact="")
+            Q(recipient_directory__isnull=True)
+            & (Q(recipient_name__exact="") | Q(recipient_name=AdmParcelReceiptForm.UNKNOWN_RECIPIENT_LABEL))
         )
     if start_date:
         for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
@@ -2060,98 +2173,11 @@ def parcel_receipt_list(request):
         ]
         _prepare_parcel_receipt_view_state(parcel_receipt)
 
-    recipient_group_map = {}
-    recipient_groups = []
     grouping_mode = "day" if split_by_day else "recipient"
-    for parcel_receipt in dispatches.object_list:
-        recipient_key = _parcel_group_key(parcel_receipt)
-        day_key = (
-            parcel_receipt.received_at.date().isoformat()
-            if parcel_receipt.received_at
-            else "unknown"
-        )
-        group_key = day_key if split_by_day else recipient_key
-        group = recipient_group_map.get(group_key)
-        if not group:
-            group = {
-                "key": group_key,
-                "recipient_label": _parcel_recipient_display(parcel_receipt),
-                "department": (parcel_receipt.recipient_department or "").strip() or "Chưa có phòng ban",
-                "parcels": [],
-                "received_day": parcel_receipt.received_at.date() if parcel_receipt.received_at else None,
-                "recipient_keys": set(),
-            }
-            recipient_group_map[group_key] = group
-            recipient_groups.append(group)
-        group["parcels"].append(parcel_receipt)
-        group["recipient_keys"].add(recipient_key)
-
-    for group in recipient_groups:
-        group["parcel_ids"] = [parcel.id for parcel in group["parcels"]]
-        group["count"] = len(group["parcels"])
-        group["parcel_ids_set"] = set(group["parcel_ids"])
-        group["recipient_count"] = len(group["recipient_keys"])
-        group["notified_count"] = sum(
-            1 for parcel in group["parcels"] if parcel.status_id == "pkg_at_clerical"
-        )
-        group["confirmed_count"] = sum(
-            1 for parcel in group["parcels"] if parcel.status_id == "pkg_processing"
-        )
-        group["notifiable_parcel_ids"] = [
-            parcel.id
-            for parcel in group["parcels"]
-            if parcel.status_id in {"pkg_received", "pkg_at_clerical"}
-        ]
-        group["handover_parcel_ids"] = [
-            parcel.id
-            for parcel in group["parcels"]
-            if parcel.status_id == "pkg_processing"
-        ]
-        group["notifiable_count"] = len(group["notifiable_parcel_ids"])
-        group["handover_count"] = len(group["handover_parcel_ids"])
-        group["status_label"] = (
-            "Chờ bàn giao"
-            if group["confirmed_count"] and group["notifiable_count"] == 0
-            else "Chưa nhận"
-        )
-        group["status_tone"] = "notified" if (
-            group["status_label"] == "Chờ bàn giao" or group["notified_count"]
-        ) else "received"
-        group["supports_batch_actions"] = group["recipient_count"] == 1
-        if grouping_mode == "day":
-            group["recipient_label"] = (
-                f"Nhận ngày {group['received_day']:%d/%m/%Y}"
-                if group["received_day"]
-                else "Chưa rõ ngày nhận"
-            )
-            group["department"] = (
-                f"{group['recipient_count']} người nhận · {group['count']} kiện"
-            )
-
-    batch_queryset = (
-        AdmParcelNotificationBatch.objects.filter(parcels__in=dispatches.object_list)
-        .select_related("reminder_schedule")
-        .prefetch_related("parcels")
-        .distinct()
-        .order_by("-created_at")
+    recipient_groups = _build_parcel_recipient_groups(
+        dispatches.object_list,
+        split_by_day=split_by_day,
     )
-    for group in recipient_groups:
-        related_batches = []
-        for batch in batch_queryset:
-            batch_parcel_ids = {parcel.id for parcel in batch.parcels.all()}
-            if batch_parcel_ids & group["parcel_ids_set"]:
-                related_batches.append(batch)
-            if len(related_batches) >= 5:
-                break
-        group["notification_batches"] = related_batches
-        group["notification_send_count"] = sum(
-            batch.notification_send_count or 1 for batch in related_batches
-        )
-        group["latest_notified_at"] = (
-            group["notification_batches"][0].notified_at
-            if group["notification_batches"]
-            else None
-        )
 
     current_recipient_batch = (
         AdmParcelRecipientImportBatch.objects.filter(is_current=True)
@@ -2259,8 +2285,9 @@ def parcel_receipt_list(request):
         "status_action_name": "admindocuments:parcel_receipt_change_status",
         "notify_action_name": "admindocuments:parcel_receipt_send_notification",
         "upload_action_name": "admindocuments:parcel_receipt_upload_images",
-        "parcel_confirm_base_url": request.build_absolute_uri(
-            reverse("admindocuments:parcel_receipt_confirm", args=["TOKEN"])
+        "parcel_confirm_base_url": _build_public_absolute_url(
+            request,
+            reverse("admindocuments:parcel_receipt_confirm", args=["TOKEN"]),
         ).replace("TOKEN", ""),
         "item_type_code": INCOMING_TYPE_PARCEL,
         "item_type_name": screen_meta["page_title"],
@@ -2396,6 +2423,7 @@ def parcel_auto_notify_settings(request):
 
 @login_required
 def parcel_receipt_item_partial(request, doc_id: int):
+    split_by_day = request.GET.get("split_by_day") == "1"
     parcel_receipt = get_object_or_404(
         AdmParcelReceipt.objects.select_related(
             "received_by",
@@ -2408,17 +2436,61 @@ def parcel_receipt_item_partial(request, doc_id: int):
         pk=doc_id,
     )
     _prepare_parcel_receipt_view_state(parcel_receipt)
+    group_queryset = AdmParcelReceipt.objects.select_related(
+        "received_by",
+        "receiving_company",
+        "status",
+        "recipient_directory",
+        "recipient_user",
+        "recipient_user__userprofile",
+    ).prefetch_related("images", "audit_logs", "audit_logs__actor")
+    if split_by_day and parcel_receipt.received_at:
+        group_queryset = group_queryset.filter(received_at__date=parcel_receipt.received_at.date())
+    elif parcel_receipt.recipient_directory_id:
+        group_queryset = group_queryset.filter(recipient_directory_id=parcel_receipt.recipient_directory_id)
+    else:
+        recipient_name = (parcel_receipt.recipient_name or "").strip()
+        if recipient_name:
+            group_queryset = group_queryset.filter(
+                recipient_directory__isnull=True,
+                recipient_name=recipient_name,
+            )
+        else:
+            group_queryset = group_queryset.filter(recipient_directory__isnull=True).filter(
+                Q(recipient_name__exact="")
+                | Q(recipient_name=AdmParcelReceiptForm.UNKNOWN_RECIPIENT_LABEL)
+            )
+    group_queryset = group_queryset.exclude(status_id__in=PARCEL_HIDDEN_LIST_STATUS_CODES).order_by("-received_at", "-id")
+    for sibling in group_queryset:
+        _prepare_parcel_receipt_view_state(sibling)
+    groups = _build_parcel_recipient_groups(group_queryset, split_by_day=split_by_day)
+    group_html = ""
+    if groups:
+        group_html = render_to_string(
+            "admindocuments/includes/parcel_recipient_group_card.html",
+            {
+                "group": groups[0],
+                "grouping_mode": "day" if split_by_day else "recipient",
+                "highlight_dispatch_id": "",
+                "upload_action_name": "admindocuments:parcel_receipt_upload_images",
+                "request": request,
+            },
+            request=request,
+        )
+    if parcel_receipt.status_id in PARCEL_HIDDEN_LIST_STATUS_CODES:
+        return JsonResponse({"remove": True, "group_html": group_html, "status": parcel_receipt.status.name})
     html = render_to_string(
         "admindocuments/includes/parcel_receipt_list_item.html",
         {
             "doc": parcel_receipt,
             "highlight_dispatch_id": "",
+            "grouping_mode": "day" if split_by_day else "recipient",
             "upload_action_name": "admindocuments:parcel_receipt_upload_images",
             "request": request,
         },
         request=request,
     )
-    return JsonResponse({"html": html, "status": parcel_receipt.status.name})
+    return JsonResponse({"html": html, "group_html": group_html, "status": parcel_receipt.status.name})
 
 
 @login_required
@@ -2657,17 +2729,42 @@ def parcel_receipt_send_group_notification(request):
         messages.error(request, "Bạn không có quyền gửi thông báo.")
         return render(request, "403.html", status=403)
     try:
-        parcels = _selected_parcels_for_group(request)
-        batch, _ = _send_parcel_group_notification_now(parcels, request.user, request)
-    except (ValueError, NotificationSendError) as exc:
-        messages.error(request, f"Gửi thông báo nhận thất bại: {exc}")
+        parcels = _selected_parcels_from_request(request)
+        grouped_parcels = {}
+        for parcel in parcels:
+            grouped_parcels.setdefault(_parcel_group_key(parcel), []).append(parcel)
+        batches = []
+        errors = []
+        for group_parcels in grouped_parcels.values():
+            try:
+                batch, _ = _send_parcel_group_notification_now(group_parcels, request.user, request)
+            except (ValueError, NotificationSendError) as exc:
+                errors.append(str(exc))
+            else:
+                batches.append(batch)
     except Exception as exc:
         messages.error(request, f"Gửi thông báo nhận thất bại: {exc}")
     else:
-        messages.success(
-            request,
-            f"Đã gửi thông báo cho {batch.parcel_count} bưu kiện của {batch.recipient_name or 'người nhận'}.",
-        )
+        if batches:
+            total_parcels = sum(batch.parcel_count for batch in batches)
+            if len(batches) == 1:
+                batch = batches[0]
+                messages.success(
+                    request,
+                    f"Đã gửi thông báo cho {batch.parcel_count} bưu kiện của {batch.recipient_name or 'người nhận'}.",
+                )
+            else:
+                messages.success(
+                    request,
+                    f"Đã gửi thông báo cho {total_parcels} bưu kiện của {len(batches)} người nhận.",
+                )
+        if errors:
+            messages.warning(request, "Một số nhóm chưa gửi được: " + " | ".join(errors[:3]))
+        if not batches and errors:
+            next_url = request.POST.get("next", "")
+            if next_url.startswith("/"):
+                return redirect(next_url)
+            return redirect("admindocuments:parcel_receipt_list")
 
     next_url = request.POST.get("next", "")
     if next_url.startswith("/"):
@@ -2683,39 +2780,67 @@ def parcel_receipt_mark_handed_over(request):
         messages.error(request, "Bạn không có quyền cập nhật bàn giao.")
         return render(request, "403.html", status=403)
 
-    try:
-        parcels = _selected_parcels_for_group(request)
-    except ValueError as exc:
-        messages.error(request, str(exc))
-    else:
-        invalid = [parcel for parcel in parcels if parcel.status_id != "pkg_processing"]
-        if invalid:
-            messages.error(request, "Chỉ bàn giao các bưu kiện đã được người nhận xác nhận.")
-        else:
-            now = timezone.now()
-            for parcel in parcels:
-                from_status = parcel.status_id
-                parcel.status_id = "pkg_done"
-                parcel.completed_at = now
-                parcel.updated_by = request.user
-                parcel.save(update_fields=["status", "completed_at", "updated_by", "updated_at"])
-                _cancel_parcel_reminder(parcel)
-                _log_parcel_event(
-                    parcel,
-                    AdmParcelReceiptLog.ACTION_HANDED_OVER,
-                    actor=request.user,
-                    from_status=from_status,
-                    to_status=parcel.status_id,
-                    note="Hành chính xác nhận đã bàn giao toàn bộ.",
-                )
-                for batch in parcel.notification_batches.select_related("reminder_schedule").all():
-                    _cancel_batch_reminder(batch)
-            messages.success(request, f"Đã bàn giao {len(parcels)} bưu kiện.")
+    messages.info(request, "Bước bàn giao đã được gộp. Khi người nhận xác nhận, bưu kiện sẽ tự hoàn tất.")
 
     next_url = request.POST.get("next", "")
     if next_url.startswith("/"):
         return redirect(next_url)
     return redirect("admindocuments:parcel_receipt_list")
+
+
+@login_required
+def parcel_receipt_assign_recipient(request, doc_id: int):
+    if request.method != "POST":
+        return redirect("admindocuments:parcel_receipt_list")
+    if not _has_incoming_dispatch_create_access(request.user):
+        messages.error(request, "Bạn không có quyền cập nhật người nhận.")
+        return render(request, "403.html", status=403)
+
+    parcel_receipt = get_object_or_404(AdmParcelReceipt, pk=doc_id)
+    recipient_id = (request.POST.get("recipient_directory_id") or "").strip()
+    if not recipient_id.isdigit():
+        messages.error(request, "Cần chọn người nhận từ danh bạ.")
+    else:
+        recipient = get_object_or_404(
+            AdmParcelRecipientCatalog,
+            pk=int(recipient_id),
+            is_active_member=True,
+        )
+        previous_recipient = _parcel_recipient_display(parcel_receipt)
+        parcel_receipt.recipient_directory = recipient
+        parcel_receipt.recipient_department = (recipient.department_name or "").strip()
+        parcel_receipt.recipient_name = recipient.full_name or ""
+        parcel_receipt.recipient_employee_code = recipient.employee_code or ""
+        parcel_receipt.recipient_gapo_user_id = recipient.gapo_user_id or ""
+        parcel_receipt.updated_by = request.user
+        parcel_receipt.save(
+            update_fields=[
+                "recipient_directory",
+                "recipient_department",
+                "recipient_name",
+                "recipient_employee_code",
+                "recipient_gapo_user_id",
+                "updated_by",
+                "updated_at",
+            ]
+        )
+        _log_parcel_event(
+            parcel_receipt,
+            AdmParcelReceiptLog.ACTION_UPDATED,
+            actor=request.user,
+            to_status=parcel_receipt.status_id,
+            note="Cập nhật người nhận.",
+            metadata={
+                "from_recipient": previous_recipient,
+                "to_recipient": _parcel_recipient_display(parcel_receipt),
+            },
+        )
+        messages.success(request, "Đã cập nhật người nhận.")
+
+    next_url = request.POST.get("next", "")
+    if next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect(f"{reverse('admindocuments:parcel_receipt_list')}?open={parcel_receipt.id}")
 
 
 @login_required
@@ -2766,14 +2891,17 @@ def parcel_receipt_confirm(request, token: str):
                 actual_receiver_name = _parcel_recipient_display(parcel_receipt)
             parcel_receipt.actual_receiver_name = actual_receiver_name
             parcel_receipt.actual_receiver_employee_code = actual_receiver_employee_code
-            parcel_receipt.status_id = "pkg_processing"
-            parcel_receipt.confirmed_at = timezone.now()
+            now = timezone.now()
+            parcel_receipt.status_id = "pkg_done"
+            parcel_receipt.confirmed_at = now
+            parcel_receipt.completed_at = now
             parcel_receipt.save(
                 update_fields=[
                     "actual_receiver_name",
                     "actual_receiver_employee_code",
                     "status",
                     "confirmed_at",
+                    "completed_at",
                     "updated_at",
                 ]
             )
@@ -2783,10 +2911,10 @@ def parcel_receipt_confirm(request, token: str):
                 AdmParcelReceiptLog.ACTION_CONFIRMED,
                 from_status=from_status,
                 to_status=parcel_receipt.status_id,
-                note="Người nhận xác nhận đã nhận hàng.",
+                note="Người nhận xác nhận đã nhận hàng từ lễ tân.",
                 metadata={"actual_receiver_name": actual_receiver_name},
             )
-            messages.success(request, "Đã xác nhận nhận hàng.")
+            messages.success(request, "Đã xác nhận nhận hàng và hoàn tất bưu kiện.")
             return redirect(request.path)
     return render(
         request,
@@ -2844,14 +2972,16 @@ def parcel_batch_confirm(request, token: str):
                     from_status = parcel.status_id
                     parcel.actual_receiver_name = actual_receiver_name
                     parcel.actual_receiver_employee_code = actual_receiver_employee_code
-                    parcel.status_id = "pkg_processing"
+                    parcel.status_id = "pkg_done"
                     parcel.confirmed_at = now
+                    parcel.completed_at = now
                     parcel.save(
                         update_fields=[
                             "actual_receiver_name",
                             "actual_receiver_employee_code",
                             "status",
                             "confirmed_at",
+                            "completed_at",
                             "updated_at",
                         ]
                     )
@@ -2861,14 +2991,14 @@ def parcel_batch_confirm(request, token: str):
                         AdmParcelReceiptLog.ACTION_CONFIRMED,
                         from_status=from_status,
                         to_status=parcel.status_id,
-                        note=f"Người nhận xác nhận theo lô #{batch.id}.",
+                        note=f"Người nhận xác nhận theo lô #{batch.id} và hoàn tất bưu kiện.",
                         metadata={
                             "batch_id": batch.id,
                             "actual_receiver_name": actual_receiver_name,
                         },
                     )
                 _cancel_batch_reminder(batch)
-            messages.success(request, "Đã xác nhận nhận hàng cho các bưu kiện đã chọn.")
+            messages.success(request, "Đã xác nhận nhận hàng và hoàn tất các bưu kiện đã chọn.")
             return redirect(request.path)
     return render(
         request,
@@ -2940,8 +3070,10 @@ def parcel_receipt_proxy_claim(request, token: str):
             from_status = parcel_receipt.status_id
             parcel_receipt.actual_receiver_name = actual_receiver_name
             parcel_receipt.actual_receiver_employee_code = actual_receiver_employee_code
-            parcel_receipt.status_id = "pkg_processing"
-            parcel_receipt.confirmed_at = timezone.now()
+            now = timezone.now()
+            parcel_receipt.status_id = "pkg_done"
+            parcel_receipt.confirmed_at = now
+            parcel_receipt.completed_at = now
             parcel_receipt.updated_by = request.user
             parcel_receipt.save(
                 update_fields=[
@@ -2949,6 +3081,7 @@ def parcel_receipt_proxy_claim(request, token: str):
                     "actual_receiver_employee_code",
                     "status",
                     "confirmed_at",
+                    "completed_at",
                     "updated_by",
                     "updated_at",
                 ]

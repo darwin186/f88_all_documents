@@ -147,122 +147,14 @@
 </div>
 {% endif %}
 
-<div class="parcel-app" x-data="{
-    activePane: 'receive',
+<div class="parcel-app" x-data="parcelReceiptApp({
+    initialPane: 'receive',
     openRecipientKey: '{{ selected_recipient_group_key|default:''|escapejs }}' || '{{ recipient_groups.0.key|default:''|escapejs }}' || null,
     openDispatchId: '{{ selected_dispatch.id|default:''|escapejs }}' || '{{ highlight_dispatch_id|default:''|escapejs }}' || null,
-    selectedParcelIds: [],
-    submittingActions: {},
-    refreshingDispatchId: null,
-    layoutMode: 'mobile',
-    init() {
-      const sync = () => {
-        const requestedPane = new URLSearchParams(window.location.search).get('pane');
-        const desktopViewport =
-          window.matchMedia('(min-width: 1280px)').matches ||
-          window.matchMedia('(min-width: 1024px) and (min-aspect-ratio: 16/10)').matches;
-        this.layoutMode = desktopViewport ? 'desktop' : 'compact';
-        if (this.layoutMode === 'desktop') {
-          this.activePane = 'all';
-        } else if (requestedPane && ['receive', 'list'].includes(requestedPane)) {
-          this.activePane = requestedPane;
-        } else if ('{{ selected_dispatch|yesno:'1,0' }}' === '1') {
-          this.activePane = 'list';
-        } else if (!['receive', 'list', 'detail'].includes(this.activePane)) {
-          this.activePane = 'receive';
-        }
-      };
-      sync();
-      window.addEventListener('resize', sync);
-    },
-    showPane(name) {
-      if (this.layoutMode === 'desktop') return true;
-      return this.activePane === name;
-    },
-    activate(name) {
-      if (this.layoutMode === 'desktop') return;
-      this.activePane = name;
-    },
-    toggleDispatch(id) {
-      const normalized = String(id);
-      this.openDispatchId = this.openDispatchId === normalized ? null : normalized;
-    },
-    toggleRecipient(key) {
-      const normalized = String(key);
-      this.openRecipientKey = this.openRecipientKey === normalized ? null : normalized;
-    },
-    isParcelSelected(id) {
-      return this.selectedParcelIds.includes(String(id));
-    },
-    toggleParcelSelection(id) {
-      const normalized = String(id);
-      if (this.isParcelSelected(normalized)) {
-        this.selectedParcelIds = this.selectedParcelIds.filter((item) => item !== normalized);
-      } else {
-        this.selectedParcelIds = [...this.selectedParcelIds, normalized];
-      }
-    },
-    selectedCountFor(ids, eligibleIds = null) {
-      let normalizedIds = ids.map((id) => String(id));
-      if (eligibleIds) {
-        const allowed = eligibleIds.map((id) => String(id));
-        normalizedIds = normalizedIds.filter((id) => allowed.includes(id));
-      }
-      return normalizedIds.filter((id) => this.selectedParcelIds.includes(String(id))).length;
-    },
-    selectedIdsFor(ids, eligibleIds = null) {
-      let normalizedIds = ids.map((id) => String(id));
-      if (eligibleIds) {
-        const allowed = eligibleIds.map((id) => String(id));
-        normalizedIds = normalizedIds.filter((id) => allowed.includes(id));
-      }
-      return normalizedIds.filter((id) => this.selectedParcelIds.includes(String(id))).join(',');
-    },
-    actionToken(groupKey, actionName) {
-      return `${groupKey}:${actionName}`;
-    },
-    isSubmittingAction(groupKey, actionName) {
-      return !!this.submittingActions[this.actionToken(groupKey, actionName)];
-    },
-    startSubmittingAction(groupKey, actionName) {
-      this.submittingActions = {
-        ...this.submittingActions,
-        [this.actionToken(groupKey, actionName)]: true,
-      };
-    },
-    toggleRecipientSelection(ids) {
-      const normalizedIds = ids.map((id) => String(id));
-      const allSelected = normalizedIds.every((id) => this.selectedParcelIds.includes(id));
-      if (allSelected) {
-        this.selectedParcelIds = this.selectedParcelIds.filter((id) => !normalizedIds.includes(id));
-      } else {
-        this.selectedParcelIds = [...new Set([...this.selectedParcelIds, ...normalizedIds])];
-      }
-    },
-    async refreshParcelItem(id) {
-      const normalized = String(id);
-      this.refreshingDispatchId = normalized;
-      try {
-        const response = await fetch(`{% url 'admindocuments:parcel_receipt_item_partial' 0 %}`.replace('/0/item/', `/${normalized}/item/`), {
-          headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        });
-        if (!response.ok) throw new Error('refresh failed');
-        const payload = await response.json();
-        const current = document.getElementById(`parcel-item-${normalized}`);
-        if (current && payload.html) {
-          current.outerHTML = payload.html;
-          const nextNode = document.getElementById(`parcel-item-${normalized}`);
-          if (nextNode && window.Alpine) {
-            window.Alpine.initTree(nextNode);
-          }
-        }
-      } catch (error) {
-        console.error(error);
-      } finally {
-        this.refreshingDispatchId = null;
-      }
-    }
-  }">
+    hasSelectedDispatch: '{{ selected_dispatch|yesno:'1,0' }}' === '1',
+    itemPartialUrlTemplate: `{% url 'admindocuments:parcel_receipt_item_partial' 0 %}`,
+    emptyStateHtml: `<div class='parcel-panel rounded-[28px] border border-dashed border-slate-300 p-10 text-center text-sm text-slate-500'>Chưa có bưu kiện nào trong danh sách chưa nhận.</div>`
+  })">
   <div class="parcel-shell min-h-[calc(100vh-4rem)] rounded-[32px] border border-white/70 p-4 sm:p-6 xl:p-8">
     <div class="mx-auto max-w-7xl space-y-6">
       <div class="lg:hidden">
@@ -554,121 +446,9 @@
             </form>
           </div>
 
-          <div class="space-y-3">
+          <div id="parcel-recipient-groups" class="space-y-3">
             {% for group in recipient_groups %}
-            <div class="parcel-panel block w-full overflow-hidden rounded-[28px] border border-white/70 p-4 transition hover:-translate-y-0.5 hover:shadow-[0_22px_42px_rgba(15,23,42,0.1)]">
-              <button type="button"
-                      @click="toggleRecipient('{{ group.key }}')"
-                      class="group block w-full text-left">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0 flex-1">
-                    <div class="text-[12px] font-bold leading-5 text-slate-900">{{ group.recipient_label }}</div>
-                    <div class="mt-2 flex flex-wrap items-center gap-2">
-                      <span class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-semibold text-slate-600">
-                        <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                        {{ group.count }} kiện chưa nhận
-                      </span>
-                    </div>
-                  </div>
-                  <svg xmlns="http://www.w3.org/2000/svg" class="mt-0.5 h-5 w-5 shrink-0 text-slate-300 transition duration-200 group-hover:text-slate-500" :class="openRecipientKey === '{{ group.key }}' ? 'rotate-90 text-slate-500' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m9 6 6 6-6 6"/>
-                  </svg>
-                </div>
-              </button>
-
-              <div x-cloak x-show="openRecipientKey === '{{ group.key }}'" x-transition.opacity.duration.150ms class="mt-4 space-y-3 border-t border-slate-200/80 pt-4">
-                <div class="flex flex-col gap-2 rounded-[20px] bg-slate-50 px-3 py-3 text-[11px] text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                  <div class="min-w-0">
-                    <div class="font-semibold text-slate-700">{{ group.department }}</div>
-                    <div class="mt-1 text-[10px] text-slate-400">
-                      {{ group.notified_count }} đã thông báo · {{ group.confirmed_count }} đã xác nhận
-                    </div>
-                    {% if group.notification_send_count %}
-                    <div class="mt-1 text-[10px] text-slate-400">
-                      Đã gửi {{ group.notification_send_count }} lần{% if group.latest_notified_at %} · gần nhất {{ group.latest_notified_at|date:"d/m H:i" }}{% endif %}
-                    </div>
-                    {% endif %}
-                  </div>
-                  {% if not group.supports_batch_actions %}
-                  <div class="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-[10px] font-semibold text-amber-700">
-                    Đang xem theo ngày, mở từng kiện để xử lý
-                  </div>
-                  {% else %}
-                  <div class="flex flex-wrap items-center gap-2">
-                    <button type="button"
-                            @click.stop="toggleRecipientSelection({{ group.parcel_ids }})"
-                            class="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600">
-                      <span x-show="selectedCountFor({{ group.parcel_ids }}) < {{ group.count }}">Chọn tất cả</span>
-                      <span x-show="selectedCountFor({{ group.parcel_ids }}) === {{ group.count }}">Bỏ chọn</span>
-                    </button>
-                    <div class="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-[10px] font-semibold text-emerald-700"
-                         x-text="selectedCountFor({{ group.parcel_ids }}) + '/{{ group.count }} đã chọn'"></div>
-                    <form method="post"
-                          action="{% url 'admindocuments:parcel_receipt_send_group_notification' %}"
-                          @click.stop
-                          @submit="startSubmittingAction('{{ group.key }}', 'notify')">
-                      {% csrf_token %}
-                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                      <input type="hidden" name="selected_parcels" :value="selectedIdsFor({{ group.parcel_ids }}, {{ group.notifiable_parcel_ids }})">
-                      <button type="submit"
-                              class="rounded-full bg-slate-900 px-3 py-1.5 text-[10px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-                              :disabled="selectedCountFor({{ group.parcel_ids }}, {{ group.notifiable_parcel_ids }}) === 0 || isSubmittingAction('{{ group.key }}', 'notify')">
-                        <span x-show="!isSubmittingAction('{{ group.key }}', 'notify')">
-                          {% if group.notification_send_count %}Gửi lại thông báo{% else %}Gửi thông báo{% endif %}
-                        </span>
-                        <span x-cloak x-show="isSubmittingAction('{{ group.key }}', 'notify')">Đang gửi...</span>
-                      </button>
-                    </form>
-                    <form method="post"
-                          action="{% url 'admindocuments:parcel_receipt_mark_handed_over' %}"
-                          @click.stop
-                          @submit="startSubmittingAction('{{ group.key }}', 'handover')">
-                      {% csrf_token %}
-                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                      <input type="hidden" name="selected_parcels" :value="selectedIdsFor({{ group.parcel_ids }}, {{ group.handover_parcel_ids }})">
-                      <button type="submit"
-                              class="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-semibold text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
-                              :disabled="selectedCountFor({{ group.parcel_ids }}, {{ group.handover_parcel_ids }}) === 0 || isSubmittingAction('{{ group.key }}', 'handover')">
-                        <span x-show="!isSubmittingAction('{{ group.key }}', 'handover')">Đã bàn giao đã chọn</span>
-                        <span x-cloak x-show="isSubmittingAction('{{ group.key }}', 'handover')">Đang cập nhật...</span>
-                      </button>
-                    </form>
-                  </div>
-                  {% endif %}
-                </div>
-                {% if group.notification_batches %}
-                <details class="rounded-[20px] border border-slate-200 bg-white px-3 py-3">
-                  <summary class="cursor-pointer list-none text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    Lịch sử thông báo
-                  </summary>
-                  <div class="mt-3 space-y-2">
-                    {% for batch in group.notification_batches %}
-                    <div class="rounded-2xl bg-slate-50 px-3 py-2.5 text-[10px] text-slate-500">
-                      <div class="flex flex-wrap items-center justify-between gap-2">
-                        <div class="font-semibold text-slate-700">
-                          Batch #{{ batch.id }} · {{ batch.parcel_count }} kiện
-                        </div>
-                        <span class="parcel-status-pill inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold"
-                              data-tone="{% if batch.status == 'confirmed' %}done{% else %}notified{% endif %}">
-                          <span class="h-1.5 w-1.5 rounded-full bg-current"></span>
-                          {% if batch.status == 'confirmed' %}Đã xác nhận{% else %}Đã gửi{% endif %}
-                        </span>
-                      </div>
-                      <div class="mt-1 text-slate-400">
-                        {% if batch.notified_at %}{{ batch.notified_at|date:"d/m/Y H:i" }}{% endif %}
-                        {% if batch.confirmed_at %} · xác nhận {{ batch.confirmed_at|date:"d/m/Y H:i" }}{% endif %}
-                        {% if batch.reminder_scheduled_at %} · nhắc lại {{ batch.reminder_scheduled_at|date:"d/m/Y H:i" }}{% endif %}
-                      </div>
-                    </div>
-                    {% endfor %}
-                  </div>
-                </details>
-                {% endif %}
-                {% for doc in group.parcels %}
-                {% include "admindocuments/includes/parcel_receipt_list_item.html" with doc=doc grouping_mode=grouping_mode %}
-                {% endfor %}
-              </div>
-            </div>
+            {% include "admindocuments/includes/parcel_recipient_group_card.html" with group=group grouping_mode=grouping_mode %}
             {% empty %}
             <div class="parcel-panel rounded-[28px] border border-dashed border-slate-300 p-10 text-center text-sm text-slate-500">
               Chưa có bưu kiện nào trong danh sách chưa nhận.
@@ -697,6 +477,168 @@
 </div>
 
 <script>
+  function parcelReceiptApp(config) {
+    return {
+      activePane: config.initialPane || 'receive',
+      openRecipientKey: config.openRecipientKey || null,
+      openDispatchId: config.openDispatchId || null,
+      hasSelectedDispatch: !!config.hasSelectedDispatch,
+      itemPartialUrlTemplate: config.itemPartialUrlTemplate,
+      emptyStateHtml: config.emptyStateHtml,
+      selectedParcelIds: [],
+      submittingActions: {},
+      refreshingDispatchId: null,
+      layoutMode: 'mobile',
+      init() {
+        const sync = () => {
+          const requestedPane = new URLSearchParams(window.location.search).get('pane');
+          const desktopViewport =
+            window.matchMedia('(min-width: 1280px)').matches ||
+            window.matchMedia('(min-width: 1024px) and (min-aspect-ratio: 16/10)').matches;
+          this.layoutMode = desktopViewport ? 'desktop' : 'compact';
+          if (this.layoutMode === 'desktop') {
+            this.activePane = 'all';
+          } else if (requestedPane && ['receive', 'list'].includes(requestedPane)) {
+            this.activePane = requestedPane;
+          } else if (this.hasSelectedDispatch) {
+            this.activePane = 'list';
+          } else if (!['receive', 'list', 'detail'].includes(this.activePane)) {
+            this.activePane = 'receive';
+          }
+        };
+        sync();
+        window.addEventListener('resize', sync);
+      },
+      showPane(name) {
+        if (this.layoutMode === 'desktop') return true;
+        return this.activePane === name;
+      },
+      activate(name) {
+        if (this.layoutMode === 'desktop') return;
+        this.activePane = name;
+      },
+      toggleDispatch(id) {
+        const normalized = String(id);
+        this.openDispatchId = this.openDispatchId === normalized ? null : normalized;
+      },
+      toggleRecipient(key) {
+        const normalized = String(key);
+        this.openRecipientKey = this.openRecipientKey === normalized ? null : normalized;
+      },
+      isParcelSelected(id) {
+        return this.selectedParcelIds.includes(String(id));
+      },
+      toggleParcelSelection(id) {
+        const normalized = String(id);
+        if (this.isParcelSelected(normalized)) {
+          this.selectedParcelIds = this.selectedParcelIds.filter((item) => item !== normalized);
+        } else {
+          this.selectedParcelIds = [...this.selectedParcelIds, normalized];
+        }
+      },
+      selectedCountFor(ids, eligibleIds = null) {
+        let normalizedIds = ids.map((id) => String(id));
+        if (eligibleIds) {
+          const allowed = eligibleIds.map((id) => String(id));
+          normalizedIds = normalizedIds.filter((id) => allowed.includes(id));
+        }
+        return normalizedIds.filter((id) => this.selectedParcelIds.includes(String(id))).length;
+      },
+      selectedIdsFor(ids, eligibleIds = null) {
+        let normalizedIds = ids.map((id) => String(id));
+        if (eligibleIds) {
+          const allowed = eligibleIds.map((id) => String(id));
+          normalizedIds = normalizedIds.filter((id) => allowed.includes(id));
+        }
+        return normalizedIds.filter((id) => this.selectedParcelIds.includes(String(id))).join(',');
+      },
+      actionToken(groupKey, actionName) {
+        return `${groupKey}:${actionName}`;
+      },
+      isSubmittingAction(groupKey, actionName) {
+        return !!this.submittingActions[this.actionToken(groupKey, actionName)];
+      },
+      startSubmittingAction(groupKey, actionName) {
+        this.submittingActions = {
+          ...this.submittingActions,
+          [this.actionToken(groupKey, actionName)]: true,
+        };
+      },
+      toggleRecipientSelection(ids) {
+        const normalizedIds = ids.map((id) => String(id));
+        const allSelected = normalizedIds.every((id) => this.selectedParcelIds.includes(id));
+        if (allSelected) {
+          this.selectedParcelIds = this.selectedParcelIds.filter((id) => !normalizedIds.includes(id));
+        } else {
+          this.selectedParcelIds = [...new Set([...this.selectedParcelIds, ...normalizedIds])];
+        }
+      },
+      async refreshParcelItem(id) {
+        const normalized = String(id);
+        this.refreshingDispatchId = normalized;
+        try {
+          const url = new URL(this.itemPartialUrlTemplate.replace('/0/item/', `/${normalized}/item/`), window.location.origin);
+          if (new URLSearchParams(window.location.search).get('split_by_day') === '1') {
+            url.searchParams.set('split_by_day', '1');
+          }
+          const response = await fetch(url, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          });
+          if (!response.ok) throw new Error('refresh failed');
+          const payload = await response.json();
+          const current = document.getElementById(`parcel-item-${normalized}`);
+          const groupNode = current ? current.closest('[data-recipient-group]') : null;
+          if (payload.remove) {
+            this.selectedParcelIds = this.selectedParcelIds.filter((itemId) => itemId !== normalized);
+            if (this.openDispatchId === normalized) this.openDispatchId = null;
+            if (groupNode && !payload.group_html && this.openRecipientKey === groupNode.dataset.recipientGroup) {
+              this.openRecipientKey = null;
+            }
+            if (groupNode && payload.group_html) {
+              const fragment = document.createElement('template');
+              fragment.innerHTML = payload.group_html.trim();
+              const nextGroup = fragment.content.firstElementChild;
+              groupNode.replaceWith(nextGroup);
+              if (nextGroup && window.Alpine) {
+                window.Alpine.initTree(nextGroup);
+              }
+            } else if (groupNode) {
+              groupNode.remove();
+            } else if (current) {
+              current.remove();
+            }
+            const listRoot = document.getElementById('parcel-recipient-groups');
+            if (listRoot && !listRoot.querySelector('[data-recipient-group]')) {
+              listRoot.innerHTML = this.emptyStateHtml;
+            }
+            return;
+          }
+          if (groupNode && payload.group_html) {
+            const fragment = document.createElement('template');
+            fragment.innerHTML = payload.group_html.trim();
+            const nextGroup = fragment.content.firstElementChild;
+            groupNode.replaceWith(nextGroup);
+            if (nextGroup && window.Alpine) {
+              window.Alpine.initTree(nextGroup);
+            }
+            return;
+          }
+          if (current && payload.html) {
+            current.outerHTML = payload.html;
+            const nextNode = document.getElementById(`parcel-item-${normalized}`);
+            if (nextNode && window.Alpine) {
+              window.Alpine.initTree(nextNode);
+            }
+          }
+        } catch (error) {
+          console.error(error);
+        } finally {
+          this.refreshingDispatchId = null;
+        }
+      }
+    };
+  }
+
   function selectParcelCompany(companyCode) {
     const codeInput = document.getElementById("id_receiving_company");
     if (codeInput) codeInput.value = companyCode || "";
@@ -848,6 +790,7 @@
   }
 
   const proxyRecipientSearchTimers = {};
+  const assignRecipientSearchTimers = {};
 
   function renderProxyRecipientResults(dispatchId, results) {
     const container = document.getElementById(`proxyRecipientResults-${dispatchId}`);
@@ -893,6 +836,76 @@
       item.classList.remove("border-emerald-400", "bg-emerald-50");
     });
     button.classList.add("border-emerald-400", "bg-emerald-50");
+  }
+
+  function renderAssignRecipientResults(dispatchId, results) {
+    const container = document.getElementById(`assignRecipientResults-${dispatchId}`);
+    if (!container) return;
+    if (!results.length) {
+      container.innerHTML = '<div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-[11px] text-slate-400">Không có kết quả phù hợp.</div>';
+      return;
+    }
+    container.innerHTML = results.map((item) => `
+      <button type="button"
+              class="flex w-full items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-300 hover:bg-emerald-50/40"
+              data-assign-dispatch-id="${dispatchId}"
+              data-recipient-id="${item.id}"
+              data-recipient-department="${(item.department_name || '').replace(/"/g, '&quot;')}"
+              data-recipient-label="${item.label.replace(/"/g, '&quot;')}"
+              onclick="selectAssignedRecipient(this)">
+        <div class="min-w-0">
+          <div class="text-[11px] font-semibold text-slate-800">${item.full_name || '-'}</div>
+          <div class="mt-1 text-[10px] text-slate-500">${item.employee_code || 'Không có mã NV'} · ${item.department_name || 'Chưa có phòng ban'}</div>
+        </div>
+        <div class="text-right text-[10px] text-slate-400">
+          <div>${item.phone_number || ''}</div>
+          <div class="mt-1">${item.email || ''}</div>
+        </div>
+      </button>
+    `).join("");
+  }
+
+  function selectAssignedRecipient(button) {
+    const dispatchId = button.dataset.assignDispatchId;
+    if (!dispatchId) return;
+    const idInput = document.getElementById(`assignRecipientId-${dispatchId}`);
+    const departmentInput = document.getElementById(`assignRecipientDepartment-${dispatchId}`);
+    const selectedLabel = document.getElementById(`assignRecipientSelectedLabel-${dispatchId}`);
+    if (idInput) idInput.value = button.dataset.recipientId || "";
+    if (departmentInput) departmentInput.value = button.dataset.recipientDepartment || "";
+    if (selectedLabel) {
+      selectedLabel.textContent = button.dataset.recipientLabel || "Chưa chọn người nhận";
+      selectedLabel.classList.remove("text-slate-400", "border-dashed");
+      selectedLabel.classList.add("text-slate-800", "font-medium");
+    }
+    document.querySelectorAll(`[data-assign-dispatch-id="${dispatchId}"]`).forEach((item) => {
+      item.classList.remove("border-emerald-400", "bg-emerald-50");
+    });
+    button.classList.add("border-emerald-400", "bg-emerald-50");
+  }
+
+  function queueAssignRecipientSearch(dispatchId) {
+    window.clearTimeout(assignRecipientSearchTimers[dispatchId]);
+    assignRecipientSearchTimers[dispatchId] = window.setTimeout(() => {
+      searchAssignRecipient(dispatchId);
+    }, 220);
+  }
+
+  async function searchAssignRecipient(dispatchId) {
+    const keyword = (document.getElementById(`assignRecipientSearchInput-${dispatchId}`)?.value || "").trim();
+    const container = document.getElementById(`assignRecipientResults-${dispatchId}`);
+    if (!container) return;
+    if (!keyword) {
+      container.innerHTML = "";
+      return;
+    }
+    const params = new URLSearchParams();
+    params.set("q", keyword);
+    const response = await fetch("{% url 'admindocuments:parcel_recipient_search' %}?" + params.toString(), {
+      headers: {"X-Requested-With": "XMLHttpRequest"},
+    });
+    const payload = await response.json();
+    renderAssignRecipientResults(dispatchId, payload.results || []);
   }
 
   function queueProxyRecipientSearch(dispatchId) {

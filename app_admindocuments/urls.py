@@ -46,6 +46,11 @@ urlpatterns = [
         name="parcel_receipt_send_notification",
     ),
     path(
+        "parcel-receipts/<int:doc_id>/assign-recipient/",
+        views.parcel_receipt_assign_recipient,
+        name="parcel_receipt_assign_recipient",
+    ),
+    path(
         "parcel-receipts/notify-selected/",
         views.parcel_receipt_send_group_notification,
         name="parcel_receipt_send_group_notification",

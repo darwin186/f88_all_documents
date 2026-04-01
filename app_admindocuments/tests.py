@@ -256,8 +256,8 @@ class AdmIncomingDispatchTests(TestCase):
             ),
             is_current=True,
             imported_by=cls.admin_user,
-            imported_rows=2,
-            active_rows=2,
+            imported_rows=3,
+            active_rows=3,
         )
         cls.recipient_entry = AdmParcelRecipientCatalog.objects.create(
             import_batch=cls.recipient_batch,
@@ -271,6 +271,20 @@ class AdmIncomingDispatchTests(TestCase):
             birth_date="01/01/1990",
             department_full="Tap doan F88 || Hanh chinh nhan su",
             department_name="Hanh chinh nhan su",
+            is_active_member=True,
+        )
+        cls.recipient_entry_2 = AdmParcelRecipientCatalog.objects.create(
+            import_batch=cls.recipient_batch,
+            row_number=3,
+            gapo_user_id="10002",
+            employee_code="E002",
+            full_name="Nhan Vien Moi",
+            email="recipient2@f88.vn",
+            phone_number="84900000001",
+            phone_number_normalized="84900000001",
+            birth_date="02/02/1992",
+            department_full="Tap doan F88 || Tai chinh ke toan",
+            department_name="Tai chinh ke toan",
             is_active_member=True,
         )
 
@@ -566,6 +580,63 @@ class AdmIncomingDispatchTests(TestCase):
         self.assertIn("/admindocuments/parcel-receipts/batches/confirm/", layout["children"][2]["children"][0]["deep_link"])
         mocked_apply_async.assert_called_once()
 
+    @patch("app_admindocuments.views.send_via_gapo")
+    @patch("app_admindocuments.views.send_gapo_scheduled_message.apply_async")
+    def test_group_notification_action_splits_selected_parcels_by_recipient(self, mocked_apply_async, mocked_send_via_gapo):
+        mocked_send_via_gapo.return_value = {"ok": True}
+        other_recipient = AdmParcelRecipientCatalog.objects.create(
+            import_batch=self.current_batch,
+            gapo_user_id="10002",
+            employee_code="E002",
+            full_name="Nguoi Khac",
+            email="other@f88.vn",
+            phone_number="84911111111",
+            phone_number_normalized="84911111111",
+            department_full="Tap doan F88 || Hanh chinh nhan su",
+            department_name="Hanh chinh nhan su",
+            is_active_member=True,
+        )
+        parcel_one = AdmParcelReceipt.objects.create(
+            document_number="PK-GD-01",
+            received_by=self.vanthu_user,
+            recipient_department="Hanh chinh nhan su",
+            recipient_directory=self.recipient_entry,
+            recipient_name="Nhan Vien",
+            recipient_employee_code="E001",
+            recipient_gapo_user_id="10001",
+            parcel_type="hoso",
+            sender_unit="Vnpost",
+            receiving_company=self.company_f88,
+            status=self.dispatch_status,
+            created_by=self.vanthu_user,
+        )
+        parcel_two = AdmParcelReceipt.objects.create(
+            document_number="PK-GD-02",
+            received_by=self.vanthu_user,
+            recipient_department="Hanh chinh nhan su",
+            recipient_directory=other_recipient,
+            recipient_name="Nguoi Khac",
+            recipient_employee_code="E002",
+            recipient_gapo_user_id="10002",
+            parcel_type="hanghoa",
+            sender_unit="Shopee",
+            receiving_company=self.company_f88,
+            status=self.dispatch_status,
+            created_by=self.vanthu_user,
+        )
+
+        self.client.login(username="vanthu", password="secret")
+        response = self.client.post(
+            reverse("admindocuments:parcel_receipt_send_group_notification"),
+            data={
+                "selected_parcels": f"{parcel_one.id},{parcel_two.id}",
+                "next": reverse("admindocuments:parcel_receipt_list"),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(mocked_send_via_gapo.call_count, 2)
+
     def test_batch_confirmation_link_confirms_all_selected_parcels(self):
         parcel_one = AdmParcelReceipt.objects.create(
             document_number="PK-C-01",
@@ -615,13 +686,14 @@ class AdmIncomingDispatchTests(TestCase):
         parcel_one.refresh_from_db()
         parcel_two.refresh_from_db()
         batch.refresh_from_db()
-        self.assertEqual(parcel_one.status_id, self.dispatch_status_3.code)
-        self.assertEqual(parcel_two.status_id, self.dispatch_status_3.code)
+        self.assertEqual(parcel_one.status_id, self.dispatch_status_4.code)
+        self.assertEqual(parcel_two.status_id, self.dispatch_status_4.code)
         self.assertEqual(batch.status, AdmParcelNotificationBatch.Status.CONFIRMED)
         self.assertIsNotNone(parcel_one.confirmed_at)
+        self.assertIsNotNone(parcel_one.completed_at)
         self.assertIsNotNone(batch.confirmed_at)
 
-    def test_mark_handed_over_selected_moves_parcels_to_done(self):
+    def test_mark_handed_over_route_is_deprecated_after_three_step_flow(self):
         self.client.login(username="vanthu", password="secret")
         parcel_one = AdmParcelReceipt.objects.create(
             document_number="PK-H-01",
@@ -664,9 +736,8 @@ class AdmIncomingDispatchTests(TestCase):
         self.assertEqual(response.status_code, 200)
         parcel_one.refresh_from_db()
         parcel_two.refresh_from_db()
-        self.assertEqual(parcel_one.status_id, self.dispatch_status_4.code)
-        self.assertEqual(parcel_two.status_id, self.dispatch_status_4.code)
-        self.assertIsNotNone(parcel_one.completed_at)
+        self.assertEqual(parcel_one.status_id, self.dispatch_status_3.code)
+        self.assertEqual(parcel_two.status_id, self.dispatch_status_3.code)
 
     def test_parcel_form_rejects_recipient_outside_department(self):
         other_recipient = AdmParcelRecipientCatalog.objects.create(
@@ -1025,10 +1096,72 @@ class AdmIncomingDispatchTests(TestCase):
         self.assertEqual(response.status_code, 302)
         parcel.refresh_from_db()
         reminder.refresh_from_db()
-        self.assertEqual(parcel.status_id, self.dispatch_status_3.code)
+        self.assertEqual(parcel.status_id, self.dispatch_status_4.code)
         self.assertIsNotNone(parcel.confirmed_at)
+        self.assertIsNotNone(parcel.completed_at)
         self.assertEqual(parcel.actual_receiver_name, "Nhan Vien")
         self.assertEqual(reminder.status, GapoScheduledMessage.Status.CANCELLED)
+
+    def test_assign_recipient_after_unknown_receipt(self):
+        self.client.login(username="vanthu", password="secret")
+        parcel = AdmParcelReceipt.objects.create(
+            document_number="PK-UNKNOWN-01",
+            received_by=self.vanthu_user,
+            recipient_department=AdmParcelReceiptForm.UNKNOWN_RECIPIENT_LABEL,
+            recipient_name=AdmParcelReceiptForm.UNKNOWN_RECIPIENT_LABEL,
+            parcel_type="hoso",
+            sender_unit="Viettel Post",
+            receiving_company=self.company_f88,
+            status=self.dispatch_status,
+            created_by=self.vanthu_user,
+        )
+
+        response = self.client.post(
+            reverse("admindocuments:parcel_receipt_assign_recipient", args=[parcel.id]),
+            data={
+                "recipient_directory_id": str(self.recipient_entry.id),
+                "recipient_department": self.recipient_entry.department_name,
+                "next": reverse("admindocuments:parcel_receipt_list"),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        parcel.refresh_from_db()
+        self.assertEqual(parcel.recipient_directory_id, self.recipient_entry.id)
+        self.assertEqual(parcel.recipient_name, self.recipient_entry.full_name)
+        self.assertEqual(parcel.recipient_department, self.recipient_entry.department_name)
+
+    def test_reassign_recipient_after_initial_assignment(self):
+        self.client.login(username="vanthu", password="secret")
+        parcel = AdmParcelReceipt.objects.create(
+            document_number="PK-REASSIGN-01",
+            received_by=self.vanthu_user,
+            recipient_directory=self.recipient_entry,
+            recipient_department=self.recipient_entry.department_name,
+            recipient_name=self.recipient_entry.full_name,
+            recipient_employee_code=self.recipient_entry.employee_code,
+            recipient_gapo_user_id=self.recipient_entry.gapo_user_id,
+            parcel_type="hoso",
+            sender_unit="Viettel Post",
+            receiving_company=self.company_f88,
+            status=self.dispatch_status,
+            created_by=self.vanthu_user,
+        )
+
+        response = self.client.post(
+            reverse("admindocuments:parcel_receipt_assign_recipient", args=[parcel.id]),
+            data={
+                "recipient_directory_id": str(self.recipient_entry_2.id),
+                "recipient_department": self.recipient_entry_2.department_name,
+                "next": reverse("admindocuments:parcel_receipt_list"),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        parcel.refresh_from_db()
+        self.assertEqual(parcel.recipient_directory_id, self.recipient_entry_2.id)
+        self.assertEqual(parcel.recipient_name, self.recipient_entry_2.full_name)
+        self.assertEqual(parcel.recipient_department, self.recipient_entry_2.department_name)
 
     def test_register_proxy_saves_name_and_employee_code(self):
         self.client.login(username="vanthu", password="secret")
