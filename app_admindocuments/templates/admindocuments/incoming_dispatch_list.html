@@ -50,46 +50,74 @@
   {% endif %}
 </div>
 
-<form method="get" class="mb-4 bg-white rounded-lg shadow p-3 grid lg:grid-cols-5 gap-2 items-end">
-  <div class="lg:col-span-2">
-    <label class="block text-[11px] text-gray-500 mb-1">Tìm kiếm</label>
-    <input type="text" name="q" value="{{ q }}" placeholder="{{ search_placeholder }}"
-           class="border border-gray-300 rounded-lg px-3 py-1.5 w-full text-xs focus:outline-none focus:ring focus:ring-green-300" />
-  </div>
-  <div>
-    <label class="block text-[11px] text-gray-500 mb-1">Tình trạng</label>
-    <select name="status" class="border border-gray-300 rounded-lg px-3 py-1.5 w-full text-xs">
-      <option value="">Tất cả</option>
-      {% for st in status_options %}
-      <option value="{{ st.code }}" {% if selected_status == st.code %}selected{% endif %}>{{ st.name }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <div>
-    <label class="block text-[11px] text-gray-500 mb-1">Phòng ban xử lý</label>
-    <select name="department" class="border border-gray-300 rounded-lg px-3 py-1.5 w-full text-xs">
-      <option value="">Tất cả</option>
+<form id="incomingDispatchFilterForm" method="get" class="mb-4 sticky top-2 z-20 rounded-2xl border border-gray-100 bg-white/92 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80 p-2.5">
+  <input type="hidden" name="company" value="{{ selected_company }}">
+  <input type="hidden" name="status" value="{{ selected_status }}">
+  <div class="grid gap-2 xl:grid-cols-[1.05fr_1.45fr_1.15fr_0.95fr] items-stretch">
+    <div class="rounded-2xl border border-gray-200 bg-gray-50/70 px-2.5 py-2 min-h-[72px] flex items-center">
+      <div class="inline-flex min-h-[40px] max-w-full flex-wrap items-center gap-1 rounded-2xl bg-white p-1 shadow-sm ring-1 ring-gray-100">
+        <button type="button"
+                onclick="setIncomingQuickFilter('company','')"
+                class="px-2.5 py-1 rounded-xl text-[10px] font-medium transition {% if not selected_company %}bg-[#14213d] text-white shadow-sm{% else %}text-gray-500 hover:bg-gray-100{% endif %}">
+          Tất cả
+        </button>
+        {% for company in companies %}
+        <button type="button"
+                onclick="setIncomingQuickFilter('company','{{ company.code }}')"
+                class="px-2.5 py-1 rounded-xl text-[10px] font-medium transition {% if selected_company == company.code %}bg-[#14213d] text-white shadow-sm{% else %}text-gray-500 hover:bg-gray-100{% endif %}">
+          {{ company.code }}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="rounded-2xl border border-gray-200 bg-gray-50/70 px-2.5 py-2 min-h-[72px] flex items-center">
+      <div class="inline-flex min-h-[40px] max-w-full flex-wrap items-center gap-1 rounded-2xl bg-white p-1 shadow-sm ring-1 ring-gray-100">
+        <button type="button"
+                onclick="setIncomingQuickFilter('status','')"
+                class="px-2.5 py-1 rounded-xl text-[10px] font-medium transition {% if not selected_status %}bg-[#14213d] text-white shadow-sm{% else %}text-gray-500 hover:bg-gray-100{% endif %}">
+          Tất cả
+        </button>
+        {% for st in status_options %}
+        <button type="button"
+                onclick="setIncomingQuickFilter('status','{{ st.code }}')"
+                class="px-2.5 py-1 rounded-xl text-[10px] font-semibold transition"
+                style="{% if selected_status == st.code %}background-color:{{ st.badge_bg_color|default:'#F3F4F6' }};color:{{ st.badge_text_color|default:'#374151' }};box-shadow:inset 0 0 0 1px {{ st.badge_bg_color|default:'#D1D5DB' }};{% else %}color:#6B7280;{% endif %}">
+          {{ st.name }}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="rounded-2xl border border-gray-200 bg-gray-50/70 px-2.5 py-2 min-h-[72px] flex items-center">
+      <div class="flex min-h-[40px] w-full items-center gap-2 rounded-2xl bg-white px-3 py-2 shadow-sm ring-1 ring-gray-100">
+        <button type="submit"
+                class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                aria-label="Tìm kiếm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35m1.85-5.15a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
+          </svg>
+        </button>
+        <input type="text" name="q" value="{{ q }}" placeholder="{{ search_placeholder }}"
+               class="w-full border-0 bg-transparent text-[11px] placeholder:text-[10px] focus:outline-none focus:ring-0 focus:border-0" />
+        <button type="button"
+                onclick="clearIncomingQueryFilter()"
+                class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-gray-300 transition hover:bg-gray-100 hover:text-gray-600 {% if not q %}invisible{% endif %}"
+                aria-label="Xóa tìm kiếm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="rounded-2xl border border-gray-200 bg-gray-50/70 px-2.5 py-2 min-h-[72px] flex items-center">
+    <select name="department" class="border border-gray-200 bg-white rounded-2xl px-3 py-2 w-full min-h-[40px] text-[11px]">
+      <option value="">Tất cả phòng ban</option>
       {% for d in departments %}
       <option value="{{ d.id }}" {% if selected_department == d.id|stringformat:'s' %}selected{% endif %}>
         {{ d.name }} ({{ d.company.code }})
       </option>
       {% endfor %}
     </select>
-  </div>
-  <div>
-    <label class="block text-[11px] text-gray-500 mb-1">Công ty nhận</label>
-    <select name="company" class="border border-gray-300 rounded-lg px-3 py-1.5 w-full text-xs">
-      <option value="">Tất cả</option>
-      {% for company in companies %}
-      <option value="{{ company.code }}" {% if selected_company == company.code %}selected{% endif %}>
-        {{ company.code }} - {{ company.name }}
-      </option>
-      {% endfor %}
-    </select>
-  </div>
-  <div class="lg:col-span-5 flex gap-2">
-    <button type="submit" class="bg-f88green hover:bg-f88dark text-white px-3 py-1.5 rounded-lg text-xs">Lọc dữ liệu</button>
-    <a href="{% url current_url_name %}" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs">Xóa bộ lọc</a>
+    </div>
   </div>
 </form>
 
@@ -127,7 +155,10 @@
         <td class="px-4 py-3">{{ doc.summary|truncatechars:120 }}</td>
         <td class="px-4 py-3">{{ doc.receiving_company.code }} - {{ doc.receiving_company.name }}</td>
         <td class="px-4 py-3">
-          <span class="inline-flex px-2 py-1 text-xs font-semibold rounded bg-gray-100 text-gray-700">{{ doc.normalized_status_name|default:doc.status.name|default:"-" }}</span>
+          <span class="inline-flex px-2 py-1 text-xs font-semibold rounded"
+                style="background-color:{{ doc.normalized_status_badge_bg_color }};color:{{ doc.normalized_status_badge_text_color }};">
+            {{ doc.normalized_status_name|default:doc.status.name|default:"-" }}
+          </span>
         </td>
         <td class="px-4 py-3">
           <div class="flex items-center gap-2">
@@ -320,6 +351,24 @@
     bindIncomingFileSummary("incomingDrawerFiles", "incomingDrawerFilesSummary");
   });
 
+  function setIncomingQuickFilter(fieldName, value) {
+    const form = document.getElementById("incomingDispatchFilterForm");
+    if (!form) return;
+    const field = form.querySelector(`[name="${fieldName}"]`);
+    if (!field) return;
+    field.value = value;
+    form.submit();
+  }
+
+  function clearIncomingQueryFilter() {
+    const form = document.getElementById("incomingDispatchFilterForm");
+    if (!form) return;
+    const field = form.querySelector('[name="q"]');
+    if (!field) return;
+    field.value = "";
+    form.submit();
+  }
+
   {% if form.errors and can_create %}
     window.addEventListener("DOMContentLoaded", function () {
       const currentCode = document.getElementById("incomingReceivingCompanyCode")?.value || "";
@@ -331,7 +380,7 @@
 {% endif %}
 
 {% if selected_dispatch %}
-<div class="fixed inset-0 z-40">
+<div class="fixed inset-0 z-40" x-data="{ drawerTab: 'overview' }">
   <a href="{% url current_url_name %}?q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&company={{ selected_company }}&page={{ page_obj.number }}"
      class="absolute inset-0 bg-black/25"></a>
   <aside class="absolute top-0 right-0 h-full w-full max-w-xl bg-white shadow-2xl border-l border-gray-200 overflow-y-auto">
@@ -342,6 +391,22 @@
     </div>
 
     <div class="p-4 space-y-4 text-xs text-gray-700">
+      <div class="flex items-center gap-2">
+        <button type="button"
+                @click="drawerTab = 'overview'"
+                :class="drawerTab === 'overview' ? 'bg-f88green text-white border-f88green' : 'bg-white text-gray-600 border-gray-200'"
+                class="px-3 py-1.5 rounded-full border text-[11px] font-medium transition">
+          Thông tin xử lý
+        </button>
+        <button type="button"
+                @click="drawerTab = 'history'"
+                :class="drawerTab === 'history' ? 'bg-f88green text-white border-f88green' : 'bg-white text-gray-600 border-gray-200'"
+                class="px-3 py-1.5 rounded-full border text-[11px] font-medium transition">
+          Lịch sử trạng thái
+        </button>
+      </div>
+
+      <div x-show="drawerTab === 'overview'" class="space-y-4">
       <div class="grid grid-cols-2 gap-3">
         <div>
           <div class="text-[11px] text-gray-500">Số hiệu</div>
@@ -369,22 +434,61 @@
           <div class="text-[11px] text-gray-500">Công ty nhận</div>
           <div class="font-semibold">{{ selected_dispatch.receiving_company.code }} - {{ selected_dispatch.receiving_company.name }}</div>
         </div>
+        <div class="col-span-2">
+          <div class="text-[11px] text-gray-500">Phòng ban xử lý</div>
+          <div class="font-semibold">
+            {% with processing_departments=selected_dispatch.processing_departments.all %}
+            {% if processing_departments %}
+            {% for department in processing_departments %}{{ department.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            {% else %}
+            -
+            {% endif %}
+            {% endwith %}
+          </div>
+        </div>
       </div>
 
       <div class="rounded-lg border border-gray-200 p-3">
         <div class="text-[11px] uppercase tracking-wide text-gray-500 mb-2">Tiến trình xử lý</div>
         <ol class="space-y-2">
           {% for step in selected_workflow_steps %}
-          <li class="flex items-center gap-2">
+          <li class="flex items-start gap-2">
             {% if step.is_current %}
-            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-f88green text-white text-[11px]">●</span>
-            <span class="font-semibold text-f88green">{{ step.label }}</span>
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-f88green text-white text-[11px] mt-0.5">●</span>
+            <div>
+              <div class="font-semibold text-f88green">{{ step.label }}</div>
+              <div class="text-[11px] text-f88green/80">
+                {% if step.timestamp %}
+                {{ step.timestamp|date:"d/m/Y H:i" }}
+                {% else %}
+                Đang ở bước hiện tại
+                {% endif %}
+              </div>
+            </div>
             {% elif step.is_done %}
-            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white text-[11px]">✓</span>
-            <span class="text-gray-700">{{ step.label }}</span>
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white text-[11px] mt-0.5">✓</span>
+            <div>
+              <div class="text-gray-700">{{ step.label }}</div>
+              <div class="text-[11px] text-gray-500">
+                {% if step.timestamp %}
+                {{ step.timestamp|date:"d/m/Y H:i" }}
+                {% else %}
+                Đã hoàn tất bước trước
+                {% endif %}
+              </div>
+            </div>
             {% else %}
-            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 text-gray-500 text-[11px]">•</span>
-            <span class="text-gray-500">{{ step.label }}</span>
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-200 text-gray-500 text-[11px] mt-0.5">•</span>
+            <div>
+              <div class="text-gray-500">{{ step.label }}</div>
+              <div class="text-[11px] text-gray-400">
+                {% if step.timestamp %}
+                {{ step.timestamp|date:"d/m/Y H:i" }}
+                {% else %}
+                Chưa tới bước này
+                {% endif %}
+              </div>
+            </div>
             {% endif %}
           </li>
           {% empty %}
@@ -395,8 +499,30 @@
 
       <div class="rounded-lg border border-gray-200 p-3">
         <div class="flex items-center justify-between gap-3 mb-2">
+          <div class="text-[11px] uppercase tracking-wide text-gray-500">Phòng ban xử lý</div>
+        </div>
+        {% if can_edit_status %}
+        <form method="post" action="{% url 'admindocuments:incoming_dispatch_update_department' selected_dispatch.id %}" class="flex items-center gap-2">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path }}">
+          <select name="processing_department" class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-xs">
+            <option value="">Chưa chọn phòng ban xử lý</option>
+            {% for department in departments %}
+            <option value="{{ department.id }}" {% if selected_dispatch.current_processing_department_id == department.id %}selected{% endif %}>{{ department.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="px-3 py-2 text-xs rounded-lg bg-f88green hover:bg-f88dark text-white">Lưu</button>
+        </form>
+        {% else %}
+        <p class="text-[11px] text-gray-500">Bạn không có quyền cập nhật phòng ban xử lý.</p>
+        {% endif %}
+      </div>
+
+      <div class="rounded-lg border border-gray-200 p-3">
+          <div class="flex items-center justify-between gap-3 mb-2">
           <div class="text-[11px] uppercase tracking-wide text-gray-500">Thay đổi trạng thái</div>
-          <span class="inline-flex px-2 py-1 text-[11px] font-semibold rounded bg-gray-100 text-gray-700">
+          <span class="inline-flex px-2 py-1 text-[11px] font-semibold rounded"
+                style="background-color:{{ selected_dispatch.normalized_status_badge_bg_color }};color:{{ selected_dispatch.normalized_status_badge_text_color }};">
             {{ selected_dispatch.normalized_status_name|default:selected_dispatch.status.name|default:"-" }}
           </span>
         </div>
@@ -413,33 +539,6 @@
         </form>
         {% else %}
         <p class="text-[11px] text-gray-500">Bạn không có quyền thay đổi trạng thái.</p>
-        {% endif %}
-      </div>
-
-      <div class="rounded-lg border border-gray-200 p-3">
-        <div class="text-[11px] uppercase tracking-wide text-gray-500 mb-2">Lịch sử thay đổi trạng thái</div>
-        {% if selected_dispatch.status_logs_display %}
-        <div class="space-y-2">
-          {% for log in selected_dispatch.status_logs_display %}
-          <div class="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-            <div class="flex items-center justify-between gap-3">
-              <div class="font-medium text-gray-800">
-                {{ log.from_status.name|default:"-" }} -> {{ log.to_status.name|default:"-" }}
-              </div>
-              <div class="text-[11px] text-gray-500">{{ log.changed_at|date:"d/m/Y H:i" }}</div>
-            </div>
-            <div class="mt-1 text-[11px] text-gray-500">
-              {% if log.changed_by %}
-              {{ log.changed_by.get_full_name|default:log.changed_by.username }}
-              {% else %}
-              Hệ thống
-              {% endif %}
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-        {% else %}
-        <p class="text-[11px] text-gray-500">Chưa có lịch sử thay đổi trạng thái.</p>
         {% endif %}
       </div>
 
@@ -488,6 +587,36 @@
         {% else %}
         <p class="text-gray-500">Chưa có tệp đính kèm.</p>
         {% endif %}
+      </div>
+      </div>
+
+      <div x-show="drawerTab === 'history'">
+      <div class="rounded-lg border border-gray-200 p-3">
+        <div class="text-[11px] uppercase tracking-wide text-gray-500 mb-2">Lịch sử thay đổi trạng thái</div>
+        {% if selected_dispatch.status_logs_display %}
+        <div class="space-y-2">
+          {% for log in selected_dispatch.status_logs_display %}
+          <div class="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+            <div class="flex items-center justify-between gap-3">
+              <div class="font-medium text-gray-800">
+                {{ log.from_status.name|default:"-" }} -> {{ log.to_status.name|default:"-" }}
+              </div>
+              <div class="text-[11px] text-gray-500">{{ log.changed_at|date:"d/m/Y H:i" }}</div>
+            </div>
+            <div class="mt-1 text-[11px] text-gray-500">
+              {% if log.changed_by %}
+              {{ log.changed_by.get_full_name|default:log.changed_by.username }}
+              {% else %}
+              Hệ thống
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-[11px] text-gray-500">Chưa có lịch sử thay đổi trạng thái.</p>
+        {% endif %}
+      </div>
       </div>
     </div>
   </aside>

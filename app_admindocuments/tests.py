@@ -32,7 +32,11 @@ from .models import (
     AdmParcelSenderSuggestion,
     AdmSignerRole,
 )
-from .views import _build_incoming_workflow_steps, _send_parcel_group_notification_now
+from .views import (
+    _allowed_status_codes_for_dispatch,
+    _build_incoming_workflow_steps,
+    _send_parcel_group_notification_now,
+)
 
 
 class AdmAdministrativeDocumentNumberInvariantTests(TestCase):
@@ -301,7 +305,7 @@ class AdmIncomingDispatchTests(TestCase):
         payload.update(overrides)
         return payload
 
-    def test_form_requires_processing_departments(self):
+    def test_incoming_dispatch_form_allows_blank_processing_department(self):
         form = AdmIncomingDispatchForm(
             data={
                 "document_number": "CV-001",
@@ -312,8 +316,7 @@ class AdmIncomingDispatchTests(TestCase):
                 "receiving_company": self.company_f88.code,
             }
         )
-        self.assertFalse(form.is_valid())
-        self.assertIn("processing_department", form.errors)
+        self.assertTrue(form.is_valid(), form.errors)
 
     def test_parcel_form_requires_processing_departments(self):
         form = AdmParcelReceiptForm(
@@ -547,7 +550,7 @@ class AdmIncomingDispatchTests(TestCase):
         request.user = self.vanthu_user
         request.build_absolute_uri = lambda path="": f"http://testserver{path}"
 
-        batch, _ = _send_parcel_group_notification_now(
+        batch, _, reminder_error = _send_parcel_group_notification_now(
             [parcel_one, parcel_two],
             self.vanthu_user,
             request,
@@ -559,6 +562,7 @@ class AdmIncomingDispatchTests(TestCase):
         self.assertEqual(parcel_two.status_id, self.dispatch_status_2.code)
         self.assertEqual(batch.parcel_count, 2)
         self.assertEqual(batch.status, AdmParcelNotificationBatch.Status.SENT)
+        self.assertEqual(reminder_error, "")
         self.assertIn("Bạn có 2 kiện hàng", batch.message_text)
         mocked_send_via_gapo.assert_called_once()
         _, kwargs = mocked_send_via_gapo.call_args
@@ -577,7 +581,9 @@ class AdmIncomingDispatchTests(TestCase):
         self.assertEqual(layout["children"][2]["children"][0]["background"], "14532D")
         self.assertEqual(layout["children"][2]["children"][0]["text_object"]["color"], "F8FAFC")
         self.assertEqual(layout["border"]["color"], "#22C55E")
-        self.assertIn("/admindocuments/parcel-receipts/batches/confirm/", layout["children"][2]["children"][0]["deep_link"])
+        self.assertIn("/admindocuments/pb/", layout["children"][2]["children"][0]["deep_link"])
+        self.assertEqual(layout["deep_link"], layout["children"][2]["children"][0]["deep_link"])
+        self.assertIn("Link nhanh:", batch.message_text)
         mocked_apply_async.assert_called_once()
 
     @patch("app_admindocuments.views.send_via_gapo")
@@ -585,7 +591,8 @@ class AdmIncomingDispatchTests(TestCase):
     def test_group_notification_action_splits_selected_parcels_by_recipient(self, mocked_apply_async, mocked_send_via_gapo):
         mocked_send_via_gapo.return_value = {"ok": True}
         other_recipient = AdmParcelRecipientCatalog.objects.create(
-            import_batch=self.current_batch,
+            import_batch=self.recipient_batch,
+            row_number=4,
             gapo_user_id="10002",
             employee_code="E002",
             full_name="Nguoi Khac",
@@ -693,6 +700,26 @@ class AdmIncomingDispatchTests(TestCase):
         self.assertIsNotNone(parcel_one.completed_at)
         self.assertIsNotNone(batch.confirmed_at)
 
+    def test_parcel_batch_confirm_qr_returns_svg(self):
+        self.client.login(username="vanthu", password="secret")
+        batch = AdmParcelNotificationBatch.objects.create(
+            recipient_directory=self.recipient_entry,
+            recipient_name="Nhan Vien",
+            recipient_employee_code="E001",
+            recipient_gapo_user_id="10001",
+            recipient_department="Hanh chinh nhan su",
+            parcel_count=1,
+            status=AdmParcelNotificationBatch.Status.SENT,
+        )
+
+        response = self.client.get(
+            reverse("admindocuments:parcel_batch_confirm_qr", args=[batch.token])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/svg+xml")
+        self.assertIn(b"<svg", response.content)
+
     def test_mark_handed_over_route_is_deprecated_after_three_step_flow(self):
         self.client.login(username="vanthu", password="secret")
         parcel_one = AdmParcelReceipt.objects.create(
@@ -742,7 +769,7 @@ class AdmIncomingDispatchTests(TestCase):
     def test_parcel_form_rejects_recipient_outside_department(self):
         other_recipient = AdmParcelRecipientCatalog.objects.create(
             import_batch=self.recipient_batch,
-            row_number=3,
+            row_number=4,
             gapo_user_id="10002",
             employee_code="E002",
             full_name="Other User",
@@ -816,6 +843,48 @@ class AdmIncomingDispatchTests(TestCase):
         dispatch.refresh_from_db()
         self.assertEqual(dispatch.status_id, self.dispatch_status_7.code)
 
+    def test_incoming_dispatch_update_processing_department_can_set_and_clear(self):
+        superuser = User.objects.create_superuser(
+            username="super_dispatch_dept",
+            password="secret",
+            email="super_dispatch_dept@example.com",
+        )
+        second_department = AdmDepartment.objects.create(
+            code="KT",
+            name="Ke toan",
+            company=self.company_f88,
+        )
+        dispatch = AdmIncomingDispatch.objects.create(
+            document_number="CV-005B",
+            responsible_user=self.vanthu_user,
+            sending_unit="So Cong Thuong",
+            signer_name="Test Signer",
+            summary="Noi dung test doi phong ban",
+            incoming_item_type=self.dispatch_type_doc,
+            receiving_company=self.company_f88,
+            gapo_group=self.gapo_group,
+            status=self.dispatch_status_5,
+            created_by=self.vanthu_user,
+        )
+        dispatch.processing_departments.set([self.department])
+
+        self.client.force_login(superuser)
+        url = reverse("admindocuments:incoming_dispatch_update_department", args=[dispatch.id])
+        response = self.client.post(url, data={"processing_department": second_department.id})
+
+        self.assertEqual(response.status_code, 302)
+        dispatch.refresh_from_db()
+        self.assertEqual(
+            list(dispatch.processing_departments.values_list("id", flat=True)),
+            [second_department.id],
+        )
+
+        response = self.client.post(url, data={"processing_department": ""})
+
+        self.assertEqual(response.status_code, 302)
+        dispatch.refresh_from_db()
+        self.assertFalse(dispatch.processing_departments.exists())
+
     def test_incoming_document_workflow_no_longer_shows_pending_signer_step(self):
         dispatch = AdmIncomingDispatch.objects.create(
             document_number="CV-006",
@@ -833,6 +902,63 @@ class AdmIncomingDispatchTests(TestCase):
         labels = [step["label"] for step in _build_incoming_workflow_steps(dispatch)]
         self.assertNotIn("Trình ký", labels)
 
+    def test_incoming_document_available_statuses_excludes_initial_received(self):
+        dispatch = AdmIncomingDispatch.objects.create(
+            document_number="CV-006B",
+            responsible_user=self.vanthu_user,
+            sending_unit="So Cong Thuong",
+            signer_name="Test Signer",
+            summary="Noi dung test available statuses",
+            incoming_item_type=self.dispatch_type_doc,
+            receiving_company=self.company_f88,
+            gapo_group=self.gapo_group,
+            status=self.dispatch_status_5,
+            created_by=self.vanthu_user,
+        )
+
+        available_codes = _allowed_status_codes_for_dispatch(dispatch)
+
+        self.assertNotIn(self.dispatch_status_5.code, available_codes)
+        self.assertIn(self.dispatch_status_6.code, available_codes)
+        self.assertIn(self.dispatch_status_7.code, available_codes)
+        self.assertIn(self.dispatch_status_8.code, available_codes)
+
+    def test_incoming_document_workflow_steps_include_status_change_timestamps(self):
+        dispatch = AdmIncomingDispatch.objects.create(
+            document_number="CV-006C",
+            responsible_user=self.vanthu_user,
+            sending_unit="So Cong Thuong",
+            signer_name="Test Signer",
+            summary="Noi dung test workflow timestamps",
+            incoming_item_type=self.dispatch_type_doc,
+            receiving_company=self.company_f88,
+            gapo_group=self.gapo_group,
+            status=self.dispatch_status_7,
+            created_by=self.vanthu_user,
+        )
+        clerical_changed_at = timezone.now() - timezone.timedelta(hours=3)
+        assistant_changed_at = timezone.now() - timezone.timedelta(hours=1)
+        first_log = AdmIncomingDispatchStatusLog.objects.create(
+            dispatch=dispatch,
+            from_status=self.dispatch_status_5,
+            to_status=self.dispatch_status_6,
+            changed_by=self.admin_user,
+        )
+        AdmIncomingDispatchStatusLog.objects.filter(pk=first_log.pk).update(changed_at=clerical_changed_at)
+        second_log = AdmIncomingDispatchStatusLog.objects.create(
+            dispatch=dispatch,
+            from_status=self.dispatch_status_6,
+            to_status=self.dispatch_status_7,
+            changed_by=self.admin_user,
+        )
+        AdmIncomingDispatchStatusLog.objects.filter(pk=second_log.pk).update(changed_at=assistant_changed_at)
+
+        steps = _build_incoming_workflow_steps(dispatch)
+        timestamp_map = {step["code"]: step["timestamp"] for step in steps}
+
+        self.assertEqual(timestamp_map["doc_at_clerical"], clerical_changed_at)
+        self.assertEqual(timestamp_map["doc_at_assistant"], assistant_changed_at)
+
     def test_legacy_incoming_document_status_is_mapped_to_correct_workflow_step(self):
         legacy_status, _ = AdmIncomingDispatchStatus.objects.update_or_create(
             code="to_btl",
@@ -848,6 +974,32 @@ class AdmIncomingDispatchTests(TestCase):
             sending_unit="So Cong Thuong",
             signer_name="Test Signer",
             summary="Noi dung test workflow cu",
+            incoming_item_type=self.dispatch_type_doc,
+            receiving_company=self.company_f88,
+            gapo_group=self.gapo_group,
+            status=legacy_status,
+            created_by=self.vanthu_user,
+        )
+
+        steps = _build_incoming_workflow_steps(dispatch)
+        current_steps = [step["label"] for step in steps if step["is_current"]]
+        self.assertEqual(current_steps, ["Đang ở Ban trợ lý"])
+
+    def test_legacy_to_pc_status_is_mapped_to_assistant_workflow_step(self):
+        legacy_status, _ = AdmIncomingDispatchStatus.objects.update_or_create(
+            code="to_pc",
+            defaults={
+                "name": "Chuyển PC xử lý",
+                "sort_order": 99,
+                "is_active": True,
+            },
+        )
+        dispatch = AdmIncomingDispatch.objects.create(
+            document_number="CV-006B1",
+            responsible_user=self.vanthu_user,
+            sending_unit="So Cong Thuong",
+            signer_name="Test Signer",
+            summary="Noi dung test workflow cu to_pc",
             incoming_item_type=self.dispatch_type_doc,
             receiving_company=self.company_f88,
             gapo_group=self.gapo_group,
@@ -1130,6 +1282,69 @@ class AdmIncomingDispatchTests(TestCase):
         self.assertEqual(parcel.recipient_directory_id, self.recipient_entry.id)
         self.assertEqual(parcel.recipient_name, self.recipient_entry.full_name)
         self.assertEqual(parcel.recipient_department, self.recipient_entry.department_name)
+
+    def test_completed_parcel_with_legacy_status_is_hidden_from_list(self):
+        self.client.login(username="vanthu", password="secret")
+        completed_parcel = AdmParcelReceipt.objects.create(
+            document_number="PK-LEGACY-DONE",
+            received_by=self.vanthu_user,
+            recipient_department="Phong CNTT",
+            recipient_name="Nhan Vien Cu",
+            recipient_employee_code="E777",
+            parcel_type="hoso",
+            sender_unit="Viettel Post",
+            receiving_company=self.company_f88,
+            status=self.dispatch_status_2,
+            created_by=self.vanthu_user,
+            confirmed_at=timezone.now(),
+            completed_at=timezone.now(),
+        )
+
+        response = self.client.get(reverse("admindocuments:parcel_receipt_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, completed_parcel.document_number)
+
+    def test_parcel_list_filters_recipient_by_text_query(self):
+        self.client.login(username="vanthu", password="secret")
+        matched = AdmParcelReceipt.objects.create(
+            document_number="PK-FILTER-RECIPIENT-1",
+            received_by=self.vanthu_user,
+            recipient_directory=self.recipient_entry,
+            recipient_department=self.recipient_entry.department_name,
+            recipient_name=self.recipient_entry.full_name,
+            recipient_employee_code=self.recipient_entry.employee_code,
+            recipient_gapo_user_id=self.recipient_entry.gapo_user_id,
+            parcel_type="hoso",
+            sender_unit="Viettel Post",
+            receiving_company=self.company_f88,
+            status=self.dispatch_status,
+            created_by=self.vanthu_user,
+        )
+        other = AdmParcelReceipt.objects.create(
+            document_number="PK-FILTER-RECIPIENT-2",
+            received_by=self.vanthu_user,
+            recipient_directory=self.recipient_entry_2,
+            recipient_department=self.recipient_entry_2.department_name,
+            recipient_name=self.recipient_entry_2.full_name,
+            recipient_employee_code=self.recipient_entry_2.employee_code,
+            recipient_gapo_user_id=self.recipient_entry_2.gapo_user_id,
+            parcel_type="hanghoa",
+            sender_unit="Shopee",
+            receiving_company=self.company_f88,
+            status=self.dispatch_status,
+            created_by=self.vanthu_user,
+        )
+
+        response = self.client.get(
+            reverse("admindocuments:parcel_receipt_list"),
+            {"recipient": self.recipient_entry.employee_code},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        rendered_names = [item.sender_unit for item in response.context["dispatches"].object_list]
+        self.assertIn(matched.sender_unit, rendered_names)
+        self.assertNotIn(other.sender_unit, rendered_names)
 
     def test_reassign_recipient_after_initial_assignment(self):
         self.client.login(username="vanthu", password="secret")

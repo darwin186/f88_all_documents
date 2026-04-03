@@ -58,6 +58,16 @@ def _parcel_dynamic_default_image():
     return static("admindocuments/parcel-notify-card.svg")
 
 
+class AdmIncomingDispatchStatusAdminForm(forms.ModelForm):
+    class Meta:
+        model = AdmIncomingDispatchStatus
+        fields = "__all__"
+        widgets = {
+            "badge_text_color": forms.TextInput(attrs={"type": "color"}),
+            "badge_bg_color": forms.TextInput(attrs={"type": "color"}),
+        }
+
+
 @admin.register(AdmDocumentType)
 class AdmDocumentTypeAdmin(admin.ModelAdmin):
     list_display = ("code", "name")
@@ -150,9 +160,22 @@ class AdmIncomingDispatchTypeAdmin(admin.ModelAdmin):
 
 @admin.register(AdmIncomingDispatchStatus)
 class AdmIncomingDispatchStatusAdmin(admin.ModelAdmin):
-    list_display = ("code", "name", "is_active", "sort_order")
+    form = AdmIncomingDispatchStatusAdminForm
+    list_display = ("code", "name", "badge_preview", "badge_text_color", "badge_bg_color", "is_active", "sort_order")
     list_filter = ("is_active",)
     search_fields = ("code", "name")
+
+    def badge_preview(self, obj):
+        bg = obj.badge_bg_color or "#F3F4F6"
+        fg = obj.badge_text_color or "#374151"
+        return format_html(
+            '<span style="display:inline-flex;padding:4px 10px;border-radius:999px;background:{};color:{};font-size:12px;font-weight:600;">{}</span>',
+            bg,
+            fg,
+            obj.name,
+        )
+
+    badge_preview.short_description = "Badge"
 
 
 @admin.register(AdmIncomingGapoGroup)

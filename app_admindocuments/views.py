@@ -6,6 +6,8 @@ from datetime import datetime, date, timedelta
 from io import BytesIO
 from functools import wraps
 from urllib.parse import urljoin
+import qrcode
+from qrcode.image.svg import SvgPathImage
 
 from django.contrib import messages
 from django.contrib.auth.models import User
@@ -122,6 +124,11 @@ LEGACY_INCOMING_DOC_STATUS_MAP = {
     "doc_pending_signer": "doc_at_assistant",
     "in_progress": "doc_at_clerical",
     "to_btl": "doc_at_assistant",
+    "to_pc": "doc_at_assistant",
+    "received": "doc_received",
+    "at_clerical": "doc_at_clerical",
+    "at_assistant": "doc_at_assistant",
+    "pending_signer": "doc_at_assistant",
     "done": "doc_archived",
     "archived": "doc_archived",
 }
@@ -193,6 +200,14 @@ def _incoming_dispatch_route_name(item_type_code):
 
 def _incoming_dispatch_list_url(item_type_code):
     return reverse(_incoming_dispatch_route_name(item_type_code))
+
+
+def _exclude_hidden_parcels(queryset):
+    return queryset.exclude(
+        Q(status_id__in=PARCEL_HIDDEN_LIST_STATUS_CODES)
+        | Q(completed_at__isnull=False)
+        | Q(confirmed_at__isnull=False)
+    )
 
 
 def _save_incoming_dispatch_images(dispatch, files, user):
@@ -304,15 +319,38 @@ def _build_public_absolute_url(request, path):
 def _build_parcel_confirmation_url(request, token):
     return _build_public_absolute_url(
         request,
-        reverse("admindocuments:parcel_receipt_confirm", args=[token]),
+        reverse("admindocuments:parcel_receipt_confirm_short", args=[token]),
     )
 
 
 def _build_parcel_batch_confirmation_url(request, token):
     return _build_public_absolute_url(
         request,
-        reverse("admindocuments:parcel_batch_confirm", args=[token]),
+        reverse("admindocuments:parcel_batch_confirm_short", args=[token]),
     )
+
+
+def _build_parcel_confirmation_qr_svg_url(token):
+    return reverse("admindocuments:parcel_receipt_confirm_qr", args=[token])
+
+
+def _build_parcel_batch_confirmation_qr_svg_url(token):
+    return reverse("admindocuments:parcel_batch_confirm_qr", args=[token])
+
+
+def _build_qr_svg_response(target_url):
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=8,
+        border=2,
+    )
+    qr.add_data(target_url)
+    qr.make(fit=True)
+    image = qr.make_image(image_factory=SvgPathImage)
+    buffer = BytesIO()
+    image.save(buffer)
+    return HttpResponse(buffer.getvalue(), content_type="image/svg+xml")
 
 
 def _build_parcel_dynamic_image_url(request):
@@ -385,6 +423,18 @@ def _cancel_batch_reminder(batch):
         reminder.save(update_fields=["status", "updated_at"])
 
 
+def _enqueue_gapo_schedule(schedule, *, eta):
+    try:
+        send_gapo_scheduled_message.apply_async(args=[schedule.id], eta=eta)
+    except Exception as exc:
+        schedule.status = GapoScheduledMessage.Status.FAILED
+        schedule.last_error = str(exc)
+        schedule.save(update_fields=["status", "last_error", "updated_at"])
+        raise RuntimeError(
+            "Không kết nối được hàng đợi nhắc lại. Kiểm tra Redis/Celery."
+        ) from exc
+
+
 def _schedule_parcel_batch_reminder(batch, parcels, request_user, request, *, confirm_url):
     setting = _get_active_parcel_auto_notify_setting()
     if not setting:
@@ -404,7 +454,7 @@ def _schedule_parcel_batch_reminder(batch, parcels, request_user, request, *, co
     image_url = template.hero_image_url or _build_parcel_dynamic_image_url(request)
     reminder_message = (
         f"Nhắc lại: bạn có {len(parcels)} kiện hàng chưa được nhận. "
-        "Liên hệ lễ tân tòa nhà để được hỗ trợ."
+        f"Liên hệ lễ tân tòa nhà để được hỗ trợ. Link nhanh: {confirm_url}"
     )
     body_metadata = {
         "metadata": {
@@ -417,7 +467,7 @@ def _schedule_parcel_batch_reminder(batch, parcels, request_user, request, *, co
                 "background": "",
                 "item_spacing": 0,
                 "insets": "",
-                "deep_link": "",
+                "deep_link": confirm_url,
                 "border": {
                     "color": _normalize_gapo_hex(template.card_border_color, fallback="#DADDE1"),
                     "corner_radius": 16,
@@ -514,7 +564,7 @@ def _schedule_parcel_batch_reminder(batch, parcels, request_user, request, *, co
         schedule_at=schedule_at,
         created_by=request_user,
     )
-    send_gapo_scheduled_message.apply_async(args=[schedule.id], eta=schedule_at)
+    _enqueue_gapo_schedule(schedule, eta=schedule_at)
     batch.reminder_schedule = schedule
     batch.reminder_scheduled_at = schedule_at
     batch.save(update_fields=["reminder_schedule", "reminder_scheduled_at", "updated_at"])
@@ -563,10 +613,7 @@ def _schedule_parcel_reminder(parcel_receipt, request_user, request, *, confirm_
         schedule_at=now + timedelta(hours=24),
         created_by=request_user,
     )
-    send_gapo_scheduled_message.apply_async(
-        args=[reminder_schedule.id],
-        eta=reminder_schedule.schedule_at,
-    )
+    _enqueue_gapo_schedule(reminder_schedule, eta=reminder_schedule.schedule_at)
     parcel_receipt.reminder_schedule = reminder_schedule
     parcel_receipt.reminder_scheduled_at = reminder_schedule.schedule_at
     parcel_receipt.save(update_fields=["reminder_schedule", "reminder_scheduled_at", "updated_at"])
@@ -642,7 +689,7 @@ def _send_parcel_group_notification_now(parcels, request_user, request):
     parcel_label = "kiện hàng" if len(parcels) > 1 else "kiện hàng"
     message = (
         f"Bạn có {len(parcels)} {parcel_label} chưa được nhận. "
-        "Liên hệ lễ tân tòa nhà để được hỗ trợ."
+        f"Liên hệ lễ tân tòa nhà để được hỗ trợ. Link nhanh: {confirm_url}"
     )
     template = _get_active_parcel_dynamic_template() or AdmParcelDynamicTemplate()
     context = _build_parcel_dynamic_context(parcels, first, confirm_url)
@@ -670,7 +717,7 @@ def _send_parcel_group_notification_now(parcels, request_user, request):
                 "background": "",
                 "item_spacing": 0,
                 "insets": "",
-                "deep_link": "",
+                "deep_link": confirm_url,
                 "border": {
                     "color": card_border_color,
                     "corner_radius": 16,
@@ -794,7 +841,11 @@ def _send_parcel_group_notification_now(parcels, request_user, request):
             "updated_at",
         ]
     )
-    _schedule_parcel_batch_reminder(batch, parcels, request_user, request, confirm_url=confirm_url)
+    reminder_error = ""
+    try:
+        _schedule_parcel_batch_reminder(batch, parcels, request_user, request, confirm_url=confirm_url)
+    except Exception as exc:
+        reminder_error = str(exc)
 
     for parcel in parcels:
         previous_status = parcel.status_id
@@ -812,7 +863,7 @@ def _send_parcel_group_notification_now(parcels, request_user, request):
             note=f"Đã gửi thông báo nhận theo lô #{batch.id}.",
             metadata={"batch_id": batch.id, "parcel_count": len(parcels)},
         )
-    return batch, response
+    return batch, response, reminder_error
 
 
 def _send_parcel_notification_now(parcel_receipt, request_user, request):
@@ -923,15 +974,25 @@ def _incoming_flow_label(item_type_code, status_code, signer_label="Người ký
     return ""
 
 
+def _incoming_status_badge_tokens(status):
+    return {
+        "bg": (getattr(status, "badge_bg_color", "") or "#F3F4F6").strip(),
+        "text": (getattr(status, "badge_text_color", "") or "#374151").strip(),
+    }
+
+
 def _allowed_status_codes_for_dispatch(dispatch):
     signer_label = (dispatch.signer_name or "").strip() or "Người ký"
     flow = _incoming_flow_by_type(dispatch.incoming_item_type_id, signer_label=signer_label)
     codes = [code for code, _ in flow]
+    initial_code = flow[0][0] if flow else ""
+    if dispatch.incoming_item_type_id == INCOMING_TYPE_DOC and initial_code:
+        codes = [code for code in codes if code != initial_code]
     normalized_current = _normalize_incoming_dispatch_status_code(
         dispatch.incoming_item_type_id,
         dispatch.status_id,
     )
-    if normalized_current and normalized_current not in codes:
+    if normalized_current and normalized_current not in codes and normalized_current != initial_code:
         codes.append(normalized_current)
     return codes
 
@@ -951,6 +1012,24 @@ def _build_incoming_workflow_steps(dispatch):
     )
     signer_label = (dispatch.signer_name or "").strip() or "Người ký"
     flow = _incoming_flow_by_type(dispatch.incoming_item_type_id, signer_label=signer_label)
+    logs = list(
+        getattr(dispatch, "status_logs_display", None)
+        or dispatch.status_logs.select_related("to_status").all()
+    )
+    first_code = flow[0][0] if flow else ""
+    received_timestamp = getattr(dispatch, "created_at", None)
+    if received_timestamp is None and getattr(dispatch, "received_date", None):
+        received_timestamp = datetime.combine(dispatch.received_date, datetime.min.time())
+    timestamp_map = {first_code: received_timestamp} if first_code else {}
+    for log in reversed(logs):
+        normalized_to = _normalize_incoming_dispatch_status_code(
+            dispatch.incoming_item_type_id,
+            log.to_status_id,
+        )
+        if normalized_to and normalized_to not in timestamp_map:
+            timestamp_map[normalized_to] = log.changed_at
+    if current_status and current_status not in timestamp_map and getattr(dispatch, "updated_at", None):
+        timestamp_map[current_status] = dispatch.updated_at
     index_map = {code: idx for idx, (code, _) in enumerate(flow)}
     current_index = index_map.get(current_status, -1)
     steps = []
@@ -961,6 +1040,7 @@ def _build_incoming_workflow_steps(dispatch):
                 "label": label,
                 "is_current": idx == current_index,
                 "is_done": current_index > idx,
+                "timestamp": timestamp_map.get(code),
             }
         )
     return steps
@@ -1029,7 +1109,52 @@ def _parcel_extra_audit_logs(parcel_receipt):
     return [log for log in parcel_receipt.audit_logs.all() if log.action not in duplicate_actions]
 
 
-def _prepare_parcel_receipt_view_state(parcel_receipt):
+def _parcel_type_tone(parcel_receipt):
+    if parcel_receipt.parcel_type == AdmParcelReceipt.ParcelType.DOSSIER:
+        return "document"
+    if parcel_receipt.parcel_type == AdmParcelReceipt.ParcelType.GOODS:
+        return "goods"
+    return "other"
+
+
+def _parcel_reminder_meta(reminder_schedule, reminder_scheduled_at, *, notification_send_count=0):
+    meta = {
+        "badge_label": "",
+        "badge_tone": "",
+        "status_label": "Chưa lên lịch nhắc",
+        "scheduled_at": reminder_scheduled_at,
+        "scheduled_label": reminder_scheduled_at.strftime("%d/%m/%Y %H:%M")
+        if reminder_scheduled_at
+        else "",
+        "last_error": "",
+    }
+    if not reminder_schedule:
+        if notification_send_count:
+            meta["badge_label"] = "Chưa lên lịch nhắc"
+            meta["badge_tone"] = "warning"
+        return meta
+
+    meta["last_error"] = (reminder_schedule.last_error or "").strip()
+    if reminder_schedule.status == GapoScheduledMessage.Status.PENDING:
+        meta["badge_label"] = "Đã lên lịch nhắc"
+        meta["badge_tone"] = "scheduled"
+        meta["status_label"] = "Đã lên lịch nhắc"
+    elif reminder_schedule.status == GapoScheduledMessage.Status.SENT:
+        meta["badge_label"] = "Đã nhắc lại"
+        meta["badge_tone"] = "done"
+        meta["status_label"] = "Đã gửi nhắc lại"
+    elif reminder_schedule.status == GapoScheduledMessage.Status.FAILED:
+        meta["badge_label"] = "Chưa lên lịch nhắc"
+        meta["badge_tone"] = "warning"
+        meta["status_label"] = "Lên lịch nhắc lỗi"
+    elif reminder_schedule.status == GapoScheduledMessage.Status.CANCELLED:
+        meta["badge_label"] = "Đã hủy lịch nhắc"
+        meta["badge_tone"] = "muted"
+        meta["status_label"] = "Đã hủy lịch nhắc"
+    return meta
+
+
+def _prepare_parcel_receipt_view_state(parcel_receipt, request=None):
     parcel_receipt.workflow_steps = _build_parcel_workflow_steps(parcel_receipt)
     parcel_receipt.extra_audit_logs = _parcel_extra_audit_logs(parcel_receipt)
     parcel_receipt.actual_receiver_display = _parcel_actual_receiver_display(parcel_receipt)
@@ -1037,10 +1162,38 @@ def _prepare_parcel_receipt_view_state(parcel_receipt):
     parcel_receipt.recipient_label = _parcel_recipient_display(parcel_receipt)
     parcel_receipt.is_unassigned = _parcel_is_unassigned(parcel_receipt)
     parcel_receipt.recipient_group_key = _parcel_group_key(parcel_receipt)
+    parcel_receipt.parcel_type_tone = _parcel_type_tone(parcel_receipt)
+    latest_batch = None
+    if hasattr(parcel_receipt, "_prefetched_objects_cache") and "notification_batches" in parcel_receipt._prefetched_objects_cache:
+        prefetched_batches = list(parcel_receipt.notification_batches.all())
+        latest_batch = prefetched_batches[0] if prefetched_batches else None
+    parcel_receipt.latest_notification_batch = latest_batch
+    if latest_batch:
+        parcel_receipt.reminder_meta = _parcel_reminder_meta(
+            latest_batch.reminder_schedule,
+            latest_batch.reminder_scheduled_at,
+            notification_send_count=latest_batch.notification_send_count or 0,
+        )
+    else:
+        parcel_receipt.reminder_meta = _parcel_reminder_meta(
+            parcel_receipt.reminder_schedule,
+            parcel_receipt.reminder_scheduled_at,
+            notification_send_count=1 if parcel_receipt.notified_at else 0,
+        )
+    if request and parcel_receipt.confirmation_token:
+        parcel_receipt.confirmation_url = _build_parcel_confirmation_url(
+            request, parcel_receipt.confirmation_token
+        )
+        parcel_receipt.confirmation_qr_svg_url = _build_parcel_confirmation_qr_svg_url(
+            parcel_receipt.confirmation_token
+        )
+    else:
+        parcel_receipt.confirmation_url = ""
+        parcel_receipt.confirmation_qr_svg_url = ""
     return parcel_receipt
 
 
-def _build_parcel_recipient_groups(parcel_receipts, *, split_by_day=False):
+def _build_parcel_recipient_groups(parcel_receipts, *, split_by_day=False, request=None):
     recipient_group_map = {}
     recipient_groups = []
     grouping_mode = "day" if split_by_day else "recipient"
@@ -1124,6 +1277,29 @@ def _build_parcel_recipient_groups(parcel_receipts, *, split_by_day=False):
             if group["notification_batches"]
             else None
         )
+        latest_batch = group["notification_batches"][0] if group["notification_batches"] else None
+        if latest_batch:
+            group["reminder_meta"] = _parcel_reminder_meta(
+                latest_batch.reminder_schedule,
+                latest_batch.reminder_scheduled_at,
+                notification_send_count=latest_batch.notification_send_count or 0,
+            )
+        else:
+            group["reminder_meta"] = _parcel_reminder_meta(
+                None,
+                None,
+                notification_send_count=group["notification_send_count"],
+            )
+        if request and group["notification_batches"] and group["recipient_count"] == 1:
+            group["latest_confirm_url"] = _build_parcel_batch_confirmation_url(
+                request, latest_batch.token
+            )
+            group["latest_confirm_qr_svg_url"] = _build_parcel_batch_confirmation_qr_svg_url(
+                latest_batch.token
+            )
+        else:
+            group["latest_confirm_url"] = ""
+            group["latest_confirm_qr_svg_url"] = ""
     return recipient_groups
 
 
@@ -1884,6 +2060,10 @@ def _incoming_dispatch_list(request, item_type_code):
             if dispatch.normalized_status_id in active_status_map
             else normalized_flow_label or dispatch.status.name
         )
+        badge_source = active_status_map.get(dispatch.normalized_status_id) or dispatch.status
+        badge_tokens = _incoming_status_badge_tokens(badge_source)
+        dispatch.normalized_status_badge_bg_color = badge_tokens["bg"]
+        dispatch.normalized_status_badge_text_color = badge_tokens["text"]
         dispatch.available_statuses = [
             active_status_map[code]
             for code in _allowed_status_codes_for_dispatch(dispatch)
@@ -1937,11 +2117,18 @@ def _incoming_dispatch_list(request, item_type_code):
                     signer_label=(selected_dispatch.signer_name or "").strip() or "Người ký",
                 ) or selected_dispatch.status.name
             )
+            badge_source = active_status_map.get(selected_dispatch.normalized_status_id) or selected_dispatch.status
+            badge_tokens = _incoming_status_badge_tokens(badge_source)
+            selected_dispatch.normalized_status_badge_bg_color = badge_tokens["bg"]
+            selected_dispatch.normalized_status_badge_text_color = badge_tokens["text"]
             selected_dispatch.available_statuses = [
                 active_status_map[code]
                 for code in _allowed_status_codes_for_dispatch(selected_dispatch)
                 if code in active_status_map
             ]
+            selected_dispatch.current_processing_department_id = (
+                selected_dispatch.processing_departments.values_list("id", flat=True).first()
+            )
             selected_dispatch.status_logs_display = list(
                 selected_dispatch.status_logs.select_related(
                     "from_status",
@@ -2018,7 +2205,7 @@ def parcel_receipt_list(request):
     recipient_filter = request.GET.get("recipient", "").strip()
     unnotified_only = request.GET.get("unnotified") == "1"
     unassigned_only = request.GET.get("unassigned") == "1"
-    split_by_day = request.GET.get("split_by_day") == "1"
+    split_by_day = request.GET.get("split_by_day", "1") != "0"
     start_date = (request.GET.get("start_date") or "").strip()
     end_date = (request.GET.get("end_date") or "").strip()
     receive_company = (request.GET.get("receive_company") or "").strip()
@@ -2104,10 +2291,20 @@ def parcel_receipt_list(request):
             "recipient_user",
             "recipient_user__userprofile",
         )
-        .prefetch_related("images", "audit_logs", "audit_logs__actor")
+        .prefetch_related(
+            "images",
+            "audit_logs",
+            "audit_logs__actor",
+            models.Prefetch(
+                "notification_batches",
+                queryset=AdmParcelNotificationBatch.objects.select_related(
+                    "reminder_schedule"
+                ).order_by("-created_at"),
+            ),
+        )
         .order_by("-received_at", "-id")
     )
-    dispatches_qs = dispatches_qs.exclude(status_id__in=PARCEL_HIDDEN_LIST_STATUS_CODES)
+    dispatches_qs = _exclude_hidden_parcels(dispatches_qs)
     if query:
         dispatches_qs = dispatches_qs.filter(
             Q(sender_unit__icontains=query)
@@ -2124,11 +2321,21 @@ def parcel_receipt_list(request):
     if status_filter:
         dispatches_qs = dispatches_qs.filter(status=status_filter)
     if department_filter:
-        dispatches_qs = dispatches_qs.filter(recipient_department=department_filter)
-    if company_filter:
-        dispatches_qs = dispatches_qs.filter(receiving_company_id=company_filter)
-    if recipient_filter.isdigit():
-        dispatches_qs = dispatches_qs.filter(recipient_directory_id=recipient_filter)
+        dispatches_qs = dispatches_qs.filter(
+            Q(recipient_department__icontains=department_filter)
+            | Q(recipient_directory__department_name__icontains=department_filter)
+        )
+    if recipient_filter:
+        dispatches_qs = dispatches_qs.filter(
+            Q(recipient_name__icontains=recipient_filter)
+            | Q(recipient_employee_code__icontains=recipient_filter)
+            | Q(recipient_directory__full_name__icontains=recipient_filter)
+            | Q(recipient_directory__employee_code__icontains=recipient_filter)
+            | Q(recipient_directory__email__icontains=recipient_filter)
+            | Q(recipient_user__first_name__icontains=recipient_filter)
+            | Q(recipient_user__last_name__icontains=recipient_filter)
+            | Q(recipient_user__username__icontains=recipient_filter)
+        )
     if unnotified_only:
         dispatches_qs = dispatches_qs.filter(notified_at__isnull=True)
     if unassigned_only:
@@ -2171,12 +2378,13 @@ def parcel_receipt_list(request):
             for code in _allowed_status_codes_for_parcel(parcel_receipt)
             if code in active_status_map
         ]
-        _prepare_parcel_receipt_view_state(parcel_receipt)
+        _prepare_parcel_receipt_view_state(parcel_receipt, request=request)
 
     grouping_mode = "day" if split_by_day else "recipient"
     recipient_groups = _build_parcel_recipient_groups(
         dispatches.object_list,
         split_by_day=split_by_day,
+        request=request,
     )
 
     current_recipient_batch = (
@@ -2223,11 +2431,10 @@ def parcel_receipt_list(request):
                 "notification_schedule",
                 "reminder_schedule",
             )
-            .prefetch_related("images", "audit_logs", "audit_logs__actor")
             .first()
         )
         if selected_dispatch:
-            _prepare_parcel_receipt_view_state(selected_dispatch)
+            _prepare_parcel_receipt_view_state(selected_dispatch, request=request)
             selected_workflow_steps = selected_dispatch.workflow_steps
             selected_recipient_group_key = (
                 selected_dispatch.received_at.date().isoformat()
@@ -2247,7 +2454,7 @@ def parcel_receipt_list(request):
         "q": query,
         "selected_status": status_filter,
         "selected_department": department_filter,
-        "selected_company": company_filter,
+        "selected_company": "",
         "selected_recipient": recipient_filter,
         "selected_unnotified": unnotified_only,
         "selected_unassigned": unassigned_only,
@@ -2287,7 +2494,7 @@ def parcel_receipt_list(request):
         "upload_action_name": "admindocuments:parcel_receipt_upload_images",
         "parcel_confirm_base_url": _build_public_absolute_url(
             request,
-            reverse("admindocuments:parcel_receipt_confirm", args=["TOKEN"]),
+            reverse("admindocuments:parcel_receipt_confirm_short", args=["TOKEN"]),
         ).replace("TOKEN", ""),
         "item_type_code": INCOMING_TYPE_PARCEL,
         "item_type_name": screen_meta["page_title"],
@@ -2423,7 +2630,7 @@ def parcel_auto_notify_settings(request):
 
 @login_required
 def parcel_receipt_item_partial(request, doc_id: int):
-    split_by_day = request.GET.get("split_by_day") == "1"
+    split_by_day = request.GET.get("split_by_day", "1") != "0"
     parcel_receipt = get_object_or_404(
         AdmParcelReceipt.objects.select_related(
             "received_by",
@@ -2432,10 +2639,20 @@ def parcel_receipt_item_partial(request, doc_id: int):
             "recipient_directory",
             "recipient_user",
             "recipient_user__userprofile",
-        ).prefetch_related("images", "audit_logs", "audit_logs__actor"),
+        ).prefetch_related(
+            "images",
+            "audit_logs",
+            "audit_logs__actor",
+            models.Prefetch(
+                "notification_batches",
+                queryset=AdmParcelNotificationBatch.objects.select_related(
+                    "reminder_schedule"
+                ).order_by("-created_at"),
+            ),
+        ),
         pk=doc_id,
     )
-    _prepare_parcel_receipt_view_state(parcel_receipt)
+    _prepare_parcel_receipt_view_state(parcel_receipt, request=request)
     group_queryset = AdmParcelReceipt.objects.select_related(
         "received_by",
         "receiving_company",
@@ -2443,7 +2660,17 @@ def parcel_receipt_item_partial(request, doc_id: int):
         "recipient_directory",
         "recipient_user",
         "recipient_user__userprofile",
-    ).prefetch_related("images", "audit_logs", "audit_logs__actor")
+    ).prefetch_related(
+        "images",
+        "audit_logs",
+        "audit_logs__actor",
+        models.Prefetch(
+            "notification_batches",
+            queryset=AdmParcelNotificationBatch.objects.select_related(
+                "reminder_schedule"
+            ).order_by("-created_at"),
+        ),
+    )
     if split_by_day and parcel_receipt.received_at:
         group_queryset = group_queryset.filter(received_at__date=parcel_receipt.received_at.date())
     elif parcel_receipt.recipient_directory_id:
@@ -2460,10 +2687,14 @@ def parcel_receipt_item_partial(request, doc_id: int):
                 Q(recipient_name__exact="")
                 | Q(recipient_name=AdmParcelReceiptForm.UNKNOWN_RECIPIENT_LABEL)
             )
-    group_queryset = group_queryset.exclude(status_id__in=PARCEL_HIDDEN_LIST_STATUS_CODES).order_by("-received_at", "-id")
+    group_queryset = _exclude_hidden_parcels(group_queryset).order_by("-received_at", "-id")
     for sibling in group_queryset:
-        _prepare_parcel_receipt_view_state(sibling)
-    groups = _build_parcel_recipient_groups(group_queryset, split_by_day=split_by_day)
+        _prepare_parcel_receipt_view_state(sibling, request=request)
+    groups = _build_parcel_recipient_groups(
+        group_queryset,
+        split_by_day=split_by_day,
+        request=request,
+    )
     group_html = ""
     if groups:
         group_html = render_to_string(
@@ -2477,7 +2708,11 @@ def parcel_receipt_item_partial(request, doc_id: int):
             },
             request=request,
         )
-    if parcel_receipt.status_id in PARCEL_HIDDEN_LIST_STATUS_CODES:
+    if (
+        parcel_receipt.status_id in PARCEL_HIDDEN_LIST_STATUS_CODES
+        or parcel_receipt.confirmed_at is not None
+        or parcel_receipt.completed_at is not None
+    ):
         return JsonResponse({"remove": True, "group_html": group_html, "status": parcel_receipt.status.name})
     html = render_to_string(
         "admindocuments/includes/parcel_receipt_list_item.html",
@@ -2491,6 +2726,20 @@ def parcel_receipt_item_partial(request, doc_id: int):
         request=request,
     )
     return JsonResponse({"html": html, "group_html": group_html, "status": parcel_receipt.status.name})
+
+
+@login_required
+def parcel_receipt_confirm_qr(request, token: str):
+    parcel_receipt = get_object_or_404(AdmParcelReceipt, confirmation_token=token)
+    confirm_url = _build_parcel_confirmation_url(request, parcel_receipt.confirmation_token)
+    return _build_qr_svg_response(confirm_url)
+
+
+@login_required
+def parcel_batch_confirm_qr(request, token: str):
+    batch = get_object_or_404(AdmParcelNotificationBatch, token=token)
+    confirm_url = _build_parcel_batch_confirmation_url(request, batch.token)
+    return _build_qr_svg_response(confirm_url)
 
 
 @login_required
@@ -2606,6 +2855,39 @@ def incoming_dispatch_change_status(request, doc_id: int):
     if next_url.startswith("/"):
         return redirect(next_url)
     return redirect(_incoming_dispatch_route_name(dispatch.incoming_item_type_id))
+
+
+@login_required
+def incoming_dispatch_update_department(request, doc_id: int):
+    if request.method != "POST":
+        return redirect("admindocuments:incoming_document_list")
+    if not _has_incoming_dispatch_status_edit_access(request.user):
+        messages.error(request, "Bạn không có quyền cập nhật phòng ban xử lý.")
+        return render(request, "403.html", status=403)
+
+    dispatch = get_object_or_404(
+        AdmIncomingDispatch.objects.prefetch_related("processing_departments"),
+        pk=doc_id,
+    )
+    department_id = (request.POST.get("processing_department") or "").strip()
+    if department_id:
+        department = get_object_or_404(
+            AdmDepartment.objects.filter(is_active=True),
+            pk=department_id,
+        )
+        dispatch.processing_departments.set([department])
+        messages.success(request, "Đã cập nhật phòng ban xử lý.")
+    else:
+        dispatch.processing_departments.clear()
+        messages.success(request, "Đã xóa phòng ban xử lý.")
+
+    dispatch.updated_by = request.user
+    dispatch.save(update_fields=["updated_by", "updated_at"])
+
+    next_url = request.POST.get("next", "")
+    if next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect(f"{_incoming_dispatch_list_url(dispatch.incoming_item_type_id)}?open={dispatch.id}")
 
 
 @login_required
@@ -2735,13 +3017,18 @@ def parcel_receipt_send_group_notification(request):
             grouped_parcels.setdefault(_parcel_group_key(parcel), []).append(parcel)
         batches = []
         errors = []
+        reminder_warnings = []
         for group_parcels in grouped_parcels.values():
             try:
-                batch, _ = _send_parcel_group_notification_now(group_parcels, request.user, request)
+                batch, _, reminder_error = _send_parcel_group_notification_now(
+                    group_parcels, request.user, request
+                )
             except (ValueError, NotificationSendError) as exc:
                 errors.append(str(exc))
             else:
                 batches.append(batch)
+                if reminder_error:
+                    reminder_warnings.append(reminder_error)
     except Exception as exc:
         messages.error(request, f"Gửi thông báo nhận thất bại: {exc}")
     else:
@@ -2758,6 +3045,11 @@ def parcel_receipt_send_group_notification(request):
                     request,
                     f"Đã gửi thông báo cho {total_parcels} bưu kiện của {len(batches)} người nhận.",
                 )
+        if reminder_warnings:
+            messages.warning(
+                request,
+                "Đã gửi thông báo nhưng chưa lên lịch nhắc lại: " + " | ".join(reminder_warnings[:3]),
+            )
         if errors:
             messages.warning(request, "Một số nhóm chưa gửi được: " + " | ".join(errors[:3]))
         if not batches and errors:

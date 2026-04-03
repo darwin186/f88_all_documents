@@ -196,6 +196,8 @@ GAPO_API_URL = os.getenv('GAPO_API_URL')
 GAPO_BOT_API_KEY = (os.getenv('BOT_API_KEY') or '').strip()
 GAPO_BOT_ID = os.getenv('BOT_ID')
 PUBLIC_APP_BASE_URL = (os.getenv('PUBLIC_APP_BASE_URL') or '').strip().rstrip('/')
+GAPO_CONNECT_TIMEOUT = float(os.getenv('GAPO_CONNECT_TIMEOUT', '3.05'))
+GAPO_READ_TIMEOUT = float(os.getenv('GAPO_READ_TIMEOUT', '5'))
 
 # Borrow request API key
 BORROW_REQUEST_API_KEY = (os.getenv('BORROW_REQUEST_API_KEY') or '').strip()

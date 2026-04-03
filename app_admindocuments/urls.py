@@ -31,6 +31,11 @@ urlpatterns = [
         name="incoming_dispatch_change_status",
     ),
     path(
+        "incoming-dispatches/<int:doc_id>/processing-department/",
+        views.incoming_dispatch_update_department,
+        name="incoming_dispatch_update_department",
+    ),
+    path(
         "incoming-dispatches/<int:doc_id>/images/upload/",
         views.incoming_dispatch_upload_images,
         name="incoming_dispatch_upload_images",
@@ -76,9 +81,29 @@ urlpatterns = [
         name="parcel_batch_confirm",
     ),
     path(
+        "parcel-receipts/batches/confirm/<str:token>/qr.svg",
+        views.parcel_batch_confirm_qr,
+        name="parcel_batch_confirm_qr",
+    ),
+    path(
+        "pb/<str:token>/",
+        views.parcel_batch_confirm,
+        name="parcel_batch_confirm_short",
+    ),
+    path(
         "parcel-receipts/confirm/<str:token>/",
         views.parcel_receipt_confirm,
         name="parcel_receipt_confirm",
+    ),
+    path(
+        "parcel-receipts/confirm/<str:token>/qr.svg",
+        views.parcel_receipt_confirm_qr,
+        name="parcel_receipt_confirm_qr",
+    ),
+    path(
+        "p/<str:token>/",
+        views.parcel_receipt_confirm,
+        name="parcel_receipt_confirm_short",
     ),
     path(
         "parcel-receipts/<int:doc_id>/proxy/",

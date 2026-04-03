@@ -488,6 +488,8 @@ class AdmIncomingDispatchType(models.Model):
 class AdmIncomingDispatchStatus(models.Model):
     code = models.CharField(max_length=50, primary_key=True)
     name = models.CharField(max_length=255)
+    badge_text_color = models.CharField(max_length=20, blank=True, null=True)
+    badge_bg_color = models.CharField(max_length=20, blank=True, null=True)
     is_active = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0)
 

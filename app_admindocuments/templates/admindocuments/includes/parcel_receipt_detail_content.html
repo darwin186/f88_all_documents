@@ -10,8 +10,18 @@
   <div class="rounded-2xl border border-white/80 bg-white/80 px-3 py-2"><div class="text-[9px] uppercase tracking-[0.14em] text-slate-400">Người nhận</div><div class="parcel-safe-text mt-1 font-semibold text-slate-700">{{ selected_dispatch.actual_receiver_display }}</div></div>
 </div>
 
-<div class="mt-3 rounded-[22px] border border-white/80 bg-white/80 px-3 py-3">
-  <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Tiến trình xử lý</div>
+{% if selected_dispatch.confirmation_url and selected_dispatch.confirmation_qr_svg_url %}
+<div class="mt-3 flex justify-end">
+  <button type="button"
+          @click="openQrModal('{{ selected_dispatch.confirmation_url|escapejs }}', '{{ selected_dispatch.confirmation_qr_svg_url|escapejs }}', '{{ selected_dispatch.recipient_label|escapejs }}')"
+          class="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[10px] font-semibold text-emerald-700">
+    Hiển thị QR xác nhận
+  </button>
+</div>
+{% endif %}
+
+<details class="mt-3 rounded-[22px] border border-white/80 bg-white/80 px-3 py-3">
+  <summary class="cursor-pointer list-none text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Tiến trình xử lý</summary>
   <div class="mt-3 space-y-2.5">
     {% for step in selected_workflow_steps %}
     <div class="parcel-track-line relative flex gap-3">
@@ -33,11 +43,11 @@
     </div>
     {% endfor %}
   </div>
-</div>
+</details>
 
 <div class="mt-4 space-y-3">
-  <div class="rounded-[22px] border border-white/80 bg-white/80 px-3 py-3">
-    <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Điều chỉnh người nhận</div>
+  <details class="rounded-[22px] border border-white/80 bg-white/80 px-3 py-3">
+    <summary class="cursor-pointer list-none text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Điều chỉnh người nhận</summary>
     <form method="post" action="{% url 'admindocuments:parcel_receipt_assign_recipient' selected_dispatch.id %}" class="mt-3 space-y-3">
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -56,10 +66,10 @@
       <div id="assignRecipientResults-{{ selected_dispatch.id }}" class="space-y-2"></div>
       <button type="submit" class="rounded-2xl bg-emerald-600 px-4 py-2 text-[11px] font-semibold text-white">{% if selected_dispatch.recipient_directory_id %}Cập nhật người nhận{% else %}Lưu người nhận{% endif %}</button>
     </form>
-  </div>
+  </details>
 
-  <div class="rounded-[22px] border border-white/80 bg-white/80 px-3 py-3">
-    <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Hình thức nhận</div>
+  <details class="rounded-[22px] border border-white/80 bg-white/80 px-3 py-3">
+    <summary class="cursor-pointer list-none text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Hình thức nhận</summary>
     <form method="post" action="{% url 'admindocuments:parcel_receipt_register_proxy' selected_dispatch.id %}" class="mt-3 space-y-3">
       {% csrf_token %}
       <div class="flex flex-wrap gap-2">
@@ -79,13 +89,13 @@
              class="block w-full rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-2.5 text-[12px] text-slate-700 placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
       <button type="submit" class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold text-slate-700">Lưu hình thức nhận</button>
     </form>
-  </div>
+  </details>
 
-  <div class="rounded-[22px] border border-white/80 bg-white/80 px-3 py-3">
-    <div class="flex items-center justify-between gap-3">
+  <details class="rounded-[22px] border border-white/80 bg-white/80 px-3 py-3">
+    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
       <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Tệp đính kèm</div>
       <span class="text-[10px] text-slate-400">{{ selected_dispatch.images.all|length }} tệp</span>
-    </div>
+    </summary>
     <form method="post" action="{% url upload_action_name selected_dispatch.id %}" enctype="multipart/form-data" class="mt-3 space-y-3">
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -129,20 +139,5 @@
     {% else %}
     <div class="mt-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-[11px] text-slate-400">Chưa có tệp đính kèm.</div>
     {% endif %}
-  </div>
-
-  {% if selected_dispatch.extra_audit_logs %}
-  <details class="rounded-[22px] border border-white/80 bg-white/80 px-3 py-3">
-    <summary class="cursor-pointer list-none text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Lịch sử bổ sung</summary>
-    <div class="mt-3 space-y-2">
-      {% for log in selected_dispatch.extra_audit_logs %}
-      <div class="rounded-2xl bg-slate-50 px-3 py-2.5">
-        <div class="text-[11px] font-bold text-slate-800">{{ log.get_action_display }}</div>
-        <div class="mt-1 text-[10px] text-slate-400">{{ log.created_at|date:"d/m/Y H:i" }}{% if log.actor %} · {{ log.actor.get_full_name|default:log.actor.username }}{% endif %}</div>
-        {% if log.note %}<div class="mt-2 text-[11px] text-slate-500">{{ log.note }}</div>{% endif %}
-      </div>
-      {% endfor %}
-    </div>
   </details>
-  {% endif %}
 </div>

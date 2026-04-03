@@ -68,7 +68,16 @@ def post_gapo_message(payload: dict[str, Any]) -> dict[str, Any]:
         "x-gapo-api-key": api_key,
         "Content-Type": "application/json",
     }
-    response = requests.post(gapo_url, json=payload, headers=headers, timeout=10)
+    timeout = (
+        float(getattr(settings, "GAPO_CONNECT_TIMEOUT", 3.05)),
+        float(getattr(settings, "GAPO_READ_TIMEOUT", 5)),
+    )
+    try:
+        response = requests.post(gapo_url, json=payload, headers=headers, timeout=timeout)
+    except requests.Timeout as exc:
+        raise GapoMessageError("Gapo timeout trong lúc gửi thông báo.") from exc
+    except requests.RequestException as exc:
+        raise GapoMessageError(f"Gapo network error: {exc}") from exc
     if response.status_code >= 400:
         raise GapoMessageError(f"Gapo error {response.status_code}: {response.text}")
     try:

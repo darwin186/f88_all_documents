@@ -326,7 +326,7 @@ class _BaseIncomingReceiptForm(forms.ModelForm):
         queryset=AdmDepartment.objects.select_related("company")
         .filter(is_active=True)
         .order_by("company__code", "name"),
-        required=True,
+        required=False,
         label="Phòng ban xử lý",
     )
     def __init__(self, *args, **kwargs):
@@ -341,12 +341,6 @@ class _BaseIncomingReceiptForm(forms.ModelForm):
         )
         self.fields["receiving_company"].empty_label = "Chọn công ty nhận"
         self.fields["processing_department"].empty_label = "Chọn phòng ban xử lý"
-
-    def clean_processing_department(self):
-        department = self.cleaned_data.get("processing_department")
-        if not department:
-            raise forms.ValidationError("Cần chọn phòng ban xử lý.")
-        return department
 
     def save(self, commit=True):
         instance = super().save(commit=False)
@@ -369,8 +363,12 @@ class _BaseIncomingReceiptForm(forms.ModelForm):
 
     def _save_processing_department_m2m(self):
         department = getattr(self, "_selected_processing_department", None)
-        if self.instance.pk and department is not None:
-            self.instance.processing_departments.set([department])
+        if not self.instance.pk:
+            return
+        if department is None:
+            self.instance.processing_departments.clear()
+            return
+        self.instance.processing_departments.set([department])
 
 
 def _apply_small_field_styles(form):

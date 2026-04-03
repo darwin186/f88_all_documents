@@ -362,36 +362,50 @@
         </div>
         </div>
 
-        <div x-cloak x-show="showPane('list')" x-transition.opacity.duration.150ms class="min-w-0 space-y-4">
+        <div id="parcel-list-pane" x-cloak x-show="showPane('list')" x-transition.opacity.duration.150ms class="min-w-0 space-y-4" tabindex="-1">
           <div class="parcel-panel rounded-[28px] border border-white/70 p-5 sm:p-6">
             <div class="flex flex-col gap-3">
               <div class="min-w-0">
                 <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-sky-600">Chưa nhận</p>
                 <h2 class="parcel-title mt-2 text-[20px] font-bold text-slate-900 sm:text-[22px]">Danh sách chưa nhận</h2>
               </div>
-              <div class="flex flex-wrap items-center gap-2">
-                {% if has_admin_docs_access %}
-                <a href="{% url 'admindocuments:parcel_auto_notify_settings' %}" class="inline-flex w-fit items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600 shadow-sm">
-                  Cài giờ nhắc
-                </a>
-                {% endif %}
+              <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                 <div class="inline-flex w-fit items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-600 shadow-sm">
                   <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
                   {{ paginator.count }} bưu kiện chưa nhận
                 </div>
+                {% if auto_notify_setting %}
+                  {% if has_admin_docs_access %}
+                  <a href="{% url 'admindocuments:parcel_auto_notify_settings' %}" class="inline-flex w-fit items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-500 shadow-sm transition hover:border-emerald-200 hover:text-emerald-700">
+                    <span class="h-2 w-2 rounded-full bg-sky-500"></span>
+                    Nhắc lại lúc {{ auto_notify_setting.reminder_send_times_display }}{% if auto_notify_setting.skip_weekends %} · bỏ T7, CN{% endif %}
+                  </a>
+                  {% else %}
+                  <div class="inline-flex w-fit items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-500 shadow-sm">
+                    <span class="h-2 w-2 rounded-full bg-sky-500"></span>
+                    Nhắc lại lúc {{ auto_notify_setting.reminder_send_times_display }}{% if auto_notify_setting.skip_weekends %} · bỏ T7, CN{% endif %}
+                  </div>
+                  {% endif %}
+                {% endif %}
               </div>
             </div>
 
             <form method="get" class="mt-5 space-y-3">
-              <div class="flex flex-wrap gap-2">
-                <button type="submit" name="split_by_day" value="{% if split_by_day %}0{% else %}1{% endif %}" class="rounded-full border px-3 py-1.5 text-[10px] font-semibold {% if split_by_day %}border-emerald-200 bg-emerald-50 text-emerald-700{% else %}border-slate-200 bg-white text-slate-600{% endif %}">
-                  {% if split_by_day %}Đang tách theo ngày{% else %}Tách theo ngày nhận{% endif %}
-                </button>
-                {% if auto_notify_setting %}
-                <div class="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-500">
-                  Nhắc lại lúc {{ auto_notify_setting.reminder_send_times_display }}{% if auto_notify_setting.skip_weekends %} · bỏ T7, CN{% endif %}
+              <input type="hidden" name="pane" value="list">
+              <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <input type="hidden" name="split_by_day" value="{% if split_by_day %}1{% else %}0{% endif %}">
+                <div class="inline-flex w-full rounded-full border border-slate-200 bg-slate-50 p-1 shadow-sm sm:w-fit">
+                  <button type="button"
+                          @click="$el.form.elements['split_by_day'].value='1'; $el.form.submit()"
+                          class="flex-1 rounded-full px-3 py-1.5 text-[10px] font-semibold transition sm:flex-none {% if split_by_day %}bg-slate-900 text-white shadow-sm{% else %}text-slate-500 hover:text-slate-700{% endif %}">
+                    Theo ngày
+                  </button>
+                  <button type="button"
+                          @click="$el.form.elements['split_by_day'].value='0'; $el.form.submit()"
+                          class="flex-1 rounded-full px-3 py-1.5 text-[10px] font-semibold transition sm:flex-none {% if not split_by_day %}bg-slate-900 text-white shadow-sm{% else %}text-slate-500 hover:text-slate-700{% endif %}">
+                    Theo người nhận
+                  </button>
                 </div>
-                {% endif %}
               </div>
               <div class="flex flex-col gap-3 rounded-[24px] border border-[#e3e9f2] bg-white px-4 py-3 shadow-[0_14px_30px_rgba(15,23,42,0.05)] sm:flex-row sm:items-center">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -408,35 +422,27 @@
 
               <details class="rounded-3xl border border-slate-200 bg-white/80 px-4 py-3 shadow-sm">
                 <summary class="cursor-pointer list-none text-[11px] font-semibold text-slate-600">Bộ lọc nâng cao</summary>
+                <input type="hidden" name="unnotified" value="{% if selected_unnotified %}1{% else %}0{% endif %}">
+                <input type="hidden" name="unassigned" value="{% if selected_unassigned %}1{% else %}0{% endif %}">
                 <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <select name="department" class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
-                    <option value="">Tất cả phòng ban</option>
-                    {% for department in departments %}
-                    <option value="{{ department }}" {% if selected_department == department %}selected{% endif %}>{{ department }}</option>
-                    {% endfor %}
-                  </select>
-                  <select name="recipient" class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
-                    <option value="">Tất cả người nhận</option>
-                    {% for recipient in recipient_options %}
-                    <option value="{{ recipient.id }}" {% if selected_recipient == recipient.id|stringformat:'s' %}selected{% endif %}>{{ recipient.full_name }}{% if recipient.employee_code %} - {{ recipient.employee_code }}{% endif %}</option>
-                    {% endfor %}
-                  </select>
+                  <input type="text" name="recipient" value="{{ selected_recipient }}" placeholder="Tìm theo người nhận, mã NV, email..."
+                         class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 placeholder:text-[10px] placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
+                  <input type="text" name="department" value="{{ selected_department }}" placeholder="Tìm theo phòng ban..."
+                         class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 placeholder:text-[10px] placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
                   <input type="date" name="start_date" value="{{ selected_start_date }}" class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
                   <input type="date" name="end_date" value="{{ selected_end_date }}" class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
-                  <select name="company" class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100 md:col-span-2 xl:col-span-2">
-                    <option value="">Tất cả công ty nhận</option>
-                    {% for company in companies %}
-                    <option value="{{ company.code }}" {% if selected_company == company.code %}selected{% endif %}>{{ company.code }} - {{ company.name }}</option>
-                    {% endfor %}
-                  </select>
-                  <label class="inline-flex items-center gap-2 rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700">
-                    <input type="checkbox" name="unnotified" value="1" {% if selected_unnotified %}checked{% endif %}>
-                    <span>Chưa thông báo</span>
-                  </label>
-                  <label class="inline-flex items-center gap-2 rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700">
-                    <input type="checkbox" name="unassigned" value="1" {% if selected_unassigned %}checked{% endif %}>
-                    <span>Chưa có người nhận</span>
-                  </label>
+                  <div class="md:col-span-2 xl:col-span-4 flex flex-wrap gap-2">
+                    <button type="button"
+                            onclick="this.form.elements['unnotified'].value = this.form.elements['unnotified'].value === '1' ? '0' : '1'; this.form.submit();"
+                            class="rounded-full border px-3 py-2 text-[10px] font-semibold transition {% if selected_unnotified %}border-amber-200 bg-amber-50 text-amber-700{% else %}border-slate-200 bg-white text-slate-500{% endif %}">
+                      Chưa thông báo
+                    </button>
+                    <button type="button"
+                            onclick="this.form.elements['unassigned'].value = this.form.elements['unassigned'].value === '1' ? '0' : '1'; this.form.submit();"
+                            class="rounded-full border px-3 py-2 text-[10px] font-semibold transition {% if selected_unassigned %}border-amber-200 bg-amber-50 text-amber-700{% else %}border-slate-200 bg-white text-slate-500{% endif %}">
+                      Chưa có người nhận
+                    </button>
+                  </div>
                 </div>
                 <div class="mt-4 flex flex-wrap gap-2">
                   <button type="submit" class="rounded-full bg-slate-900 px-4 py-2 text-[10px] font-semibold text-white">Áp dụng bộ lọc</button>
@@ -461,10 +467,10 @@
             <div>Trang {{ page_obj.number }} / {{ paginator.num_pages }}</div>
             <div class="flex items-center gap-2">
               {% if page_obj.has_previous %}
-              <a href="?q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&recipient={{ selected_recipient }}&company={{ selected_company }}&start_date={{ selected_start_date }}&end_date={{ selected_end_date }}&unnotified={% if selected_unnotified %}1{% else %}0{% endif %}&unassigned={% if selected_unassigned %}1{% else %}0{% endif %}&split_by_day={% if split_by_day %}1{% else %}0{% endif %}&page={{ page_obj.previous_page_number }}" class="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-600">Trước</a>
+              <a href="?pane=list&q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&recipient={{ selected_recipient }}&start_date={{ selected_start_date }}&end_date={{ selected_end_date }}&unnotified={% if selected_unnotified %}1{% else %}0{% endif %}&unassigned={% if selected_unassigned %}1{% else %}0{% endif %}&split_by_day={% if split_by_day %}1{% else %}0{% endif %}&page={{ page_obj.previous_page_number }}" class="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-600">Trước</a>
               {% endif %}
               {% if page_obj.has_next %}
-              <a href="?q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&recipient={{ selected_recipient }}&company={{ selected_company }}&start_date={{ selected_start_date }}&end_date={{ selected_end_date }}&unnotified={% if selected_unnotified %}1{% else %}0{% endif %}&unassigned={% if selected_unassigned %}1{% else %}0{% endif %}&split_by_day={% if split_by_day %}1{% else %}0{% endif %}&page={{ page_obj.next_page_number }}" class="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-600">Sau</a>
+              <a href="?pane=list&q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&recipient={{ selected_recipient }}&start_date={{ selected_start_date }}&end_date={{ selected_end_date }}&unnotified={% if selected_unnotified %}1{% else %}0{% endif %}&unassigned={% if selected_unassigned %}1{% else %}0{% endif %}&split_by_day={% if split_by_day %}1{% else %}0{% endif %}&page={{ page_obj.next_page_number }}" class="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-600">Sau</a>
               {% endif %}
             </div>
           </div>
@@ -472,6 +478,34 @@
 
         </div>
       </section>
+    </div>
+  </div>
+
+  <div x-cloak x-show="qrModal.open" x-transition.opacity.duration.150ms class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-900/35" @click="closeQrModal()"></div>
+    <div class="relative w-full max-w-sm rounded-[28px] border border-white/70 bg-white p-5 shadow-2xl">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">QR xác nhận</div>
+          <div class="mt-1 text-[14px] font-semibold text-slate-900" x-text="qrModal.title || 'Bưu kiện chờ xác nhận'"></div>
+        </div>
+        <button type="button" @click="closeQrModal()" class="rounded-full border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-50">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="mt-4 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+        <div class="mx-auto flex w-fit items-center justify-center rounded-[20px] bg-white p-3 shadow-sm">
+          <img :src="qrModal.svgUrl" alt="QR xác nhận" class="h-56 w-56 max-w-full">
+        </div>
+        <div class="mt-4 rounded-2xl bg-white px-3 py-2 text-[11px] text-slate-600 break-all shadow-sm" x-text="qrModal.targetUrl"></div>
+      </div>
+      <div class="mt-4 flex justify-end">
+        <a :href="qrModal.targetUrl" target="_blank" rel="noopener" class="rounded-2xl bg-emerald-600 px-4 py-2 text-[11px] font-semibold text-white">
+          Mở link xác nhận
+        </a>
+      </div>
     </div>
   </div>
 </div>
@@ -485,11 +519,28 @@
       hasSelectedDispatch: !!config.hasSelectedDispatch,
       itemPartialUrlTemplate: config.itemPartialUrlTemplate,
       emptyStateHtml: config.emptyStateHtml,
+      qrModal: {
+        open: false,
+        targetUrl: '',
+        svgUrl: '',
+        title: '',
+      },
       selectedParcelIds: [],
       submittingActions: {},
       refreshingDispatchId: null,
       layoutMode: 'mobile',
       init() {
+        const focusListPane = () => {
+          if (this.layoutMode === 'desktop' || this.activePane !== 'list') return;
+          window.requestAnimationFrame(() => {
+            const listPane = document.getElementById('parcel-list-pane');
+            if (!listPane) return;
+            listPane.scrollIntoView({ block: 'start', behavior: 'auto' });
+            if (typeof listPane.focus === 'function') {
+              listPane.focus({ preventScroll: true });
+            }
+          });
+        };
         const sync = () => {
           const requestedPane = new URLSearchParams(window.location.search).get('pane');
           const desktopViewport =
@@ -505,6 +556,7 @@
           } else if (!['receive', 'list', 'detail'].includes(this.activePane)) {
             this.activePane = 'receive';
           }
+          focusListPane();
         };
         sync();
         window.addEventListener('resize', sync);
@@ -572,6 +624,17 @@
         } else {
           this.selectedParcelIds = [...new Set([...this.selectedParcelIds, ...normalizedIds])];
         }
+      },
+      openQrModal(targetUrl, svgUrl, title = '') {
+        this.qrModal = {
+          open: true,
+          targetUrl: targetUrl || '',
+          svgUrl: svgUrl || '',
+          title: title || '',
+        };
+      },
+      closeQrModal() {
+        this.qrModal.open = false;
       },
       async refreshParcelItem(id) {
         const normalized = String(id);
