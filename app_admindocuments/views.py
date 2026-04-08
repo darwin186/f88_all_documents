@@ -387,6 +387,30 @@ def _build_parcel_dynamic_context(parcels, first_parcel, confirm_url):
     }
 
 
+def _ensure_parcel_confirm_url_in_body(body_text, template_text, confirm_url):
+    resolved_body = (body_text or "").strip()
+    if confirm_url in resolved_body:
+        return resolved_body
+    if "{{confirm_url}}" in (template_text or ""):
+        return resolved_body
+    if not resolved_body:
+        return f"Xác nhận tại đây: {confirm_url}"
+    return f"{resolved_body}\n{confirm_url}"
+
+
+def _gapo_markdown_link(url, label="tại đây"):
+    return f"[{label}]({url})"
+
+
+def _send_parcel_clickable_link_fallback(receiver_id, confirm_url):
+    """Send a plain-text follow-up message so Gapo can auto-link the URL."""
+    send_via_gapo(
+        str(receiver_id),
+        f"Xác nhận nhận hàng {_gapo_markdown_link(confirm_url)}",
+        target_type="receiver",
+    )
+
+
 def _get_active_parcel_auto_notify_setting():
     return (
         AdmParcelAutoNotifySetting.objects.filter(is_active=True)
@@ -450,11 +474,16 @@ def _schedule_parcel_batch_reminder(batch, parcels, request_user, request, *, co
     context = _build_parcel_dynamic_context(parcels, first, confirm_url)
     title_text = template.render_text(template.title_template, context)
     body_text = template.render_text(template.body_template, context)
+    body_text = _ensure_parcel_confirm_url_in_body(
+        body_text,
+        template.body_template,
+        confirm_url,
+    )
     button_text = template.render_text(template.button_text, context)
     image_url = template.hero_image_url or _build_parcel_dynamic_image_url(request)
     reminder_message = (
         f"Nhắc lại: bạn có {len(parcels)} kiện hàng chưa được nhận. "
-        f"Liên hệ lễ tân tòa nhà để được hỗ trợ. Link nhanh: {confirm_url}"
+        f"Liên hệ lễ tân tòa nhà để được hỗ trợ. Xác nhận {_gapo_markdown_link(confirm_url)}"
     )
     body_metadata = {
         "metadata": {
@@ -595,7 +624,7 @@ def _build_parcel_notification_message(parcel_receipt, request):
     body = (
         f"Bạn có {parcel_type_label.lower()} mới từ '{parcel_receipt.sender_unit}'. "
         f"Người nhận: {recipient_name}. "
-        f"Xác nhận nhận hàng tại: {confirm_url}"
+        f"Xác nhận nhận hàng {_gapo_markdown_link(confirm_url)}"
     )
     return str(receiver_id), body, confirm_url
 
@@ -608,7 +637,7 @@ def _schedule_parcel_reminder(parcel_receipt, request_user, request, *, confirm_
         receiver_id=str(receiver_id),
         message=(
             f"Nhắc lại: bạn chưa xác nhận bưu phẩm từ '{parcel_receipt.sender_unit}'. "
-            f"Vui lòng xác nhận tại: {confirm_url}"
+            f"Vui lòng xác nhận {_gapo_markdown_link(confirm_url)}"
         ),
         schedule_at=now + timedelta(hours=24),
         created_by=request_user,
@@ -689,13 +718,18 @@ def _send_parcel_group_notification_now(parcels, request_user, request):
     parcel_label = "kiện hàng" if len(parcels) > 1 else "kiện hàng"
     message = (
         f"Bạn có {len(parcels)} {parcel_label} chưa được nhận. "
-        f"Liên hệ lễ tân tòa nhà để được hỗ trợ. Link nhanh: {confirm_url}"
+        f"Liên hệ lễ tân tòa nhà để được hỗ trợ. Xác nhận {_gapo_markdown_link(confirm_url)}"
     )
     template = _get_active_parcel_dynamic_template() or AdmParcelDynamicTemplate()
     context = _build_parcel_dynamic_context(parcels, first, confirm_url)
     image_url = template.hero_image_url or _build_parcel_dynamic_image_url(request)
     title_text = template.render_text(template.title_template, context)
     body_text = template.render_text(template.body_template, context)
+    body_text = _ensure_parcel_confirm_url_in_body(
+        body_text,
+        template.body_template,
+        confirm_url,
+    )
     button_text = template.render_text(template.button_text, context)
     card_border_color = _normalize_gapo_hex(
         template.card_border_color, fallback="#DADDE1"
@@ -825,6 +859,11 @@ def _send_parcel_group_notification_now(parcels, request_user, request):
         body_type="dynamic",
         body_metadata=body_metadata,
     )
+    try:
+        _send_parcel_clickable_link_fallback(receiver_id, confirm_url)
+    except NotificationSendError:
+        # Keep dynamic message flow resilient even when fallback text link fails.
+        pass
     now = timezone.now()
     batch.message_text = message
     batch.status = AdmParcelNotificationBatch.Status.SENT

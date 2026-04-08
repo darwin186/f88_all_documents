@@ -23,13 +23,13 @@
   </div>
   {% if can_create %}
   <div class="flex items-center gap-2">
-    <div class="relative" x-data="{open:false}">
+    <div class="relative z-40" x-data="{open:false}">
       <button type="button" @click="open = !open"
               class="bg-f88green hover:bg-f88dark text-white px-3 py-1.5 rounded-lg shadow text-xs">
         {{ create_button_label }}
       </button>
       <div x-show="open" @click.outside="open=false" x-transition
-           class="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+           class="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
         <div class="px-3 py-2 border-b border-gray-100 text-[11px] text-gray-500">Chọn công ty nhận</div>
         <ul class="max-h-64 overflow-y-auto py-1">
           {% for company in companies %}

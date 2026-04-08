@@ -1011,7 +1011,7 @@ class AdmParcelDynamicTemplate(models.Model):
     body_template = models.TextField(
         default=(
             "Hiện có {{parcel_count}} kiện từ {{primary_sender}}. "
-            "Liên hệ lễ tân để nhận và bấm nút bên dưới để xác nhận."
+            "Liên hệ lễ tân để nhận. Xác nhận tại đây: {{confirm_url}}"
         )
     )
     button_text = models.CharField(
