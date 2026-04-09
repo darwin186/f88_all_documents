@@ -502,7 +502,7 @@ class AdmIncomingDispatchTests(TestCase):
 
     @patch("app_admindocuments.views.send_via_gapo")
     @patch("app_admindocuments.views.send_gapo_scheduled_message.apply_async")
-    def test_group_notification_action_sends_single_message(self, mocked_apply_async, mocked_send_via_gapo):
+    def test_group_notification_action_sends_dynamic_and_web_url_messages(self, mocked_apply_async, mocked_send_via_gapo):
         mocked_send_via_gapo.return_value = {"ok": True}
         AdmParcelDynamicTemplate.objects.update_or_create(
             template_type=AdmParcelDynamicTemplate.TEMPLATE_PARCEL_NOTIFY_CONFIRM,
@@ -564,26 +564,33 @@ class AdmIncomingDispatchTests(TestCase):
         self.assertEqual(batch.status, AdmParcelNotificationBatch.Status.SENT)
         self.assertEqual(reminder_error, "")
         self.assertIn("Bạn có 2 kiện hàng", batch.message_text)
-        mocked_send_via_gapo.assert_called_once()
-        _, kwargs = mocked_send_via_gapo.call_args
-        self.assertEqual(kwargs["body_type"], "dynamic")
-        layout = kwargs["body_metadata"]["metadata"]["layout"]
+        self.assertEqual(mocked_send_via_gapo.call_count, 3)
+        text_args, text_kwargs = mocked_send_via_gapo.call_args_list[0]
+        self.assertEqual(text_kwargs.get("body_type", "text"), "text")
+        self.assertIn("[tại đây](", text_args[1])
+        _, dynamic_kwargs = mocked_send_via_gapo.call_args_list[1]
+        self.assertEqual(dynamic_kwargs["body_type"], "dynamic")
+        layout = dynamic_kwargs["body_metadata"]["metadata"]["layout"]
         self.assertEqual(layout["type"], "container")
         self.assertEqual(layout["children"][0]["type"], "photo")
         self.assertEqual(layout["children"][2]["children"][0]["type"], "button")
         self.assertEqual(layout["children"][0]["photo_url"], "https://cdn.example.com/parcel.png")
         self.assertEqual(layout["children"][1]["children"][0]["text_object"]["text"], "Xin chao Nhan Vien - E001")
-        self.assertEqual(
-            layout["children"][1]["children"][1]["text_object"]["text"],
-            "Ban co 2 kien tu Vnpost cho F88.",
-        )
+        body_text = layout["children"][1]["children"][1]["text_object"]["text"]
+        self.assertTrue(body_text.startswith("Ban co 2 kien tu Vnpost cho F88."))
+        self.assertIn("/admindocuments/pb/", body_text)
         self.assertEqual(layout["children"][2]["children"][0]["text_object"]["text"], "Xac nhan tai day")
         self.assertEqual(layout["children"][2]["children"][0]["background"], "14532D")
         self.assertEqual(layout["children"][2]["children"][0]["text_object"]["color"], "F8FAFC")
         self.assertEqual(layout["border"]["color"], "#22C55E")
         self.assertIn("/admindocuments/pb/", layout["children"][2]["children"][0]["deep_link"])
         self.assertEqual(layout["deep_link"], layout["children"][2]["children"][0]["deep_link"])
-        self.assertIn("Link nhanh:", batch.message_text)
+        self.assertIn("Xác nhận [tại đây](", batch.message_text)
+        _, carousel_kwargs = mocked_send_via_gapo.call_args_list[2]
+        self.assertEqual(carousel_kwargs["body_type"], "carousel")
+        card = carousel_kwargs["body_metadata"]["metadata"]["carousel_cards"][0]
+        self.assertEqual(card["buttons"][0]["type"], "web_url")
+        self.assertIn("/admindocuments/pb/", card["buttons"][0]["payload"])
         mocked_apply_async.assert_called_once()
 
     @patch("app_admindocuments.views.send_via_gapo")
@@ -642,7 +649,7 @@ class AdmIncomingDispatchTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(mocked_send_via_gapo.call_count, 2)
+        self.assertEqual(mocked_send_via_gapo.call_count, 6)
 
     def test_batch_confirmation_link_confirms_all_selected_parcels(self):
         parcel_one = AdmParcelReceipt.objects.create(

@@ -402,6 +402,35 @@ def _gapo_markdown_link(url, label="tại đây"):
     return f"[{label}]({url})"
 
 
+def _send_parcel_web_url_button_fallback(receiver_id, confirm_url, request):
+    """Send a carousel button using web_url to improve browser open compatibility."""
+    image_url = _build_parcel_dynamic_image_url(request)
+    send_via_gapo(
+        str(receiver_id),
+        "Xác nhận nhận hàng tại đây",
+        target_type="receiver",
+        body_type="carousel",
+        body_metadata={
+            "metadata": {
+                "carousel_cards": [
+                    {
+                        "title": "Xác nhận nhận bưu kiện",
+                        "subtitle": "Bấm nút để mở trang xác nhận trên trình duyệt.",
+                        "image_url": image_url,
+                        "buttons": [
+                            {
+                                "title": "Bấm tại đây",
+                                "type": "web_url",
+                                "payload": confirm_url,
+                            }
+                        ],
+                    }
+                ]
+            }
+        },
+    )
+
+
 def _send_parcel_clickable_link_fallback(receiver_id, confirm_url):
     """Send a plain-text follow-up message so Gapo can auto-link the URL."""
     send_via_gapo(
@@ -852,6 +881,11 @@ def _send_parcel_group_notification_now(parcels, request_user, request):
             }
         }
     }
+    try:
+        _send_parcel_clickable_link_fallback(receiver_id, confirm_url)
+    except NotificationSendError:
+        pass
+
     response = send_via_gapo(
         str(receiver_id),
         message,
@@ -860,9 +894,9 @@ def _send_parcel_group_notification_now(parcels, request_user, request):
         body_metadata=body_metadata,
     )
     try:
-        _send_parcel_clickable_link_fallback(receiver_id, confirm_url)
+        _send_parcel_web_url_button_fallback(receiver_id, confirm_url, request)
     except NotificationSendError:
-        # Keep dynamic message flow resilient even when fallback text link fails.
+        # Keep dynamic message flow resilient even when web_url fallback fails.
         pass
     now = timezone.now()
     batch.message_text = message
@@ -907,7 +941,15 @@ def _send_parcel_group_notification_now(parcels, request_user, request):
 
 def _send_parcel_notification_now(parcel_receipt, request_user, request):
     receiver_id, body, confirm_url = _build_parcel_notification_message(parcel_receipt, request)
+    try:
+        _send_parcel_clickable_link_fallback(receiver_id, confirm_url)
+    except NotificationSendError:
+        pass
     response = send_via_gapo(str(receiver_id), body, target_type="receiver")
+    try:
+        _send_parcel_web_url_button_fallback(receiver_id, confirm_url, request)
+    except NotificationSendError:
+        pass
     now = timezone.now()
     notification_schedule = parcel_receipt.notification_schedule
     if notification_schedule:

@@ -68,7 +68,7 @@
       <div class="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.2fr),minmax(300px,0.9fr)]">
         <section class="space-y-4">
           <div class="rounded-[24px] border border-white/80 bg-white/80 p-4 shadow-[0_14px_30px_rgba(15,23,42,0.05)]">
-            <div class="grid gap-3 sm:grid-cols-2">
+            <div class="grid gap-3 sm:grid-cols-3">
               <div class="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
                 <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Đơn hàng của</div>
                 <div class="mt-1 text-[13px] font-semibold text-slate-800">{{ batch.recipient_name|default:"-" }}</div>
@@ -80,10 +80,6 @@
               <div class="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
                 <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Số kiện</div>
                 <div class="mt-1 text-[13px] font-semibold text-slate-800">{{ batch.parcel_count }}</div>
-              </div>
-              <div class="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Trạng thái vật lý của đơn</div>
-                <div class="mt-1 text-[13px] font-semibold text-slate-800">{% if batch.status == 'confirmed' %}Đã xác nhận{% elif batch.status == 'sent' %}Đã thông báo{% else %}Đã tạo{% endif %}</div>
               </div>
             </div>
           </div>
@@ -125,7 +121,7 @@
             Đã xác nhận lúc {{ batch.confirmed_at|date:"d/m/Y H:i" }}.
           </div>
           {% else %}
-          <form method="post" class="space-y-4 rounded-[24px] border border-white/80 bg-white/80 p-4 shadow-[0_14px_30px_rgba(15,23,42,0.05)]">
+          <form method="post" data-proxy-toggle class="space-y-4 rounded-[24px] border border-white/80 bg-white/80 p-4 shadow-[0_14px_30px_rgba(15,23,42,0.05)]">
             {% csrf_token %}
             <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] text-amber-700">
               Chỉ bấm xác nhận khi bạn chắc chắn đã nhận được các bưu kiện trực tiếp từ lễ tân.
@@ -135,18 +131,18 @@
               <span>Tôi xác nhận đã nhận các bưu kiện này.</span>
             </label>
 
-            <div class="grid gap-3 sm:grid-cols-2">
+            <div class="grid gap-2 sm:grid-cols-2">
               <label class="confirm-radio cursor-pointer">
                 <input type="radio" name="claim_mode" value="self" class="sr-only" checked>
-                <span class="flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[12px] font-semibold text-slate-700 transition">Chính chủ</span>
+                <span class="flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-700 transition">Chính chủ</span>
               </label>
               <label class="confirm-radio cursor-pointer">
                 <input type="radio" name="claim_mode" value="proxy" class="sr-only">
-                <span class="flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[12px] font-semibold text-slate-700 transition">Nhận hộ</span>
+                <span class="flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-semibold text-slate-700 transition">Nhận hộ</span>
               </label>
             </div>
 
-            <div class="space-y-3">
+            <div class="hidden space-y-3" data-proxy-fields>
               <div>
                 <label class="mb-2 block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Tên người nhận hộ</label>
                 <input type="text" name="actual_receiver_name" class="block w-full rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 placeholder:text-[11px] placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100" placeholder="Chỉ nhập khi nhận hộ">
@@ -167,4 +163,24 @@
     </div>
   </div>
 </body>
+<script>
+  (function () {
+    function bindProxyToggle(form) {
+      const radios = form.querySelectorAll('input[name="claim_mode"]');
+      const proxyFields = form.querySelector('[data-proxy-fields]');
+      if (!radios.length || !proxyFields) return;
+
+      const update = () => {
+        const selected = form.querySelector('input[name="claim_mode"]:checked');
+        const isProxy = selected && selected.value === 'proxy';
+        proxyFields.classList.toggle('hidden', !isProxy);
+      };
+
+      radios.forEach((radio) => radio.addEventListener('change', update));
+      update();
+    }
+
+    document.querySelectorAll('form[data-proxy-toggle]').forEach(bindProxyToggle);
+  })();
+</script>
 </html>
