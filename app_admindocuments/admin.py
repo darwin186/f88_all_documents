@@ -22,6 +22,7 @@ from .models import (
     AdmParcelNotificationBatch,
     AdmParcelRecipientCatalog,
     AdmParcelRecipientImportBatch,
+    AdmParcelReceiveLocation,
     AdmParcelReceipt,
     AdmParcelReceiptImage,
     AdmParcelReceiptLog,
@@ -197,6 +198,7 @@ class AdmParcelReceiptAdmin(admin.ModelAdmin):
     list_display = (
         "document_number",
         "received_by",
+        "receive_location",
         "recipient_department",
         "recipient_name",
         "recipient_employee_code",
@@ -218,6 +220,13 @@ class AdmParcelReceiptAdmin(admin.ModelAdmin):
         "recipient_user__username",
     )
     readonly_fields = ("received_by", "received_at", "created_at", "confirmation_token", "proxy_qr_token")
+
+
+@admin.register(AdmParcelReceiveLocation)
+class AdmParcelReceiveLocationAdmin(admin.ModelAdmin):
+    list_display = ("name", "address", "is_active", "updated_at")
+    list_filter = ("is_active",)
+    search_fields = ("name", "address", "note")
 
 
 @admin.register(AdmParcelReceiptImage)

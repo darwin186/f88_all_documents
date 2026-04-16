@@ -219,6 +219,17 @@
             </div>
 
             <div>
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <label class="block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{{ form.receive_location.label }}</label>
+                {% if has_admin_docs_access %}
+                <a href="{% url 'admindocuments:master_data' %}#receive_location" class="text-[10px] font-semibold text-emerald-600 transition hover:text-emerald-700">Tạo nơi nhận</a>
+                {% endif %}
+              </div>
+              {{ form.receive_location }}
+              {% if form.receive_location.errors %}<p class="mt-2 text-xs text-red-600">{{ form.receive_location.errors.0 }}</p>{% endif %}
+            </div>
+
+            <div>
               <div class="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
                 {% for value, label in form.fields.parcel_type.choices %}
                 <button type="button"
@@ -374,6 +385,12 @@
                   <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
                   {{ paginator.count }} bưu kiện chưa nhận
                 </div>
+                {% if has_admin_docs_access %}
+                <a href="{% url 'admindocuments:parcel_receipt_completed_list' %}" class="inline-flex w-fit items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-500 shadow-sm transition hover:border-emerald-200 hover:text-emerald-700">
+                  <span class="h-2 w-2 rounded-full bg-slate-500"></span>
+                  Xem dữ liệu đã nhận
+                </a>
+                {% endif %}
                 {% if auto_notify_setting %}
                   {% if has_admin_docs_access %}
                   <a href="{% url 'admindocuments:parcel_auto_notify_settings' %}" class="inline-flex w-fit items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-semibold text-slate-500 shadow-sm transition hover:border-emerald-200 hover:text-emerald-700">
@@ -392,6 +409,13 @@
 
             <form method="get" class="mt-5 space-y-3">
               <input type="hidden" name="pane" value="list">
+              <input type="hidden" name="recipient" value="{{ selected_recipient }}">
+              <input type="hidden" name="department" value="{{ selected_department }}">
+              <input type="hidden" name="start_date" value="{{ selected_start_date }}">
+              <input type="hidden" name="end_date" value="{{ selected_end_date }}">
+              <input type="hidden" name="unnotified" value="{% if selected_unnotified %}1{% else %}0{% endif %}">
+              <input type="hidden" name="unassigned" value="{% if selected_unassigned %}1{% else %}0{% endif %}">
+              <input type="hidden" name="receive_location" value="{{ selected_receive_location }}">
               <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 <input type="hidden" name="split_by_day" value="{% if split_by_day %}1{% else %}0{% endif %}">
                 <div class="inline-flex w-full rounded-full border border-slate-200 bg-slate-50 p-1 shadow-sm sm:w-fit">
@@ -422,13 +446,18 @@
 
               <details class="rounded-3xl border border-slate-200 bg-white/80 px-4 py-3 shadow-sm">
                 <summary class="cursor-pointer list-none text-[11px] font-semibold text-slate-600">Bộ lọc nâng cao</summary>
-                <input type="hidden" name="unnotified" value="{% if selected_unnotified %}1{% else %}0{% endif %}">
-                <input type="hidden" name="unassigned" value="{% if selected_unassigned %}1{% else %}0{% endif %}">
                 <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                   <input type="text" name="recipient" value="{{ selected_recipient }}" placeholder="Tìm theo người nhận, mã NV, email..."
                          class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 placeholder:text-[10px] placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
                   <input type="text" name="department" value="{{ selected_department }}" placeholder="Tìm theo phòng ban..."
                          class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 placeholder:text-[10px] placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
+                  <select name="receive_location"
+                          class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
+                    <option value="all" {% if selected_receive_location == 'all' %}selected{% endif %}>Tất cả nơi nhận</option>
+                    {% for location in receive_locations %}
+                    <option value="{{ location.id }}" {% if selected_receive_location == location.id|stringformat:'s' %}selected{% endif %}>{{ location.name }}</option>
+                    {% endfor %}
+                  </select>
                   <input type="date" name="start_date" value="{{ selected_start_date }}" class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
                   <input type="date" name="end_date" value="{{ selected_end_date }}" class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
                   <div class="md:col-span-2 xl:col-span-4 flex flex-wrap gap-2">

@@ -10,6 +10,11 @@ urlpatterns = [
     path("incoming-documents/", views.incoming_document_list, name="incoming_document_list"),
     path("parcel-receipts/", views.parcel_receipt_list, name="parcel_receipt_list"),
     path(
+        "parcel-receipts/completed/",
+        views.parcel_receipt_completed_list,
+        name="parcel_receipt_completed_list",
+    ),
+    path(
         "parcel-recipients/search/",
         views.parcel_recipient_search,
         name="parcel_recipient_search",

@@ -144,12 +144,19 @@ class Shop(models.Model):
         return self.shop_name
 
 # Model - User Profile
-class UserProfile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-    department = models.CharField(max_length= 100, null= False, blank= False, unique= False, default= None) 
-    region = models.ForeignKey(Region, db_column='region_id', on_delete=models.CASCADE, null= True)
-    shop = models.ForeignKey(Shop, db_column='shop_id', on_delete=models.CASCADE, null= True)
-    gapo_user_id = models.CharField(max_length=50, null=True, blank=True, unique=True)
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    department = models.CharField(max_length= 100, null= False, blank= False, unique= False, default= None) 
+    region = models.ForeignKey(Region, db_column='region_id', on_delete=models.CASCADE, null= True)
+    shop = models.ForeignKey(Shop, db_column='shop_id', on_delete=models.CASCADE, null= True)
+    default_receive_location = models.ForeignKey(
+        'app_admindocuments.AdmParcelReceiveLocation',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='default_users',
+    )
+    gapo_user_id = models.CharField(max_length=50, null=True, blank=True, unique=True)
     employee_code = models.CharField(max_length= 10, null= True, blank= True, unique= False, default= None)
     gender = models.ForeignKey(Gender, on_delete=models.SET_NULL, null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)

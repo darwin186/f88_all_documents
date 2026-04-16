@@ -82,6 +82,20 @@
                 <div class="mt-1 text-[13px] font-semibold text-slate-800">{{ batch.parcel_count }}</div>
               </div>
             </div>
+            {% with first_parcel=parcels.0 %}
+            {% if first_parcel.receive_location %}
+            <div class="mt-3 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+              <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Nơi nhận</div>
+              <div class="mt-1 text-[13px] font-semibold text-slate-800">{{ first_parcel.receive_location.name }}</div>
+              {% if first_parcel.receive_location.address %}
+              <div class="mt-1 text-[11px] text-slate-500">{{ first_parcel.receive_location.address }}</div>
+              {% endif %}
+              {% if first_parcel.receive_location.note %}
+              <div class="mt-1 text-[11px] text-slate-500">{{ first_parcel.receive_location.note }}</div>
+              {% endif %}
+            </div>
+            {% endif %}
+            {% endwith %}
           </div>
 
           <div class="space-y-3">

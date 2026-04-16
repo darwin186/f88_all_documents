@@ -18,7 +18,7 @@ from django.db import IntegrityError, transaction, models
 from django.db.models import F
 from django.db.models import Count, Q, Max
 from django.db.models.functions import TruncDay, ExtractYear
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -40,6 +40,7 @@ from .forms import (
     AdmAdministrativeDocumentUpdateForm,
     AdmIncomingDispatchForm,
     AdmParcelRecipientImportForm,
+    AdmParcelReceiveLocationForm,
     AdmParcelAutoNotifySettingForm,
     AdmParcelReceiptForm,
     AdmPaperDocumentForm,
@@ -72,6 +73,7 @@ from .models import (
     AdmParcelNotificationBatch,
     AdmParcelRecipientCatalog,
     AdmParcelRecipientImportBatch,
+    AdmParcelReceiveLocation,
     AdmParcelReceipt,
     AdmParcelReceiptImage,
     AdmParcelReceiptLog,
@@ -205,6 +207,14 @@ def _incoming_dispatch_list_url(item_type_code):
 def _exclude_hidden_parcels(queryset):
     return queryset.exclude(
         Q(status_id__in=PARCEL_HIDDEN_LIST_STATUS_CODES)
+        | Q(completed_at__isnull=False)
+        | Q(confirmed_at__isnull=False)
+    )
+
+
+def _completed_parcels_queryset(queryset):
+    return queryset.filter(
+        Q(status_id="pkg_done")
         | Q(completed_at__isnull=False)
         | Q(confirmed_at__isnull=False)
     )
@@ -397,13 +407,14 @@ def _build_parcel_dynamic_context(parcels, first_parcel, confirm_url):
 
 def _ensure_parcel_confirm_url_in_body(body_text, template_text, confirm_url):
     resolved_body = (body_text or "").strip()
-    if confirm_url in resolved_body:
-        return resolved_body
-    if "{{confirm_url}}" in (template_text or ""):
-        return resolved_body
     if not resolved_body:
-        return f"Xác nhận tại đây: {confirm_url}"
-    return f"{resolved_body}\n{confirm_url}"
+        return "Bạn có bưu kiện mới. Liên hệ lễ tân để nhận và bấm nút bên dưới để xác nhận nhận hàng."
+    if "xác nhận nhận hàng" not in resolved_body.lower():
+        resolved_body = resolved_body.replace(
+            "bấm nút bên dưới để xác nhận.",
+            "bấm nút bên dưới để xác nhận nhận hàng.",
+        )
+    return resolved_body
 
 
 def _gapo_markdown_link(url, label="tại đây"):
@@ -440,11 +451,13 @@ def _send_parcel_web_url_button_fallback(receiver_id, confirm_url, request):
 
 
 def _send_parcel_clickable_link_fallback(receiver_id, confirm_url):
-    """Send a plain-text follow-up message so Gapo can auto-link the URL."""
+    """Send an explicit markdown plaintext follow-up for clickable link support."""
     send_via_gapo(
         str(receiver_id),
         f"Xác nhận nhận hàng {_gapo_markdown_link(confirm_url)}",
         target_type="receiver",
+        body_type="text",
+        body_metadata={"is_markdown_text": True},
     )
 
 
@@ -2297,17 +2310,26 @@ def parcel_receipt_list(request):
     split_by_day = request.GET.get("split_by_day", "1") != "0"
     start_date = (request.GET.get("start_date") or "").strip()
     end_date = (request.GET.get("end_date") or "").strip()
+    receive_location_filter = (request.GET.get("receive_location") or "").strip()
     receive_company = (request.GET.get("receive_company") or "").strip()
     open_dispatch_id = (request.GET.get("open") or "").strip()
     highlight_dispatch_id = (request.GET.get("highlight") or "").strip()
     companies = AdmCompany.objects.filter(is_active=True).order_by("name")
+    receive_locations = AdmParcelReceiveLocation.objects.filter(is_active=True).order_by("name")
     prefill_company = None
+    default_receive_location_id = (
+        UserProfile.objects.filter(user=request.user)
+        .values_list("default_receive_location_id", flat=True)
+        .first()
+    )
+    if not receive_location_filter and default_receive_location_id:
+        receive_location_filter = str(default_receive_location_id)
 
     if receive_company:
         prefill_company = companies.filter(code=receive_company).first()
 
     if request.method == "POST":
-        form = AdmParcelReceiptForm(request.POST)
+        form = AdmParcelReceiptForm(request.POST, user=request.user)
         receive_company = (request.POST.get("receiving_company") or "").strip()
         prefill_company = companies.filter(code=receive_company).first()
         if form.is_valid():
@@ -2367,7 +2389,7 @@ def parcel_receipt_list(request):
         else:
             messages.error(request, "Dữ liệu không hợp lệ, vui lòng kiểm tra lại.")
     else:
-        form = AdmParcelReceiptForm()
+        form = AdmParcelReceiptForm(user=request.user)
         if prefill_company:
             form.initial["receiving_company"] = prefill_company.code
 
@@ -2446,6 +2468,8 @@ def parcel_receipt_list(request):
                 break
             except ValueError:
                 continue
+    if receive_location_filter and receive_location_filter != "all":
+        dispatches_qs = dispatches_qs.filter(receive_location_id=receive_location_filter)
 
     dispatches_qs = dispatches_qs.distinct()
     paginator = Paginator(dispatches_qs, 25)
@@ -2551,8 +2575,10 @@ def parcel_receipt_list(request):
         "grouping_mode": grouping_mode,
         "selected_start_date": start_date,
         "selected_end_date": end_date,
+        "selected_receive_location": receive_location_filter,
         "status_options": status_options,
         "companies": companies,
+        "receive_locations": receive_locations,
         "departments": departments,
         "recipient_options": recipient_options,
         "recipient_groups": recipient_groups,
@@ -2589,6 +2615,104 @@ def parcel_receipt_list(request):
         "item_type_name": screen_meta["page_title"],
     }
     return render(request, "admindocuments/parcel_receipt_list.html", context)
+
+
+@login_required
+def parcel_receipt_completed_list(request):
+    if not _has_admin_docs_access(request.user):
+        return HttpResponseForbidden("Bạn không có quyền xem dữ liệu bưu kiện đã nhận.")
+
+    query = (request.GET.get("q") or "").strip()
+    recipient_filter = (request.GET.get("recipient") or "").strip()
+    department_filter = (request.GET.get("department") or "").strip()
+    start_date = (request.GET.get("start_date") or "").strip()
+    end_date = (request.GET.get("end_date") or "").strip()
+
+    parcels_qs = (
+        AdmParcelReceipt.objects.select_related(
+            "received_by",
+            "receiving_company",
+            "status",
+            "recipient_directory",
+            "recipient_user",
+            "recipient_user__userprofile",
+        )
+        .prefetch_related("images")
+        .order_by("-completed_at", "-confirmed_at", "-received_at", "-id")
+    )
+    parcels_qs = _completed_parcels_queryset(parcels_qs)
+
+    if query:
+        parcels_qs = parcels_qs.filter(
+            Q(tracking_code__icontains=query)
+            | Q(sender_unit__icontains=query)
+            | Q(content__icontains=query)
+            | Q(recipient_name__icontains=query)
+            | Q(recipient_employee_code__icontains=query)
+            | Q(actual_receiver_name__icontains=query)
+            | Q(actual_receiver_employee_code__icontains=query)
+        )
+    if recipient_filter:
+        parcels_qs = parcels_qs.filter(
+            Q(recipient_name__icontains=recipient_filter)
+            | Q(recipient_employee_code__icontains=recipient_filter)
+            | Q(actual_receiver_name__icontains=recipient_filter)
+            | Q(actual_receiver_employee_code__icontains=recipient_filter)
+            | Q(recipient_directory__full_name__icontains=recipient_filter)
+            | Q(recipient_directory__employee_code__icontains=recipient_filter)
+        )
+    if department_filter:
+        parcels_qs = parcels_qs.filter(
+            Q(recipient_department__icontains=department_filter)
+            | Q(recipient_directory__department_name__icontains=department_filter)
+        )
+    if start_date:
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+            try:
+                parcels_qs = parcels_qs.filter(received_at__date__gte=datetime.strptime(start_date, fmt).date())
+                break
+            except ValueError:
+                continue
+    if end_date:
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+            try:
+                parcels_qs = parcels_qs.filter(received_at__date__lte=datetime.strptime(end_date, fmt).date())
+                break
+            except ValueError:
+                continue
+
+    parcels_qs = parcels_qs.distinct()
+    paginator = Paginator(parcels_qs, 25)
+    page_number = request.GET.get("page", "1")
+    try:
+        parcels = paginator.page(page_number)
+    except PageNotAnInteger:
+        parcels = paginator.page(1)
+    except EmptyPage:
+        parcels = paginator.page(paginator.num_pages)
+
+    for parcel in parcels.object_list:
+        parcel.recipient_display = _parcel_recipient_display(parcel) or "Chưa xác định"
+        parcel.actual_receiver_display = _parcel_actual_receiver_display(parcel)
+        parcel.finished_at = parcel.completed_at or parcel.confirmed_at
+
+    context = {
+        "active": "parcel_receipt_completed_list",
+        "screen_key": "parcel_receipt_completed_list",
+        "page_title": "Bưu kiện đã nhận",
+        "page_description": "Tra cứu lại bưu phẩm, bưu kiện đã được người nhận xác nhận.",
+        "parcels": parcels,
+        "page_obj": parcels,
+        "paginator": paginator,
+        "is_paginated": paginator.num_pages > 1,
+        "q": query,
+        "recipient": recipient_filter,
+        "department": department_filter,
+        "start_date": start_date,
+        "end_date": end_date,
+        "has_admin_docs_access": _has_admin_docs_access(request.user),
+    }
+    return render(request, "admindocuments/parcel_receipt_completed_list.html", context)
 
 
 @login_required
@@ -4486,6 +4610,7 @@ def master_data(request):
         "status": (AdmDocumentStatusForm, "Trạng thái văn bản"),
         "company": (AdmCompanyForm, "Công ty"),
         "department": (AdmDepartmentForm, "Phòng ban"),
+        "receive_location": (AdmParcelReceiveLocationForm, "Nơi nhận"),
         "paper_type": (AdmPaperTypeForm, "Loại giấy (paper)"),
         "courier": (AdmCourierCompanyForm, "Đơn vị chuyển phát"),
     }
@@ -4496,6 +4621,7 @@ def master_data(request):
         "status": "app_admindocuments.add_admdocumentstatus",
         "company": "app_admindocuments.add_admcompany",
         "department": "app_admindocuments.add_admdepartment",
+        "receive_location": "app_admindocuments.add_admparcelreceivelocation",
         "paper_type": "app_admindocuments.add_admpapertype",
         "courier": "app_admindocuments.add_admcouriercompany",
     }
@@ -4538,6 +4664,7 @@ def master_data(request):
         "departments": AdmDepartment.objects.select_related("company").all().order_by(
             "company__code", "name"
         ),
+        "receive_locations": AdmParcelReceiveLocation.objects.all().order_by("name"),
         "paper_types": AdmPaperType.objects.all().order_by("name"),
         "couriers": AdmCourierCompany.objects.all().order_by("name"),
         "forms": forms_map,

@@ -3,7 +3,7 @@ from datetime import datetime
 from django import forms
 from django.utils import timezone
 
-from app_documents.models import Region, Shop
+from app_documents.models import Region, Shop, UserProfile
 
 from .models import (
     AdmAdministrativeDocument,
@@ -11,6 +11,7 @@ from .models import (
     AdmIncomingDispatch,
     AdmParcelRecipientCatalog,
     AdmParcelRecipientImportBatch,
+    AdmParcelReceiveLocation,
     AdmParcelAutoNotifySetting,
     AdmParcelReceipt,
     AdmParcelSenderSuggestion,
@@ -437,6 +438,11 @@ class AdmParcelReceiptForm(forms.ModelForm):
         label="Người nhận",
     )
     recipient_unknown = forms.BooleanField(required=False, widget=forms.HiddenInput())
+    receive_location = forms.ModelChoiceField(
+        queryset=AdmParcelReceiveLocation.objects.none(),
+        required=True,
+        label="Nơi nhận",
+    )
     parcel_type = forms.ChoiceField(
         required=True,
         label="Loại bưu phẩm",
@@ -446,6 +452,7 @@ class AdmParcelReceiptForm(forms.ModelForm):
     class Meta:
         model = AdmParcelReceipt
         fields = [
+            "receive_location",
             "recipient_department",
             "recipient_directory",
             "parcel_type",
@@ -455,6 +462,7 @@ class AdmParcelReceiptForm(forms.ModelForm):
             "receiving_company",
         ]
         labels = {
+            "receive_location": "Nơi nhận",
             "sender_unit": "Đơn vị gửi",
             "content": "Nội dung",
             "tracking_code": "Mã vận đơn",
@@ -465,6 +473,7 @@ class AdmParcelReceiptForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        self.current_user = kwargs.pop("user", None)
         super().__init__(*args, **kwargs)
         _apply_small_field_styles(self)
         parcel_field_classes = (
@@ -475,8 +484,12 @@ class AdmParcelReceiptForm(forms.ModelForm):
         for field_name, field in self.fields.items():
             existing = field.widget.attrs.get("class", "")
             field.widget.attrs["class"] = f"{existing} {parcel_field_classes}".strip()
-            if field_name in {"recipient_department", "recipient_directory", "parcel_type", "receiving_company"}:
+            if field_name in {"receive_location", "recipient_department", "recipient_directory", "parcel_type", "receiving_company"}:
                 field.widget.attrs["class"] = f"{field.widget.attrs['class']} appearance-none".strip()
+        self.fields["receive_location"].queryset = AdmParcelReceiveLocation.objects.filter(
+            is_active=True
+        ).order_by("name")
+        self.fields["receive_location"].empty_label = "Chọn nơi nhận"
         self.fields["receiving_company"].queryset = (
             AdmCompany.objects.filter(is_active=True).order_by("name")
         )
@@ -519,9 +532,19 @@ class AdmParcelReceiptForm(forms.ModelForm):
         )
 
         if self.instance.pk:
+            self.initial["receive_location"] = self.instance.receive_location_id
             self.initial["recipient_department"] = self.instance.recipient_department
             self.initial["recipient_unknown"] = self.instance.recipient_directory_id is None
         elif not self.is_bound:
+            default_location_id = (
+                UserProfile.objects.filter(user=self.current_user)
+                .values_list("default_receive_location_id", flat=True)
+                .first()
+                if self.current_user and getattr(self.current_user, "is_authenticated", False)
+                else None
+            )
+            if default_location_id:
+                self.initial.setdefault("receive_location", default_location_id)
             self.initial.setdefault(
                 "parcel_type",
                 AdmParcelReceipt.ParcelType.DOSSIER,
@@ -569,6 +592,12 @@ class AdmParcelReceiptForm(forms.ModelForm):
             raise forms.ValidationError("Cần nhập đơn vị gửi.")
         return sender_unit
 
+    def clean_receive_location(self):
+        receive_location = self.cleaned_data.get("receive_location")
+        if not receive_location:
+            raise forms.ValidationError("Cần chọn nơi nhận.")
+        return receive_location
+
     def clean_content(self):
         content = (self.cleaned_data.get("content") or "").strip()
         if len(content) > 255:
@@ -594,6 +623,7 @@ class AdmParcelReceiptForm(forms.ModelForm):
     def save(self, commit=True):
         instance = super().save(commit=False)
         recipient = self.cleaned_data.get("recipient_directory")
+        instance.receive_location = self.cleaned_data["receive_location"]
         instance.recipient_department = self.cleaned_data["recipient_department"]
         instance.recipient_directory = recipient
         if recipient is None:
@@ -712,6 +742,21 @@ class _MasterBaseForm(forms.ModelForm):
         for field in self.fields.values():
             existing = field.widget.attrs.get("class", "")
             field.widget.attrs["class"] = f"{existing} {base_classes}".strip()
+
+
+class AdmParcelReceiveLocationForm(_MasterBaseForm):
+    class Meta:
+        model = AdmParcelReceiveLocation
+        fields = ["name", "address", "note", "is_active"]
+        labels = {
+            "name": "Nơi nhận",
+            "address": "Địa chỉ nơi nhận",
+            "note": "Ghi chú",
+            "is_active": "Đang dùng",
+        }
+        widgets = {
+            "note": forms.Textarea(attrs={"rows": 3}),
+        }
 
 
 class AdmDocumentTypeForm(_MasterBaseForm):

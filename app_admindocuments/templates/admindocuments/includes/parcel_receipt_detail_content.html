@@ -8,6 +8,18 @@
 <div class="mt-3 grid grid-cols-1 gap-2 text-[10px] text-slate-500 sm:grid-cols-2">
   <div class="rounded-2xl border border-white/80 bg-white/80 px-3 py-2"><div class="text-[9px] uppercase tracking-[0.14em] text-slate-400">Lễ tân</div><div class="parcel-safe-text mt-1 font-semibold text-slate-700">{% if selected_dispatch.received_by %}{{ selected_dispatch.received_by.get_full_name|default:selected_dispatch.received_by.username }}{% else %}Chưa ghi nhận{% endif %}</div></div>
   <div class="rounded-2xl border border-white/80 bg-white/80 px-3 py-2"><div class="text-[9px] uppercase tracking-[0.14em] text-slate-400">Người nhận</div><div class="parcel-safe-text mt-1 font-semibold text-slate-700">{{ selected_dispatch.actual_receiver_display }}</div></div>
+  {% if selected_dispatch.receive_location %}
+  <div class="sm:col-span-2 rounded-2xl border border-white/80 bg-white/80 px-3 py-2">
+    <div class="text-[9px] uppercase tracking-[0.14em] text-slate-400">Nơi nhận</div>
+    <div class="parcel-safe-text mt-1 font-semibold text-slate-700">{{ selected_dispatch.receive_location.name }}</div>
+    {% if selected_dispatch.receive_location.address %}
+    <div class="mt-1 text-[10px] text-slate-500">{{ selected_dispatch.receive_location.address }}</div>
+    {% endif %}
+    {% if selected_dispatch.receive_location.note %}
+    <div class="mt-1 text-[10px] text-slate-500">{{ selected_dispatch.receive_location.note }}</div>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
 
 {% if selected_dispatch.confirmation_url and selected_dispatch.confirmation_qr_svg_url %}

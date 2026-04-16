@@ -1,0 +1,145 @@
+{% extends "admindocuments/base.html" %}
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+{% if messages %}
+<div class="fixed bottom-4 right-4 z-50 space-y-2">
+  {% for message in messages %}
+  <div class="rounded-lg border px-4 py-3 text-xs shadow {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-700{% elif message.tags == 'warning' %}border-amber-200 bg-amber-50 text-amber-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
+    {{ message }}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="space-y-4 text-[13px]">
+  <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div>
+      <h1 class="text-xl font-semibold text-gray-700">{{ page_title }}</h1>
+      <p class="text-xs text-gray-500">{{ page_description }}</p>
+    </div>
+    <a href="{% url 'admindocuments:parcel_receipt_list' %}" class="inline-flex w-fit items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm transition hover:border-emerald-200 hover:text-emerald-700">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+      </svg>
+      Quay lại danh sách chưa nhận
+    </a>
+  </div>
+
+  <form method="get" class="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
+    <div class="grid gap-3 lg:grid-cols-[1.35fr_1fr_1fr_0.95fr_0.95fr]">
+      <input type="text"
+             name="q"
+             value="{{ q }}"
+             placeholder="Mã vận đơn, đơn vị gửi, nội dung..."
+             class="min-h-[42px] rounded-xl border border-gray-200 bg-gray-50 px-3 text-[11px] placeholder:text-[10px] focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100">
+      <input type="text"
+             name="recipient"
+             value="{{ recipient }}"
+             placeholder="Người nhận hoặc người nhận thực tế"
+             class="min-h-[42px] rounded-xl border border-gray-200 bg-gray-50 px-3 text-[11px] placeholder:text-[10px] focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100">
+      <input type="text"
+             name="department"
+             value="{{ department }}"
+             placeholder="Phòng ban"
+             class="min-h-[42px] rounded-xl border border-gray-200 bg-gray-50 px-3 text-[11px] placeholder:text-[10px] focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100">
+      <input type="date"
+             name="start_date"
+             value="{{ start_date }}"
+             class="min-h-[42px] rounded-xl border border-gray-200 bg-gray-50 px-3 text-[11px] focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100">
+      <div class="flex gap-2">
+        <input type="date"
+               name="end_date"
+               value="{{ end_date }}"
+               class="min-h-[42px] min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 text-[11px] focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100">
+        <button type="submit" class="inline-flex min-h-[42px] items-center justify-center rounded-xl bg-f88green px-4 text-xs font-semibold text-white shadow-sm transition hover:bg-f88dark">
+          Lọc
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+    <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+      <div class="text-sm font-semibold text-gray-700">Bảng tra cứu đã nhận</div>
+      <div class="text-[11px] text-gray-500">{{ paginator.count }} bản ghi</div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-100 text-[12px]">
+        <thead class="bg-gray-50/80">
+          <tr class="text-left text-[10px] uppercase tracking-[0.14em] text-gray-500">
+            <th class="px-4 py-3 font-semibold">Tiếp nhận</th>
+            <th class="px-4 py-3 font-semibold">Hoàn tất</th>
+            <th class="px-4 py-3 font-semibold">Người nhận</th>
+            <th class="px-4 py-3 font-semibold">Người nhận thực tế</th>
+            <th class="px-4 py-3 font-semibold">Đơn vị gửi / Mã vận đơn</th>
+            <th class="px-4 py-3 font-semibold">Nơi nhận</th>
+            <th class="px-4 py-3 font-semibold">Loại</th>
+            <th class="px-4 py-3 font-semibold">Công ty</th>
+            <th class="px-4 py-3 font-semibold">Lễ tân</th>
+            <th class="px-4 py-3 font-semibold">Trạng thái</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 bg-white">
+          {% for parcel in parcels %}
+          <tr class="align-top">
+            <td class="px-4 py-3 whitespace-nowrap text-gray-700">
+              {{ parcel.received_at|date:"d/m/Y H:i" }}
+            </td>
+            <td class="px-4 py-3 whitespace-nowrap text-gray-700">
+              {{ parcel.finished_at|date:"d/m/Y H:i"|default:"-" }}
+            </td>
+            <td class="px-4 py-3 min-w-[220px]">
+              <div class="font-semibold text-gray-800">{{ parcel.recipient_display }}</div>
+              <div class="mt-1 text-[11px] text-gray-500">{{ parcel.recipient_department|default:"Chưa rõ phòng ban" }}</div>
+            </td>
+            <td class="px-4 py-3 min-w-[220px]">
+              <div class="font-medium text-gray-800">{{ parcel.actual_receiver_display }}</div>
+            </td>
+            <td class="px-4 py-3 min-w-[260px]">
+              <div class="font-medium text-gray-800">{{ parcel.sender_unit|default:"Chưa rõ đơn vị gửi" }}</div>
+              <div class="mt-1 text-[11px] text-gray-500">{{ parcel.tracking_code|default:"Chưa có mã vận đơn" }}</div>
+              {% if parcel.content %}
+              <div class="mt-1 text-[11px] text-gray-500 line-clamp-2">{{ parcel.content }}</div>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 min-w-[220px]">
+              {% if parcel.receive_location %}
+              <div class="font-medium text-gray-800">{{ parcel.receive_location.name }}</div>
+              <div class="mt-1 text-[11px] text-gray-500">{{ parcel.receive_location.address|default:"-" }}</div>
+              {% else %}
+              <span class="text-gray-400">-</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 whitespace-nowrap text-gray-700">{{ parcel.get_parcel_type_display }}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-gray-700">{{ parcel.receiving_company.name|default:parcel.receiving_company_id }}</td>
+            <td class="px-4 py-3 whitespace-nowrap text-gray-700">{% if parcel.received_by %}{{ parcel.received_by.get_full_name|default:parcel.received_by.username }}{% else %}-{% endif %}</td>
+            <td class="px-4 py-3 whitespace-nowrap">
+              <span class="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
+                {{ parcel.status.name }}
+              </span>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="10" class="px-4 py-10 text-center text-sm text-gray-500">Chưa có bưu kiện nào đã nhận để hiển thị.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if is_paginated %}
+  <div class="flex items-center justify-end gap-2 text-xs">
+    {% if page_obj.has_previous %}
+    <a href="?page={{ page_obj.previous_page_number }}&q={{ q|urlencode }}&recipient={{ recipient|urlencode }}&department={{ department|urlencode }}&start_date={{ start_date|urlencode }}&end_date={{ end_date|urlencode }}" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-600 transition hover:border-emerald-200 hover:text-emerald-700">Trước</a>
+    {% endif %}
+    <span class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-500">Trang {{ page_obj.number }}/{{ paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+    <a href="?page={{ page_obj.next_page_number }}&q={{ q|urlencode }}&recipient={{ recipient|urlencode }}&department={{ department|urlencode }}&start_date={{ start_date|urlencode }}&end_date={{ end_date|urlencode }}" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-600 transition hover:border-emerald-200 hover:text-emerald-700">Sau</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

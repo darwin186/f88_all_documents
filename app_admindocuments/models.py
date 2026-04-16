@@ -717,6 +717,13 @@ class AdmParcelReceipt(models.Model):
         blank=True,
     )
     received_at = models.DateTimeField(default=timezone.now, editable=False, db_index=True, null=True, blank=True)
+    receive_location = models.ForeignKey(
+        "AdmParcelReceiveLocation",
+        on_delete=models.PROTECT,
+        related_name="parcel_receipts",
+        null=True,
+        blank=True,
+    )
     recipient_department = models.CharField(max_length=100, db_index=True, blank=True, default="")
     recipient_directory = models.ForeignKey(
         "AdmParcelRecipientCatalog",
@@ -918,6 +925,24 @@ class AdmParcelNotificationBatch(models.Model):
         return f"Batch {self.id or '-'}"
 
 
+class AdmParcelReceiveLocation(models.Model):
+    name = models.CharField(max_length=255, unique=True)
+    address = models.CharField(max_length=500, blank=True, default="")
+    note = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "adm_parcel_receive_location"
+        verbose_name = "Parcel Receive Location"
+        verbose_name_plural = "Parcel Receive Locations"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 def _parcel_default_reminder_time():
     return time(hour=9, minute=0)
 
@@ -1011,7 +1036,7 @@ class AdmParcelDynamicTemplate(models.Model):
     body_template = models.TextField(
         default=(
             "Hiện có {{parcel_count}} kiện từ {{primary_sender}}. "
-            "Liên hệ lễ tân để nhận. Xác nhận tại đây: {{confirm_url}}"
+            "Liên hệ lễ tân để nhận và bấm nút bên dưới để xác nhận nhận hàng."
         )
     )
     button_text = models.CharField(

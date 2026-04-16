@@ -98,6 +98,18 @@
                 <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Tiếp nhận</div>
                 <div class="mt-1 text-[13px] font-semibold text-slate-800">{{ parcel.received_at|date:"d/m/Y H:i" }}</div>
               </div>
+              {% if parcel.receive_location %}
+              <div class="sm:col-span-2 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Nơi nhận</div>
+                <div class="mt-1 text-[13px] font-semibold text-slate-800">{{ parcel.receive_location.name }}</div>
+                {% if parcel.receive_location.address %}
+                <div class="mt-1 text-[11px] text-slate-500">{{ parcel.receive_location.address }}</div>
+                {% endif %}
+                {% if parcel.receive_location.note %}
+                <div class="mt-1 text-[11px] text-slate-500">{{ parcel.receive_location.note }}</div>
+                {% endif %}
+              </div>
+              {% endif %}
               {% if parcel.content %}
               <div class="sm:col-span-2 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
                 <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">Nội dung</div>

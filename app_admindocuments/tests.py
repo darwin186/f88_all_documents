@@ -28,6 +28,7 @@ from .models import (
     AdmParcelDynamicTemplate,
     AdmParcelRecipientCatalog,
     AdmParcelRecipientImportBatch,
+    AdmParcelReceiveLocation,
     AdmParcelReceipt,
     AdmParcelSenderSuggestion,
     AdmSignerRole,
@@ -230,6 +231,12 @@ class AdmIncomingDispatchTests(TestCase):
             name="Hanh chinh nhan su",
             company=cls.company_f88,
         )
+        cls.receive_location = AdmParcelReceiveLocation.objects.create(
+            name="Quay lễ tân tầng 1",
+            address="Tầng 1, Tòa nhà F88",
+            note="Điểm nhận mặc định",
+            is_active=True,
+        )
         cls.admin_user = User.objects.create_user(username="admin", password="secret")
         cls.vanthu_user = User.objects.create_user(username="vanthu", password="secret")
         cls.viewer_user = User.objects.create_user(username="viewer", password="secret")
@@ -251,6 +258,7 @@ class AdmIncomingDispatchTests(TestCase):
             user=cls.vanthu_user,
             department="Van thu",
             employee_code="VT01",
+            default_receive_location=cls.receive_location,
         )
         cls.recipient_batch = AdmParcelRecipientImportBatch.objects.create(
             original_name="recipient_test.xlsx",
@@ -295,6 +303,7 @@ class AdmIncomingDispatchTests(TestCase):
 
     def _parcel_payload(self, **overrides):
         payload = {
+            "receive_location": str(self.receive_location.id),
             "recipient_department": "Hanh chinh nhan su",
             "recipient_directory": str(self.recipient_entry.id),
             "parcel_type": "hoso",
@@ -338,6 +347,126 @@ class AdmIncomingDispatchTests(TestCase):
         parcel = form.save(commit=False)
         self.assertEqual(parcel.recipient_name, AdmParcelReceiptForm.UNKNOWN_RECIPIENT_LABEL)
         self.assertEqual(parcel.recipient_department, AdmParcelReceiptForm.UNKNOWN_RECIPIENT_LABEL)
+
+    def test_parcel_form_prefills_receive_location_from_user_profile(self):
+        form = AdmParcelReceiptForm(user=self.vanthu_user)
+        self.assertEqual(form.initial.get("receive_location"), self.receive_location.id)
+
+    def test_master_data_allows_creating_receive_location(self):
+        superuser = User.objects.create_superuser(
+            username="masterdataadmin",
+            email="masterdataadmin@example.com",
+            password="secret",
+        )
+        self.client.force_login(superuser)
+
+        response = self.client.post(
+            reverse("admindocuments:master_data"),
+            {
+                "form_name": "receive_location",
+                "name": "Quầy lễ tân tầng 2",
+                "address": "Tầng 2, Tòa nhà F88",
+                "note": "Điểm nhận bổ sung",
+                "is_active": "on",
+            },
+        )
+
+        self.assertRedirects(response, f"{reverse('admindocuments:master_data')}#receive_location")
+        self.assertTrue(
+            AdmParcelReceiveLocation.objects.filter(name="Quầy lễ tân tầng 2").exists()
+        )
+
+    def test_parcel_list_defaults_to_current_user_receive_location(self):
+        other_location = AdmParcelReceiveLocation.objects.create(
+            name="Quầy lễ tân tầng 3",
+            address="Tầng 3, Tòa nhà F88",
+            is_active=True,
+        )
+        self.client.login(username="vanthu", password="secret")
+        visible = AdmParcelReceipt.objects.create(
+            document_number="PK-LOC-DEFAULT-1",
+            receive_location=self.receive_location,
+            received_by=self.vanthu_user,
+            recipient_directory=self.recipient_entry,
+            recipient_department=self.recipient_entry.department_name,
+            recipient_name=self.recipient_entry.full_name,
+            recipient_employee_code=self.recipient_entry.employee_code,
+            recipient_gapo_user_id=self.recipient_entry.gapo_user_id,
+            parcel_type="hoso",
+            sender_unit="Visible sender",
+            receiving_company=self.company_f88,
+            status=self.dispatch_status,
+            created_by=self.vanthu_user,
+        )
+        AdmParcelReceipt.objects.create(
+            document_number="PK-LOC-DEFAULT-2",
+            receive_location=other_location,
+            received_by=self.vanthu_user,
+            recipient_directory=self.recipient_entry,
+            recipient_department=self.recipient_entry.department_name,
+            recipient_name=self.recipient_entry.full_name,
+            recipient_employee_code=self.recipient_entry.employee_code,
+            recipient_gapo_user_id=self.recipient_entry.gapo_user_id,
+            parcel_type="hoso",
+            sender_unit="Hidden sender",
+            receiving_company=self.company_f88,
+            status=self.dispatch_status,
+            created_by=self.vanthu_user,
+        )
+
+        response = self.client.get(reverse("admindocuments:parcel_receipt_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, visible.sender_unit)
+        self.assertNotContains(response, "Hidden sender")
+        self.assertEqual(response.context["selected_receive_location"], str(self.receive_location.id))
+
+    def test_parcel_list_can_show_all_receive_locations(self):
+        other_location = AdmParcelReceiveLocation.objects.create(
+            name="Quầy lễ tân tầng 4",
+            address="Tầng 4, Tòa nhà F88",
+            is_active=True,
+        )
+        self.client.login(username="vanthu", password="secret")
+        AdmParcelReceipt.objects.create(
+            document_number="PK-LOC-ALL-1",
+            receive_location=self.receive_location,
+            received_by=self.vanthu_user,
+            recipient_directory=self.recipient_entry,
+            recipient_department=self.recipient_entry.department_name,
+            recipient_name=self.recipient_entry.full_name,
+            recipient_employee_code=self.recipient_entry.employee_code,
+            recipient_gapo_user_id=self.recipient_entry.gapo_user_id,
+            parcel_type="hoso",
+            sender_unit="Default location sender",
+            receiving_company=self.company_f88,
+            status=self.dispatch_status,
+            created_by=self.vanthu_user,
+        )
+        AdmParcelReceipt.objects.create(
+            document_number="PK-LOC-ALL-2",
+            receive_location=other_location,
+            received_by=self.vanthu_user,
+            recipient_directory=self.recipient_entry,
+            recipient_department=self.recipient_entry.department_name,
+            recipient_name=self.recipient_entry.full_name,
+            recipient_employee_code=self.recipient_entry.employee_code,
+            recipient_gapo_user_id=self.recipient_entry.gapo_user_id,
+            parcel_type="hoso",
+            sender_unit="All locations sender",
+            receiving_company=self.company_f88,
+            status=self.dispatch_status,
+            created_by=self.vanthu_user,
+        )
+
+        response = self.client.get(
+            reverse("admindocuments:parcel_receipt_list"),
+            {"receive_location": "all"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Default location sender")
+        self.assertContains(response, "All locations sender")
 
     def test_responsible_user_and_received_date_are_immutable(self):
         dispatch = AdmIncomingDispatch.objects.create(
@@ -588,8 +717,7 @@ class AdmIncomingDispatchTests(TestCase):
         self.assertEqual(layout["children"][0]["photo_url"], "https://cdn.example.com/parcel.png")
         self.assertEqual(layout["children"][1]["children"][0]["text_object"]["text"], "Xin chao Nhan Vien - E001")
         body_text = layout["children"][1]["children"][1]["text_object"]["text"]
-        self.assertTrue(body_text.startswith("Ban co 2 kien tu Vnpost cho F88."))
-        self.assertIn("/admindocuments/pb/", body_text)
+        self.assertEqual(body_text, "Ban co 2 kien tu Vnpost cho F88.")
         self.assertEqual(layout["children"][2]["children"][0]["text_object"]["text"], "Xac nhan tai day")
         self.assertEqual(layout["children"][2]["children"][0]["background"], "14532D")
         self.assertEqual(layout["children"][2]["children"][0]["text_object"]["color"], "F8FAFC")
@@ -1323,10 +1451,64 @@ class AdmIncomingDispatchTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, completed_parcel.document_number)
 
+    def test_completed_parcel_table_only_shows_completed_records_for_admin(self):
+        superuser = User.objects.create_superuser(
+            username="parceladmin",
+            email="parceladmin@example.com",
+            password="secret",
+        )
+        completed = AdmParcelReceipt.objects.create(
+            document_number="PK-COMPLETED-TABLE-1",
+            received_by=superuser,
+            recipient_directory=self.recipient_entry,
+            recipient_department=self.recipient_entry.department_name,
+            recipient_name=self.recipient_entry.full_name,
+            recipient_employee_code=self.recipient_entry.employee_code,
+            recipient_gapo_user_id=self.recipient_entry.gapo_user_id,
+            parcel_type="hoso",
+            sender_unit="Completed sender",
+            tracking_code="DONE001",
+            receiving_company=self.company_f88,
+            status=self.dispatch_status_4,
+            created_by=superuser,
+            updated_by=superuser,
+            confirmed_at=timezone.now(),
+            completed_at=timezone.now(),
+        )
+        AdmParcelReceipt.objects.create(
+            document_number="PK-PENDING-TABLE-1",
+            received_by=superuser,
+            recipient_directory=self.recipient_entry,
+            recipient_department=self.recipient_entry.department_name,
+            recipient_name=self.recipient_entry.full_name,
+            recipient_employee_code=self.recipient_entry.employee_code,
+            recipient_gapo_user_id=self.recipient_entry.gapo_user_id,
+            parcel_type="hoso",
+            sender_unit="Pending sender",
+            tracking_code="PENDING001",
+            receiving_company=self.company_f88,
+            status=self.dispatch_status,
+            created_by=superuser,
+            updated_by=superuser,
+        )
+
+        self.client.force_login(superuser)
+        response = self.client.get(reverse("admindocuments:parcel_receipt_completed_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, completed.tracking_code)
+        self.assertNotContains(response, "PENDING001")
+
+    def test_completed_parcel_table_requires_admin_access(self):
+        self.client.force_login(self.viewer_user)
+        response = self.client.get(reverse("admindocuments:parcel_receipt_completed_list"))
+        self.assertEqual(response.status_code, 403)
+
     def test_parcel_list_filters_recipient_by_text_query(self):
         self.client.login(username="vanthu", password="secret")
         matched = AdmParcelReceipt.objects.create(
             document_number="PK-FILTER-RECIPIENT-1",
+            receive_location=self.receive_location,
             received_by=self.vanthu_user,
             recipient_directory=self.recipient_entry,
             recipient_department=self.recipient_entry.department_name,
@@ -1341,6 +1523,7 @@ class AdmIncomingDispatchTests(TestCase):
         )
         other = AdmParcelReceipt.objects.create(
             document_number="PK-FILTER-RECIPIENT-2",
+            receive_location=self.receive_location,
             received_by=self.vanthu_user,
             recipient_directory=self.recipient_entry_2,
             recipient_department=self.recipient_entry_2.department_name,

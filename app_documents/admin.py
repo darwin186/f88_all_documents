@@ -343,9 +343,9 @@ admin.site.register(LoanDetail,LoanDetailAdmin)
 
 #User Profile
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ('user', 'department', 'region', 'shop', 'employee_code', 'gender')
-    list_filter = ('department', 'region', 'shop')
-    search_fields = ('user__username', 'employee_code', 'department')
+    list_display = ('user', 'department', 'region', 'shop', 'default_receive_location', 'employee_code', 'gender')
+    list_filter = ('department', 'region', 'shop', 'default_receive_location')
+    search_fields = ('user__username', 'employee_code', 'department', 'default_receive_location__name')
     list_per_page = 25
 admin.site.register(UserProfile, UserProfileAdmin)
 

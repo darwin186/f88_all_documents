@@ -90,10 +90,17 @@
         <span>Công văn đến</span>
       </a>
       <a href="{% url 'admindocuments:parcel_receipt_list' %}"
-         class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'parcel_receipt_list' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">
+         class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'parcel_receipt_list' or active == 'parcel_receipt_completed_list' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4.75 7.75h14.5v8.5H4.75z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 11.25h8m-8 3h5"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 7.75V6.5A1.5 1.5 0 018.5 5h7A1.5 1.5 0 0117 6.5v1.25"/></svg>
         <span>Bưu phẩm/Bưu kiện</span>
       </a>
+      {% if has_admin_docs_access %}
+      <a href="{% url 'admindocuments:parcel_receipt_completed_list' %}"
+         class="ml-8 flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors {% if active == 'parcel_receipt_completed_list' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-600 dark:text-gray-200 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 12l4 4L19 6"/></svg>
+        <span>Đã nhận</span>
+      </a>
+      {% endif %}
       {% if request.user.is_superuser %}
       <a href="{% url 'admindocuments:parcel_recipient_directory' %}"
          class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors {% if active == 'parcel_recipient_directory' %}bg-green-50 text-f88green dark:bg-zinc-800 dark:text-yellow-300{% else %}text-gray-700 dark:text-gray-100 hover:text-f88green hover:bg-green-50 dark:hover:text-yellow-200 dark:hover:bg-zinc-800{% endif %}">
