@@ -22,6 +22,11 @@
             <div class="parcel-safe-text text-[11px] font-semibold leading-4 text-slate-900">
               {{ doc.recipient_label }}
             </div>
+            {% if doc.content %}
+            <div class="parcel-line-clamp-2 mt-0.5 text-[9px] font-medium leading-4 text-slate-600">
+              {{ doc.content }}
+            </div>
+            {% endif %}
             <div class="parcel-line-clamp-1 mt-0.5 text-[9px] font-medium leading-4 text-slate-500">
               {{ doc.sender_unit|default:"Chưa có đơn vị gửi" }}{% if doc.tracking_code %} / {{ doc.tracking_code }}{% endif %}
             </div>

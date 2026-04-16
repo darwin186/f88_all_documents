@@ -203,7 +203,7 @@
             </div>
             {% endif %}
 
-            <div>
+            <div id="parcelCompanyGroup" class="rounded-2xl border border-red-300 bg-red-50/30 p-1.5 transition-colors">
               <div class="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
                 {% for company in companies %}
                 <button type="button"
@@ -229,7 +229,7 @@
               {% if form.receive_location.errors %}<p class="mt-2 text-xs text-red-600">{{ form.receive_location.errors.0 }}</p>{% endif %}
             </div>
 
-            <div>
+            <div id="parcelTypeGroup" class="rounded-2xl border border-red-300 bg-red-50/30 p-1.5 transition-colors">
               <div class="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
                 {% for value, label in form.fields.parcel_type.choices %}
                 <button type="button"
@@ -256,7 +256,7 @@
               {{ form.recipient_unknown.as_hidden }}
               <input type="text" id="recipientSearchInput" placeholder="Tìm theo tên, mã nhân viên, email hoặc số điện thoại đầy đủ"
                      class="mb-3 block w-full rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 placeholder:text-[11px] placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
-              <div id="recipientSelectedLabel" class="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-[11px] text-slate-500">
+              <div id="recipientSelectedLabel" class="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-red-300 bg-white px-4 py-3 text-[11px] text-slate-500 transition-colors">
                 <span id="recipientSelectedText">Chưa chọn người nhận</span>
                 <button type="button"
                         id="recipientClearButton"
@@ -737,6 +737,7 @@
     document.querySelectorAll("[data-company-pill]").forEach((pill) => {
       pill.dataset.active = pill.dataset.companyCode === companyCode ? "true" : "false";
     });
+    refreshParcelIntakeValidation();
   }
 
   function selectParcelType(typeValue) {
@@ -745,6 +746,7 @@
     document.querySelectorAll("[data-parcel-type-pill]").forEach((pill) => {
       pill.dataset.active = pill.dataset.parcelTypeValue === typeValue ? "true" : "false";
     });
+    refreshParcelIntakeValidation();
   }
 
   function syncSenderUnitValue() {
@@ -765,6 +767,62 @@
       custom.value = "";
     }
     syncSenderUnitValue();
+    refreshParcelIntakeValidation();
+  }
+
+  function toggleValidationClasses(element, isFilled) {
+    if (!element) return;
+    element.classList.toggle("border-red-300", !isFilled);
+    element.classList.toggle("bg-red-50/30", !isFilled);
+    element.classList.toggle("border-emerald-300", !!isFilled);
+    element.classList.toggle("bg-emerald-50/30", !!isFilled);
+  }
+
+  function refreshParcelIntakeValidation() {
+    const companyInput = document.getElementById("id_receiving_company");
+    const receiveLocationInput = document.getElementById("id_receive_location");
+    const parcelTypeInput = document.getElementById("id_parcel_type");
+    const recipientInput = document.getElementById("id_recipient_directory");
+    const recipientUnknownInput = document.getElementById("id_recipient_unknown");
+    const departmentInput = document.getElementById("id_recipient_department");
+    const senderUnitInput = document.getElementById("id_sender_unit");
+    const trackingCodeInput = document.getElementById("id_tracking_code");
+    const contentInput = document.getElementById("id_content");
+
+    toggleValidationClasses(
+      document.getElementById("parcelCompanyGroup"),
+      !!(companyInput?.value || "").trim()
+    );
+    toggleValidationClasses(
+      receiveLocationInput,
+      !!(receiveLocationInput?.value || "").trim()
+    );
+    toggleValidationClasses(
+      document.getElementById("parcelTypeGroup"),
+      !!(parcelTypeInput?.value || "").trim()
+    );
+    toggleValidationClasses(
+      document.getElementById("recipientSelectedLabel"),
+      !!(recipientInput?.value || "").trim() || !!(recipientUnknownInput?.value || "").trim()
+    );
+    toggleValidationClasses(
+      departmentInput,
+      !!(departmentInput?.value || "").trim()
+    );
+    toggleValidationClasses(
+      document.getElementById("parcelSenderPreset")?.value === "__new__"
+        ? document.getElementById("parcelSenderCustom")
+        : document.getElementById("parcelSenderPreset"),
+      !!(senderUnitInput?.value || "").trim()
+    );
+    toggleValidationClasses(
+      trackingCodeInput,
+      !!(trackingCodeInput?.value || "").trim()
+    );
+    toggleValidationClasses(
+      contentInput,
+      !!(contentInput?.value || "").trim()
+    );
   }
 
   function renderRecipientResults(results) {
@@ -818,6 +876,7 @@
     button.classList.add("border-emerald-400", "bg-emerald-50");
     filterDepartmentOptions();
     updateDepartmentClearButton();
+    refreshParcelIntakeValidation();
   }
 
   function selectUnknownRecipient() {
@@ -842,6 +901,7 @@
       item.classList.remove("border-emerald-400", "bg-emerald-50");
     });
     updateDepartmentClearButton();
+    refreshParcelIntakeValidation();
   }
 
   function clearSelectedRecipient() {
@@ -861,6 +921,7 @@
     document.querySelectorAll("[data-recipient-id]").forEach((item) => {
       item.classList.remove("border-emerald-400", "bg-emerald-50");
     });
+    refreshParcelIntakeValidation();
   }
 
   function updateDepartmentClearButton() {
@@ -879,6 +940,7 @@
     if (departmentSearchInput) departmentSearchInput.value = "";
     filterDepartmentOptions();
     updateDepartmentClearButton();
+    refreshParcelIntakeValidation();
   }
 
   const proxyRecipientSearchTimers = {};
@@ -1036,6 +1098,7 @@
       option.hidden = !!keyword && !option.text.toLowerCase().includes(keyword);
     });
     updateDepartmentClearButton();
+    refreshParcelIntakeValidation();
   }
 
   async function searchRecipientDirectory(options = {}) {
@@ -1114,6 +1177,13 @@
       toggleSenderUnitMode();
     }
 
+    document.getElementById("id_receive_location")?.addEventListener("change", refreshParcelIntakeValidation);
+    document.getElementById("id_recipient_department")?.addEventListener("change", refreshParcelIntakeValidation);
+    document.getElementById("parcelSenderPreset")?.addEventListener("change", refreshParcelIntakeValidation);
+    document.getElementById("parcelSenderCustom")?.addEventListener("input", refreshParcelIntakeValidation);
+    document.getElementById("id_tracking_code")?.addEventListener("input", refreshParcelIntakeValidation);
+    document.getElementById("id_content")?.addEventListener("input", refreshParcelIntakeValidation);
+
     let recipientSearchTimer = null;
     document.getElementById("id_recipient_department")?.addEventListener("change", () => {
       updateDepartmentClearButton();
@@ -1136,6 +1206,7 @@
     }
     filterDepartmentOptions();
     updateDepartmentClearButton();
+    refreshParcelIntakeValidation();
   });
 </script>
 {% endblock %}
