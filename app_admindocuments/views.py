@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, date, timedelta
 from io import BytesIO
 from functools import wraps
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, urlunparse
 import qrcode
 from qrcode.image.svg import SvgPathImage
 
@@ -309,11 +309,19 @@ def _build_public_absolute_url(request, path):
     if not path:
         return ""
     if str(path).startswith(("http://", "https://")):
-        return str(path)
-    base_url = (getattr(settings, "PUBLIC_APP_BASE_URL", "") or "").strip().rstrip("/")
-    if base_url:
-        return urljoin(f"{base_url}/", str(path).lstrip("/"))
-    return request.build_absolute_uri(path)
+        parsed = urlparse(str(path))
+    else:
+        base_url = (getattr(settings, "PUBLIC_APP_BASE_URL", "") or "").strip().rstrip("/")
+        if base_url:
+            parsed = urlparse(urljoin(f"{base_url}/", str(path).lstrip("/")))
+        else:
+            parsed = urlparse(request.build_absolute_uri(path))
+
+    hostname = (parsed.hostname or "").lower()
+    if parsed.scheme == "http" and hostname not in {"127.0.0.1", "localhost", "::1"}:
+        parsed = parsed._replace(scheme="https")
+
+    return urlunparse(parsed)
 
 
 def _build_parcel_confirmation_url(request, token):

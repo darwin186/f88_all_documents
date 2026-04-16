@@ -3,7 +3,7 @@ from io import BytesIO
 
 from django.contrib.auth.models import Group, User
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -35,6 +35,7 @@ from .models import (
 from .views import (
     _allowed_status_codes_for_dispatch,
     _build_incoming_workflow_steps,
+    _build_parcel_confirmation_url,
     _send_parcel_group_notification_now,
 )
 
@@ -463,6 +464,16 @@ class AdmIncomingDispatchTests(TestCase):
         messages = list(response.context["messages"])
         self.assertTrue(
             any("Đã gửi thông báo nhận thành công." in str(message) for message in messages)
+        )
+
+    @override_settings(PUBLIC_APP_BASE_URL="")
+    def test_public_confirmation_url_forces_https_for_public_host(self):
+        request = RequestFactory().get("/", secure=False, HTTP_HOST="ida-chungtu.f88.co")
+        request.user = self.vanthu_user
+        url = _build_parcel_confirmation_url(request, "sample-token")
+        self.assertEqual(
+            url,
+            "https://ida-chungtu.f88.co/admindocuments/p/sample-token/",
         )
 
     @patch("app_admindocuments.views.send_gapo_scheduled_message.apply_async")
