@@ -66,6 +66,7 @@ urlpatterns = [
     path('quan-ly-muon-chung-tu-v2/', views.borrow_document_management_v2, name='borrow_management_v2'),
     path('yeu-cau-muon-chung-tu-v2/', views.borrow_request_management_v2, name='borrow_request_management_v2'),
     path('yeu-cau-muon-chung-tu-v2/<int:request_id>/', views.borrow_request_detail_v2, name='borrow_request_detail_v2'),
+    path('api/borrow-contact-recipients/search/', views.borrow_contact_recipient_search, name='borrow_contact_recipient_search'),
     path('api/borrow-requests/', views.api_borrow_request_create, name='api_borrow_request_create'),
     path('api/heartbeat/', views.api_user_heartbeat, name='api_user_heartbeat'),
     path('quan-ly-tai-khoan-ctv/', views.online_users_view, name='ctv_account_management_v2'),
@@ -76,4 +77,6 @@ urlpatterns = [
     path('manage-borrow/return-or-report-lost/<int:document_id>/<str:action>/', views.manage_borrow_document, name='manage_borrow_document'),
     path('gapo/schedule/', views.gapo_schedule_view, name='gapo_schedule'),
     path('gapo/schedule/ai-draft/', views.gapo_ai_generate_view, name='gapo_ai_generate'),
+    path('gapo/webhook/poc/', views.gapo_webhook_poc_view, name='gapo_webhook_poc'),
+    path('gapo/webhook/poc/events/', views.gapo_webhook_poc_events_view, name='gapo_webhook_poc_events'),
 ]   

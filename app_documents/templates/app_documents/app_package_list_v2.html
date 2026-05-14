@@ -895,6 +895,7 @@
                   <tr>
                     <th className="px-3 py-2">#</th>
                     <th className="px-3 py-2 cursor-pointer select-none" onClick={() => handleSort('packageCode')}>Mã thùng</th>
+                    <th className="px-3 py-2 cursor-pointer select-none" onClick={() => handleSort('partnerPackageCode')}>Mã thùng đối tác</th>
                     <th className="px-3 py-2 cursor-pointer select-none" onClick={() => handleSort('partnerName')}>Đối tác</th>
                     <th className="px-3 py-2">Trạng thái</th>
                     <th className="px-3 py-2 cursor-pointer select-none" onClick={() => handleSort('packageType')}>Loại</th>
@@ -909,6 +910,7 @@
                     <tr key={pkg.id} className={`cursor-pointer hover:bg-gray-50 ${selectedId === pkg.id ? 'bg-emerald-50' : ''}`} onClick={() => handleSelectCard(pkg.id)}>
                       <td className="px-3 py-2 text-[10px] text-gray-700">{idx + 1}</td>
                       <td className="px-3 py-2 font-semibold text-gray-900 text-[10px]">{pkg.packageCode}</td>
+                      <td className="px-3 py-2 text-[10px] text-gray-700">{pkg.partnerPackageCode || '---'}</td>
                       <td className="px-3 py-2 text-[10px] text-gray-700">{pkg.partnerName || 'Chưa có đối tác'}</td>
                       <td className="px-3 py-2 text-[10px] font-semibold whitespace-nowrap" style={{ color: pkg.status && pkg.status.color ? pkg.status.color : '#e5e7eb' }}>
                         {(pkg.status && pkg.status.name && pkg.status.name !== 'Chưa cập nhật') ? pkg.status.name : 'Chưa gửi'}
@@ -920,7 +922,7 @@
                       <td className="px-3 py-2 text-[10px] text-gray-700">{pkg.createdDate}</td>
                     </tr>
                   )) : (
-                    <tr><td colSpan="9" className="px-3 py-6 text-center text-gray-500 text-[10px]">Không tìm thấy thùng phù hợp với bộ lọc.</td></tr>
+                    <tr><td colSpan="10" className="px-3 py-6 text-center text-gray-500 text-[10px]">Không tìm thấy thùng phù hợp với bộ lọc.</td></tr>
                   )}
                 </tbody>
               </table>

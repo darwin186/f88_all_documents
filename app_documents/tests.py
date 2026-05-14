@@ -2,11 +2,12 @@ import json
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.urls import reverse
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from app_documents.forms import GapoScheduleForm
-from app_documents.models import GapoScheduledMessage
+from app_documents.models import GapoScheduledMessage, GapoWebhookEvent
 from app_documents.tasks import send_gapo_scheduled_message
 
 
@@ -111,3 +112,50 @@ class GapoScheduledMessageTaskTests(TestCase):
 
         schedule.refresh_from_db()
         self.assertEqual(schedule.status, GapoScheduledMessage.Status.SENT)
+
+
+class GapoWebhookPOCTests(TestCase):
+    def test_webhook_endpoint_stores_incoming_payload(self):
+        response = self.client.post(
+            reverse("gapo_webhook_poc"),
+            data=json.dumps(
+                {
+                    "type": "message_created",
+                    "bot_id": "5828367940457829714",
+                    "thread_id": 123456789,
+                    "message": {
+                        "id": "msg-001",
+                        "text": "hello from bot A",
+                        "sender_id": "bot-a",
+                    },
+                }
+            ),
+            content_type="application/json",
+            HTTP_X_GAPO_REQUEST_ID="req-1",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+
+        event = GapoWebhookEvent.objects.get()
+        self.assertEqual(event.event_type, "message_created")
+        self.assertEqual(event.bot_id, "5828367940457829714")
+        self.assertEqual(event.thread_id, "123456789")
+        self.assertEqual(event.message_id, "msg-001")
+        self.assertEqual(event.sender_id, "bot-a")
+        self.assertEqual(event.message_text, "hello from bot A")
+        self.assertTrue(event.is_json_valid)
+        self.assertEqual(event.headers["X-Gapo-Request-Id"], "req-1")
+
+    @override_settings(GAPO_WEBHOOK_SECRET="test-secret")
+    def test_webhook_endpoint_rejects_invalid_secret(self):
+        response = self.client.post(
+            reverse("gapo_webhook_poc"),
+            data=json.dumps({"type": "message_created"}),
+            content_type="application/json",
+            HTTP_X_GAPO_WEBHOOK_SECRET="wrong-secret",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(GapoWebhookEvent.objects.count(), 0)

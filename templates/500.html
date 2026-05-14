@@ -1,4 +1,3 @@
-{% load static %}
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -21,7 +20,6 @@
     </div>
     <h1 class="text-2xl font-semibold text-red-600 mb-2">500 - Đã xảy ra lỗi</h1>
     <p class="text-gray-700 mb-6">Xin lỗi bạn vì sự cố không mong muốn. Vui lòng thử tải lại trang hoặc liên hệ hỗ trợ.</p>
-    <img src="{% static 'media/images/404/meo404.png' %}" class="mx-auto w-48 mb-6" alt="500">
     <div class="flex flex-col sm:flex-row sm:justify-center gap-3">
       <a href="{% url 'home' %}" class="inline-flex justify-center items-center rounded-lg bg-f88 hover:bg-f88dark text-white font-semibold px-4 py-2.5 transition">Về trang chủ</a>
     </div>

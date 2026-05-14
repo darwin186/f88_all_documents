@@ -75,15 +75,155 @@
   {% endif %}
   {% endif %}
 
+  {% if is_admin and task_tab == 'approve' %}
+  <div class="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <p class="text-[10px] font-semibold text-gray-700">Duyệt lịch làm việc</p>
+        <p class="text-[9px] text-gray-500">Admin duyệt toàn bộ request đã submit trước khi phân công công việc.</p>
+      </div>
+    </div>
+    <form method="get" class="grid grid-cols-1 md:grid-cols-5 gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3 text-[9px]">
+      <input type="hidden" name="tab" value="approve">
+      <div>
+        <label class="block text-[8px] text-gray-500 mb-1">Checker</label>
+        <select name="checker_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px]">
+          <option value="">Tất cả checker</option>
+          {% for checker in ctv_users %}
+            <option value="{{ checker.id }}" {% if review_filters.checker_id == checker.id|stringformat:"s" %}selected{% endif %}>{{ checker.get_full_name|default:checker.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-[8px] text-gray-500 mb-1">From date</label>
+        <input type="date" name="from_date" value="{{ review_filters.from_date }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px]">
+      </div>
+      <div>
+        <label class="block text-[8px] text-gray-500 mb-1">To date</label>
+        <input type="date" name="to_date" value="{{ review_filters.to_date }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px]">
+      </div>
+      <div>
+        <label class="block text-[8px] text-gray-500 mb-1">Trạng thái</label>
+        <select name="status" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px]">
+          <option value="submitted" {% if review_filters.status == 'submitted' %}selected{% endif %}>Chờ duyệt</option>
+          <option value="approved" {% if review_filters.status == 'approved' %}selected{% endif %}>Đã duyệt</option>
+          <option value="rejected" {% if review_filters.status == 'rejected' %}selected{% endif %}>Trả lại</option>
+          <option value="draft" {% if review_filters.status == 'draft' %}selected{% endif %}>Nháp</option>
+          <option value="locked" {% if review_filters.status == 'locked' %}selected{% endif %}>Đã khóa</option>
+          <option value="all" {% if review_filters.status == 'all' %}selected{% endif %}>Tất cả</option>
+        </select>
+      </div>
+      <div class="flex items-end gap-2">
+        <button type="submit" class="flex-1 rounded-lg bg-emerald-600 px-3 py-2 text-[9px] font-semibold text-white">Lọc</button>
+        <a href="{% url 'workshift_tasks' %}?tab=approve" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px] text-gray-600">Reset</a>
+      </div>
+    </form>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-[9px]">
+        <thead class="bg-gray-50 text-gray-500">
+          <tr>
+            <th class="text-left px-3 py-2">Checker</th>
+            <th class="text-center px-3 py-2">Tuần</th>
+            <th class="text-center px-3 py-2">Trạng thái</th>
+            <th class="text-center px-3 py-2">Tổng giờ</th>
+            <th class="text-left px-3 py-2">Lịch submit</th>
+            <th class="text-left px-3 py-2">Thông tin duyệt</th>
+            <th class="text-right px-3 py-2">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for week in review_weeks %}
+          <tr>
+            <td class="px-3 py-2">
+              <div class="font-semibold text-gray-700">{{ week.user.get_full_name|default:week.user.username }}</div>
+              <div class="text-[8px] text-gray-400">{{ week.user.username }}</div>
+            </td>
+            <td class="px-3 py-2 text-center text-gray-600">{{ week.week_start_date|date:"d/m/Y" }} - {{ week.week_end_date|date:"d/m/Y" }}</td>
+            <td class="px-3 py-2 text-center">
+              {% with label=status_labels|get_item:week.status %}
+                <span class="inline-flex rounded-full px-2 py-0.5 {% if week.status == 'submitted' %}bg-amber-50 text-amber-700{% elif week.status == 'approved' %}bg-emerald-50 text-emerald-700{% elif week.status == 'rejected' %}bg-red-50 text-red-700{% else %}bg-gray-50 text-gray-600{% endif %}">
+                  {{ label|default:week.status }}
+                </span>
+              {% endwith %}
+            </td>
+            <td class="px-3 py-2 text-center font-semibold text-gray-700">{{ week.total_hours }}h</td>
+            <td class="px-3 py-2">
+              <details class="rounded-lg border border-gray-200 bg-gray-50">
+                <summary class="cursor-pointer px-3 py-2 text-[8px] font-semibold text-gray-700">Xem ngày và ca</summary>
+                <div class="space-y-1 border-t border-gray-200 p-2">
+                  {% for shift in week.shifts.all %}
+                    <div class="rounded-md bg-white px-2 py-1 text-[8px] text-gray-700">
+                      <span class="font-semibold">{{ shift.shift_date|date:"D d/m" }}</span>
+                      <span>:</span>
+                      {% if shift.shift_template %}
+                        <span>{{ shift.shift_template.template_name }}</span>
+                      {% else %}
+                        <span>Ca {{ shift.shift_index }}</span>
+                      {% endif %}
+                      <span>{{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>
+                      <span class="text-gray-500">({{ shift.total_hours }}h)</span>
+                    </div>
+                  {% empty %}
+                    <div class="text-[8px] text-gray-400">Không có ca submit.</div>
+                  {% endfor %}
+                </div>
+              </details>
+            </td>
+            <td class="px-3 py-2 text-gray-500">
+              {% if week.status == 'approved' %}
+                Duyệt bởi {{ week.approved_by.get_full_name|default:week.approved_by.username }}{% if week.approved_at %} lúc {{ week.approved_at|date:"d/m/Y H:i" }}{% endif %}
+              {% elif week.status == 'rejected' %}
+                {{ week.rejected_reason|default:"Không có lý do trả lại." }}
+              {% else %}
+                Chờ admin duyệt.
+              {% endif %}
+            </td>
+            <td class="px-3 py-2">
+              <div class="flex flex-wrap items-center justify-end gap-2">
+                {% if week.status == 'submitted' or week.status == 'rejected' %}
+                <form method="post">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="approve_week">
+                  <input type="hidden" name="week_id" value="{{ week.week_id }}">
+                  <input type="hidden" name="next_query" value="{{ review_query }}">
+                  <button type="submit" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[8px] font-semibold">Approve</button>
+                </form>
+                {% endif %}
+                {% if week.status == 'submitted' or week.status == 'approved' %}
+                <form method="post" class="flex items-center gap-1">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="reject_week">
+                  <input type="hidden" name="week_id" value="{{ week.week_id }}">
+                  <input type="hidden" name="next_query" value="{{ review_query }}">
+                  <input type="text" name="rejected_reason" class="w-36 rounded-lg border border-gray-200 px-2 py-1.5 text-[8px]" placeholder="Lý do trả lại">
+                  <button type="submit" class="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-[8px] font-semibold hover:bg-red-50">Reject</button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="px-3 py-4 text-center text-gray-400">Không có request phù hợp bộ lọc.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
   {% if messages %}
-  <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[9px] text-emerald-700 space-y-1">
+  <div class="space-y-2">
     {% for message in messages %}
-      <div>{{ message }}</div>
+      <div class="rounded-xl border p-3 text-[9px] {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
+        {{ message }}
+      </div>
     {% endfor %}
   </div>
   {% endif %}
 
-  {% if task_tab != 'catalog' %}
+  {% if task_tab == 'assign' %}
   <div class="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div class="text-[10px] font-semibold text-gray-700">
@@ -117,12 +257,17 @@
             {% with day_key=day|date:"Y-m-d" %}
             {% with user_grid=shift_grid|get_item:user.id %}
             {% with shift=user_grid|get_item:day_key|get_item:idx %}
-              <div class="rounded-lg border border-gray-200 bg-white p-2 text-[9px] space-y-2">
+              <div class="rounded-lg border border-gray-200 bg-white p-2 text-[9px] space-y-2" data-workshift-task-card>
                 <div class="text-[8px] text-gray-500">Ca {{ idx }}</div>
                 {% if shift %}
+                  {% with assigned_total=assignment_totals_by_shift|get_item:shift.shift_id %}
                   <div class="flex items-center justify-between">
-                    <span class="font-semibold text-gray-700">{{ shift.start_time }} - {{ shift.end_time }}</span>
+                    <span class="font-semibold text-gray-700">{{ shift.start_time|time:"H:i" }} - {{ shift.end_time|time:"H:i" }}</span>
                     <span class="text-gray-400">{{ shift.total_hours }}h</span>
+                  </div>
+                  <div class="flex items-center justify-between text-[8px] {% if assigned_total and assigned_total > shift.total_hours %}text-red-600{% else %}text-gray-500{% endif %}" data-assignment-summary data-current-hours="{{ assigned_total|default:'0' }}" data-limit-hours="{{ shift.total_hours }}">
+                    <span>Đã phân công</span>
+                    <span><span data-assigned-hours>{{ assigned_total|default:"0" }}</span>/{{ shift.total_hours }}h</span>
                   </div>
                   <div class="space-y-1">
                     {% with assignments=assignments_by_shift|get_item:shift.shift_id %}
@@ -139,7 +284,7 @@
                     {% endwith %}
                   </div>
                   {% if is_admin %}
-                  <form method="post" class="space-y-1">
+                  <form method="post" class="space-y-1" data-task-assign-form>
                     {% csrf_token %}
                     <input type="hidden" name="action" value="assign">
                     <input type="hidden" name="shift_id" value="{{ shift.shift_id }}">
@@ -150,12 +295,14 @@
                       {% endfor %}
                     </select>
                     <div class="flex items-center gap-1">
-                      <input type="number" step="0.25" name="planned_hours" class="w-full rounded-md border border-gray-200 px-2 py-1 text-[8px]" placeholder="Giờ">
+                      <input type="number" step="0.25" name="planned_hours" class="w-full rounded-md border border-gray-200 px-2 py-1 text-[8px]" placeholder="Giờ" data-planned-hours-input>
                       <input type="text" name="note" class="w-full rounded-md border border-gray-200 px-2 py-1 text-[8px]" placeholder="Ghi chú">
                     </div>
-                    <button type="submit" class="w-full rounded-md bg-emerald-600 text-white text-[8px] font-semibold py-1">Gán</button>
+                    <p class="hidden text-[8px] text-red-600" data-over-hours-warning>Vượt giờ ca đăng ký.</p>
+                    <button type="submit" class="w-full rounded-md bg-emerald-600 text-white text-[8px] font-semibold py-1" data-submit-button>Gán</button>
                   </form>
                   {% endif %}
+                  {% endwith %}
                 {% else %}
                   <div class="text-[8px] text-gray-400">Chưa có ca.</div>
                 {% endif %}
@@ -170,4 +317,46 @@
   </div>
   {% endif %}
 </div>
+<script>
+  (function () {
+    document.querySelectorAll('[data-task-assign-form]').forEach((form) => {
+      const card = form.closest('[data-workshift-task-card]');
+      const summary = card?.querySelector('[data-assignment-summary]');
+      const input = form.querySelector('[data-planned-hours-input]');
+      const warning = form.querySelector('[data-over-hours-warning]');
+      const submitButton = form.querySelector('[data-submit-button]');
+      if (!card || !summary || !input || !warning || !submitButton) return;
+
+      const currentHours = parseFloat(summary.dataset.currentHours || '0') || 0;
+      const limitHours = parseFloat(summary.dataset.limitHours || '0') || 0;
+
+      const renderState = () => {
+        const plannedHours = parseFloat(input.value || '0') || 0;
+        const nextTotal = currentHours + plannedHours;
+        const isOver = plannedHours > 0 && limitHours > 0 && nextTotal > limitHours;
+
+        card.classList.toggle('border-red-300', isOver);
+        card.classList.toggle('bg-red-50', isOver);
+        summary.classList.toggle('text-red-600', isOver);
+        summary.classList.toggle('text-gray-500', !isOver);
+        input.classList.toggle('border-red-400', isOver);
+        input.classList.toggle('bg-red-50', isOver);
+        warning.classList.toggle('hidden', !isOver);
+        if (isOver) {
+          warning.textContent = `Vượt giờ ca đăng ký (${nextTotal.toFixed(2)}/${limitHours.toFixed(2)}h).`;
+        }
+      };
+
+      input.addEventListener('input', renderState);
+      form.addEventListener('submit', (event) => {
+        renderState();
+        const plannedHours = parseFloat(input.value || '0') || 0;
+        if (plannedHours > 0 && limitHours > 0 && currentHours + plannedHours > limitHours) {
+          event.preventDefault();
+          input.focus();
+        }
+      });
+    });
+  })();
+</script>
 {% endblock %}

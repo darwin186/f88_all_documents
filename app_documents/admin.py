@@ -18,7 +18,8 @@ from .models import (
     FolderIssueType,
     FolderIssue,
     UiScreen,
-    UiPermission
+    UiPermission,
+    GapoWebhookEvent,
 )
 # Register your models here.
 admin.site.site_header = "Chứng từ F88"  
@@ -86,10 +87,10 @@ admin.site.register(BorrowingStatus,BorrowingStatusAdmin)
 
 
 class BorrowRequestAdmin(admin.ModelAdmin):
-    list_display = ('request_id', 'borrower', 'status', 'needed_date', 'appointment_date', 'ticket_code', 'created_at')
-    search_fields = ('request_id', 'ticket_code', 'external_ref', 'borrower__shop_name')
+    list_display = ('request_id', 'borrower', 'contact_name', 'contact_employee_code', 'status', 'needed_date', 'appointment_date', 'ticket_code', 'created_at')
+    search_fields = ('request_id', 'ticket_code', 'external_ref', 'borrower__shop_name', 'contact_name', 'contact_employee_code', 'contact_gapo_user_id', 'contact_email')
     list_filter = ('status', 'needed_date', 'appointment_date')
-    list_select_related = ('borrower',)
+    list_select_related = ('borrower', 'contact_recipient')
     list_per_page = 25
 admin.site.register(BorrowRequest, BorrowRequestAdmin)
 
@@ -136,6 +137,51 @@ class UserPresenceHourlyAdmin(admin.ModelAdmin):
 admin.site.register(UserPresenceHourly, UserPresenceHourlyAdmin)
 
 
+class GapoWebhookEventAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'created_at',
+        'event_type',
+        'bot_id',
+        'message_id',
+        'thread_id',
+        'collab_id',
+        'sender_id',
+        'is_json_valid',
+    )
+    search_fields = (
+        'event_type',
+        'bot_id',
+        'message_id',
+        'thread_id',
+        'collab_id',
+        'sender_id',
+        'message_text',
+    )
+    list_filter = ('event_type', 'is_json_valid', 'created_at')
+    readonly_fields = (
+        'event_type',
+        'bot_id',
+        'message_id',
+        'thread_id',
+        'collab_id',
+        'sender_id',
+        'message_text',
+        'http_method',
+        'request_path',
+        'remote_addr',
+        'headers',
+        'payload',
+        'raw_body',
+        'is_json_valid',
+        'created_at',
+    )
+    list_per_page = 50
+
+
+admin.site.register(GapoWebhookEvent, GapoWebhookEventAdmin)
+
+
 class FolderIssueTypeAdmin(admin.ModelAdmin):
     list_display = ('issue_type_name', 'is_active', 'is_no_issue', 'badge_color', 'sort_order')
     list_filter = ('is_active', 'is_no_issue')
@@ -179,8 +225,9 @@ admin.site.register(CheckingAdditional,CheckingAdditionalAdmin)
 
 # CheckingStatusTypeAdmin
 class CheckingStatusTypeAdmin(admin.ModelAdmin):
-    list_display = ('status_type_code', 'status_type_name')
+    list_display = ('status_type_code', 'status_type_name', 'is_missing_document')
     search_fields = ('status_type_code', 'status_type_name')
+    list_filter = ('is_missing_document',)
 admin.site.register(CheckingStatusType,CheckingStatusTypeAdmin)
 
 # EmployeeAdmin

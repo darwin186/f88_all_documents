@@ -1022,11 +1022,9 @@
       selectedRows.forEach(row => {
         const li = document.createElement('li');
         const docType = row.dataset.documentType || '';
-        const docCode = row.dataset.documentCode || '';
         const docDate = row.dataset.documentDate || '';
         const parts = [];
         if (docType) parts.push(docType);
-        if (docCode) parts.push(docCode);
         if (docDate) parts.push(docDate);
         li.textContent = parts.join(' • ') || 'Chứng từ';
         bulkList.appendChild(li);
@@ -1310,13 +1308,22 @@
     }
 
     getCheckboxes().forEach(cb => {
+      cb.addEventListener('click', (event) => {
+        event.stopPropagation();
+      });
       cb.addEventListener('change', () => {
         updateCheckboxAvailability();
         updateSelectAllState();
         updateBulkButton();
+        const selectedCount = getSelectedCheckboxes().length;
+        if (!bulkMode && selectedCount >= 2) {
+          drawer?.classList.add('translate-x-full');
+          activeRow = null;
+          activeDocumentId = null;
+        }
         syncRowHighlight();
         if (bulkMode) {
-          if (getSelectedCheckboxes().length === 0) {
+          if (selectedCount === 0) {
             setBulkMode(false);
             drawer?.classList.add('translate-x-full');
           } else {

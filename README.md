@@ -6,6 +6,282 @@
 ### 1) Mục tiêu hệ thống
 Hệ thống quản lý chứng từ bản cứng gồm các luồng chính: **nhận chứng từ**, **duyệt chứng từ**, **quản lý thùng**, **chỉ tiêu/KPI**, và **mượn chứng từ**. Toàn bộ màn hình v2 dùng base/layout chung để đồng bộ UI.
 
+## App Documents v2 - Yêu cầu nghiệp vụ
+
+Tài liệu này mô tả các yêu cầu nghiệp vụ cho nhóm màn hình v2 của `app_documents`. Phần này tập trung vào cách người dùng nghiệp vụ vận hành hệ thống, các điều kiện kiểm soát, trạng thái dữ liệu và kết quả mong đợi sau mỗi thao tác.
+
+### 1) Phạm vi nghiệp vụ v2
+
+Nhóm màn hình `app_documents` v2 phục vụ quản lý vòng đời chứng từ bản cứng từ lúc phát sinh, tiếp nhận về kho xử lý, duyệt, đóng thùng, theo dõi KPI và cho mượn.
+
+Các màn hình chính:
+
+- **Nhận chứng từ v2**: `/nhan-chung-tu-v2`
+- **Duyệt chứng từ v2**: `/duyet-chung-tu-v2`
+- **Quản lý thùng**: `/package-list-management`
+- **Chỉ tiêu chứng từ**: `/chi-tieu-chung-tu-v2`
+- **Yêu cầu mượn chứng từ**: `/yeu-cau-muon-chung-tu-v2`
+- **Quản lý mượn chứng từ**: `/quan-ly-muon-chung-tu-v2`
+- **Quản lý tài khoản CTV**: `/quan-ly-tai-khoan-ctv`
+
+### 2) Vai trò sử dụng
+
+- **Admin**: quản trị nghiệp vụ, xem/chỉnh dữ liệu toàn hệ thống, xem KPI, quản lý CTV.
+- **Checker/CTV**: xử lý nhận chứng từ, duyệt chứng từ, tạo và xử lý yêu cầu mượn nếu được cấp quyền.
+- **Shop/PGD**: là đơn vị phát sinh chứng từ, dữ liệu được lọc theo phạm vi được phân quyền.
+- **Supervisor/Manager/Risk**: xem hoặc thao tác theo phạm vi vùng/khu vực được cấu hình.
+
+Nguyên tắc phân quyền chung: người dùng chỉ được xem và thao tác dữ liệu thuộc phạm vi được cấp quyền. Các màn xử lý nghiệp vụ trọng yếu như nhận, duyệt, mượn và KPI chỉ mở cho nhóm có quyền phù hợp.
+
+### 3) Yêu cầu nghiệp vụ - Nhận chứng từ v2
+
+**Mục tiêu**
+
+Ghi nhận việc chứng từ/quyển chứng từ đã được tiếp nhận từ PGD về bộ phận xử lý, đồng thời đưa chứng từ vào đúng thùng lưu trữ.
+
+**Luồng nghiệp vụ**
+
+1. Người xử lý mở màn hình nhận chứng từ.
+2. Lọc danh sách quyển theo PGD, vùng, loại quyển, trạng thái, ngày phát sinh hoặc mã thùng.
+3. Chọn quyển cần nhận.
+4. Nhập hoặc chọn mã thùng F88 phù hợp.
+5. Xác nhận nhận chứng từ.
+6. Hệ thống cập nhật trạng thái quyển sang đã nhận.
+7. Hệ thống ghi nhận người nhận, ngày nhận, thùng nhận và lịch sử nhận.
+8. Hệ thống đồng bộ chứng từ trong quyển vào cùng thùng.
+
+**Điều kiện kiểm soát**
+
+- Chỉ nhận các quyển thuộc phạm vi người dùng được quyền xử lý.
+- Thùng nhận phải hợp lệ theo loại quyển và vùng/khu vực.
+- Một quyển đã nhận phải có lịch sử nhận để truy vết.
+- Nếu quyển/chứng từ nhận trễ so với quy định, hệ thống phải ghi nhận phục vụ KPI.
+
+**Kết quả sau xử lý**
+
+- Quyển có trạng thái đã nhận.
+- Quyển được gắn với thùng.
+- Chứng từ trong quyển được đồng bộ thùng.
+- Có log nhận chứng từ và log đưa quyển/chứng từ vào thùng.
+
+### 4) Yêu cầu nghiệp vụ - Duyệt chứng từ v2
+
+**Mục tiêu**
+
+Kiểm tra tính đầy đủ/hợp lệ của từng chứng từ và ghi nhận kết quả duyệt.
+
+**Luồng nghiệp vụ**
+
+1. Người xử lý mở màn hình duyệt chứng từ.
+2. Lọc chứng từ theo PGD, mã hợp đồng, mã GNN, mã thùng, trạng thái nhận, trạng thái duyệt hoặc ngày.
+3. Chọn một hoặc nhiều chứng từ cần duyệt.
+4. Chọn kết quả duyệt.
+5. Nếu cần bổ sung, nhập thông tin yêu cầu bổ sung.
+6. Xác nhận duyệt.
+7. Hệ thống cập nhật trạng thái duyệt và trạng thái nghiệp vụ của chứng từ.
+8. Hệ thống ghi lịch sử duyệt.
+
+**Điều kiện kiểm soát**
+
+- Chỉ duyệt chứng từ thuộc phạm vi quyền của người dùng.
+- Chứng từ cần có dữ liệu hợp lệ để xác định PGD, loại chứng từ, mã hợp đồng hoặc mã GNN.
+- Duyệt nhiều chỉ áp dụng cho nhóm chứng từ cùng mã hợp đồng/GNN và chưa duyệt.
+- Trạng thái duyệt không được hardcode theo mã cố định mà phải dựa trên cấu hình trạng thái.
+- Nếu kết quả là yêu cầu bổ sung, hệ thống phải tạo bản ghi bổ sung để theo dõi.
+
+**Kết quả sau xử lý**
+
+- Chứng từ được cập nhật trạng thái duyệt.
+- Chứng từ đủ điều kiện được chuyển sang trạng thái đã duyệt.
+- Chứng từ cần bổ sung có bản ghi yêu cầu bổ sung.
+- Có lịch sử duyệt chứng từ để truy vết người xử lý và thời điểm xử lý.
+
+### 5) Yêu cầu nghiệp vụ - Quản lý thùng
+
+**Mục tiêu**
+
+Quản lý thùng lưu trữ chứng từ, đảm bảo quyển/chứng từ được đóng gói đúng loại, đúng vùng và có lịch sử luân chuyển.
+
+**Luồng nghiệp vụ**
+
+1. Người xử lý tạo hoặc chọn thùng.
+2. Hệ thống sinh mã thùng theo quy chuẩn.
+3. Người xử lý đưa quyển/chứng từ vào thùng qua nghiệp vụ nhận chứng từ.
+4. Khi cần điều chỉnh, người xử lý có thể gỡ thùng theo điều kiện cho phép.
+5. Hệ thống ghi nhận lịch sử thùng với quyển và chứng từ.
+
+**Điều kiện kiểm soát**
+
+- Mã thùng phải theo format quản trị quy định.
+- Thùng phải phù hợp với loại quyển/chứng từ.
+- Thùng phải phù hợp với vùng/khu vực.
+- Chỉ cho gỡ thùng khi còn trong ngày và chưa có chứng từ đã duyệt.
+- Không làm mất lịch sử luân chuyển khi thay đổi thùng.
+
+**Kết quả sau xử lý**
+
+- Thùng được tạo đúng chuẩn.
+- Quyển/chứng từ có thông tin thùng hiện tại.
+- Lịch sử đóng thùng và luân chuyển được lưu đầy đủ.
+
+### 6) Yêu cầu nghiệp vụ - Mượn chứng từ v2
+
+**Mục tiêu**
+
+Quản lý việc phòng ban/bộ phận mượn chứng từ bản cứng đã được duyệt, theo dõi từ lúc yêu cầu, gán chứng từ, bàn giao, hoàn trả hoặc báo mất.
+
+**Đối tượng nghiệp vụ**
+
+- **Phiếu yêu cầu mượn**: ghi nhận nhu cầu mượn của một phòng ban.
+- **Chứng từ trong phiếu**: từng chứng từ được gán và theo dõi trạng thái riêng.
+- **Giao dịch mượn thực tế**: phát sinh khi chứng từ được bàn giao.
+- **Log xử lý**: ghi lại toàn bộ thao tác trên phiếu và từng chứng từ.
+
+**Luồng nghiệp vụ**
+
+1. Người xử lý tạo phiếu yêu cầu mượn với phòng ban, ngày mượn, ngày hẹn trả, mã ticket, mã hợp đồng/GNN, email/SĐT liên hệ và ghi chú.
+2. Phiếu mới tạo có trạng thái **Chờ xử lý**.
+3. Người xử lý vào chi tiết phiếu và tìm chứng từ theo `contract_code` hoặc `loan_code`.
+4. Hệ thống hiển thị danh sách chứng từ liên quan và lý do không đủ điều kiện nếu có.
+5. Người xử lý chọn chứng từ hợp lệ để gán vào phiếu.
+6. Chứng từ được gán chuyển sang trạng thái **Đã gán**.
+7. Khi chứng từ sẵn sàng rời kho, người xử lý thực hiện **Bàn giao**.
+8. Hệ thống tạo giao dịch mượn thực tế, chuyển chứng từ sang trạng thái **Đang mượn** và gỡ chứng từ khỏi thùng hiện tại.
+9. Khi phòng ban trả chứng từ, người xử lý thực hiện **Hoàn trả** trên từng chứng từ.
+10. Nếu chứng từ bị mất, người xử lý thực hiện **Báo mất**.
+11. Hệ thống cập nhật trạng thái từng chứng từ và trạng thái tổng của phiếu.
+
+**Điều kiện chứng từ được mượn**
+
+- Chứng từ phải đã duyệt.
+- Chứng từ không được đang mượn.
+- Chứng từ không có giao dịch mượn chưa đóng.
+- Chứng từ chưa được gán trong phiếu hiện tại.
+- Người thao tác phải thuộc nhóm có quyền xử lý nghiệp vụ mượn.
+
+**Quy tắc bàn giao**
+
+- Chỉ bàn giao các chứng từ đã gán và có mã chứng từ hợp lệ.
+- Khi bàn giao, hệ thống tạo bản ghi giao dịch mượn thực tế.
+- Người cho mượn là user đang thao tác.
+- Phòng ban mượn lấy từ phiếu yêu cầu.
+- Ngày mượn là ngày bàn giao thực tế.
+- Ngày hẹn trả lấy từ chứng từ trong phiếu, nếu không có thì lấy từ phiếu.
+- Chứng từ được chuyển sang trạng thái đang mượn.
+- Chứng từ được gỡ khỏi thùng hiện tại.
+
+**Quy tắc hoàn trả**
+
+- Chỉ hoàn trả chứng từ đã bàn giao.
+- Khi hoàn trả, giao dịch mượn được chuyển sang trạng thái đã trả.
+- Hệ thống ghi nhận ngày trả.
+- Chứng từ được chuyển lại trạng thái đã duyệt.
+- Phiếu được cập nhật lại trạng thái tổng.
+
+**Quy tắc báo mất**
+
+- Chỉ báo mất chứng từ đã bàn giao.
+- Giao dịch mượn được chuyển sang trạng thái báo mất.
+- Chứng từ được chuyển sang trạng thái đã mất.
+- Phiếu được cập nhật lại trạng thái tổng.
+
+**Trạng thái phiếu mượn**
+
+- **Chờ xử lý**: phiếu mới tạo, chưa gán chứng từ.
+- **Đã gán chứng từ**: phiếu đã có chứng từ nhưng chưa bàn giao.
+- **Đã bàn giao**: chứng từ đã được bàn giao cho phòng ban mượn.
+- **Trả một phần**: một phần chứng từ đã trả/báo mất, phần còn lại chưa hoàn tất.
+- **Đã trả**: toàn bộ chứng từ trong phiếu đã kết thúc.
+- **Hủy**: phiếu bị hủy trước khi có chứng từ.
+- **Từ chối**: trạng thái dự phòng cho trường hợp không chấp nhận yêu cầu.
+
+**Trạng thái chứng từ trong phiếu**
+
+- **Chờ gán**
+- **Đã gán**
+- **Đã bàn giao**
+- **Đã trả**
+- **Báo mất**
+- **Hủy**
+
+**Quy tắc hủy phiếu**
+
+- Chỉ được hủy phiếu khi chưa có chứng từ được gán.
+- Nếu phiếu đã có chứng từ, không cho hủy để tránh mất lịch sử xử lý.
+
+**Kết quả sau xử lý**
+
+- Phiếu mượn thể hiện đầy đủ phòng ban, thời gian, liên hệ, ticket và danh sách chứng từ.
+- Mỗi chứng từ có trạng thái riêng.
+- Giao dịch mượn thực tế được ghi nhận sau bàn giao.
+- Có log cho các thao tác tạo phiếu, gán chứng từ, bàn giao, hoàn trả, báo mất và cập nhật ngày hẹn trả.
+
+### 7) Yêu cầu nghiệp vụ - KPI/Chỉ tiêu chứng từ
+
+**Mục tiêu**
+
+Theo dõi năng suất xử lý chứng từ, tình trạng nhận/duyệt, SLA và tình hình mượn chứng từ.
+
+**Nhóm chỉ tiêu chính**
+
+- Tổng số quyển/chứng từ phát sinh.
+- Số lượng đã nhận.
+- Số lượng chưa nhận.
+- Số lượng nhận đúng hạn/trễ hạn.
+- Số lượng đã duyệt.
+- Số lượng cần bổ sung.
+- Năng suất theo người xử lý.
+- Báo cáo theo PGD, vùng/khu vực và tháng.
+- Tổng lượt mượn chứng từ.
+- Số chứng từ đang mượn.
+- Số chứng từ đã trả.
+- Số chứng từ báo mất.
+- Số lượt mượn quá hạn.
+- Tỷ lệ trả đúng hạn.
+
+**Điều kiện kiểm soát**
+
+- Chỉ admin hoặc người được cấp quyền mới xem được KPI tổng hợp.
+- Dữ liệu KPI phải dựa trên trạng thái nghiệp vụ và log xử lý thực tế.
+- Các chỉ tiêu bật/tắt theo cấu hình `DocumentKpiSetting`.
+- Báo cáo phải hỗ trợ lọc theo thời gian và đơn vị.
+
+### 8) Yêu cầu nghiệp vụ - Quản lý tài khoản CTV
+
+**Mục tiêu**
+
+Theo dõi tình trạng hoạt động của cộng tác viên/người xử lý nghiệp vụ trên màn hình v2.
+
+**Luồng nghiệp vụ**
+
+1. Khi người dùng sử dụng hệ thống v2, trình duyệt gửi heartbeat định kỳ.
+2. Hệ thống ghi nhận thời điểm online gần nhất.
+3. Hệ thống cộng dồn thời gian hoạt động trong ngày.
+4. Admin xem danh sách người dùng online/offline và tổng thời gian hoạt động.
+
+**Điều kiện kiểm soát**
+
+- Chỉ admin được xem màn quản lý tài khoản CTV.
+- Online/offline được xác định theo khoảng thời gian không hoạt động được cấu hình.
+- Thời gian hoạt động chỉ cộng khi heartbeat liên tục trong ngưỡng hợp lệ.
+
+### 9) Nguyên tắc truy vết và an toàn dữ liệu
+
+- Mọi thao tác nghiệp vụ quan trọng phải có log.
+- Không xóa lịch sử nhận, duyệt, đóng thùng hoặc mượn chứng từ.
+- Không hardcode trạng thái theo tên/mã cụ thể nếu hệ thống đã có flag cấu hình.
+- Khi chuyển trạng thái chứng từ, phải cập nhật theo đúng trạng thái nghiệp vụ hiện hành.
+- Không cho phép thao tác làm mất dấu chứng từ đang nằm trong thùng, đang duyệt hoặc đang mượn.
+- Dữ liệu hiển thị phải tuân thủ phân quyền vùng/PGD/người dùng.
+
+### 10) Kết luận nghiệp vụ
+
+Luồng chuẩn của `app_documents` v2 được hiểu là:
+
+**PGD phát sinh chứng từ -> bộ phận xử lý nhận chứng từ -> duyệt chứng từ -> đóng thùng/quản lý lưu trữ -> theo dõi KPI -> cho mượn khi có yêu cầu -> hoàn trả hoặc báo mất.**
+
+Mỗi màn v2 phải phục vụ đúng một bước trong vòng đời này, đồng thời đảm bảo chứng từ luôn có trạng thái hiện tại rõ ràng, lịch sử xử lý đầy đủ và dữ liệu đủ tin cậy để báo cáo/KPI.
+
 ### 2) Ứng dụng chính
 - `app_documents`: nghiệp vụ chứng từ, nhận/duyệt, thùng, KPI, mượn.
 - `app_admindocuments`: cấp số văn bản hành chính/giấy tờ (khác mảng chứng từ).

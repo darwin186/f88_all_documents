@@ -3,7 +3,7 @@
 {% block top_nav %}
   {% include 'app_documents/components/top_nav_v2.html' %}
 {% endblock %}
-{% block main_extra_class %}pt-14{% endblock %}
+{% block main_extra_class %}pt-14 overflow-hidden{% endblock %}
 
 {% block content %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -11,6 +11,13 @@
   body { font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size:10px; }
   .filter-bar, .filter-bar * { font-size: 10px !important; }
   .table-wrap table { font-size: 10px; }
+  .table-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #f9fafb;
+    box-shadow: inset 0 -1px 0 #e5e7eb;
+  }
   .filter-input { height: 34px; }
   /* Flatpickr size to match PGD dropdown */
   .flatpickr-calendar { font-size: 10px; }
@@ -34,7 +41,7 @@
   .toast-info .toast-dot { background: #3b82f6; }
 </style>
 
-<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
+<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 mt-5 h-full min-h-0 flex flex-col gap-4">
   {% if messages %}
   <script>
     window.SERVER_TOASTS = [
@@ -44,7 +51,7 @@
     ];
   </script>
   {% endif %}
-  <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
+  <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3 flex-shrink-0">
     <form id="filter-form" method="get" action="{% url 'receiving_transaction_v2' %}" x-data="{ showMore: false }" class="grid lg:grid-cols-[2fr,1fr,1fr,1fr,1fr,auto] gap-3 items-center">
       <input type="hidden" name="sort" value="{{ sort_param }}">
       <div class="relative">
@@ -186,9 +193,9 @@
     </form>
   </div>
 
-  <div class="relative">
-    <div class="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden table-wrap">
-      <div class="flex justify-between items-center px-3 py-2 text-[10px] text-gray-600">
+  <div class="relative flex-1 min-h-0">
+    <div class="h-full min-h-0 rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden table-wrap flex flex-col">
+      <div class="flex-shrink-0 flex justify-between items-center px-3 py-2 text-[10px] text-gray-600">
         <span>Tổng quyển: {{ folder_detail.paginator.count }}</span>
       <div class="flex items-center gap-1">
           {% if folder_detail.has_previous %}
@@ -208,6 +215,7 @@
           {% endif %}
         </div>
       </div>
+      <div class="table-scroll flex-1 min-h-0 overflow-auto">
       <table class="min-w-full text-left">
         <thead class="bg-gray-50 text-gray-600 uppercase">
           <tr>
@@ -222,13 +230,13 @@
               <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.shop }}" class="flex items-center gap-1">Phòng Giao Dịch{% if sort_param == 'shop' %}▲{% elif sort_param == '-shop' %}▼{% endif %}</a>
             </th>
             <th class="px-3 py-2">
+              <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.folder_created_date }}" class="flex items-center gap-1">Ngày phát sinh{% if sort_param == 'folder_created_date' %}▲{% elif sort_param == '-folder_created_date' %}▼{% endif %}</a>
+            </th>
+            <th class="px-3 py-2">
               <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.folder_type }}" class="flex items-center gap-1">Loại quyển chứng từ{% if sort_param == 'folder_type' %}▲{% elif sort_param == '-folder_type' %}▼{% endif %}</a>
             </th>
             <th class="px-3 py-2">
               <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.is_original }}" class="flex items-center gap-1">Phiên bản{% if sort_param == 'is_original' %}▲{% elif sort_param == '-is_original' %}▼{% endif %}</a>
-            </th>
-            <th class="px-3 py-2">
-              <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.folder_created_date }}" class="flex items-center gap-1">Ngày phát sinh{% if sort_param == 'folder_created_date' %}▲{% elif sort_param == '-folder_created_date' %}▼{% endif %}</a>
             </th>
             <th class="px-3 py-2">
               <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.lastest_received_date }}" class="flex items-center gap-1">Ngày nhận{% if sort_param == 'lastest_received_date' %}▲{% elif sort_param == '-lastest_received_date' %}▼{% endif %}</a>
@@ -236,7 +244,7 @@
             <th class="px-3 py-2">
               <a href="?{% if base_qs %}{{ base_qs }}&{% endif %}sort={{ sort_toggle.folder_status }}" class="flex items-center gap-1">Trạng thái{% if sort_param == 'folder_status' %}▲{% elif sort_param == '-folder_status' %}▼{% endif %}</a>
             </th>
-            <th class="px-3 py-2">Trạng thái nhận</th>
+            <th class="px-3 py-2">Mã thùng</th>
             <th class="px-3 py-2">Người nhận</th>
           </tr>
         </thead>
@@ -250,6 +258,7 @@
             <td class="px-3 py-2 text-gray-700">{{ forloop.counter|add:folder_detail.start_index|add:-1 }}</td>
             <td class="px-3 py-2 font-semibold text-gray-900">{{ folder_dtl.folder_code }}</td>
             <td class="px-3 py-2 text-gray-700">{{ folder_dtl.shop_id.shop_name }}</td>
+            <td class="px-3 py-2 text-gray-700">{{ folder_dtl.folder_created_date|date:"Y-m-d" }}</td>
             <td class="px-3 py-2 text-gray-700">{{ folder_dtl.folder_type_id.folder_type_name }}</td>
             <td class="px-3 py-2 text-gray-700">
               <div class="flex flex-wrap items-center gap-1">
@@ -263,21 +272,31 @@
                 {% endif %}
               </div>
             </td>
-            <td class="px-3 py-2 text-gray-700">{{ folder_dtl.folder_created_date|date:"Y-m-d" }}</td>
             <td class="px-3 py-2 text-gray-700">{{ folder_dtl.lastest_received_date|date:"Y-m-d H:i" }}</td>
             <td class="px-3 py-2 text-gray-700">
-              <span class="px-2 py-1 rounded-full text-[9px] font-semibold" style="background-color: {% if st.is_received %}#d1f4e0{% else %}{{ st.badge_color|default:'#e5e7eb' }}{% endif %}; color: {% if st.is_received %}#006837{% else %}#0f172a{% endif %}; border: 1px solid {% if st.is_received %}#9ee5bc{% else %}#d1d5db{% endif %};">
-                {{ st.folder_status_name }}
-              </span>
+              <div class="flex flex-wrap items-center gap-1">
+                <span class="px-2 py-1 rounded-full text-[9px] font-semibold" style="background-color: {% if st.is_received %}#d1f4e0{% else %}{{ st.badge_color|default:'#e5e7eb' }}{% endif %}; color: {% if st.is_received %}#006837{% else %}#0f172a{% endif %}; border: 1px solid {% if st.is_received %}#9ee5bc{% else %}#d1d5db{% endif %};">
+                  {{ st.folder_status_name }}
+                </span>
+                {% if folder_dtl.is_late %}
+                  <span class="px-2 py-1 rounded-full bg-red-100 text-red-700 text-[9px] font-semibold">Trễ hạn</span>
+                {% elif folder_dtl.is_on_time %}
+                  <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-semibold">Đúng hạn</span>
+                {% endif %}
+              </div>
             </td>
             <td class="px-3 py-2 text-gray-700">
-              {% if folder_dtl.is_late %}
-                <span class="px-2 py-1 rounded-full bg-red-100 text-red-700 text-[9px] font-semibold">Trễ hạn</span>
-              {% elif folder_dtl.is_on_time %}
-                <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-semibold">Đúng hạn</span>
-              {% else %}
-                <span class="text-gray-400">—</span>
-              {% endif %}
+              <div class="flex flex-wrap items-center gap-1">
+                {% if folder_dtl.package_id and folder_dtl.package_id.package_code %}
+                  <span class="px-2 py-1 rounded-full bg-gray-100 text-gray-800 text-[9px] font-semibold border border-gray-200">F88: {{ folder_dtl.package_id.package_code }}</span>
+                {% endif %}
+                {% if folder_dtl.package_id and folder_dtl.package_id.partnerpackage and folder_dtl.package_id.partnerpackage.partner_package_code %}
+                  <span class="px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 text-[9px] font-semibold border border-indigo-100">ĐT: {{ folder_dtl.package_id.partnerpackage.partner_package_code }}</span>
+                {% endif %}
+                {% if not folder_dtl.package_id or not folder_dtl.package_id.package_code %}
+                  <span class="text-gray-400">—</span>
+                {% endif %}
+              </div>
             </td>
             <td class="px-3 py-2 text-gray-700">{{ folder_dtl.lastest_received_by|default:'' }}</td>
           </tr>
@@ -287,6 +306,7 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
   </div>
 </div>
 

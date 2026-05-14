@@ -1,0 +1,165 @@
+{% extends "app_documents/base_app_documents_v2.html" %}
+
+{% block title %}Report lịch làm việc{% endblock %}
+
+{% block top_nav %}
+  {% include "app_documents/components/top_nav_v2.html" %}
+{% endblock %}
+
+{% block main_extra_class %}pt-14{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1500px] 2xl:max-w-[1700px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
+  {% include "app_workshift/components/sub_nav.html" %}
+
+  <div class="rounded-2xl border border-gray-200 bg-white p-4 space-y-4">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <p class="text-[11px] font-semibold text-gray-800">Report lịch làm việc</p>
+        <p class="text-[9px] text-gray-500">Nhìn nhanh ai làm gì theo ngày, tuần và tháng.</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 text-[9px]">
+        <a href="{% url 'workshift_report' %}?month={{ prev_month|date:'Y-m' }}&status={{ status_filter }}{% if checker_id %}&checker_id={{ checker_id }}{% endif %}" class="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Tháng trước</a>
+        <span class="font-semibold text-gray-700">Tháng {{ selected_month|date:"m/Y" }}</span>
+        <a href="{% url 'workshift_report' %}?month={{ next_month|date:'Y-m' }}&status={{ status_filter }}{% if checker_id %}&checker_id={{ checker_id }}{% endif %}" class="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Tháng sau</a>
+        <a href="{% url 'workshift_report_export' %}?month={{ selected_month|date:'Y-m' }}&status={{ status_filter }}{% if checker_id %}&checker_id={{ checker_id }}{% endif %}" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Xuất Excel</a>
+      </div>
+    </div>
+
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3 text-[9px]">
+      <div>
+        <label class="block text-[8px] text-gray-500 mb-1">Tháng</label>
+        <input type="month" name="month" value="{{ selected_month|date:'Y-m' }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px]">
+      </div>
+      {% if is_admin %}
+      <div>
+        <label class="block text-[8px] text-gray-500 mb-1">Checker</label>
+        <select name="checker_id" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px]">
+          <option value="">Tất cả checker</option>
+          {% for checker in ctv_users %}
+            <option value="{{ checker.id }}" {% if checker_id == checker.id|stringformat:"s" %}selected{% endif %}>{{ checker.get_full_name|default:checker.username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div>
+        <label class="block text-[8px] text-gray-500 mb-1">Trạng thái lịch</label>
+        <select name="status" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px]">
+          <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Đã duyệt</option>
+          <option value="submitted" {% if status_filter == 'submitted' %}selected{% endif %}>Chờ duyệt</option>
+          <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Trả lại</option>
+          <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Nháp</option>
+          <option value="locked" {% if status_filter == 'locked' %}selected{% endif %}>Đã khóa</option>
+          <option value="all" {% if status_filter == 'all' %}selected{% endif %}>Tất cả</option>
+        </select>
+      </div>
+      <div class="flex items-end">
+        <button type="submit" class="w-full rounded-lg bg-emerald-600 px-3 py-2 text-[9px] font-semibold text-white">Xem report</button>
+      </div>
+    </form>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-[9px]">
+      <div class="rounded-xl border border-gray-200 bg-white p-3">
+        <p class="text-gray-500">Tổng giờ đăng ký</p>
+        <p class="mt-1 text-[16px] font-semibold text-gray-900">{{ total_hours }}h</p>
+      </div>
+      <div class="rounded-xl border border-gray-200 bg-white p-3">
+        <p class="text-gray-500">Tổng ca</p>
+        <p class="mt-1 text-[16px] font-semibold text-gray-900">{{ total_shifts }}</p>
+      </div>
+      <div class="rounded-xl border border-gray-200 bg-white p-3">
+        <p class="text-gray-500">Giờ đã phân công</p>
+        <p class="mt-1 text-[16px] font-semibold text-emerald-700">{{ assigned_hours }}h</p>
+      </div>
+      <div class="rounded-xl border border-gray-200 bg-white p-3">
+        <p class="text-gray-500">Checker có lịch</p>
+        <p class="mt-1 text-[16px] font-semibold text-gray-900">{{ user_totals|length }}</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-4">
+    <div class="rounded-2xl border border-gray-200 bg-white p-4">
+      <div class="grid grid-cols-5 gap-1 text-center text-[8px] font-semibold text-gray-500 mb-1">
+        <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div>
+      </div>
+      <div class="space-y-1">
+        {% for week in report_weeks %}
+          <div class="grid grid-cols-5 gap-1">
+            {% for cell in week %}
+              <section class="min-h-[150px] rounded-xl border {% if cell.in_month %}border-gray-200 bg-white{% else %}border-gray-100 bg-gray-50 opacity-60{% endif %} p-2">
+                <div class="mb-2 flex items-center justify-between">
+                  <span class="text-[9px] font-semibold {% if cell.in_month %}text-gray-800{% else %}text-gray-400{% endif %}">{{ cell.day|date:"d/m" }}</span>
+                  {% if cell.items %}
+                    <span class="rounded-full bg-emerald-50 px-2 py-0.5 text-[8px] text-emerald-700">{{ cell.items|length }} ca</span>
+                  {% endif %}
+                </div>
+                <div class="space-y-1">
+                  {% for item in cell.items %}
+                    {% with shift=item.shift %}
+                    <div class="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-[8px]">
+                      <div class="flex items-start justify-between gap-1">
+                        <div>
+                          <div class="font-semibold text-gray-800">{{ shift.work_week.user.get_full_name|default:shift.work_week.user.username }}</div>
+                          <div class="text-gray-500">
+                            {% if shift.shift_template %}{{ shift.shift_template.template_name }}{% else %}Ca {{ shift.shift_index }}{% endif %}
+                            · {{ shift.start_time|time:"H:i" }}-{{ shift.end_time|time:"H:i" }}
+                          </div>
+                        </div>
+                        <span class="text-gray-500">{{ shift.total_hours }}h</span>
+                      </div>
+                      <div class="mt-1 flex flex-wrap gap-1">
+                        {% for assignment in item.assignments %}
+                          <span class="rounded-full bg-white px-2 py-0.5 text-[8px] text-emerald-700">{{ assignment.task.task_name }} {{ assignment.planned_hours }}h</span>
+                        {% empty %}
+                          <span class="text-[8px] text-amber-600">Chưa phân công</span>
+                        {% endfor %}
+                      </div>
+                    </div>
+                    {% endwith %}
+                  {% empty %}
+                    <div class="text-[8px] text-gray-300">Không có lịch.</div>
+                  {% endfor %}
+                </div>
+              </section>
+            {% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <aside class="space-y-4">
+      <div class="rounded-2xl border border-gray-200 bg-white p-4">
+        <p class="mb-3 text-[10px] font-semibold text-gray-700">Tổng theo checker</p>
+        <div class="space-y-2 text-[9px]">
+          {% for item in user_totals %}
+            <div class="rounded-lg border border-gray-100 bg-gray-50 p-2">
+              <div class="flex items-center justify-between">
+                <span class="font-semibold text-gray-700">{{ item.user.get_full_name|default:item.user.username }}</span>
+                <span class="text-gray-900">{{ item.hours }}h</span>
+              </div>
+              <div class="mt-1 text-[8px] text-gray-500">{{ item.shifts }} ca · đã phân công {{ item.assigned_hours }}h</div>
+            </div>
+          {% empty %}
+            <div class="text-[9px] text-gray-400">Không có dữ liệu.</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="rounded-2xl border border-gray-200 bg-white p-4">
+        <p class="mb-3 text-[10px] font-semibold text-gray-700">Tổng theo công việc</p>
+        <div class="space-y-2 text-[9px]">
+          {% for item in task_totals %}
+            <div class="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 px-2 py-1.5">
+              <span class="text-gray-700">{{ item.task.task_name }}</span>
+              <span class="font-semibold text-gray-900">{{ item.hours }}h</span>
+            </div>
+          {% empty %}
+            <div class="text-[9px] text-gray-400">Chưa có công việc được phân công.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}

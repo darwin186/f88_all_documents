@@ -67,7 +67,7 @@
 
   <div class="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden table-wrap">
     <div class="flex justify-between items-center px-3 py-2 text-[10px] text-gray-600">
-      <span>Tổng lượt mượn: {{ borrow_list.paginator.count }}</span>
+      <span>Tổng phiếu/lượt mượn đã bàn giao: {{ borrow_list.paginator.count }}</span>
       <div class="flex items-center gap-1">
         {% if borrow_list.has_previous %}
         <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page=1{% if base_qs %}&{{ base_qs }}{% endif %}">«</a>
@@ -90,8 +90,10 @@
       <thead class="bg-gray-50 text-gray-600 uppercase">
         <tr>
           <th class="px-3 py-2">Mã chứng từ</th>
+          <th class="px-3 py-2">Phiếu yêu cầu</th>
           <th class="px-3 py-2">Phòng ban mượn</th>
           <th class="px-3 py-2">Người mượn</th>
+          <th class="px-3 py-2">HDCC/GNN</th>
           <th class="px-3 py-2">Ngày mượn</th>
           <th class="px-3 py-2">Hẹn trả</th>
           <th class="px-3 py-2">Ngày trả</th>
@@ -104,8 +106,22 @@
         {% for b in borrow_list %}
         <tr class="hover:bg-gray-50">
           <td class="px-3 py-2 font-semibold text-gray-900">{{ b.documents_id.documents_code }}</td>
+          <td class="px-3 py-2 text-gray-700">
+            {% if b.borrow_request %}
+            <a href="{% url 'borrow_request_detail_v2' b.borrow_request.request_id %}" class="font-semibold text-emerald-700 hover:underline">BR-{{ b.borrow_request.created_at|date:"Ymd" }}-{{ b.borrow_request.request_id|stringformat:"04d" }}</a>
+            {% else %}
+            <span class="text-gray-400">Legacy</span>
+            {% endif %}
+          </td>
           <td class="px-3 py-2 text-gray-700">{{ b.borrower.shop_name }}</td>
           <td class="px-3 py-2 text-gray-700">{{ b.borrower_detail|default:"" }}</td>
+          <td class="px-3 py-2 text-gray-700">
+            {% if b.documents_id.contract_id %}
+              {{ b.documents_id.contract_id.contract_code }}
+            {% elif b.documents_id.loan_id %}
+              {{ b.documents_id.loan_id.loan_code }}
+            {% endif %}
+          </td>
           <td class="px-3 py-2 text-gray-700">{{ b.borrow_date|date:"Y-m-d" }}</td>
           <td class="px-3 py-2 text-gray-700">{{ b.appointment_date|date:"Y-m-d" }}</td>
           <td class="px-3 py-2 text-gray-700">{{ b.return_date|date:"Y-m-d" }}</td>
@@ -114,7 +130,7 @@
           <td class="px-3 py-2 text-gray-700">{{ b.ticket_code|default:"" }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="9" class="px-3 py-4 text-center text-gray-500">Không có dữ liệu mượn chứng từ</td></tr>
+        <tr><td colspan="11" class="px-3 py-4 text-center text-gray-500">Không có dữ liệu mượn chứng từ</td></tr>
         {% endfor %}
       </tbody>
     </table>

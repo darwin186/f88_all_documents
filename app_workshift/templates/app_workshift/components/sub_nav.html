@@ -3,10 +3,16 @@
     Đăng ký ca làm việc
   </a>
   {% with current_tab=request.GET.tab|default:'' %}
-  <a href="{% url 'workshift_tasks' %}?tab=assign" class="px-3 py-1.5 rounded-lg {% if request.resolver_match.url_name == 'workshift_tasks' and current_tab != 'catalog' %}bg-emerald-50 text-emerald-700 font-semibold{% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+  <a href="{% url 'workshift_tasks' %}?tab=assign" class="px-3 py-1.5 rounded-lg {% if request.resolver_match.url_name == 'workshift_tasks' and current_tab != 'catalog' and current_tab != 'approve' %}bg-emerald-50 text-emerald-700 font-semibold{% else %}text-gray-600 hover:bg-gray-50{% endif %}">
     Phân công công việc
   </a>
+  <a href="{% url 'workshift_report' %}" class="px-3 py-1.5 rounded-lg {% if request.resolver_match.url_name == 'workshift_report' %}bg-emerald-50 text-emerald-700 font-semibold{% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    Report lịch
+  </a>
   {% if is_admin or is_super_admin %}
+  <a href="{% url 'workshift_tasks' %}?tab=approve" class="px-3 py-1.5 rounded-lg {% if request.resolver_match.url_name == 'workshift_tasks' and current_tab == 'approve' %}bg-emerald-50 text-emerald-700 font-semibold{% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+    Duyệt lịch
+  </a>
   <a href="{% url 'workshift_tasks' %}?tab=catalog" class="px-3 py-1.5 rounded-lg {% if request.resolver_match.url_name == 'workshift_tasks' and current_tab == 'catalog' %}bg-emerald-50 text-emerald-700 font-semibold{% else %}text-gray-600 hover:bg-gray-50{% endif %}">
     Danh mục công việc
   </a>

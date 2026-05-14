@@ -59,7 +59,10 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+if DEBUG:
+    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+else:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 ROOT_URLCONF = 'documents.urls'
 
@@ -195,6 +198,7 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL')
 GAPO_API_URL = os.getenv('GAPO_API_URL')
 GAPO_BOT_API_KEY = (os.getenv('BOT_API_KEY') or '').strip()
 GAPO_BOT_ID = os.getenv('BOT_ID')
+GAPO_WEBHOOK_SECRET = (os.getenv('GAPO_WEBHOOK_SECRET') or '').strip()
 PUBLIC_APP_BASE_URL = (os.getenv('PUBLIC_APP_BASE_URL') or '').strip().rstrip('/')
 GAPO_CONNECT_TIMEOUT = float(os.getenv('GAPO_CONNECT_TIMEOUT', '3.05'))
 GAPO_READ_TIMEOUT = float(os.getenv('GAPO_READ_TIMEOUT', '5'))

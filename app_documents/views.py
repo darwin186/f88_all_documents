@@ -86,7 +86,8 @@ from .models import (
     UserPresenceHourly,
     BorrowRequestStatus,
     BorrowRequestItemStatus,
-    GapoScheduledMessage
+    GapoScheduledMessage,
+    GapoWebhookEvent,
 )
 # Import các form
 from .forms import PackageForm, GapoPasswordResetForm, GapoScheduleForm
@@ -96,6 +97,7 @@ from .utils import get_user_context, check_on_time, UI_SCREENS, ROLE_CODES, ensu
 from .dashboard import parse_dates, get_dashboard_metrics, get_folder_received_metrics
 from .tasks import send_gapo_scheduled_message
 from .utils import require_ui_permission
+from app_admindocuments.models import AdmParcelRecipientCatalog, AdmParcelRecipientImportBatch
 
 AI_STYLE_HINTS = {
     "formal": "Viết ngắn gọn, lịch sự, trang trọng, dùng đại từ phù hợp công việc.",
@@ -197,6 +199,190 @@ class CustomPasswordResetView(PasswordResetView):
             raise ValueError(f"GAPO trả về lỗi {response.status_code}: {response.text}")
         
 logger = logging.getLogger(__name__)
+
+
+def _get_nested_gapo_value(payload, *paths):
+    if not isinstance(payload, dict):
+        return ""
+    for path in paths:
+        current = payload
+        found = True
+        for part in path:
+            if not isinstance(current, dict) or part not in current:
+                found = False
+                break
+            current = current[part]
+        if found and current not in (None, "", [], {}):
+            if isinstance(current, (dict, list)):
+                return json.dumps(current, ensure_ascii=False)
+            return str(current)
+    return ""
+
+
+def _extract_gapo_webhook_summary(payload):
+    return {
+        "event_type": _get_nested_gapo_value(
+            payload,
+            ("type",),
+            ("event",),
+            ("event_type",),
+            ("data", "type"),
+            ("data", "event"),
+        ),
+        "bot_id": _get_nested_gapo_value(
+            payload,
+            ("bot_id",),
+            ("data", "bot_id"),
+            ("bot", "id"),
+            ("data", "bot", "id"),
+        ),
+        "message_id": _get_nested_gapo_value(
+            payload,
+            ("message_id",),
+            ("data", "message_id"),
+            ("message", "id"),
+            ("data", "message", "id"),
+        ),
+        "thread_id": _get_nested_gapo_value(
+            payload,
+            ("thread_id",),
+            ("data", "thread_id"),
+            ("message", "thread_id"),
+            ("data", "message", "thread_id"),
+        ),
+        "collab_id": _get_nested_gapo_value(
+            payload,
+            ("collab_id",),
+            ("data", "collab_id"),
+            ("message", "collab_id"),
+            ("data", "message", "collab_id"),
+        ),
+        "sender_id": _get_nested_gapo_value(
+            payload,
+            ("sender_id",),
+            ("data", "sender_id"),
+            ("user_id",),
+            ("data", "user_id"),
+            ("sender", "id"),
+            ("data", "sender", "id"),
+            ("message", "sender_id"),
+            ("data", "message", "sender_id"),
+        ),
+        "message_text": _get_nested_gapo_value(
+            payload,
+            ("text",),
+            ("tmp_text",),
+            ("message", "text"),
+            ("message", "tmp_text"),
+            ("data", "text"),
+            ("data", "tmp_text"),
+            ("body", "text"),
+            ("data", "body", "text"),
+            ("message", "body", "text"),
+            ("data", "message", "text"),
+            ("data", "message", "tmp_text"),
+            ("data", "message", "body", "text"),
+        ),
+    }
+
+
+def _build_gapo_webhook_headers(request):
+    captured = {}
+    for key, value in request.headers.items():
+        key_lower = key.lower()
+        if key_lower == "authorization":
+            captured[key] = "[redacted]"
+        elif key_lower == "x-gapo-webhook-secret":
+            captured[key] = "[redacted]"
+        elif key_lower.startswith("x-gapo") or key_lower in {
+            "content-type",
+            "user-agent",
+            "x-forwarded-for",
+            "x-real-ip",
+        }:
+            captured[key] = value
+    return captured
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def gapo_webhook_poc_view(request):
+    if request.method == "GET":
+        return JsonResponse(
+            {
+                "ok": True,
+                "message": "Gapo webhook POC is ready.",
+                "post_url": request.build_absolute_uri(),
+                "recent_events_url": request.build_absolute_uri(reverse("gapo_webhook_poc_events")),
+            }
+        )
+
+    secret = getattr(settings, "GAPO_WEBHOOK_SECRET", "")
+    if secret:
+        token = request.headers.get("X-Gapo-Webhook-Secret") or request.headers.get("Authorization", "")
+        if token.startswith("Bearer "):
+            token = token.replace("Bearer ", "", 1)
+        if token != secret:
+            return JsonResponse({"ok": False, "error": "Invalid webhook secret."}, status=403)
+
+    raw_body = request.body.decode("utf-8", errors="replace")
+    is_json_valid = True
+    payload = {}
+    try:
+        parsed_payload = json.loads(raw_body or "{}")
+        if isinstance(parsed_payload, dict):
+            payload = parsed_payload
+        else:
+            payload = {"_payload": parsed_payload}
+    except json.JSONDecodeError:
+        is_json_valid = False
+
+    summary = _extract_gapo_webhook_summary(payload)
+    event = GapoWebhookEvent.objects.create(
+        event_type=summary["event_type"],
+        bot_id=summary["bot_id"],
+        message_id=summary["message_id"],
+        thread_id=summary["thread_id"],
+        collab_id=summary["collab_id"],
+        sender_id=summary["sender_id"],
+        message_text=summary["message_text"],
+        http_method=request.method,
+        request_path=request.path,
+        remote_addr=(request.headers.get("X-Forwarded-For") or request.META.get("REMOTE_ADDR", "")).split(",")[0].strip(),
+        headers=_build_gapo_webhook_headers(request),
+        payload=payload,
+        raw_body=raw_body,
+        is_json_valid=is_json_valid,
+    )
+    return JsonResponse(
+        {
+            "ok": True,
+            "stored": True,
+            "event_id": event.id,
+            "is_json_valid": is_json_valid,
+            "summary": summary,
+        }
+    )
+
+
+@login_required
+@require_http_methods(["GET"])
+def gapo_webhook_poc_events_view(request):
+    events = list(
+        GapoWebhookEvent.objects.values(
+            "id",
+            "created_at",
+            "event_type",
+            "bot_id",
+            "message_id",
+            "thread_id",
+            "collab_id",
+            "sender_id",
+            "message_text",
+            "is_json_valid",
+        )[:20]
+    )
+    return JsonResponse({"ok": True, "count": len(events), "events": events}, encoder=DjangoJSONEncoder)
 
 @login_required
 def switch_region(request, region_id):
@@ -5187,6 +5373,128 @@ def _refresh_borrow_request_status(borrow_request):
     borrow_request.save(update_fields=['status'])
 
 
+def _has_missing_document_checking_status(document):
+    checking_status = getattr(document, 'status_id', None)
+    checking_status_type = getattr(checking_status, 'checking_status_type', None)
+    return bool(checking_status_type and checking_status_type.is_missing_document)
+
+
+def _get_borrow_contact_recipient(recipient_id):
+    if not recipient_id or not str(recipient_id).isdigit():
+        return None
+    return (
+        AdmParcelRecipientCatalog.objects.filter(
+            pk=int(recipient_id),
+            import_batch__is_current=True,
+            is_active_member=True,
+        )
+        .only(
+            'id',
+            'full_name',
+            'employee_code',
+            'gapo_user_id',
+            'email',
+            'phone_number',
+        )
+        .first()
+    )
+
+
+def _get_borrower_for_contact_recipient(recipient):
+    department_name = (getattr(recipient, 'department_name', '') or '').strip()
+    if not department_name:
+        return None
+    return Shop.objects.filter(for_borrow_only=True, shop_name__iexact=department_name).first()
+
+
+def _apply_borrow_contact_snapshot(borrow_request, recipient, contact_email=None, contact_phone=None):
+    if recipient:
+        borrow_request.contact_recipient = recipient
+        borrow_request.contact_name = recipient.full_name or None
+        borrow_request.contact_employee_code = recipient.employee_code or None
+        borrow_request.contact_gapo_user_id = recipient.gapo_user_id or None
+        borrow_request.contact_email = recipient.email or ((contact_email or '').strip() or None)
+        borrow_request.contact_phone = recipient.phone_number or ((contact_phone or '').strip() or None)
+    else:
+        borrow_request.contact_recipient = None
+        borrow_request.contact_name = None
+        borrow_request.contact_employee_code = None
+        borrow_request.contact_gapo_user_id = None
+        borrow_request.contact_email = (contact_email or '').strip() or None
+        borrow_request.contact_phone = (contact_phone or '').strip() or None
+
+
+@login_required
+def borrow_contact_recipient_search(request):
+    user_context = get_user_context(request.user)
+    if not user_context['is_admin'] and not user_context['is_checker']:
+        return JsonResponse({'results': []}, status=403)
+
+    current_batch = (
+        AdmParcelRecipientImportBatch.objects.filter(is_current=True)
+        .order_by('-created_at')
+        .first()
+    )
+    if not current_batch:
+        return JsonResponse({'results': []})
+
+    query = (request.GET.get('q') or '').strip()
+    selected_id = (request.GET.get('selected_id') or '').strip()
+    queryset = current_batch.recipients.filter(is_active_member=True)
+    if selected_id.isdigit():
+        queryset = queryset.filter(pk=int(selected_id))
+    else:
+        if not query:
+            return JsonResponse({'results': []})
+        phone_query = ''.join(ch for ch in query if ch.isdigit())
+        looks_like_phone = phone_query and all(ch.isdigit() or ch in ' +-.()' for ch in query)
+        if looks_like_phone:
+            queryset = queryset.filter(phone_number_normalized=phone_query)
+        else:
+            queryset = queryset.filter(
+                Q(full_name__icontains=query)
+                | Q(employee_code__icontains=query)
+                | Q(email__icontains=query)
+            )
+
+    recipients = list(queryset.order_by('full_name', 'employee_code')[:20])
+    department_names = {
+        (recipient.department_name or '').strip().lower()
+        for recipient in recipients
+        if (recipient.department_name or '').strip()
+    }
+    borrower_by_department = {
+        (shop.shop_name or '').strip().lower(): shop
+        for shop in Shop.objects.filter(for_borrow_only=True, shop_name__isnull=False)
+        if (shop.shop_name or '').strip().lower() in department_names
+    }
+    results = []
+    for recipient in recipients:
+        borrower = borrower_by_department.get((recipient.department_name or '').strip().lower())
+        label = ' - '.join(
+            part
+            for part in [
+                recipient.full_name,
+                recipient.employee_code,
+                recipient.department_name,
+            ]
+            if part
+        )
+        results.append({
+            'id': recipient.id,
+            'full_name': recipient.full_name,
+            'employee_code': recipient.employee_code,
+            'department_name': recipient.department_name,
+            'gapo_user_id': recipient.gapo_user_id,
+            'phone_number': recipient.phone_number,
+            'email': recipient.email,
+            'borrower_id': borrower.shop_id if borrower else '',
+            'borrower_name': borrower.shop_name if borrower else '',
+            'label': label,
+        })
+    return JsonResponse({'results': results})
+
+
 #BORROW
 @login_required
 def borrow_request_management_v2(request):
@@ -5205,6 +5513,7 @@ def borrow_request_management_v2(request):
             ticket_code = request.POST.get('ticket_code')
             contact_email = request.POST.get('contact_email')
             contact_phone = request.POST.get('contact_phone')
+            contact_recipient = _get_borrow_contact_recipient(request.POST.get('contact_recipient_id'))
             note = request.POST.get('note')
             if not borrower_id or not needed_date:
                 messages.error(request, 'Vui lòng nhập phòng ban và ngày cần.')
@@ -5225,20 +5534,20 @@ def borrow_request_management_v2(request):
                 except ValueError:
                     messages.error(request, 'Ngày hẹn trả không hợp lệ.')
                     return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
-            new_request = BorrowRequest.objects.create(
-                borrower=borrower,
+            new_request = BorrowRequest(
+                borrower=_get_borrower_for_contact_recipient(contact_recipient) or borrower,
                 requester=user,
                 reference_code=reference_code or None,
                 needed_date=needed_date_value,
                 appointment_date=appointment_date_value,
                 ticket_code=ticket_code or None,
-                contact_email=contact_email or None,
-                contact_phone=contact_phone or None,
                 note=note or None,
                 status=BorrowRequestStatus.PENDING,
                 created_by=user,
                 updated_by=user,
             )
+            _apply_borrow_contact_snapshot(new_request, contact_recipient, contact_email, contact_phone)
+            new_request.save()
             _borrow_request_log(new_request, 'create', None, BorrowRequestStatus.PENDING, user=user)
             return redirect('borrow_request_detail_v2', request_id=new_request.request_id)
 
@@ -5255,6 +5564,13 @@ def borrow_request_management_v2(request):
             filters['borrower__shop_name__icontains'] = choice_borrower
     if choice_status:
         filters['status'] = choice_status
+    else:
+        filters['status__in'] = [
+            BorrowRequestStatus.PENDING,
+            BorrowRequestStatus.ASSIGNED,
+            BorrowRequestStatus.CANCELLED,
+            BorrowRequestStatus.REJECTED,
+        ]
     if choice_ticket:
         filters['ticket_code__icontains'] = choice_ticket
     if choice_needed_date:
@@ -5306,6 +5622,7 @@ def borrow_request_management_v2(request):
         'base_qs': base_qs,
         'drop_list_shops': Shop.objects.filter(for_borrow_only=True).order_by('shop_name'),
         'drop_list_request_status': BorrowRequestStatus.choices,
+        'is_request_work_queue': not bool(choice_status),
         'filters': {
             'borrower': choice_borrower,
             'status': choice_status,
@@ -5330,6 +5647,14 @@ def borrow_request_detail_v2(request, request_id):
         status=BorrowRequestItemStatus.ASSIGNED,
         documents_id__isnull=False,
     ).exists()
+    has_handed_over_items = items.filter(
+        Q(status__in=[
+            BorrowRequestItemStatus.HANDED_OVER,
+            BorrowRequestItemStatus.RETURNED,
+            BorrowRequestItemStatus.LOST,
+        ]) | Q(legacy_borrowing__isnull=False)
+    ).exists()
+    can_update_request = not has_handed_over_items
     logs = borrow_request.logs.select_related('created_by', 'item').order_by('-created_at')
     status_labels = dict(BorrowRequestStatus.choices)
     status_flow = [
@@ -5366,20 +5691,32 @@ def borrow_request_detail_v2(request, request_id):
     preview_error = None
 
     if preview_key:
-        documents = DocumentsDetail.objects.select_related(
-            'shop_id',
-            'document_type_id',
-            'folder_id',
-            'status_id',
-            'document_status_id',
-            'package_id',
-        ).filter(
-            Q(loan_id__loan_code__iexact=preview_key) | Q(contract_id__contract_code__iexact=preview_key)
-        ).order_by('documents_created_date', 'documents_id')
-        if not documents.exists():
+        loan_id = LoanDetail.objects.filter(loan_code=preview_key).values_list('loan_id', flat=True).first()
+        contract_id = ContractDetail.objects.filter(contract_code=preview_key).values_list('contract_id', flat=True).first()
+        document_filter = Q()
+        if loan_id:
+            document_filter |= Q(loan_id_id=loan_id)
+        if contract_id:
+            document_filter |= Q(contract_id_id=contract_id)
+
+        documents = []
+        if document_filter:
+            documents = list(
+                DocumentsDetail.objects.select_related(
+                    'shop_id',
+                    'document_type_id',
+                    'business_type_id',
+                    'folder_id',
+                    'status_id',
+                    'status_id__checking_status_type',
+                    'document_status_id',
+                    'package_id',
+                ).filter(document_filter).order_by('documents_created_date', 'documents_id')[:200]
+            )
+        if not documents:
             preview_error = 'Không tìm thấy chứng từ theo contract_code hoặc loan_code.'
         else:
-            doc_ids = list(documents.values_list('documents_id', flat=True))
+            doc_ids = [doc.documents_id for doc in documents]
             active_borrow_ids = set(
                 BorrowingDocument.objects.filter(
                     documents_id__in=doc_ids,
@@ -5397,6 +5734,8 @@ def borrow_request_detail_v2(request, request_id):
                 doc_status = doc.document_status_id
                 if not doc_status or not doc_status.is_checked:
                     reasons.append('Chưa duyệt')
+                if _has_missing_document_checking_status(doc):
+                    reasons.append('Thiếu chứng từ')
                 if doc_status and doc_status.is_borrow:
                     reasons.append('Đang mượn')
                 if doc.documents_id in active_borrow_ids:
@@ -5417,15 +5756,21 @@ def borrow_request_detail_v2(request, request_id):
                 messages.error(request, 'Vui lòng nhập mã chứng từ.')
                 return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
             try:
-                document = DocumentsDetail.objects.select_related('document_status_id').get(documents_code=document_code)
+                document = DocumentsDetail.objects.select_related(
+                    'document_status_id',
+                    'status_id__checking_status_type',
+                ).get(documents_code=document_code)
             except DocumentsDetail.DoesNotExist:
                 messages.error(request, 'Không tìm thấy chứng từ.')
                 return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
             if document.document_status_id and document.document_status_id.is_borrow:
                 messages.error(request, 'Chứng từ đang được mượn.')
                 return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
-            if document.document_status_id and not document.document_status_id.is_checked:
+            if not document.document_status_id or not document.document_status_id.is_checked:
                 messages.error(request, 'Chứng từ chưa ở trạng thái đã duyệt.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            if _has_missing_document_checking_status(document):
+                messages.error(request, 'Chứng từ có trạng thái duyệt thiếu chứng từ, không thể mượn.')
                 return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
             active_borrow = BorrowingDocument.objects.filter(documents_id=document, borrow_status_id__flag_return=False).exists()
             if active_borrow:
@@ -5450,6 +5795,7 @@ def borrow_request_detail_v2(request, request_id):
                 return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
             documents = DocumentsDetail.objects.select_related(
                 'document_status_id',
+                'status_id__checking_status_type',
             ).filter(documents_id__in=selected_ids)
             active_borrow_ids = set(
                 BorrowingDocument.objects.filter(
@@ -5473,6 +5819,9 @@ def borrow_request_detail_v2(request, request_id):
                 if not doc_status or not doc_status.is_checked:
                     skipped.append(doc.documents_code)
                     continue
+                if _has_missing_document_checking_status(doc):
+                    skipped.append(doc.documents_code)
+                    continue
                 if doc_status.is_borrow or doc.documents_id in active_borrow_ids:
                     skipped.append(doc.documents_code)
                     continue
@@ -5494,9 +5843,23 @@ def borrow_request_detail_v2(request, request_id):
             return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
         if action == 'handover':
-            items_to_handover = borrow_request.items.filter(status=BorrowRequestItemStatus.ASSIGNED, documents_id__isnull=False)
+            items_to_handover = borrow_request.items.select_related(
+                'documents_id__document_status_id',
+                'documents_id__status_id__checking_status_type',
+            ).filter(status=BorrowRequestItemStatus.ASSIGNED, documents_id__isnull=False)
             if not items_to_handover.exists():
                 messages.error(request, 'Không có chứng từ để bàn giao.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            missing_document_codes = [
+                item.documents_id.documents_code
+                for item in items_to_handover
+                if _has_missing_document_checking_status(item.documents_id)
+            ]
+            if missing_document_codes:
+                messages.error(
+                    request,
+                    f'Không thể bàn giao {len(missing_document_codes)} chứng từ có trạng thái duyệt thiếu chứng từ.',
+                )
                 return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
             borrow_status = BorrowingStatus.objects.filter(flag_is_borrowing=True).first()
             if not borrow_status:
@@ -5513,7 +5876,7 @@ def borrow_request_detail_v2(request, request_id):
                     appointment_date=item.appointment_date or borrow_request.appointment_date,
                     lender=user,
                     borrower=borrow_request.borrower,
-                    borrower_detail=None,
+                    borrower_detail=borrow_request.contact_name,
                     ticket_code=borrow_request.ticket_code,
                     note=borrow_request.note,
                     borrow_status_id=borrow_status,
@@ -5583,36 +5946,86 @@ def borrow_request_detail_v2(request, request_id):
             return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
         if action == 'update_request':
+            if not can_update_request:
+                messages.error(request, 'Phiếu đã bàn giao chứng từ, không thể cập nhật thông tin yêu cầu.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+
+            borrower_id = request.POST.get('borrower_id')
+            needed_date = request.POST.get('needed_date')
             appointment_date = request.POST.get('appointment_date')
+            contact_recipient = _get_borrow_contact_recipient(request.POST.get('contact_recipient_id'))
+
+            borrower = Shop.objects.filter(shop_id=borrower_id, for_borrow_only=True).first()
+            if not borrower:
+                messages.error(request, 'Phòng ban mượn không hợp lệ.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            try:
+                borrow_request.needed_date = datetime.strptime(needed_date, "%Y-%m-%d").date()
+            except (TypeError, ValueError):
+                messages.error(request, 'Ngày mượn không hợp lệ.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
             if appointment_date:
                 try:
                     borrow_request.appointment_date = datetime.strptime(appointment_date, "%Y-%m-%d").date()
                 except ValueError:
                     messages.error(request, 'Ngày hẹn trả không hợp lệ.')
                     return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
-            borrow_request.reference_code = request.POST.get('reference_code') or borrow_request.reference_code
-            borrow_request.ticket_code = request.POST.get('ticket_code') or borrow_request.ticket_code
-            borrow_request.contact_email = request.POST.get('contact_email') or borrow_request.contact_email
-            borrow_request.contact_phone = request.POST.get('contact_phone') or borrow_request.contact_phone
-            borrow_request.note = request.POST.get('note') or borrow_request.note
+            else:
+                borrow_request.appointment_date = None
+
+            borrow_request.borrower = _get_borrower_for_contact_recipient(contact_recipient) or borrower
+            borrow_request.reference_code = (request.POST.get('reference_code') or '').strip() or None
+            borrow_request.ticket_code = (request.POST.get('ticket_code') or '').strip() or None
+            _apply_borrow_contact_snapshot(
+                borrow_request,
+                contact_recipient,
+                request.POST.get('contact_email'),
+                request.POST.get('contact_phone'),
+            )
+            borrow_request.note = (request.POST.get('note') or '').strip() or None
             borrow_request.updated_by = user
-            borrow_request.save(update_fields=['appointment_date', 'reference_code', 'ticket_code', 'contact_email', 'contact_phone', 'note', 'updated_by', 'updated_at'])
+            borrow_request.save(update_fields=[
+                'borrower',
+                'contact_recipient',
+                'contact_name',
+                'contact_employee_code',
+                'contact_gapo_user_id',
+                'needed_date',
+                'appointment_date',
+                'reference_code',
+                'ticket_code',
+                'contact_email',
+                'contact_phone',
+                'note',
+                'updated_by',
+                'updated_at',
+            ])
+            borrow_request.items.filter(
+                status=BorrowRequestItemStatus.ASSIGNED,
+                legacy_borrowing__isnull=True,
+            ).update(appointment_date=borrow_request.appointment_date, updated_by_id=user.pk, updated_at=timezone.now())
             _borrow_request_log(borrow_request, 'update', borrow_request.status, borrow_request.status, user=user)
             messages.success(request, 'Đã cập nhật yêu cầu.')
             return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
         if action == 'update_item_appointment':
+            if not can_update_request:
+                messages.error(request, 'Phiếu đã bàn giao chứng từ, không thể cập nhật ngày hẹn trả.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
             item_id = request.POST.get('item_id')
             appointment_date = request.POST.get('appointment_date')
             if not item_id or not appointment_date:
                 messages.error(request, 'Vui lòng chọn ngày hẹn trả.')
+                return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+            item = get_object_or_404(BorrowRequestItem, item_id=item_id, borrow_request=borrow_request)
+            if item.status != BorrowRequestItemStatus.ASSIGNED or item.legacy_borrowing_id:
+                messages.error(request, 'Chứng từ đã bàn giao, không thể cập nhật ngày hẹn trả.')
                 return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
             try:
                 appointment_date_value = datetime.strptime(appointment_date, "%Y-%m-%d").date()
             except ValueError:
                 messages.error(request, 'Ngày hẹn trả không hợp lệ.')
                 return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
-            item = get_object_or_404(BorrowRequestItem, item_id=item_id, borrow_request=borrow_request)
             item.appointment_date = appointment_date_value
             item.updated_by = user
             item.save(update_fields=['appointment_date', 'updated_by', 'updated_at'])
@@ -5638,6 +6051,7 @@ def borrow_request_detail_v2(request, request_id):
         'items': items,
         'has_assigned_items': has_assigned_items,
         'has_handover_items': has_handover_items,
+        'can_update_request': can_update_request,
         'logs': logs,
         'log_steps': log_steps,
         'preview_key': preview_key,
@@ -5675,6 +6089,7 @@ def api_borrow_request_create(request):
     ticket_code = data.get('ticket_code')
     contact_email = data.get('contact_email')
     contact_phone = data.get('contact_phone')
+    contact_recipient = _get_borrow_contact_recipient(data.get('contact_recipient_id'))
     note = data.get('note')
     source_system = data.get('source_system')
     external_ref = data.get('external_ref')
@@ -5684,15 +6099,13 @@ def api_borrow_request_create(request):
     if not borrower:
         return JsonResponse({'success': False, 'error': 'Borrower not found.'}, status=404)
     user = request.user if request.user.is_authenticated else None
-    borrow_request = BorrowRequest.objects.create(
-        borrower=borrower,
+    borrow_request = BorrowRequest(
+        borrower=_get_borrower_for_contact_recipient(contact_recipient) or borrower,
         requester=user,
         reference_code=reference_code or None,
         needed_date=needed_date,
         appointment_date=appointment_date or None,
         ticket_code=ticket_code or None,
-        contact_email=contact_email or None,
-        contact_phone=contact_phone or None,
         note=note or None,
         status=BorrowRequestStatus.PENDING,
         source_system=source_system or None,
@@ -5700,6 +6113,8 @@ def api_borrow_request_create(request):
         created_by=user,
         updated_by=user,
     )
+    _apply_borrow_contact_snapshot(borrow_request, contact_recipient, contact_email, contact_phone)
+    borrow_request.save()
     _borrow_request_log(borrow_request, 'create', None, BorrowRequestStatus.PENDING, user=user, meta={'source_system': source_system, 'external_ref': external_ref})
     return JsonResponse({'success': True, 'request_id': borrow_request.request_id})
 
@@ -5810,8 +6225,16 @@ def borrow_document_management_v2(request):
     if choice_status:
         filters['borrow_status_id'] = choice_status
 
+    request_item_qs = BorrowRequestItem.objects.select_related('borrow_request').order_by('-created_at')
     borrow_qs = BorrowingDocument.objects.select_related(
-        'documents_id', 'borrower', 'borrow_status_id', 'lender'
+        'documents_id',
+        'documents_id__loan_id',
+        'documents_id__contract_id',
+        'borrower',
+        'borrow_status_id',
+        'lender',
+    ).prefetch_related(
+        Prefetch('request_items', queryset=request_item_qs, to_attr='linked_request_items')
     ).order_by('-borrow_date', '-borrow_id')
     if filters:
         borrow_qs = borrow_qs.filter(**filters)
@@ -5819,6 +6242,10 @@ def borrow_document_management_v2(request):
     paginator = Paginator(borrow_qs, 25)
     page_number = request.GET.get('page')
     borrow_list = paginator.get_page(page_number)
+    for borrow in borrow_list:
+        linked_items = getattr(borrow, 'linked_request_items', [])
+        borrow.request_item = linked_items[0] if linked_items else None
+        borrow.borrow_request = borrow.request_item.borrow_request if borrow.request_item else None
 
     current = borrow_list.number if borrow_list else 1
     total_pages = paginator.num_pages if paginator else 1
@@ -5865,9 +6292,16 @@ def request_borrow_document_view(request):
             note = data.get('note')
             # Kiểm tra chứng từ có tồn tại không
             try:
-                documents = DocumentsDetail.objects.get(documents_id=document_id)
+                documents = DocumentsDetail.objects.select_related(
+                    'document_status_id',
+                    'status_id__checking_status_type',
+                ).get(documents_id=document_id)
             except DocumentsDetail.DoesNotExist:
                 return JsonResponse({"success": False, "message": "Chứng từ không tồn tại."}, status=404)
+            if not documents.document_status_id or not documents.document_status_id.is_checked:
+                return JsonResponse({"success": False, "message": "Chứng từ chưa ở trạng thái đã duyệt."}, status=400)
+            if _has_missing_document_checking_status(documents):
+                return JsonResponse({"success": False, "message": "Chứng từ có trạng thái duyệt thiếu chứng từ, không thể mượn."}, status=400)
             # Kiểm tra phòng ban có tồn tại không
             try:
                 borrower = Shop.objects.get(shop_id=borrower_id)

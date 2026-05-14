@@ -44,10 +44,49 @@ class WorkPolicy(models.Model):
         return self.policy_name
 
 
+class WorkShiftTemplate(models.Model):
+    template_id = models.AutoField(primary_key=True)
+    template_name = models.CharField(max_length=100)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    include_lunch_break = models.BooleanField(default=True)
+    effective_from = models.DateField(null=True, blank=True)
+    effective_to = models.DateField(null=True, blank=True)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        User,
+        db_column='created_by',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='work_shift_templates_created',
+    )
+    updated_by = models.ForeignKey(
+        User,
+        db_column='updated_by',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='work_shift_templates_updated',
+    )
+
+    class Meta:
+        db_table = 'd_WorkShiftTemplate'
+        ordering = ['sort_order', 'start_time', 'template_name']
+
+    def __str__(self):
+        return f"{self.template_name} ({self.start_time:%H:%M} - {self.end_time:%H:%M})"
+
+
 class WorkWeek(models.Model):
     class Status(models.TextChoices):
         DRAFT = 'draft', 'Draft'
         SUBMITTED = 'submitted', 'Submitted'
+        APPROVED = 'approved', 'Approved'
+        REJECTED = 'rejected', 'Rejected'
         LOCKED = 'locked', 'Locked'
 
     week_id = models.AutoField(primary_key=True)
@@ -74,6 +113,16 @@ class WorkWeek(models.Model):
         blank=True,
         related_name='work_weeks_updated',
     )
+    approved_by = models.ForeignKey(
+        User,
+        db_column='approved_by',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='work_weeks_approved',
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_reason = models.TextField(null=True, blank=True)
 
     class Meta:
         db_table = 'f_WorkWeek'
@@ -87,6 +136,14 @@ class WorkWeek(models.Model):
 class WorkShift(models.Model):
     shift_id = models.AutoField(primary_key=True)
     work_week = models.ForeignKey(WorkWeek, db_column='week_id', on_delete=models.CASCADE, related_name='shifts')
+    shift_template = models.ForeignKey(
+        WorkShiftTemplate,
+        db_column='template_id',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='work_shifts',
+    )
     shift_date = models.DateField()
     shift_index = models.PositiveSmallIntegerField(default=1)
     start_time = models.TimeField()

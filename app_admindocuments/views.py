@@ -3162,10 +3162,12 @@ def parcel_receipt_change_status(request, doc_id: int):
     if new_status == "pkg_processing" and parcel_receipt.confirmed_at is None:
         parcel_receipt.confirmed_at = timezone.now()
         update_fields.append("confirmed_at")
+    if new_status in {"pkg_processing", "pkg_done"}:
+        # Treat legacy processing/done states as received so pending reminders stop.
+        _cancel_parcel_reminder(parcel_receipt)
     if new_status == "pkg_done" and parcel_receipt.completed_at is None:
         parcel_receipt.completed_at = timezone.now()
         update_fields.append("completed_at")
-        _cancel_parcel_reminder(parcel_receipt)
     parcel_receipt.save(update_fields=update_fields)
     _log_parcel_event(
         parcel_receipt,

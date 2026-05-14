@@ -1400,6 +1400,45 @@ class AdmIncomingDispatchTests(TestCase):
         self.assertEqual(parcel.actual_receiver_name, "Nhan Vien")
         self.assertEqual(reminder.status, GapoScheduledMessage.Status.CANCELLED)
 
+    def test_manual_change_to_pkg_processing_cancels_pending_reminder(self):
+        self.client.login(username="vanthu", password="secret")
+        parcel = AdmParcelReceipt.objects.create(
+            document_number="PK-PROCESSING-01",
+            received_by=self.vanthu_user,
+            recipient_department="Hanh chinh nhan su",
+            recipient_directory=self.recipient_entry,
+            recipient_name="Nhan Vien",
+            recipient_employee_code="E001",
+            recipient_gapo_user_id="10001",
+            recipient_user=self.recipient_user,
+            parcel_type="hoso",
+            sender_unit="Viettel Post",
+            content="Buu pham test",
+            receiving_company=self.company_f88,
+            status=self.dispatch_status_2,
+            created_by=self.vanthu_user,
+        )
+        reminder = GapoScheduledMessage.objects.create(
+            receiver_id="10001",
+            message="reminder",
+            schedule_at=timezone.now(),
+            created_by=self.vanthu_user,
+        )
+        parcel.reminder_schedule = reminder
+        parcel.save(update_fields=["reminder_schedule"])
+
+        response = self.client.post(
+            reverse("admindocuments:parcel_receipt_change_status", args=[parcel.id]),
+            data={"status": self.dispatch_status_3.code},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        parcel.refresh_from_db()
+        reminder.refresh_from_db()
+        self.assertEqual(parcel.status_id, self.dispatch_status_3.code)
+        self.assertIsNotNone(parcel.confirmed_at)
+        self.assertEqual(reminder.status, GapoScheduledMessage.Status.CANCELLED)
+
     def test_assign_recipient_after_unknown_receipt(self):
         self.client.login(username="vanthu", password="secret")
         parcel = AdmParcelReceipt.objects.create(

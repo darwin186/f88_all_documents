@@ -55,6 +55,14 @@
   .toast-error .toast-dot { background: #ef4444; }
   .toast-warning .toast-dot { background: #f59e0b; }
   .toast-info .toast-dot { background: #3b82f6; }
+  .panel { border: 1px solid #e5e7eb; background: #fff; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04); }
+  .panel-header { border-bottom: 1px solid #eef2f7; }
+  .field-label { display: block; margin-bottom: 5px; font-size: 9px; font-weight: 700; color: #6b7280; text-transform: uppercase; }
+  .request-input { min-height: 38px; border: 1px solid #e5e7eb; background: #f9fafb; border-radius: 10px; }
+  .request-input:focus-within { border-color: #10b981; background: #fff; }
+  .status-pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 9999px; padding: 4px 8px; font-size: 9px; font-weight: 700; white-space: nowrap; }
+  .status-dot { width: 6px; height: 6px; border-radius: 9999px; }
+  .table-wrap tbody tr { transition: background-color .15s ease; }
 </style>
 
 <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
@@ -80,76 +88,128 @@
     </nav>
   </div>
 
-  <div x-data="{ showCreate: false }" class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4">
-    <div class="flex items-center justify-between">
-      <div>
-        <div class="text-xs font-semibold text-gray-900">Phiếu yêu cầu mượn</div>
-        <div class="text-[9px] text-gray-500">Tạo phiếu yêu cầu mượn từ phòng ban.</div>
+  <div x-data="{ showCreate: false }" class="panel rounded-xl overflow-visible">
+    <div class="panel-header flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <div class="flex items-center gap-3">
+        <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <path d="M14 2v6h6"/>
+            <path d="M9 15h6"/>
+            <path d="M9 11h3"/>
+          </svg>
+        </div>
+        <div>
+          <div class="text-[13px] font-bold text-gray-900">Phiếu yêu cầu mượn</div>
+          <div class="text-[10px] text-gray-500">Ghi nhận nhu cầu, người mượn và chứng từ cần xử lý trước khi bàn giao.</div>
+        </div>
       </div>
-      <button type="button" @click="showCreate = !showCreate" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50" x-text="showCreate ? 'Thu gọn' : 'Tạo yêu cầu'"></button>
+      <button type="button" @click="showCreate = !showCreate" class="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100">
+        <span x-text="showCreate ? 'Thu gọn phiếu' : 'Tạo yêu cầu mới'"></span>
+        <span class="text-xs" x-text="showCreate ? '⌃' : '+'"></span>
+      </button>
     </div>
-    <form method="post" action="{% url 'borrow_request_management_v2' %}" class="mt-4 grid lg:grid-cols-[2fr,1fr,1fr,1fr] gap-3 items-start" x-show="showCreate">
+    <form method="post" action="{% url 'borrow_request_management_v2' %}" class="grid gap-4 px-4 py-4 lg:grid-cols-[1.15fr,1fr] items-start" x-show="showCreate">
       {% csrf_token %}
       <input type="hidden" name="action" value="create">
-      <div class="relative" x-data="{
-        open: false,
-        searchText: '',
-        selected: ''
-      }">
-        <input type="hidden" name="borrower_id" x-model="selected">
-        <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
-          <span class="text-gray-700 text-[10px]" x-text="selected ? (searchText || 'Đã chọn phòng ban') : 'Chọn phòng ban mượn'"></span>
-          <span class="text-gray-400 text-xs">▾</span>
-        </button>
-        <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
-          <div class="flex items-center gap-2">
-            <input type="text" x-model="searchText" class="w-full rounded-lg border border-gray-200 px-2 py-1 text-[10px] focus:border-emerald-500 focus:outline-none" placeholder="Tìm phòng ban">
-            <button type="button" @click="searchText=''; selected=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm2.707-10.707a1 1 0 00-1.414-1.414L10 7.586 8.707 6.293a1 1 0 00-1.414 1.414L8.586 9l-1.293 1.293a1 1 0 101.414 1.414L10 10.414l1.293 1.293a1 1 0 001.414-1.414L11.414 9l1.293-1.293z" clip-rule="evenodd"/>
-              </svg>
+      <div class="space-y-3">
+        <div class="grid gap-3 md:grid-cols-2">
+          <div class="relative" x-data="{ open: false, searchText: '', selected: '' }">
+            <span class="field-label">Phòng ban mượn</span>
+            <input type="hidden" name="borrower_id" x-model="selected" data-borrower-id>
+            <button type="button" @click="open = !open" class="request-input w-full flex items-center justify-between px-3 py-2 text-left focus:outline-none">
+              <span class="text-gray-700 text-[10px]" data-borrower-label x-text="selected ? (searchText || 'Đã chọn phòng ban') : 'Chọn phòng ban mượn'"></span>
+              <span class="text-gray-400 text-xs">▾</span>
             </button>
+            <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
+              <div class="flex items-center gap-2">
+                <input type="text" x-model="searchText" class="w-full rounded-lg border border-gray-200 px-2 py-1 text-[10px] focus:border-emerald-500 focus:outline-none" placeholder="Tìm phòng ban">
+                <button type="button" @click="searchText=''; selected=''" class="text-gray-400 hover:text-emerald-600 text-xs flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 hover:border-emerald-500">×</button>
+              </div>
+              <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
+                {% for shop in drop_list_shops %}
+                <button type="button" x-show="!searchText || '{{ shop.shop_name|escapejs }}'.toLowerCase().includes(searchText.toLowerCase())" @click="selected='{{ shop.shop_id }}'; searchText='{{ shop.shop_name }}'; open=false" class="w-full text-left px-2 py-2 hover:bg-emerald-50">
+                  <div class="font-semibold text-gray-900">{{ shop.shop_name }}</div>
+                  <div class="text-gray-500 text-[9px]">Mã: {{ shop.shop_code }}</div>
+                </button>
+                {% endfor %}
+              </div>
+            </div>
           </div>
-          <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
-            {% for shop in drop_list_shops %}
-            <button type="button" x-show="!searchText || '{{ shop.shop_name|escapejs }}'.toLowerCase().includes(searchText.toLowerCase())" @click="selected='{{ shop.shop_id }}'; searchText='{{ shop.shop_name }}'; open=false" class="w-full text-left px-2 py-2 hover:bg-emerald-50">
-              <div class="font-semibold text-gray-900">{{ shop.shop_name }}</div>
-              <div class="text-gray-500 text-[9px]">Mã: {{ shop.shop_code }}</div>
-            </button>
-            {% endfor %}
+          <div>
+            <span class="field-label">Mã ticket</span>
+            <div class="request-input flex items-center px-3 py-0">
+              <input name="ticket_code" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="VD: TICKET-123">
+            </div>
+          </div>
+        </div>
+        <div class="grid gap-3 md:grid-cols-2">
+          <div>
+            <span class="field-label">Ngày mượn</span>
+            <div class="request-input flex items-center px-3 py-0">
+              <input id="borrow-date" type="text" name="needed_date" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Chọn ngày" readonly>
+            </div>
+          </div>
+          <div>
+            <span class="field-label">Ngày hẹn trả</span>
+            <div class="request-input flex items-center px-3 py-0">
+              <input id="return-date" type="text" name="appointment_date" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Chọn ngày">
+            </div>
+          </div>
+        </div>
+        <div>
+          <span class="field-label">Mã HDCC/GNN cần mượn</span>
+          <div class="request-input flex items-center px-3 py-0">
+            <input name="reference_code" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Nhập mã hợp đồng hoặc GNN">
           </div>
         </div>
       </div>
-      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 form-input">
-        <input id="borrow-date" type="text" name="needed_date" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Ngày mượn" readonly>
-      </div>
-      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 form-input">
-        <input id="return-date" type="text" name="appointment_date" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Ngày cần trả" readonly>
-      </div>
-      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 form-input">
-        <input name="ticket_code" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Mã ticket">
-      </div>
-      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 form-input lg:col-span-2">
-        <input name="reference_code" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Mã hợp đồng/GNN cần mượn">
-      </div>
-      <div class="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 form-input">
-          <input name="contact_email" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Email liên hệ">
+      <div class="space-y-3">
+        <div class="space-y-2" data-borrow-contact-search>
+          <input type="hidden" name="contact_recipient_id" data-borrow-contact-id>
+          <span class="field-label">Người mượn</span>
+          <div class="request-input flex items-center px-3 py-0">
+            <input type="text" data-borrow-contact-input class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Tìm theo tên, mã nhân viên, email hoặc SĐT">
+          </div>
+          <div data-borrow-contact-selected class="hidden rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-[10px] text-emerald-700"></div>
+          <div data-borrow-contact-results class="space-y-2"></div>
         </div>
-        <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 form-input">
-          <input name="contact_phone" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Số điện thoại người mượn">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <span class="field-label">Email liên hệ</span>
+            <div class="request-input flex items-center px-3 py-0">
+              <input name="contact_email" data-borrow-contact-email class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="email@f88.vn">
+            </div>
+          </div>
+          <div>
+            <span class="field-label">SĐT</span>
+            <div class="request-input flex items-center px-3 py-0">
+              <input name="contact_phone" data-borrow-contact-phone class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" placeholder="Số điện thoại">
+            </div>
+          </div>
+        </div>
+        <div>
+          <span class="field-label">Ghi chú</span>
+          <div class="request-input flex items-center px-3 py-2">
+            <textarea name="note" rows="3" class="w-full bg-transparent border-0 ring-0 outline-none text-[10px] resize-none" placeholder="Nội dung mượn, lý do hoặc lưu ý xử lý"></textarea>
+          </div>
         </div>
       </div>
-      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 focus-within:border-emerald-500 lg:col-span-4">
-        <textarea name="note" rows="2" class="w-full bg-transparent border-0 ring-0 outline-none text-[10px] resize-none" placeholder="Ghi chú"></textarea>
-      </div>
-      <div class="lg:col-span-4 flex justify-end">
-        <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Tạo yêu cầu</button>
+      <div class="lg:col-span-2 flex items-center justify-between border-t border-gray-100 pt-3">
+        <div class="text-[10px] text-gray-500">Phiếu sau khi tạo sẽ chuyển sang bước gán chứng từ.</div>
+        <button type="submit" class="rounded-lg bg-emerald-600 px-4 py-2 text-[10px] font-bold text-white hover:bg-emerald-700">Tạo yêu cầu</button>
       </div>
     </form>
   </div>
 
-  <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
+  <div class="filter-bar panel rounded-xl p-3">
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <div class="text-[12px] font-bold text-gray-900">Danh sách yêu cầu</div>
+        <div class="text-[9px] text-gray-500">Theo dõi các phiếu trước khi bàn giao chứng từ.</div>
+      </div>
+      <a href="{% url 'borrow_management_v2' %}" class="rounded-lg border border-gray-200 px-3 py-2 text-[10px] font-bold text-gray-700 hover:bg-gray-50">Xem phiếu đã bàn giao</a>
+    </div>
     <form id="filter-form" method="get" action="{% url 'borrow_request_management_v2' %}" class="grid lg:grid-cols-[2fr,1fr,1fr,1fr,auto] gap-3 items-center">
       {% with filters.borrower|default_if_none:'' as borrower_value %}
       <div class="relative" x-data="{
@@ -168,11 +228,11 @@
         }
       }">
         <input type="hidden" name="borrower" x-model="selected">
-        <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
+        <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
           <span class="text-gray-700 text-[10px]" x-text="label(selected)"></span>
           <span class="text-gray-400 text-xs">▾</span>
         </button>
-        <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
+        <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
           <div class="flex items-center gap-2">
             <input type="text" x-model="searchText" class="w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Tìm phòng ban">
             <button type="button" @click="searchText=''; selected=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
@@ -208,11 +268,11 @@
         }
       }">
         <input type="hidden" name="status" x-model="selected">
-        <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
+        <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
           <span class="text-gray-700 text-[10px]" x-text="label(selected)"></span>
           <span class="text-gray-400 text-xs">▾</span>
         </button>
-        <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-1 text-[10px]">
+        <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-1 text-[10px]">
           <button type="button" @click="selected=''; open=false" class="w-full text-left px-2 py-2 rounded hover:bg-emerald-50 text-gray-700">Tất cả</button>
           <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
             {% for st in drop_list_request_status %}
@@ -224,10 +284,10 @@
         </div>
       </div>
       {% endwith %}
-      <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
+      <label class="relative flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
         <input name="ticket" value="{{ filters.ticket }}" placeholder="Mã ticket/email" class="w-full bg-transparent focus:outline-none text-[10px]" />
       </label>
-      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
+      <div class="relative flex items-center rounded-lg border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
         <input id="filter-needed-date" name="needed_date" value="{{ filters.needed_date }}" placeholder="Ngày mượn (từ - đến)" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" readonly />
       </div>
       <div class="flex items-center gap-2">
@@ -237,9 +297,14 @@
     </form>
   </div>
 
-  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden table-wrap">
-    <div class="flex justify-between items-center px-3 py-2 text-[10px] text-gray-600">
-      <span>Tổng yêu cầu: {{ borrow_requests.paginator.count }}</span>
+  <div class="panel rounded-xl overflow-hidden table-wrap">
+    <div class="flex flex-wrap justify-between items-center gap-2 px-4 py-3 text-[10px] text-gray-600 panel-header">
+      <span>
+        Tổng yêu cầu: {{ borrow_requests.paginator.count }}
+        {% if is_request_work_queue %}
+        <span class="ml-2 text-gray-400">Chỉ hiển thị phiếu chưa bàn giao. Phiếu đã bàn giao nằm ở Quản lý mượn.</span>
+        {% endif %}
+      </span>
       <div class="flex items-center gap-1">
         {% if borrow_requests.has_previous %}
         <a class="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50" href="?page=1{% if base_qs %}&{{ base_qs }}{% endif %}">«</a>
@@ -259,50 +324,47 @@
       </div>
     </div>
     <table class="min-w-full text-left">
-      <thead class="bg-gray-50 text-gray-600 uppercase">
+      <thead class="bg-gray-50 text-gray-500 uppercase">
         <tr>
-          <th class="px-3 py-2">Mã phiếu</th>
-          <th class="px-3 py-2">Phòng ban</th>
-          <th class="px-3 py-2">Ngày mượn</th>
-          <th class="px-3 py-2">Ngày hẹn trả</th>
-          <th class="px-3 py-2">Trạng thái</th>
-          <th class="px-3 py-2">Số chứng từ</th>
-          <th class="px-3 py-2">Cảnh báo trễ hạn</th>
-          <th class="px-3 py-2">Ticket</th>
-          <th class="px-3 py-2">Người tạo</th>
+          <th class="px-4 py-3">Phiếu</th>
+          <th class="px-3 py-3">Phòng ban</th>
+          <th class="px-3 py-3">Thời gian</th>
+          <th class="px-3 py-3">Trạng thái</th>
+          <th class="px-3 py-3">Chứng từ</th>
+          <th class="px-3 py-3">Ticket</th>
+          <th class="px-3 py-3">Người tạo</th>
           <th class="px-3 py-2 text-right">Thao tác</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
         {% for br in borrow_requests %}
         <tr class="hover:bg-gray-50">
-          <td class="px-3 py-2 font-semibold text-gray-900">BR-{{ br.created_at|date:"Ymd" }}-{{ br.request_id|stringformat:"04d" }}</td>
+          <td class="px-4 py-3">
+            <div class="font-bold text-gray-900">BR-{{ br.created_at|date:"Ymd" }}-{{ br.request_id|stringformat:"04d" }}</div>
+            <div class="mt-1 text-[9px] text-gray-500">Tạo: {{ br.created_at|date:"Y-m-d H:i" }}</div>
+          </td>
           <td class="px-3 py-2 text-gray-700">{{ br.borrower.shop_name }}</td>
-          <td class="px-3 py-2 text-gray-700">{{ br.needed_date|date:"Y-m-d" }}</td>
-          <td class="px-3 py-2 text-gray-700">{{ br.appointment_date|date:"Y-m-d" }}</td>
+          <td class="px-3 py-2 text-gray-700">
+            <div>Mượn: <span class="font-semibold text-gray-900">{{ br.needed_date|date:"Y-m-d" }}</span></div>
+            <div class="mt-1 text-gray-500">Hẹn trả: {{ br.appointment_date|date:"Y-m-d"|default:"" }}</div>
+          </td>
           <td class="px-3 py-2">
             {% if br.status == 'pending' %}
-            <span class="px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 text-[9px]">Chờ xử lý</span>
+            <span class="status-pill bg-yellow-50 text-yellow-700"><span class="status-dot bg-yellow-400"></span>Chờ xử lý</span>
             {% elif br.status == 'assigned' %}
-            <span class="px-2 py-1 rounded-full bg-blue-100 text-blue-700 text-[9px]">Đã gán</span>
-            {% elif br.status == 'handed_over' %}
-            <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[9px]">Đã bàn giao</span>
-            {% elif br.status == 'partially_returned' %}
-            <span class="px-2 py-1 rounded-full bg-orange-100 text-orange-700 text-[9px]">Trả một phần</span>
-            {% elif br.status == 'returned' %}
-            <span class="px-2 py-1 rounded-full bg-gray-100 text-gray-700 text-[9px]">Đã trả</span>
+            <span class="status-pill bg-blue-50 text-blue-700"><span class="status-dot bg-blue-500"></span>Đã gán</span>
             {% elif br.status == 'cancelled' %}
-            <span class="px-2 py-1 rounded-full bg-red-100 text-red-700 text-[9px]">Hủy</span>
+            <span class="status-pill bg-red-50 text-red-700"><span class="status-dot bg-red-500"></span>Hủy</span>
             {% else %}
-            <span class="px-2 py-1 rounded-full bg-gray-100 text-gray-700 text-[9px]">{{ br.get_status_display }}</span>
+            <span class="status-pill bg-gray-100 text-gray-700"><span class="status-dot bg-gray-400"></span>{{ br.get_status_display }}</span>
             {% endif %}
           </td>
-          <td class="px-3 py-2 text-gray-700">{{ br.items_count|default:br.items.count }}</td>
           <td class="px-3 py-2">
+            <div class="font-semibold text-gray-900">{{ br.items_count|default:br.items.count }} chứng từ</div>
             {% if br.overdue_count %}
-            <span class="px-2 py-1 rounded-full bg-red-100 text-red-700 text-[9px]">Trễ {{ br.overdue_count }}</span>
+            <div class="mt-1 text-[9px] font-semibold text-red-600">Trễ {{ br.overdue_count }}</div>
             {% else %}
-            <span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[9px]">Đúng hạn</span>
+            <div class="mt-1 text-[9px] text-emerald-700">Đúng hạn</div>
             {% endif %}
           </td>
           <td class="px-3 py-2 text-gray-700">{{ br.ticket_code|default:"" }}</td>
@@ -314,11 +376,11 @@
             {% endif %}
           </td>
           <td class="px-3 py-2 text-right">
-            <a href="{% url 'borrow_request_detail_v2' br.request_id %}" class="px-3 py-1 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50">Chi tiết</a>
+            <a href="{% url 'borrow_request_detail_v2' br.request_id %}" class="inline-flex items-center rounded-lg border border-emerald-200 px-3 py-1.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-50">Chi tiết</a>
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="10" class="px-3 py-4 text-center text-gray-500">Chưa có yêu cầu mượn</td></tr>
+        <tr><td colspan="8" class="px-3 py-6 text-center text-gray-500">Chưa có yêu cầu mượn</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -366,6 +428,89 @@
     if (returnDate && typeof flatpickr !== 'undefined') {
       flatpickr(returnDate, { dateFormat: 'Y-m-d', allowInput: true });
     }
+
+    const renderContactResults = (root, results) => {
+      const container = root.querySelector('[data-borrow-contact-results]');
+      if (!container) return;
+      if (!results.length) {
+        container.innerHTML = '<div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-3 py-2 text-[10px] text-gray-400">Không có kết quả phù hợp.</div>';
+        return;
+      }
+      container.innerHTML = results.map((item) => `
+        <button type="button"
+                class="flex w-full items-start justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 text-left hover:border-emerald-300 hover:bg-emerald-50"
+                data-contact-option
+                data-id="${item.id || ''}"
+                data-label="${(item.label || '').replace(/"/g, '&quot;')}"
+                data-email="${(item.email || '').replace(/"/g, '&quot;')}"
+                data-phone="${(item.phone_number || '').replace(/"/g, '&quot;')}"
+                data-borrower-id="${item.borrower_id || ''}"
+                data-borrower-name="${(item.borrower_name || '').replace(/"/g, '&quot;')}">
+          <span>
+            <span class="block font-semibold text-gray-900">${item.full_name || '-'}</span>
+            <span class="block text-[9px] text-gray-500">${item.employee_code || 'Không có mã NV'} · ${item.department_name || 'Chưa có phòng ban'}</span>
+          </span>
+          <span class="text-right text-[9px] text-gray-500">
+            <span class="block">${item.phone_number || ''}</span>
+            <span class="block">${item.email || ''}</span>
+          </span>
+        </button>
+      `).join('');
+    };
+
+    document.querySelectorAll('[data-borrow-contact-search]').forEach((root) => {
+      const input = root.querySelector('[data-borrow-contact-input]');
+      const idInput = root.querySelector('[data-borrow-contact-id]');
+      const selected = root.querySelector('[data-borrow-contact-selected]');
+      const emailInput = root.closest('form')?.querySelector('[data-borrow-contact-email]');
+      const phoneInput = root.closest('form')?.querySelector('[data-borrow-contact-phone]');
+      const form = root.closest('form');
+      const borrowerInput = form?.querySelector('[data-borrower-id], [name="borrower_id"]');
+      const borrowerLabel = form?.querySelector('[data-borrower-label]');
+      let timer = null;
+      input?.addEventListener('input', () => {
+        if (idInput) idInput.value = '';
+        window.clearTimeout(timer);
+        const keyword = input.value.trim();
+        if (!keyword) {
+          renderContactResults(root, []);
+          root.querySelector('[data-borrow-contact-results]').innerHTML = '';
+          if (selected) selected.classList.add('hidden');
+          return;
+        }
+        timer = window.setTimeout(async () => {
+          const params = new URLSearchParams({ q: keyword });
+          const response = await fetch("{% url 'borrow_contact_recipient_search' %}?" + params.toString(), {
+            headers: { "X-Requested-With": "XMLHttpRequest" },
+          });
+          const payload = await response.json();
+          renderContactResults(root, payload.results || []);
+        }, 220);
+      });
+      root.addEventListener('click', (event) => {
+        const option = event.target.closest('[data-contact-option]');
+        if (!option) return;
+        if (idInput) idInput.value = option.dataset.id || '';
+        if (input) input.value = option.dataset.label || '';
+        if (emailInput) emailInput.value = option.dataset.email || '';
+        if (phoneInput) phoneInput.value = option.dataset.phone || '';
+        if (option.dataset.borrowerId && borrowerInput) {
+          borrowerInput.value = option.dataset.borrowerId;
+          borrowerInput.dispatchEvent(new Event('input', { bubbles: true }));
+          borrowerInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (option.dataset.borrowerName && borrowerLabel) {
+          borrowerLabel.textContent = option.dataset.borrowerName;
+        }
+        if (selected) {
+          const departmentText = option.dataset.borrowerName ? ` · Phòng ban: ${option.dataset.borrowerName}` : '';
+          selected.textContent = `${option.dataset.label || 'Đã chọn người mượn'}${departmentText}`;
+          selected.classList.remove('hidden');
+        }
+        const results = root.querySelector('[data-borrow-contact-results]');
+        if (results) results.innerHTML = '';
+      });
+    });
   });
 </script>
 {% endblock %}

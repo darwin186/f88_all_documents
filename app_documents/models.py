@@ -244,12 +244,13 @@ class LoanDetail(models.Model):
     
     def __str__(self):
         return self.loan_code
-class CheckingStatusType(models.Model):
-    status_type_id = models.AutoField(primary_key=True) 
-    status_type_code = models.IntegerField(null= False, blank= False, unique= True)
-    status_type_name = models.CharField(max_length= 500, null= True, blank= True, default= None)
-    class Meta:
-        db_table = 'd_CheckingStatusType' 
+class CheckingStatusType(models.Model):
+    status_type_id = models.AutoField(primary_key=True) 
+    status_type_code = models.IntegerField(null= False, blank= False, unique= True)
+    status_type_name = models.CharField(max_length= 500, null= True, blank= True, default= None)
+    is_missing_document = models.BooleanField(default=False)
+    class Meta:
+        db_table = 'd_CheckingStatusType' 
     
     def __str__(self):
         return self.status_type_name
@@ -721,7 +722,7 @@ class BorrowingStatus(models.Model):
     class Meta: 
         db_table = 'd_BorrowingStatus'
 
-class GapoScheduledMessage(models.Model):
+class GapoScheduledMessage(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
         SENT = "sent", "Sent"
@@ -783,9 +784,34 @@ class GapoScheduledMessage(models.Model):
 
     def get_target_type_display(self):
         return self.TargetType(self.target_type).label
-    
-# Các giao dịch mượn chứng từ 
-class BorrowingDocument(models.Model):
+
+
+class GapoWebhookEvent(models.Model):
+    event_type = models.CharField(max_length=100, blank=True, default="")
+    bot_id = models.CharField(max_length=50, blank=True, default="")
+    message_id = models.CharField(max_length=100, blank=True, default="")
+    thread_id = models.CharField(max_length=50, blank=True, default="")
+    collab_id = models.CharField(max_length=50, blank=True, default="")
+    sender_id = models.CharField(max_length=50, blank=True, default="")
+    message_text = models.TextField(blank=True, default="")
+    http_method = models.CharField(max_length=10, blank=True, default="POST")
+    request_path = models.CharField(max_length=255, blank=True, default="")
+    remote_addr = models.CharField(max_length=64, blank=True, default="")
+    headers = models.JSONField(default=dict, blank=True)
+    payload = models.JSONField(default=dict, blank=True)
+    raw_body = models.TextField(blank=True, default="")
+    is_json_valid = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "f_GapoWebhookEvent"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.event_type or f"Webhook event #{self.pk}"
+     
+# Các giao dịch mượn chứng từ 
+class BorrowingDocument(models.Model):
     borrow_id = models.AutoField(primary_key=True)
     documents_id = models.ForeignKey( DocumentsDetail, db_column='documents_id', on_delete=models.CASCADE)
     borrow_date = models.DateField(auto_now_add=False, null= False) # Ngày mượn chứng từ
@@ -824,12 +850,23 @@ class BorrowRequestItemStatus(models.TextChoices):
     CANCELLED = "cancelled", "Hủy"
 
 
-class BorrowRequest(models.Model):
-    request_id = models.AutoField(primary_key=True)
-    borrower = models.ForeignKey(Shop, db_column="borrower", related_name="borrow_requests", on_delete=models.CASCADE)
-    requester = models.ForeignKey(User, db_column="requester", related_name="borrow_requesters", on_delete=models.SET_NULL, null=True, blank=True)
-    reference_code = models.CharField(max_length=50, null=True, blank=True)
-    needed_date = models.DateField(auto_now_add=False, null=False)
+class BorrowRequest(models.Model):
+    request_id = models.AutoField(primary_key=True)
+    borrower = models.ForeignKey(Shop, db_column="borrower", related_name="borrow_requests", on_delete=models.CASCADE)
+    requester = models.ForeignKey(User, db_column="requester", related_name="borrow_requesters", on_delete=models.SET_NULL, null=True, blank=True)
+    contact_recipient = models.ForeignKey(
+        "app_admindocuments.AdmParcelRecipientCatalog",
+        db_column="contact_recipient_id",
+        related_name="borrow_requests",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    contact_name = models.CharField(max_length=255, null=True, blank=True)
+    contact_employee_code = models.CharField(max_length=50, null=True, blank=True)
+    contact_gapo_user_id = models.CharField(max_length=100, null=True, blank=True)
+    reference_code = models.CharField(max_length=50, null=True, blank=True)
+    needed_date = models.DateField(auto_now_add=False, null=False)
     appointment_date = models.DateField(auto_now_add=False, null=True, blank=True)
     ticket_code = models.CharField(max_length=100, null=True, blank=True)
     contact_email = models.EmailField(null=True, blank=True)

@@ -1,0 +1,59 @@
+:root {
+  --admin-green: #00844a;
+  --admin-green-dark: #006837;
+}
+
+#header {
+  background: var(--admin-green);
+}
+
+#header h1 a {
+  color: #fff;
+}
+
+div.breadcrumbs {
+  background: var(--admin-green-dark);
+}
+
+a:link,
+a:visited {
+  color: var(--admin-green);
+}
+
+a:hover {
+  color: var(--admin-green-dark);
+}
+
+.button,
+.submit-row input,
+input[type="submit"],
+input[type="button"],
+button {
+  background: var(--admin-green);
+  border-color: var(--admin-green);
+}
+
+.button:hover,
+.submit-row input:hover,
+input[type="submit"]:hover,
+input[type="button"]:hover,
+button:hover {
+  background: var(--admin-green-dark);
+  border-color: var(--admin-green-dark);
+}
+
+.module caption {
+  background: var(--admin-green);
+  color: #fff;
+}
+
+.selector-chosen h2 {
+  background: var(--admin-green);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--admin-green);
+  box-shadow: 0 0 0 1px var(--admin-green-dark);
+}

@@ -40,10 +40,12 @@
 
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     <div class="lg:col-span-2 rounded-2xl border border-gray-200 bg-white p-4">
-      <h2 class="text-[10px] font-semibold text-gray-700 mb-3">Thông tin cấu hình</h2>
+      <h2 class="text-[10px] font-semibold text-gray-700 mb-3">Policy lịch làm việc</h2>
       <form method="post" class="space-y-3 text-[9px]">
         {% csrf_token %}
+        <input type="hidden" name="action" value="save_policy">
         <input type="hidden" name="policy_id" value="{{ form_data.policy_id }}">
+        <input type="hidden" name="min_hours_per_shift" value="{{ form_data.min_hours_per_shift|default:'4' }}">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label class="block text-[9px] text-gray-500 mb-1">Tên cấu hình</label>
@@ -55,62 +57,68 @@
           </div>
         </div>
 
-        <div>
-          <label class="block text-[9px] text-gray-500 mb-1">Ngày làm việc</label>
-          <div class="flex flex-wrap gap-2">
-            {% for day in day_labels %}
-              <label class="flex items-center gap-1 rounded-full border border-gray-200 px-2 py-1 text-[9px]">
-                <input type="checkbox" name="working_days" value="{{ day.0 }}" {% if day.0 in selected_days %}checked{% endif %}>
-                <span>{{ day.1 }}</span>
-              </label>
-            {% endfor %}
+        <section class="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+          <div>
+            <h3 class="text-[10px] font-semibold text-gray-700">Policy kho làm việc</h3>
+            <p class="text-[8px] text-gray-500">Quy định khung vận hành chung của kho.</p>
           </div>
-        </div>
+          <div>
+            <label class="block text-[9px] text-gray-500 mb-1">Ngày làm việc</label>
+            <div class="flex flex-wrap gap-2">
+              {% for day in day_labels %}
+                <label class="flex items-center gap-1 rounded-full border border-gray-200 bg-white px-2 py-1 text-[9px]">
+                  <input type="checkbox" name="working_days" value="{{ day.0 }}" {% if day.0 in selected_days %}checked{% endif %}>
+                  <span>{{ day.1 }}</span>
+                </label>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[9px] text-gray-500 mb-1">Giờ mở kho</label>
+              <input type="time" name="open_time" value="{{ form_data.open_time }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px]">
+            </div>
+            <div>
+              <label class="block text-[9px] text-gray-500 mb-1">Giờ kết kho</label>
+              <input type="time" name="close_time" value="{{ form_data.close_time }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px]">
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[9px] text-gray-500 mb-1">Nghỉ trưa từ</label>
+              <input type="time" name="lunch_start" value="{{ form_data.lunch_start }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px]">
+            </div>
+            <div>
+              <label class="block text-[9px] text-gray-500 mb-1">Nghỉ trưa đến</label>
+              <input type="time" name="lunch_end" value="{{ form_data.lunch_end }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px]">
+            </div>
+          </div>
+        </section>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <section class="rounded-xl border border-gray-100 bg-gray-50 p-3 space-y-3">
           <div>
-            <label class="block text-[9px] text-gray-500 mb-1">Giờ mở kho</label>
-            <input type="time" name="open_time" value="{{ form_data.open_time }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
+            <h3 class="text-[10px] font-semibold text-gray-700">Policy checker</h3>
+            <p class="text-[8px] text-gray-500">Giới hạn số ca và tổng giờ checker được đăng ký.</p>
           </div>
-          <div>
-            <label class="block text-[9px] text-gray-500 mb-1">Giờ kết kho</label>
-            <input type="time" name="close_time" value="{{ form_data.close_time }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <label class="block text-[9px] text-gray-500 mb-1">Số ca/ngày</label>
+              <input type="number" min="1" name="max_shifts_per_day" value="{{ form_data.max_shifts_per_day }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px]">
+            </div>
+            <div>
+              <label class="block text-[9px] text-gray-500 mb-1">Giờ/ngày tối đa</label>
+              <input type="number" step="0.25" name="max_hours_per_day" value="{{ form_data.max_hours_per_day }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px]">
+            </div>
+            <div>
+              <label class="block text-[9px] text-gray-500 mb-1">Giờ/tuần tối đa</label>
+              <input type="number" step="0.25" name="max_hours_per_week" value="{{ form_data.max_hours_per_week }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px]">
+            </div>
+            <div>
+              <label class="block text-[9px] text-gray-500 mb-1">Giờ/tháng tối đa</label>
+              <input type="number" step="0.25" name="max_hours_per_month" value="{{ form_data.max_hours_per_month }}" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px]">
+            </div>
           </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label class="block text-[9px] text-gray-500 mb-1">Nghỉ trưa từ</label>
-            <input type="time" name="lunch_start" value="{{ form_data.lunch_start }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
-          </div>
-          <div>
-            <label class="block text-[9px] text-gray-500 mb-1">Nghỉ trưa đến</label>
-            <input type="time" name="lunch_end" value="{{ form_data.lunch_end }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <div>
-            <label class="block text-[9px] text-gray-500 mb-1">Số ca/ngày</label>
-            <input type="number" min="1" name="max_shifts_per_day" value="{{ form_data.max_shifts_per_day }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
-          </div>
-          <div>
-            <label class="block text-[9px] text-gray-500 mb-1">Giờ/ca tối thiểu</label>
-            <input type="number" step="0.25" name="min_hours_per_shift" value="{{ form_data.min_hours_per_shift }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
-          </div>
-          <div>
-            <label class="block text-[9px] text-gray-500 mb-1">Giờ/ngày tối đa</label>
-            <input type="number" step="0.25" name="max_hours_per_day" value="{{ form_data.max_hours_per_day }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
-          </div>
-          <div>
-            <label class="block text-[9px] text-gray-500 mb-1">Giờ/tuần tối đa</label>
-            <input type="number" step="0.25" name="max_hours_per_week" value="{{ form_data.max_hours_per_week }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
-          </div>
-          <div>
-            <label class="block text-[9px] text-gray-500 mb-1">Giờ/tháng tối đa</label>
-            <input type="number" step="0.25" name="max_hours_per_month" value="{{ form_data.max_hours_per_month }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
-          </div>
-        </div>
+        </section>
 
         <div class="flex items-center gap-2">
           <input type="checkbox" name="is_active" value="1" {% if form_data.is_active %}checked{% endif %}>
@@ -123,7 +131,164 @@
       </form>
     </div>
 
-    <div class="rounded-2xl border border-gray-200 bg-white p-4">
+    <div class="rounded-2xl border border-gray-200 bg-white p-4 space-y-4">
+      <div>
+        <h2 class="text-[10px] font-semibold text-gray-700 mb-3">Danh mục ca làm việc</h2>
+        <form method="post" class="space-y-2 text-[9px]">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="create_shift_template">
+          <div>
+            <label class="block text-[9px] text-gray-500 mb-1">Tên ca</label>
+            <input type="text" name="template_name" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]" placeholder="VD: Ca sáng">
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[9px] text-gray-500 mb-1">Từ</label>
+              <select name="template_start" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
+                <option value="">Chọn giờ</option>
+                {% for slot in time_slots_24h %}
+                  <option value="{{ slot }}">{{ slot }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="block text-[9px] text-gray-500 mb-1">Đến</label>
+              <select name="template_end" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
+                <option value="">Chọn giờ</option>
+                {% for slot in time_slots_24h %}
+                  <option value="{{ slot }}">{{ slot }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-3 gap-1">
+            <button type="button" class="rounded-lg border border-gray-200 px-2 py-1 text-[8px] text-gray-600 hover:bg-emerald-50" data-template-range="08:00|12:00">08:00 - 12:00</button>
+            <button type="button" class="rounded-lg border border-gray-200 px-2 py-1 text-[8px] text-gray-600 hover:bg-emerald-50" data-template-range="13:30|17:30">13:30 - 17:30</button>
+            <button type="button" class="rounded-lg border border-gray-200 px-2 py-1 text-[8px] text-gray-600 hover:bg-emerald-50" data-template-range="08:00|17:30">08:00 - 17:30</button>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-[9px] text-gray-500 mb-1">Hiệu lực từ</label>
+              <input type="date" name="template_effective_from" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
+            </div>
+            <div>
+              <label class="block text-[9px] text-gray-500 mb-1">Hiệu lực đến</label>
+              <input type="date" name="template_effective_to" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
+            </div>
+          </div>
+          <div class="grid grid-cols-[1fr_auto] gap-2 items-end">
+            <div>
+              <label class="block text-[9px] text-gray-500 mb-1">Thứ tự</label>
+              <input type="number" name="template_sort_order" value="0" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
+            </div>
+            <label class="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-2 text-[9px]">
+              <input type="checkbox" name="template_is_active" value="1" checked>
+              <span>Dùng</span>
+            </label>
+          </div>
+          <label class="flex items-center gap-2 rounded-lg border border-gray-200 px-2 py-2 text-[9px]">
+            <input type="checkbox" name="template_include_lunch_break" value="1" checked>
+            <span>Có tính nghỉ trưa nếu ca đi qua giờ nghỉ</span>
+          </label>
+          <button type="submit" class="w-full rounded-lg bg-emerald-600 text-white text-[9px] font-semibold py-2">Tạo ca</button>
+        </form>
+
+        <div class="mt-3 space-y-2 text-[9px]">
+          {% for template in shift_templates %}
+            <div class="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+              <div class="flex items-center justify-between gap-2">
+                <div>
+                  <span class="font-semibold text-gray-800">{{ template.template_name }}</span>
+                  {% if template.usage_count %}
+                    <span class="ml-1 rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-[8px]">Đã dùng</span>
+                  {% endif %}
+                </div>
+                <div class="flex items-center gap-1">
+                  <button type="button" class="rounded-full bg-white border border-gray-200 px-2 py-0.5 text-[8px] text-gray-600 hover:bg-gray-50" data-edit-shift-template="{{ template.template_id }}">Sửa</button>
+                  <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="toggle_shift_template">
+                    <input type="hidden" name="template_id" value="{{ template.template_id }}">
+                    <button type="submit" class="rounded-full px-2 py-0.5 text-[8px] {% if template.is_active %}bg-emerald-100 text-emerald-700{% else %}bg-gray-100 text-gray-500{% endif %}">
+                      {% if template.is_active %}Đang dùng{% else %}Tạm dừng{% endif %}
+                    </button>
+                  </form>
+                </div>
+              </div>
+              <div class="mt-1 text-gray-500">{{ template.start_time|time:"H:i" }} - {{ template.end_time|time:"H:i" }} • {% if template.include_lunch_break %}Có nghỉ trưa{% else %}Không nghỉ trưa{% endif %}</div>
+              <div class="mt-1 text-gray-400">
+                Hiệu lực:
+                {% if template.effective_from %}{{ template.effective_from|date:"d/m/Y" }}{% else %}Không giới hạn{% endif %}
+                -
+                {% if template.effective_to %}{{ template.effective_to|date:"d/m/Y" }}{% else %}Không giới hạn{% endif %}
+              </div>
+              <form method="post" class="mt-3 hidden rounded-lg border border-gray-200 bg-white p-2 space-y-2" data-shift-template-form="{{ template.template_id }}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_shift_template">
+                <input type="hidden" name="template_id" value="{{ template.template_id }}">
+                <div>
+                  <label class="block text-[9px] text-gray-500 mb-1">Tên ca</label>
+                  <input type="text" name="template_name" value="{{ template.template_name }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-[9px] text-gray-500 mb-1">Từ</label>
+                    {% with start_val=template.start_time|time:"H:i" %}
+                    <select name="template_start" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]" {% if template.usage_count %}disabled{% endif %}>
+                      {% for slot in time_slots_24h %}
+                        <option value="{{ slot }}" {% if slot == start_val %}selected{% endif %}>{{ slot }}</option>
+                      {% endfor %}
+                    </select>
+                    {% endwith %}
+                  </div>
+                  <div>
+                    <label class="block text-[9px] text-gray-500 mb-1">Đến</label>
+                    {% with end_val=template.end_time|time:"H:i" %}
+                    <select name="template_end" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]" {% if template.usage_count %}disabled{% endif %}>
+                      {% for slot in time_slots_24h %}
+                        <option value="{{ slot }}" {% if slot == end_val %}selected{% endif %}>{{ slot }}</option>
+                      {% endfor %}
+                    </select>
+                    {% endwith %}
+                  </div>
+                </div>
+                {% if template.usage_count %}
+                  <p class="text-[8px] text-amber-600">Ca đã được đăng ký nên không sửa khung giờ và nghỉ trưa.</p>
+                {% endif %}
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-[9px] text-gray-500 mb-1">Hiệu lực từ</label>
+                    <input type="date" name="template_effective_from" value="{{ template.effective_from|date:'Y-m-d' }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
+                  </div>
+                  <div>
+                    <label class="block text-[9px] text-gray-500 mb-1">Hiệu lực đến</label>
+                    <input type="date" name="template_effective_to" value="{{ template.effective_to|date:'Y-m-d' }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
+                  </div>
+                </div>
+                <div class="grid grid-cols-[1fr_auto] gap-2 items-end">
+                  <div>
+                    <label class="block text-[9px] text-gray-500 mb-1">Thứ tự</label>
+                    <input type="number" name="template_sort_order" value="{{ template.sort_order }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px]">
+                  </div>
+                  <label class="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-2 text-[9px]">
+                    <input type="checkbox" name="template_is_active" value="1" {% if template.is_active %}checked{% endif %}>
+                    <span>Dùng</span>
+                  </label>
+                </div>
+                <label class="flex items-center gap-2 rounded-lg border border-gray-200 px-2 py-2 text-[9px] {% if template.usage_count %}text-gray-400{% endif %}">
+                  <input type="checkbox" name="template_include_lunch_break" value="1" {% if template.include_lunch_break %}checked{% endif %} {% if template.usage_count %}disabled{% endif %}>
+                  <span>Có tính nghỉ trưa nếu ca đi qua giờ nghỉ</span>
+                </label>
+                <button type="submit" class="w-full rounded-lg bg-emerald-600 text-white text-[9px] font-semibold py-2">Lưu ca</button>
+              </form>
+            </div>
+          {% empty %}
+            <p class="text-gray-500">Chưa có ca mẫu.</p>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="border-t border-gray-100 pt-4">
       <h2 class="text-[10px] font-semibold text-gray-700 mb-3">Danh sách cấu hình</h2>
       <div class="space-y-2 text-[9px]">
         {% if not policies %}
@@ -142,7 +307,28 @@
           {% endfor %}
         {% endif %}
       </div>
+      </div>
     </div>
   </div>
 </div>
+<script>
+  (function () {
+    const startSelect = document.querySelector('select[name="template_start"]');
+    const endSelect = document.querySelector('select[name="template_end"]');
+    document.querySelectorAll('[data-template-range]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const [start, end] = button.dataset.templateRange.split('|');
+        if (startSelect) startSelect.value = start;
+        if (endSelect) endSelect.value = end;
+      });
+    });
+    document.querySelectorAll('[data-edit-shift-template]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const form = document.querySelector(`[data-shift-template-form="${button.dataset.editShiftTemplate}"]`);
+        if (!form) return;
+        form.classList.toggle('hidden');
+      });
+    });
+  })();
+</script>
 {% endblock %}

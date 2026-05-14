@@ -1,6 +1,7 @@
 from django.contrib import admin
 from .models import (
     WorkPolicy,
+    WorkShiftTemplate,
     WorkWeek,
     WorkShift,
     TaskCatalog,
@@ -28,16 +29,23 @@ class WorkPolicyAdmin(admin.ModelAdmin):
     search_fields = ('policy_name',)
 
 
+@admin.register(WorkShiftTemplate)
+class WorkShiftTemplateAdmin(admin.ModelAdmin):
+    list_display = ('template_name', 'start_time', 'end_time', 'include_lunch_break', 'effective_from', 'effective_to', 'sort_order', 'is_active')
+    list_filter = ('is_active', 'include_lunch_break')
+    search_fields = ('template_name',)
+
+
 @admin.register(WorkWeek)
 class WorkWeekAdmin(admin.ModelAdmin):
-    list_display = ('user', 'week_start_date', 'week_end_date', 'status', 'total_hours')
+    list_display = ('user', 'week_start_date', 'week_end_date', 'status', 'total_hours', 'approved_by', 'approved_at')
     list_filter = ('status',)
     search_fields = ('user__username',)
 
 
 @admin.register(WorkShift)
 class WorkShiftAdmin(admin.ModelAdmin):
-    list_display = ('work_week', 'shift_date', 'shift_index', 'start_time', 'end_time', 'total_hours')
+    list_display = ('work_week', 'shift_template', 'shift_date', 'shift_index', 'start_time', 'end_time', 'total_hours')
     list_filter = ('shift_date',)
     search_fields = ('work_week__user__username',)
 
