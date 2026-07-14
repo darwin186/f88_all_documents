@@ -73,7 +73,10 @@
           </div>
         </div>
         <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3 text-xs text-gray-600">
-          Merge ranges: {{ current_batch.summary.merged_ranges|default:0 }} · Thiếu GAPO ID: {{ current_batch.summary.missing_gapo|default:0 }} · Thiếu phòng ban: {{ current_batch.summary.missing_department|default:0 }} · Inactive: {{ current_batch.summary.inactive_rows|default:0 }}
+          Có phòng ban: {{ current_batch.summary.department_rows|default:0 }} dòng / {{ current_batch.summary.department_count|default:0 }} đơn vị
+          · Thiếu phòng ban từ file IT: {{ current_batch.summary.missing_department|default:0 }}
+          · Thiếu GAPO ID: {{ current_batch.summary.missing_gapo|default:0 }}
+          · Inactive: {{ current_batch.summary.inactive_rows|default:0 }}
         </div>
         <form method="post">
           {% csrf_token %}

@@ -206,6 +206,9 @@ GAPO_READ_TIMEOUT = float(os.getenv('GAPO_READ_TIMEOUT', '5'))
 # Borrow request API key
 BORROW_REQUEST_API_KEY = (os.getenv('BORROW_REQUEST_API_KEY') or '').strip()
 
+# GDDB intake API token for Prefect/manual external integrations.
+GDDB_INTAKE_TOKEN = (os.getenv('GDDB_INTAKE_TOKEN') or '').strip()
+
 USER_PRESENCE_ACTIVE_GAP = int(os.getenv('USER_PRESENCE_ACTIVE_GAP', '120'))
 USER_PRESENCE_ONLINE_WINDOW = int(os.getenv('USER_PRESENCE_ONLINE_WINDOW', '300'))
 USER_PRESENCE_HEARTBEAT_SECONDS = int(os.getenv('USER_PRESENCE_HEARTBEAT_SECONDS', '60'))

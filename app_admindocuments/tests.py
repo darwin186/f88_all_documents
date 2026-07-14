@@ -37,6 +37,7 @@ from .views import (
     _allowed_status_codes_for_dispatch,
     _build_incoming_workflow_steps,
     _build_parcel_confirmation_url,
+    _parse_parcel_recipient_workbook,
     _send_parcel_group_notification_now,
 )
 
@@ -1754,6 +1755,33 @@ class AdmIncomingDispatchTests(TestCase):
         self.assertEqual(imported[1]["gapo_user_id"], "10001")
         self.assertEqual(imported[1]["employee_code"], "E001")
         self.assertEqual(imported[1]["full_name"], "Nhan Vien")
+        self.assertEqual(current_batch.summary["department_rows"], 2)
+        self.assertEqual(current_batch.summary["department_count"], 1)
+
+    def test_recipient_directory_accepts_new_it_header_after_title_row(self):
+        workbook = Workbook()
+        ws = workbook.active
+        ws.append(["DANH SÁCH THÀNH VIÊN"])
+        ws.append([
+            "STT", "User ID", "Mã nhân viên", "Tên thành viên", "Email",
+            "Số điện thoại", "Trạng thái", "Quyền", "Sơ đồ tổ chức",
+            "Chức vụ", "Phòng ban đầy đủ",
+        ])
+        ws.append([
+            1, "20001", "E002", "Nhan Vien Moi", "new@f88.vn", "84900000001",
+            "Đang hoạt động", "Member", "F88", "Chuyên viên",
+            "Tập đoàn F88 || Khối Vận hành || Phòng Vận hành",
+        ])
+
+        content = BytesIO()
+        workbook.save(content)
+        content.seek(0)
+
+        parsed = _parse_parcel_recipient_workbook(content)
+
+        self.assertEqual(parsed["summary"]["header_row"], 2)
+        self.assertEqual(parsed["rows"][0]["gapo_user_id"], "20001")
+        self.assertEqual(parsed["rows"][0]["department_name"], "Phòng Vận hành")
 
     def test_recipient_directory_requires_superuser(self):
         self.client.login(username="viewer", password="secret")

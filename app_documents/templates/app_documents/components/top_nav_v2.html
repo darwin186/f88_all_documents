@@ -13,6 +13,25 @@
         <a href="{% url 'checking_transaction_v2' %}" class="{% if request.resolver_match.url_name == 'checking_transaction_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Duyệt chứng từ</a>
         <span class="text-gray-300">•</span>
         {% endif %}
+        {% if 'gddb_registration' in allowed_screens %}
+        {% if is_admin or is_super_admin %}
+        <div class="group relative inline-flex items-center">
+          <a href="{% url 'gddb_registration_v2' %}" class="inline-flex items-center gap-1 {% if request.resolver_match.url_name == 'gddb_registration_v2' or request.resolver_match.url_name == 'gddb_export' or request.resolver_match.url_name == 'gddb_shop_mapping_export' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Giao dịch bảo đảm <span class="text-[8px]">⌄</span></a>
+          <div class="absolute left-0 top-full z-50 hidden min-w-[210px] pt-2 group-hover:block group-focus-within:block">
+            <div class="overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+              <a href="{% url 'gddb_registration_v2' %}" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Danh sách giao dịch</a>
+              <a href="{% url 'gddb_registration_v2' %}?tab=api_docs" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Tài liệu API</a>
+              <a href="{% url 'gddb_registration_v2' %}?tab=manual" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Submit manual</a>
+              <a href="{% url 'gddb_registration_v2' %}?tab=configuration" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Cấu hình định danh</a>
+              {% if is_super_admin %}<a href="{% url 'gddb_registration_v2' %}?tab=tokens" class="block border-t border-gray-100 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Quản lý token</a>{% endif %}
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <a href="{% url 'gddb_registration_v2' %}" class="{% if request.resolver_match.url_name == 'gddb_registration_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Giao dịch bảo đảm</a>
+        {% endif %}
+        <span class="text-gray-300">•</span>
+        {% endif %}
         {% if 'kpi_v2' in allowed_screens %}
         <a href="{% url 'document_kpi_v2' %}" class="{% if request.resolver_match.url_name == 'document_kpi_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Chỉ tiêu chứng từ</a>
         <span class="text-gray-300">•</span>
@@ -32,15 +51,22 @@
         {% if 'workshift_register' in allowed_screens or 'workshift_tasks' in allowed_screens %}
         <a href="{% url 'workshift_register' %}" class="{% if request.resolver_match.url_name == 'workshift_register' or request.resolver_match.url_name == 'workshift_tasks' or request.resolver_match.url_name == 'workshift_policy' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Lịch làm việc</a>
         {% endif %}
-        {% if 'receiving_import_v2' in allowed_screens %}
+        {% if 'receiving_import_v2' in allowed_screens or is_admin or is_super_admin %}
         <span class="text-gray-300">•</span>
         <div class="relative group inline-flex items-center">
-          <span class="cursor-pointer {% if request.resolver_match.url_name == 'receiving_import_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Khác</span>
+          <span class="cursor-pointer {% if request.resolver_match.url_name == 'receiving_import_v2' or request.resolver_match.url_name == 'folder_appointment_report_v2' or request.resolver_match.url_name == 'folder_appointment_export' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Khác</span>
           <div class="absolute left-0 top-full mt-1 min-w-[180px] rounded-xl border border-gray-200 bg-white shadow-lg py-1 hidden group-hover:block">
             <div class="absolute -top-2 left-0 right-0 h-2"></div>
+            {% if 'receiving_import_v2' in allowed_screens %}
             <a href="{% url 'receiving_import_v2' %}" class="flex items-center gap-2 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50">
               Import nhận chứng từ
             </a>
+            {% endif %}
+            {% if is_admin or is_super_admin %}
+            <a href="{% url 'folder_appointment_report_v2' %}" class="flex items-center gap-2 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50">
+              Hẹn nhận quyển
+            </a>
+            {% endif %}
           </div>
         </div>
         {% endif %}

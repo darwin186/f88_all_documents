@@ -151,6 +151,7 @@ INCOMING_VISIBLE_STATUS_CODES = [
 
 PARCEL_RECIPIENT_IMPORT_HEADERS = {
     "stt": "stt",
+    "user id": "gapo_user_id",
     "gapo user id": "gapo_user_id",
     "mã nhân viên": "employee_code",
     "tên thành viên": "full_name",
@@ -1625,6 +1626,13 @@ def _normalize_excel_text(value):
     return text
 
 
+def _normalize_excel_header(value):
+    """Normalize headers while retaining Vietnamese accents for exact aliases."""
+    return " ".join(
+        _normalize_excel_text(value).replace("\ufeff", "").split()
+    ).casefold()
+
+
 def _normalize_phone_number(value):
     return "".join(ch for ch in _normalize_excel_text(value) if ch.isdigit())
 
@@ -1644,15 +1652,46 @@ def _parse_parcel_recipient_workbook(file_path):
             for col_idx in range(cell_range.min_col, cell_range.max_col + 1):
                 merged_lookup[(row_idx, col_idx)] = anchor
 
-    raw_headers = [
-        _normalize_excel_text(_safe_sheet_cell_value(worksheet, 1, col_idx, merged_lookup)).lower()
-        for col_idx in range(1, worksheet.max_column + 1)
-    ]
+    # IT exports have changed the user-id label and can prepend report-title rows.
+    # Detect the actual header row instead of assuming it is always the first row.
+    header_row = 1
+    raw_headers = []
+    best_header_count = -1
+    for candidate_row in range(1, min(worksheet.max_row, 10) + 1):
+        candidate_headers = [
+            _normalize_excel_header(
+                _safe_sheet_cell_value(
+                    worksheet, candidate_row, col_idx, merged_lookup
+                )
+            )
+            for col_idx in range(1, worksheet.max_column + 1)
+        ]
+        recognized_count = sum(
+            header in PARCEL_RECIPIENT_IMPORT_HEADERS
+            for header in candidate_headers
+        )
+        if recognized_count > best_header_count:
+            header_row = candidate_row
+            raw_headers = candidate_headers
+            best_header_count = recognized_count
+
     header_map = {}
+    stt_col = None
     for idx, header in enumerate(raw_headers, 1):
         key = PARCEL_RECIPIENT_IMPORT_HEADERS.get(header)
         if key:
             header_map[idx] = key
+            if key == "stt":
+                stt_col = idx
+
+    required_fields = {"gapo_user_id", "full_name", "department_full"}
+    missing_fields = required_fields.difference(header_map.values())
+    if missing_fields:
+        missing_labels = ", ".join(sorted(missing_fields))
+        raise ValueError(
+            "File Excel không đúng cấu trúc danh bạ người nhận; "
+            f"không nhận diện được các cột: {missing_labels}."
+        )
 
     rows = []
     stats = {
@@ -1660,8 +1699,15 @@ def _parse_parcel_recipient_workbook(file_path):
         "missing_gapo": 0,
         "missing_department": 0,
         "inactive_rows": 0,
+        "header_row": header_row,
+        "recognized_headers": len(header_map),
     }
-    for row_idx in range(2, worksheet.max_row + 1):
+    for row_idx in range(header_row + 1, worksheet.max_row + 1):
+        # Skip continuation rows (users with multiple departments have merged cells;
+        # raw STT cell is None for those extra rows).
+        if stt_col and worksheet.cell(row_idx, stt_col).value is None:
+            continue
+
         record = {}
         for col_idx, field_name in header_map.items():
             record[field_name] = _normalize_excel_text(
@@ -1693,9 +1739,20 @@ def _parse_parcel_recipient_workbook(file_path):
         record["row_number"] = row_idx
         rows.append(record)
 
+    stats["department_rows"] = sum(
+        bool(row.get("department_name")) for row in rows
+    )
+    stats["department_count"] = len(
+        {
+            row["department_name"]
+            for row in rows
+            if row.get("department_name")
+        }
+    )
+
     return {
         "sheet_name": worksheet.title,
-        "total_rows": max(worksheet.max_row - 1, 0),
+        "total_rows": max(worksheet.max_row - header_row, 0),
         "rows": rows,
         "summary": stats,
     }

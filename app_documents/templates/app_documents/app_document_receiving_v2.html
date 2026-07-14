@@ -337,6 +337,7 @@
   <div class="flex items-center gap-4 border-b border-gray-100 px-4 text-[10px]">
     <button type="button" data-drawer-tab="info" class="py-2 font-semibold border-b-2 border-emerald-500 text-emerald-700">Thông tin</button>
     <button type="button" data-drawer-tab="history" class="py-2 font-semibold border-b-2 border-transparent text-gray-500 hover:text-emerald-700">Lịch sử</button>
+    <button type="button" id="drawer-tab-appointment-btn" data-drawer-tab="appointment" class="py-2 font-semibold border-b-2 border-transparent text-gray-500 hover:text-emerald-700">Hẹn nhận quyển</button>
     <button type="button" id="drawer-tab-additional-btn" data-drawer-tab="additional" class="py-2 font-semibold border-b-2 border-transparent text-gray-500 hover:text-emerald-700">Nhận bổ sung</button>
   </div>
   <div class="p-4 space-y-3 text-[10px] overflow-y-auto h-[calc(100vh-56px-92px)]">
@@ -437,6 +438,23 @@
         <ul id="drawer-history-package-list" class="space-y-2"></ul>
       </div>
     </div>
+    <div id="drawer-tab-appointment" class="space-y-3 hidden">
+      <div class="flex items-center justify-between rounded-lg border border-gray-100 bg-gray-50 p-3">
+        <div><div class="text-[9px] uppercase text-gray-500">Trạng thái hẹn</div><div id="drawer-appointment-meta" class="mt-1 text-[9px] text-gray-500"></div></div>
+        <span id="drawer-appointment-badge" class="rounded-full bg-gray-200 px-2 py-1 text-[9px] font-bold text-gray-700">Chưa hẹn</span>
+      </div>
+      <div class="rounded-lg border border-gray-100 p-3 space-y-3">
+        <label class="block"><span class="mb-1 block text-[9px] font-semibold text-gray-600">Ngày hẹn nhận quyển</span><input id="drawer-appointment-date" type="date" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[10px] focus:border-emerald-500 focus:outline-none"></label>
+        <label class="block"><span class="mb-1 block text-[9px] font-semibold text-gray-600">Lý do hẹn</span><textarea id="drawer-appointment-reason" rows="4" maxlength="2000" class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-[10px] focus:border-emerald-500 focus:outline-none" placeholder="Nhập lý do cần hẹn PGD gửi quyển..."></textarea></label>
+        <div id="drawer-appointment-msg" class="hidden text-[9px] text-red-600"></div>
+        <div class="flex justify-end gap-2"><button type="button" id="drawer-appointment-cancel" class="hidden rounded-lg border border-red-200 px-3 py-2 text-[10px] font-semibold text-red-700 hover:bg-red-50">Hủy lịch hẹn</button><button type="button" id="drawer-appointment-save" class="rounded-lg bg-emerald-600 px-3 py-2 text-[10px] font-semibold text-white hover:bg-emerald-700">Lưu lịch hẹn</button></div>
+      </div>
+      <div>
+        <div class="mb-2 text-[9px] font-semibold text-gray-600">Lịch sử hẹn nhận quyển</div>
+        <div id="drawer-appointment-history-empty" class="text-[9px] text-gray-500">Chưa có lịch sử.</div>
+        <ul id="drawer-appointment-history" class="space-y-2"></ul>
+      </div>
+    </div>
     <div id="drawer-tab-additional" class="space-y-3 hidden">
       <form id="drawer-additional-form" method="post" novalidate data-action-template="{% url 'receiving_additional_view' 0 %}">
         {% csrf_token %}
@@ -504,6 +522,8 @@
   const tabButtons = drawer?.querySelectorAll('[data-drawer-tab]') || [];
   const tabInfo = document.getElementById('drawer-tab-info');
   const tabHistory = document.getElementById('drawer-tab-history');
+  const tabAppointment = document.getElementById('drawer-tab-appointment');
+  const tabAppointmentBtn = document.getElementById('drawer-tab-appointment-btn');
   const tabAdditional = document.getElementById('drawer-tab-additional');
   const tabAdditionalBtn = document.getElementById('drawer-tab-additional-btn');
   const additionalForm = document.getElementById('drawer-additional-form');
@@ -519,6 +539,15 @@
   const historyFolderEmpty = document.getElementById('drawer-history-folder-empty');
   const historyPackageList = document.getElementById('drawer-history-package-list');
   const historyPackageEmpty = document.getElementById('drawer-history-package-empty');
+  const appointmentDateInput = document.getElementById('drawer-appointment-date');
+  const appointmentReasonInput = document.getElementById('drawer-appointment-reason');
+  const appointmentBadge = document.getElementById('drawer-appointment-badge');
+  const appointmentMeta = document.getElementById('drawer-appointment-meta');
+  const appointmentMsg = document.getElementById('drawer-appointment-msg');
+  const appointmentSaveBtn = document.getElementById('drawer-appointment-save');
+  const appointmentCancelBtn = document.getElementById('drawer-appointment-cancel');
+  const appointmentHistory = document.getElementById('drawer-appointment-history');
+  const appointmentHistoryEmpty = document.getElementById('drawer-appointment-history-empty');
   let activeFolderId = null;
   let activeRow = null;
   let noteTimer = null;
@@ -653,9 +682,13 @@
     tabButtons.forEach(btn => setTabButtonState(btn, btn.dataset.drawerTab === tabName));
     if (tabInfo) tabInfo.classList.toggle('hidden', tabName !== 'info');
     if (tabHistory) tabHistory.classList.toggle('hidden', tabName !== 'history');
+    if (tabAppointment) tabAppointment.classList.toggle('hidden', tabName !== 'appointment');
     if (tabAdditional) tabAdditional.classList.toggle('hidden', tabName !== 'additional');
     if (tabName === 'history') {
       loadHistory(activeFolderId);
+    }
+    if (tabName === 'appointment') {
+      loadFolderAppointment(activeFolderId);
     }
     if (tabName === 'additional' && activeRow && additionalForm && activeFolderId) {
       const tmpl = additionalForm.dataset.actionTemplate || '/receiving_additional_view/0/';
@@ -675,6 +708,121 @@
     const pad = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
+
+  const setAppointmentMsg = (text, isError = true) => {
+    if (!appointmentMsg) return;
+    appointmentMsg.textContent = text || '';
+    appointmentMsg.className = `text-[9px] ${isError ? 'text-red-600' : 'text-emerald-700'}`;
+    appointmentMsg.classList.toggle('hidden', !text);
+  };
+
+  const renderFolderAppointment = (data) => {
+    const appointment = data.appointment || {};
+    const logs = data.logs || [];
+    const latestAction = logs[0]?.action || '';
+    if (appointmentDateInput) {
+      appointmentDateInput.value = appointment.appointment_date || '';
+      appointmentDateInput.disabled = !!data.is_received;
+      appointmentDateInput.min = new Date().toISOString().slice(0, 10);
+    }
+    if (appointmentReasonInput) {
+      appointmentReasonInput.value = appointment.reason || '';
+      appointmentReasonInput.disabled = !!data.is_received;
+    }
+    if (appointmentBadge) {
+      appointmentBadge.className = 'rounded-full px-2 py-1 text-[9px] font-bold';
+      if (appointment.active) {
+        appointmentBadge.textContent = 'Đang hẹn';
+        appointmentBadge.classList.add('bg-amber-100', 'text-amber-800');
+      } else if (latestAction === 'received' || data.is_received) {
+        appointmentBadge.textContent = 'Đã nhận';
+        appointmentBadge.classList.add('bg-emerald-100', 'text-emerald-800');
+      } else if (latestAction === 'cancelled') {
+        appointmentBadge.textContent = 'Đã hủy';
+        appointmentBadge.classList.add('bg-gray-200', 'text-gray-700');
+      } else {
+        appointmentBadge.textContent = 'Chưa hẹn';
+        appointmentBadge.classList.add('bg-gray-200', 'text-gray-700');
+      }
+    }
+    if (appointmentMeta) {
+      const parts = [];
+      if (appointment.created_by) parts.push(`Tạo bởi ${appointment.created_by}`);
+      if (appointment.created_at) parts.push(formatDateTime(appointment.created_at));
+      if (appointment.resolved_by) parts.push(`Hoàn tất bởi ${appointment.resolved_by}`);
+      appointmentMeta.textContent = parts.join(' • ');
+    }
+    if (appointmentSaveBtn) {
+      appointmentSaveBtn.disabled = !!data.is_received;
+      appointmentSaveBtn.classList.toggle('opacity-50', !!data.is_received);
+      appointmentSaveBtn.classList.toggle('cursor-not-allowed', !!data.is_received);
+      appointmentSaveBtn.textContent = appointment.active ? 'Cập nhật lịch hẹn' : 'Lưu lịch hẹn';
+    }
+    if (appointmentCancelBtn) {
+      appointmentCancelBtn.classList.toggle('hidden', !appointment.active || !!data.is_received);
+    }
+    if (appointmentHistory) appointmentHistory.innerHTML = '';
+    if (appointmentHistoryEmpty) appointmentHistoryEmpty.classList.toggle('hidden', logs.length > 0);
+    logs.forEach((log) => {
+      const item = document.createElement('li');
+      item.className = 'rounded-lg border border-gray-100 bg-gray-50 p-3 text-[9px]';
+      const title = document.createElement('div');
+      title.className = 'font-semibold text-gray-900';
+      title.textContent = log.action_label || log.action;
+      const detail = document.createElement('div');
+      detail.className = 'mt-1 text-gray-600';
+      detail.textContent = [log.appointment_date, log.reason].filter(Boolean).join(' • ');
+      const audit = document.createElement('div');
+      audit.className = 'mt-1 text-gray-400';
+      audit.textContent = [log.actor, formatDateTime(log.event_at)].filter(Boolean).join(' • ');
+      item.append(title, detail, audit);
+      appointmentHistory?.appendChild(item);
+    });
+  };
+
+  const loadFolderAppointment = async (folderId) => {
+    if (!folderId) return;
+    setAppointmentMsg('Đang tải...', false);
+    try {
+      const response = await fetch(`/api/folder/${folderId}/appointment-v2/`);
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Không tải được lịch hẹn.');
+      renderFolderAppointment(data);
+      setAppointmentMsg('');
+    } catch (error) {
+      setAppointmentMsg(error.message || 'Không tải được lịch hẹn.');
+    }
+  };
+
+  const saveFolderAppointment = async (action) => {
+    if (!activeFolderId) return;
+    if (action === 'cancel' && !window.confirm('Hủy lịch hẹn nhận quyển này?')) return;
+    const button = action === 'cancel' ? appointmentCancelBtn : appointmentSaveBtn;
+    if (button) button.disabled = true;
+    setAppointmentMsg(action === 'cancel' ? 'Đang hủy...' : 'Đang lưu...', false);
+    try {
+      const response = await fetch(`/api/folder/${activeFolderId}/appointment-v2/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN || '' },
+        body: JSON.stringify({
+          action,
+          appointment_date: appointmentDateInput?.value || '',
+          reason: appointmentReasonInput?.value || '',
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Không lưu được lịch hẹn.');
+      setAppointmentMsg(data.message || 'Đã lưu lịch hẹn.', false);
+      await loadFolderAppointment(activeFolderId);
+    } catch (error) {
+      setAppointmentMsg(error.message || 'Không lưu được lịch hẹn.');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  };
+
+  appointmentSaveBtn?.addEventListener('click', () => saveFolderAppointment('schedule'));
+  appointmentCancelBtn?.addEventListener('click', () => saveFolderAppointment('cancel'));
 
   const loadHistory = async (folderId) => {
     if (!folderId || !historyFolderList || !historyFolderEmpty || !historyPackageList || !historyPackageEmpty) return;
@@ -743,6 +891,10 @@
   const updateSingleDrawer = (tr) => {
     activeFolderId = tr.dataset.folderId || null;
     activeRow = tr;
+    if (tabAppointmentBtn) {
+      tabAppointmentBtn.disabled = false;
+      tabAppointmentBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
     document.getElementById('drawer-shop').textContent = tr.dataset.shop || '';
     document.getElementById('drawer-type').textContent = tr.dataset.type || '';
     document.getElementById('drawer-created').textContent = tr.dataset.created || '';
@@ -882,6 +1034,11 @@
     } else {
       selectionTitle.textContent = `Đã chọn ${selected.length} quyển`;
       selectionList.classList.remove('hidden');
+      if (tabAppointmentBtn) {
+        tabAppointmentBtn.disabled = true;
+        tabAppointmentBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      }
+      setDrawerTab('info');
       noteInput.value = '';
       if (drawerIssuePicker) {
         drawerIssuePicker.clearSelection();

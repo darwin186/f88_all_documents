@@ -24,6 +24,8 @@ from urllib.parse import urlencode
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 import csv
+import hashlib
+import hmac
 import json
 import re
 import logging
@@ -82,12 +84,19 @@ from .models import (
     UiPermission,
     FolderIssueType,
     FolderIssue,
+    FolderAppointmentLog,
     UserPresenceDaily,
     UserPresenceHourly,
     BorrowRequestStatus,
     BorrowRequestItemStatus,
     GapoScheduledMessage,
     GapoWebhookEvent,
+    CollateralRegistration,
+    CollateralRegistrationApiToken,
+    CollateralRegistrationExternalIdentity,
+    CollateralRegistrationImportBatch,
+    CollateralRegistrationLog,
+    CollateralRegistrationStatus,
 )
 # Import các form
 from .forms import PackageForm, GapoPasswordResetForm, GapoScheduleForm
@@ -97,6 +106,12 @@ from .utils import get_user_context, check_on_time, UI_SCREENS, ROLE_CODES, ensu
 from .dashboard import parse_dates, get_dashboard_metrics, get_folder_received_metrics
 from .tasks import send_gapo_scheduled_message
 from .utils import require_ui_permission
+from .gddb import (
+    import_collateral_registrations,
+    load_records_from_excel_url,
+    parse_pasted_tabular_records,
+    resolve_intake_field_name,
+)
 from app_admindocuments.models import AdmParcelRecipientCatalog, AdmParcelRecipientImportBatch
 
 AI_STYLE_HINTS = {
@@ -104,6 +119,28 @@ AI_STYLE_HINTS = {
     "friendly": "Viết thân thiện, gần gũi, rõ ràng, tránh từ ngữ quá trang trọng.",
     "fun": "Viết vui vẻ, dí dỏm, tích cực nhưng vẫn lịch sự.",
 }
+
+GDDB_POSTMINI_STATUS_CHOICES = [
+    ("Đã cập nhật", "Đã cập nhật"),
+    ("Chưa cập nhật", "Chưa cập nhật"),
+    ("Đã cập nhật 1 dòng", "Đã cập nhật 1 dòng"),
+]
+
+GDDB_NON_REGISTRATION_REASON_CHOICES = [
+    "Hợp đồng hết hiệu lực",
+    "Hợp đồng đã tất toán",
+    "Hợp đồng không đủ điều kiện đăng ký",
+    "Thông tin hợp đồng/tài sản không hợp lệ",
+    "Trùng giao dịch bảo đảm",
+    "Khác",
+]
+
+GDDB_REGISTRATION_REASON_CHOICES = [
+    "Đăng ký mới",
+    "Đăng ký lại",
+    "Bổ sung/thay đổi thông tin",
+    "Khác",
+]
 
 def _normalize_issue_type_ids(issue_type_ids_raw):
     if not isinstance(issue_type_ids_raw, list):
@@ -142,6 +179,896 @@ def _replace_folder_issues(folder, issue_types, user):
             FolderIssue(folder=folder, issue_type=issue_type, created_by=user)
             for issue_type in issue_types
         ])
+
+
+def _json_body(request):
+    if not request.body:
+        return {}
+    return json.loads(request.body.decode("utf-8"))
+
+
+def _is_gddb_admin(user):
+    return user.is_superuser or user.groups.filter(name="admin").exists()
+
+
+def _is_gddb_checker(user):
+    return user.is_superuser or user.groups.filter(name="checker").exists()
+
+
+def _gddb_current_date():
+    current_time = timezone.now()
+    if timezone.is_aware(current_time):
+        return timezone.localtime(current_time).date()
+    return current_time.date()
+
+
+def _gddb_intake_identity(request):
+    expected_token = (getattr(settings, "GDDB_INTAKE_TOKEN", "") or "").strip()
+    auth_header = request.headers.get("Authorization", "")
+    bearer_token = auth_header.removeprefix("Bearer ").strip() if auth_header.startswith("Bearer ") else ""
+    supplied_tokens = [token.strip() for token in (request.headers.get("X-GDDB-Token", ""), bearer_token) if token.strip()]
+    if not supplied_tokens:
+        return False, None
+
+    for supplied_token in supplied_tokens:
+        token_hash = hashlib.sha256(supplied_token.encode("utf-8")).hexdigest()
+        managed_token = CollateralRegistrationApiToken.objects.select_related("owner").filter(
+            token_hash=token_hash,
+            is_active=True,
+            owner__is_active=True,
+        ).first()
+        if managed_token:
+            managed_token.last_used_at = timezone.now()
+            managed_token.save(update_fields=["last_used_at"])
+            return True, managed_token.owner
+        if expected_token and hmac.compare_digest(supplied_token, expected_token):
+            return True, None
+    return False, None
+
+
+def _gddb_filtered_registrations(request, *, default_pending=True, rollup_days=None):
+    use_default_work_queue = default_pending and "status_present" not in request.GET
+    if "status_present" in request.GET:
+        selected_statuses = [
+            value
+            for value in request.GET.getlist("status")
+            if value in dict(CollateralRegistrationStatus.choices)
+        ]
+    else:
+        selected_statuses = []
+
+    query = (request.GET.get("q") or "").strip()
+    date_from = dateparse.parse_date(request.GET.get("date_from") or "")
+    date_to = dateparse.parse_date(request.GET.get("date_to") or "")
+    registrations = CollateralRegistration.objects.filter(is_duplicate=False)
+    if rollup_days:
+        registrations = registrations.filter(created_at__gte=timezone.now() - timedelta(days=rollup_days))
+    if use_default_work_queue:
+        registrations = registrations.filter(
+            Q(gddb_status=CollateralRegistrationStatus.PENDING)
+            | (
+                Q(gddb_status=CollateralRegistrationStatus.REGISTERED)
+                & ~Q(postmini_updated__in=["Đã cập nhật", "Đã cập nhật 1 dòng"])
+            )
+        )
+    if selected_statuses:
+        registrations = registrations.filter(gddb_status__in=selected_statuses)
+    if query:
+        registrations = registrations.filter(
+            Q(contract_code__icontains=query)
+            | Q(license_plate__icontains=query)
+            | Q(chassis_number__icontains=query)
+            | Q(engine_number__icontains=query)
+            | Q(shop_name__icontains=query)
+        )
+    if date_from:
+        registrations = registrations.filter(registered_at__date__gte=date_from)
+    if date_to:
+        registrations = registrations.filter(registered_at__date__lte=date_to)
+    return registrations, selected_statuses, query, date_from, date_to
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+def gddb_registration_view(request):
+    registrations, selected_statuses, query, date_from, date_to = _gddb_filtered_registrations(
+        request, rollup_days=7
+    )
+    registrations = registrations.select_related("registered_by", "updated_by", "registered_identity")
+    paginator = Paginator(registrations, 50)
+    page_obj = paginator.get_page(request.GET.get("page"))
+    page_query = request.GET.copy()
+    page_query.pop("page", None)
+    pagination_query_prefix = f"{page_query.urlencode()}&" if page_query else ""
+    pagination_range = paginator.get_elided_page_range(page_obj.number, on_each_side=2, on_ends=1)
+    base_qs = CollateralRegistration.objects.filter(
+        is_duplicate=False,
+        created_at__gte=timezone.now() - timedelta(days=7),
+    )
+    pending_count = base_qs.filter(gddb_status=CollateralRegistrationStatus.PENDING).count()
+    registered_count = base_qs.filter(gddb_status=CollateralRegistrationStatus.REGISTERED).count()
+    not_registered_count = base_qs.filter(gddb_status=CollateralRegistrationStatus.NOT_REGISTERED).count()
+    done_count = base_qs.filter(
+        gddb_status=CollateralRegistrationStatus.REGISTERED,
+        postmini_updated__in=["Đã cập nhật", "Đã cập nhật 1 dòng"],
+    ).count()
+    total_count = base_qs.count()
+    active_tab = request.GET.get("tab", "list")
+    allowed_tabs = {"list"}
+    if _is_gddb_admin(request.user):
+        allowed_tabs.update({"api_docs", "manual", "configuration"})
+    if request.user.is_superuser:
+        allowed_tabs.add("tokens")
+    if active_tab not in allowed_tabs:
+        if active_tab != "list":
+            messages.error(request, "Bạn không có quyền truy cập chức năng này.")
+        active_tab = "list"
+    manual_batch = None
+    manual_batch_id = request.GET.get("manual_batch_id")
+    if manual_batch_id:
+        manual_batch = CollateralRegistrationImportBatch.objects.filter(batch_id=manual_batch_id).first()
+    manual_payload_draft = request.session.pop("gddb_manual_payload_draft", "") if active_tab == "manual" else ""
+    api_tokens = CollateralRegistrationApiToken.objects.select_related("owner", "created_by", "revoked_by") if request.user.is_superuser else []
+    new_api_token = request.session.pop("gddb_new_api_token", None) if request.user.is_superuser else None
+    registration_identities = CollateralRegistrationExternalIdentity.objects.filter(is_active=True).order_by("external_code")
+    shop_names = {item.shop_name.strip().casefold() for item in page_obj if item.shop_name and item.shop_name.strip()}
+    suggested_by_shop = {}
+    if shop_names:
+        for shop in Shop.objects.filter(is_shop_active=True, for_borrow_only=False).select_related("default_gddb_identity"):
+            normalized_name = (shop.shop_name or "").strip().casefold()
+            if normalized_name in shop_names and shop.default_gddb_identity and shop.default_gddb_identity.is_active:
+                suggested_by_shop.setdefault(normalized_name, shop.default_gddb_identity)
+    for item in page_obj:
+        item.suggested_identity = suggested_by_shop.get((item.shop_name or "").strip().casefold())
+
+    configuration_identities = []
+    configuration_shops = []
+    pgd_query = (request.GET.get("pgd_q") or "").strip()
+    if active_tab == "configuration":
+        configuration_identities = CollateralRegistrationExternalIdentity.objects.order_by("external_code")
+        configuration_shops = Shop.objects.filter(is_shop_active=True, for_borrow_only=False).select_related(
+            "default_gddb_identity"
+        )
+        if pgd_query:
+            configuration_shops = configuration_shops.filter(
+                Q(shop_name__icontains=pgd_query) | Q(shop_code__icontains=pgd_query)
+            )
+        configuration_shops = configuration_shops.order_by("shop_name")
+    token_owners = User.objects.filter(is_active=True).order_by("username") if request.user.is_superuser else []
+    context = get_user_context(request.user)
+    context.update({
+        "page_obj": page_obj,
+        "status_choices": CollateralRegistrationStatus.choices,
+        "postmini_status_choices": GDDB_POSTMINI_STATUS_CHOICES,
+        "non_registration_reason_choices": GDDB_NON_REGISTRATION_REASON_CHOICES,
+        "registration_reason_choices": GDDB_REGISTRATION_REASON_CHOICES,
+        "registration_identity_choices": registration_identities,
+        "filters": {
+            "status": selected_statuses[0] if len(selected_statuses) == 1 else "",
+            "statuses": selected_statuses,
+            "q": query,
+            "date_from": date_from.isoformat() if date_from else "",
+            "date_to": date_to.isoformat() if date_to else "",
+        },
+        "is_default_work_queue": "status_present" not in request.GET,
+        "selected_status_options": [
+            (value, label) for value, label in CollateralRegistrationStatus.choices if value in selected_statuses
+        ],
+        "pending_count": pending_count,
+        "not_registered_count": not_registered_count,
+        "registered_count": registered_count,
+        "done_count": done_count,
+        "processing_posmini_count": registered_count - done_count,
+        "total_count": total_count,
+        "active_tab": active_tab,
+        "manual_batch": manual_batch,
+        "manual_payload_draft": manual_payload_draft,
+        "api_tokens": api_tokens,
+        "new_api_token": new_api_token,
+        "token_owners": token_owners,
+        "configuration_identities": configuration_identities,
+        "configuration_shops": configuration_shops,
+        "pgd_query": pgd_query,
+        "pagination_range": pagination_range,
+        "pagination_query_prefix": pagination_query_prefix,
+        "can_process_gddb": _is_gddb_checker(request.user),
+        "can_export_gddb": _is_gddb_admin(request.user),
+    })
+    return render(request, "app_documents/app_gddb_registration_v2.html", context)
+
+
+GDDB_INTAKE_FIELD_LABELS = {
+    "external_ref": "ID external",
+    "contract_code": "Mã hợp đồng",
+    "license_plate": "Biển số xe",
+    "chassis_number": "Số khung",
+    "engine_number": "Số máy",
+    "gddb_status": "Trạng thái GDĐB",
+    "contract_status": "Trạng thái hợp đồng",
+    "source_created_date": "Ngày tạo",
+    "disbursement_date": "Ngày giải ngân",
+    "shop_name": "Cửa hàng",
+    "disbursement_source": "Nguồn giải ngân",
+    "post_update_status": "Trạng thái sau cập nhật",
+    "postmini_updated": "Cập nhật PosMini",
+    "source_user": "User đăng ký",
+    "registered_by_name": "User thực hiện đăng ký",
+    "reason": "Lý do",
+    "note": "Ghi chú",
+    "previous_application_no": "Số đơn đăng ký trước đó",
+    "previous_registration_date": "Ngày đăng ký trước đó",
+    "it_ticket_code": "Mã ticket IT",
+    "pgd_note": "Note cho PGD",
+    "source_system": "Hệ thống nguồn",
+}
+
+
+def _parse_gddb_manual_payload(raw_payload):
+    input_mode = "JSON"
+    column_mapping = []
+    if raw_payload.lstrip().startswith(("{", "[")):
+        try:
+            payload = json.loads(raw_payload)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"JSON không hợp lệ: {exc}") from exc
+
+        if isinstance(payload, dict):
+            if payload.get("excel_url") or payload.get("url"):
+                raise ValueError("Submit manual không hỗ trợ excel_url; hãy dán nội dung file trực tiếp.")
+            records = payload.get("records", [])
+            source_type = payload.get("source_type") or "manual_ui"
+            source_url = payload.get("source_url") or "gddb_manual_submit"
+        else:
+            records = payload
+            source_type = "manual_ui"
+            source_url = "gddb_manual_submit"
+        if isinstance(records, list):
+            source_columns = []
+            for record in records[:20]:
+                if not isinstance(record, dict):
+                    continue
+                for key in record:
+                    if key not in source_columns:
+                        source_columns.append(key)
+            column_mapping = [
+                {"source": key, "field": resolve_intake_field_name(key), "value_key": key}
+                for key in source_columns
+            ]
+    else:
+        try:
+            records, input_mode, column_mapping = parse_pasted_tabular_records(raw_payload, include_mapping=True)
+        except ValueError as exc:
+            raise ValueError(f"Không đọc được dữ liệu: {exc}") from exc
+        source_type = "manual_paste"
+        source_url = "gddb_manual_paste"
+
+    if not isinstance(records, list):
+        raise ValueError("records phải là một danh sách.")
+    if any(not isinstance(record, dict) for record in records):
+        raise ValueError("Mỗi phần tử trong records phải là một object dữ liệu.")
+    return records, source_type, source_url, input_mode, column_mapping
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+@require_http_methods(["POST"])
+def gddb_manual_preview_view(request):
+    if not _is_gddb_admin(request.user):
+        return JsonResponse({"success": False, "error": "Chỉ Admin được xem trước dữ liệu GDĐB manual."}, status=403)
+    raw_payload = (request.POST.get("manual_payload") or "").strip()
+    if not raw_payload:
+        return JsonResponse({"success": False, "error": "Vui lòng dán dữ liệu cần xem trước."}, status=400)
+    try:
+        records, _, _, input_mode, column_mapping = _parse_gddb_manual_payload(raw_payload)
+    except ValueError as exc:
+        return JsonResponse({"success": False, "error": str(exc)}, status=400)
+
+    preview_columns = []
+    preview_value_keys = []
+    for mapping in column_mapping:
+        field = mapping.get("field")
+        preview_value_keys.append(mapping.get("value_key") or field or mapping.get("source"))
+        preview_columns.append({
+            "source": mapping.get("source") or "",
+            "field": field or "",
+            "label": GDDB_INTAKE_FIELD_LABELS.get(field, "Không sử dụng"),
+            "ignored": not bool(field),
+        })
+    preview_rows = [
+        [record.get(value_key, "") for value_key in preview_value_keys]
+        for record in records[:5]
+    ]
+    return JsonResponse({
+        "success": True,
+        "input_mode": input_mode,
+        "total_rows": len(records),
+        "columns": preview_columns,
+        "rows": preview_rows,
+        "has_ignored_columns": any(column["ignored"] for column in preview_columns),
+    }, encoder=DjangoJSONEncoder)
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+@require_http_methods(["POST"])
+def gddb_manual_intake_view(request):
+    if not _is_gddb_admin(request.user):
+        messages.error(request, "Chỉ Admin được submit dữ liệu GDĐB manual.")
+        return redirect("gddb_registration_v2")
+    raw_payload = (request.POST.get("manual_payload") or "").strip()
+    if not raw_payload:
+        messages.error(request, "Vui lòng dán JSON hoặc dữ liệu copy từ Excel/Google Sheets.")
+        return redirect(f"{reverse('gddb_registration_v2')}?tab=manual")
+
+    try:
+        records, source_type, source_url, input_mode, _ = _parse_gddb_manual_payload(raw_payload)
+    except ValueError as exc:
+        request.session["gddb_manual_payload_draft"] = raw_payload[:100000]
+        messages.error(request, str(exc))
+        return redirect(f"{reverse('gddb_registration_v2')}?tab=manual")
+
+    batch = import_collateral_registrations(
+        records,
+        user=request.user,
+        source_type=source_type,
+        source_url=source_url,
+    )
+    messages.success(
+        request,
+        (
+            "Đã submit GDĐB manual: "
+            f"nhận dạng {input_mode}; "
+            f"tổng {batch.total_rows}, tạo {batch.created_rows}, cập nhật {batch.updated_rows}, "
+            f"bỏ qua {batch.skipped_rows}, trùng {batch.duplicate_rows}, lỗi {batch.error_rows}."
+        ),
+    )
+    return redirect(f"{reverse('gddb_registration_v2')}?tab=manual&manual_batch_id={batch.batch_id}")
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def api_gddb_intake(request):
+    authorized, token_owner = _gddb_intake_identity(request)
+    if not authorized:
+        return JsonResponse({"success": False, "error": "Unauthorized"}, status=403)
+    try:
+        payload = _json_body(request)
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Payload JSON không hợp lệ."}, status=400)
+
+    excel_url = payload.get("excel_url") or payload.get("url") if isinstance(payload, dict) else ""
+    if excel_url:
+        try:
+            records = load_records_from_excel_url(excel_url)
+        except Exception as exc:
+            return JsonResponse({"success": False, "error": f"Không đọc được Excel URL: {exc}"}, status=400)
+        source_type = "excel_url"
+        source_url = excel_url
+    else:
+        records = payload.get("records", []) if isinstance(payload, dict) else payload
+        source_type = payload.get("source_type", "api") if isinstance(payload, dict) else "api"
+        source_url = payload.get("source_url", "") if isinstance(payload, dict) else ""
+
+    if not isinstance(records, list):
+        return JsonResponse({"success": False, "error": "records phải là một danh sách."}, status=400)
+
+    batch = import_collateral_registrations(
+        records,
+        user=token_owner or (request.user if request.user.is_authenticated else None),
+        source_type=source_type,
+        source_url=source_url,
+    )
+    return JsonResponse({
+        "success": True,
+        "batch_id": batch.batch_id,
+        "total_rows": batch.total_rows,
+        "created_rows": batch.created_rows,
+        "updated_rows": batch.updated_rows,
+        "skipped_rows": batch.skipped_rows,
+        "duplicate_rows": batch.duplicate_rows,
+        "error_rows": batch.error_rows,
+        "summary": batch.summary,
+    })
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+@require_http_methods(["POST"])
+def api_gddb_update(request, registration_id):
+    if not _is_gddb_checker(request.user):
+        return JsonResponse({"success": False, "error": "Chỉ Checker được xử lý giao dịch GDĐB."}, status=403)
+    registration = get_object_or_404(CollateralRegistration, registration_id=registration_id, is_duplicate=False)
+    try:
+        payload = _json_body(request)
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Payload JSON không hợp lệ."}, status=400)
+
+    status = payload.get("gddb_status")
+    if status not in dict(CollateralRegistrationStatus.choices):
+        return JsonResponse({"success": False, "error": "Trạng thái giao dịch bảo đảm không hợp lệ."}, status=400)
+    postmini_updated = payload.get("postmini_updated", registration.postmini_updated) or "Chưa cập nhật"
+    if postmini_updated not in dict(GDDB_POSTMINI_STATUS_CHOICES):
+        return JsonResponse({"success": False, "error": "Trạng thái PosMini không hợp lệ."}, status=400)
+    identity_id = payload.get("registered_identity_id")
+    registered_identity = None
+    if identity_id:
+        try:
+            identity_id = int(identity_id)
+        except (TypeError, ValueError):
+            return JsonResponse({"success": False, "error": "Định danh đăng ký không hợp lệ."}, status=400)
+        registered_identity = CollateralRegistrationExternalIdentity.objects.filter(
+            identity_id=identity_id,
+            is_active=True,
+        ).first()
+        if not registered_identity:
+            return JsonResponse({"success": False, "error": "Định danh đăng ký không hợp lệ hoặc đã ngừng hoạt động."}, status=400)
+    if status == CollateralRegistrationStatus.REGISTERED and not registered_identity:
+        return JsonResponse({"success": False, "error": "Vui lòng xác nhận định danh đã dùng để đăng ký."}, status=400)
+    reason = (payload.get("reason") or "").strip()
+    if status == CollateralRegistrationStatus.NOT_REGISTERED:
+        if reason not in GDDB_NON_REGISTRATION_REASON_CHOICES:
+            return JsonResponse({"success": False, "error": "Vui lòng chọn lý do không đăng ký hợp lệ."}, status=400)
+    elif status == CollateralRegistrationStatus.REGISTERED and reason and reason not in GDDB_REGISTRATION_REASON_CHOICES:
+        return JsonResponse({"success": False, "error": "Lý do/loại đăng ký không hợp lệ."}, status=400)
+
+    old_status = registration.gddb_status
+    old_postmini_status = registration.postmini_updated or "Chưa cập nhật"
+    registration.gddb_status = status
+    registration.post_update_status = dict(CollateralRegistrationStatus.choices)[status]
+    registration.note = payload.get("note", registration.note)
+    registration.reason = reason
+    registration.postmini_updated = postmini_updated
+    registration.source_user = request.user.username
+    registration.previous_application_no = payload.get("previous_application_no", registration.previous_application_no)
+    registration.it_ticket_code = payload.get("it_ticket_code", registration.it_ticket_code)
+    registration.pgd_note = payload.get("pgd_note", registration.pgd_note)
+    registration.registered_identity = registered_identity
+    registration.registered_by_name = registered_identity.external_code if registered_identity else ""
+    registration.updated_by = request.user
+    if status == CollateralRegistrationStatus.REGISTERED:
+        registration.registered_by = request.user
+        if old_status != CollateralRegistrationStatus.REGISTERED or not registration.registered_at:
+            registration.registered_at = timezone.now()
+    else:
+        registration.registered_by = None
+        registration.registered_at = None
+        registration.registered_identity = None
+        registration.registered_by_name = ""
+        registration.postmini_updated = "Chưa cập nhật"
+    registration.save()
+    CollateralRegistrationLog.objects.create(
+        registration=registration,
+        action="status_update",
+        from_status=old_status,
+        to_status=status,
+        note=registration.note,
+        metadata={
+            "reason": registration.reason,
+            "previous_application_no": registration.previous_application_no,
+            "it_ticket_code": registration.it_ticket_code,
+            "pgd_note": registration.pgd_note,
+            "postmini_updated": registration.postmini_updated,
+            "source_user": registration.source_user,
+            "registered_by_name": registration.registered_by_name,
+            "registered_identity_id": registration.registered_identity_id,
+            "from_postmini_status": old_postmini_status,
+            "to_postmini_status": registration.postmini_updated,
+        },
+        created_by=request.user,
+    )
+    return JsonResponse({
+        "success": True,
+        "registration_id": registration.registration_id,
+        "gddb_status": registration.gddb_status,
+        "gddb_status_label": registration.get_gddb_status_display(),
+        "registered_at": registration.registered_at,
+        "source_user": registration.source_user,
+        "registered_identity_id": registration.registered_identity_id,
+        "registered_identity_code": registration.registered_by_name,
+        "postmini_updated": registration.postmini_updated,
+        "post_update_status": registration.post_update_status,
+        "reason": registration.reason,
+    }, encoder=DjangoJSONEncoder)
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+@require_http_methods(["POST"])
+def api_gddb_postmini_update(request, registration_id):
+    if not _is_gddb_checker(request.user):
+        return JsonResponse({"success": False, "error": "Chỉ Checker được cập nhật PosMini."}, status=403)
+    registration = get_object_or_404(CollateralRegistration, registration_id=registration_id, is_duplicate=False)
+    if registration.gddb_status != CollateralRegistrationStatus.REGISTERED:
+        return JsonResponse({"success": False, "error": "Cần xác nhận đăng ký GDĐB trước khi cập nhật PosMini."}, status=400)
+    try:
+        payload = _json_body(request)
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Payload JSON không hợp lệ."}, status=400)
+    postmini_status = payload.get("postmini_updated")
+    if postmini_status not in dict(GDDB_POSTMINI_STATUS_CHOICES):
+        return JsonResponse({"success": False, "error": "Trạng thái PosMini không hợp lệ."}, status=400)
+
+    old_status = registration.postmini_updated or "Chưa cập nhật"
+    registration.postmini_updated = postmini_status
+    registration.updated_by = request.user
+    registration.source_user = request.user.username
+    registration.save(update_fields=["postmini_updated", "updated_by", "source_user", "updated_at"])
+    CollateralRegistrationLog.objects.create(
+        registration=registration,
+        action="postmini_update",
+        note=f"PosMini: {old_status} → {postmini_status}",
+        metadata={"from_postmini_status": old_status, "to_postmini_status": postmini_status},
+        created_by=request.user,
+    )
+    return JsonResponse({
+        "success": True,
+        "postmini_updated": postmini_status,
+        "process_done": postmini_status != "Chưa cập nhật",
+        "source_user": registration.source_user,
+    })
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+def gddb_export_view(request):
+    if not _is_gddb_admin(request.user):
+        return HttpResponse("Bạn không có quyền xuất dữ liệu đối soát GDĐB.", status=403)
+
+    period_type = (request.GET.get("period_type") or "").strip()
+    export_from = export_to = None
+    export_label = ""
+    if period_type == "day":
+        export_from = dateparse.parse_date(request.GET.get("export_day") or "")
+        export_to = export_from
+        export_label = export_from.strftime("%Y%m%d") if export_from else ""
+    elif period_type == "month":
+        try:
+            export_from = datetime.strptime(request.GET.get("export_month") or "", "%Y-%m").date().replace(day=1)
+            export_to = export_from.replace(day=calendar.monthrange(export_from.year, export_from.month)[1])
+            export_label = export_from.strftime("%Y%m")
+        except ValueError:
+            export_from = export_to = None
+    elif period_type == "year":
+        try:
+            export_year = int(request.GET.get("export_year") or "")
+            if not 2000 <= export_year <= 2100:
+                raise ValueError
+            export_from = datetime(export_year, 1, 1).date()
+            export_to = datetime(export_year, 12, 31).date()
+            export_label = str(export_year)
+        except (TypeError, ValueError):
+            export_from = export_to = None
+    elif period_type == "range":
+        export_from = dateparse.parse_date(request.GET.get("export_from") or "")
+        export_to = dateparse.parse_date(request.GET.get("export_to") or "")
+        if export_from and export_to:
+            export_label = f"{export_from:%Y%m%d}-{export_to:%Y%m%d}"
+
+    if not export_from or not export_to or export_from > export_to:
+        messages.error(request, "Vui lòng chọn khoảng thời gian xuất đối soát hợp lệ.")
+        return redirect("gddb_registration_v2")
+
+    registrations = CollateralRegistration.objects.filter(
+        is_duplicate=False,
+        registered_at__date__range=(export_from, export_to),
+    ).select_related(
+        "registered_by", "registered_identity"
+    ).order_by("registered_at", "contract_code")
+    headers = [
+        "Mã hợp đồng",
+        "Biển số xe",
+        "Số khung",
+        "Số máy",
+        "Trạng thái GDĐB",
+        "Trạng thái hợp đồng",
+        "Ngày tạo",
+        "Ngày giải ngân",
+        "Cửa hàng",
+        "Nguồn giải ngân",
+        "Trạng thái cập nhật giao dịch bảo đảm",
+        "Lý do",
+        "Cập nhật PosMini",
+        "User đăng ký",
+        "User thực hiện đăng ký",
+    ]
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Doi soat GDDB"
+    worksheet.append(headers)
+    for cell in worksheet[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="047857")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    status_labels = dict(CollateralRegistrationStatus.choices)
+    for item in registrations.iterator():
+        worksheet.append([
+            item.contract_code,
+            item.license_plate or "",
+            item.chassis_number or "",
+            item.engine_number or "",
+            status_labels.get(item.gddb_status, item.gddb_status),
+            item.contract_status or "",
+            item.source_created_date,
+            item.disbursement_date,
+            item.shop_name or "",
+            item.disbursement_source or "",
+            item.post_update_status or status_labels.get(item.gddb_status, item.gddb_status),
+            item.reason or "",
+            item.postmini_updated or "Chưa cập nhật",
+            item.source_user or "",
+            item.registered_identity.external_code if item.registered_identity else (item.registered_by_name or ""),
+        ])
+    for row in worksheet.iter_rows(min_row=2, min_col=7, max_col=8):
+        for cell in row:
+            cell.number_format = "dd/mm/yyyy"
+    for index, header in enumerate(headers, start=1):
+        worksheet.column_dimensions[get_column_letter(index)].width = min(max(len(header) + 4, 14), 32)
+    worksheet.freeze_panes = "A2"
+    worksheet.auto_filter.ref = worksheet.dimensions
+
+    output = BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    filename = f"doi-soat-gddb-{export_label}.xlsx"
+    response = HttpResponse(
+        output.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+@require_http_methods(["POST"])
+def gddb_token_create_view(request):
+    if not request.user.is_superuser:
+        return HttpResponse("Chỉ Super Admin được quản lý token GDĐB.", status=403)
+    name = (request.POST.get("name") or "").strip()
+    owner = User.objects.filter(pk=request.POST.get("owner_id"), is_active=True).first()
+    if not name or not owner:
+        messages.error(request, "Vui lòng nhập tên token và gán người sở hữu đang hoạt động.")
+        return redirect(f"{reverse('gddb_registration_v2')}?tab=tokens")
+
+    raw_token = f"gddb_{secrets.token_urlsafe(32)}"
+    CollateralRegistrationApiToken.objects.create(
+        name=name,
+        token_hash=hashlib.sha256(raw_token.encode("utf-8")).hexdigest(),
+        token_prefix=raw_token[:12],
+        owner=owner,
+        created_by=request.user,
+    )
+    request.session["gddb_new_api_token"] = raw_token
+    messages.success(request, "Đã tạo token. Hãy sao chép ngay vì token chỉ hiển thị một lần.")
+    return redirect(f"{reverse('gddb_registration_v2')}?tab=tokens")
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+@require_http_methods(["POST"])
+def gddb_token_revoke_view(request, token_id):
+    if not request.user.is_superuser:
+        return HttpResponse("Chỉ Super Admin được quản lý token GDĐB.", status=403)
+    api_token = get_object_or_404(CollateralRegistrationApiToken, token_id=token_id)
+    if api_token.is_active:
+        api_token.is_active = False
+        api_token.revoked_at = timezone.now()
+        api_token.revoked_by = request.user
+        api_token.save(update_fields=["is_active", "revoked_at", "revoked_by"])
+        messages.success(request, f"Đã thu hồi token {api_token.name}.")
+    return redirect(f"{reverse('gddb_registration_v2')}?tab=tokens")
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+@require_http_methods(["POST"])
+def gddb_identity_create_view(request):
+    if not _is_gddb_admin(request.user):
+        return HttpResponse("Chỉ Admin được cấu hình định danh GDĐB.", status=403)
+    external_code = (request.POST.get("external_code") or "").strip()
+    display_name = (request.POST.get("display_name") or "").strip()
+    if not external_code:
+        messages.error(request, "Vui lòng nhập định danh external.")
+    elif not re.fullmatch(r"[A-Za-z0-9._-]+", external_code):
+        messages.error(request, "Định danh chỉ được chứa chữ, số, dấu chấm, gạch dưới hoặc gạch ngang.")
+    elif CollateralRegistrationExternalIdentity.objects.filter(external_code__iexact=external_code).exists():
+        messages.error(request, f"Định danh {external_code} đã tồn tại.")
+    else:
+        CollateralRegistrationExternalIdentity.objects.create(
+            external_code=external_code,
+            display_name=display_name or external_code,
+            created_by=request.user,
+            updated_by=request.user,
+        )
+        messages.success(request, f"Đã tạo định danh {external_code}.")
+    return redirect(f"{reverse('gddb_registration_v2')}?tab=configuration")
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+@require_http_methods(["POST"])
+def gddb_configuration_save_view(request):
+    if not _is_gddb_admin(request.user):
+        return HttpResponse("Chỉ Admin được cấu hình định danh GDĐB.", status=403)
+
+    active_identity_ids = set(request.POST.getlist("active_identity"))
+    with transaction.atomic():
+        for identity in CollateralRegistrationExternalIdentity.objects.all():
+            next_active = str(identity.identity_id) in active_identity_ids
+            if identity.is_active != next_active:
+                identity.is_active = next_active
+                identity.updated_by = request.user
+                identity.save(update_fields=["is_active", "updated_by", "updated_at"])
+
+        valid_identities = {
+            str(identity_id): identity_id
+            for identity_id in CollateralRegistrationExternalIdentity.objects.filter(is_active=True).values_list(
+                "identity_id", flat=True
+            )
+        }
+        submitted_shop_ids = [
+            key.removeprefix("shop_identity_")
+            for key in request.POST
+            if key.startswith("shop_identity_") and key.removeprefix("shop_identity_").isdigit()
+        ]
+        for shop in Shop.objects.filter(
+            is_shop_active=True,
+            for_borrow_only=False,
+            shop_id__in=submitted_shop_ids,
+        ):
+            submitted_id = (request.POST.get(f"shop_identity_{shop.shop_id}") or "").strip()
+            next_identity_id = valid_identities.get(submitted_id)
+            if shop.default_gddb_identity_id != next_identity_id:
+                shop.default_gddb_identity_id = next_identity_id
+                shop.save(update_fields=["default_gddb_identity"])
+
+    messages.success(request, "Đã lưu danh mục định danh và mapping mặc định theo PGD.")
+    return redirect(f"{reverse('gddb_registration_v2')}?tab=configuration")
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+def gddb_shop_mapping_export_view(request):
+    if not _is_gddb_admin(request.user):
+        return HttpResponse("Chỉ Admin được xuất mapping định danh GDĐB.", status=403)
+
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Mapping PGD"
+    worksheet.append(["PGD", "Định danh"])
+    for cell in worksheet[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="047857")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    shops = Shop.objects.filter(is_shop_active=True, for_borrow_only=False).select_related(
+        "default_gddb_identity"
+    ).order_by("shop_name")
+    for shop in shops:
+        worksheet.append([
+            shop.shop_name,
+            shop.default_gddb_identity.external_code
+            if shop.default_gddb_identity and shop.default_gddb_identity.is_active
+            else "",
+        ])
+        for cell in worksheet[worksheet.max_row]:
+            cell.data_type = "s"
+    worksheet.column_dimensions["A"].width = 42
+    worksheet.column_dimensions["B"].width = 24
+    worksheet.freeze_panes = "A2"
+    worksheet.auto_filter.ref = worksheet.dimensions
+
+    output = BytesIO()
+    workbook.save(output)
+    filename = f"mapping-pgd-dinh-danh-gddb-{_gddb_current_date():%Y%m%d}.xlsx"
+    response = HttpResponse(
+        output.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+@require_http_methods(["POST"])
+def gddb_shop_mapping_import_view(request):
+    if not _is_gddb_admin(request.user):
+        return HttpResponse("Chỉ Admin được import mapping định danh GDĐB.", status=403)
+
+    uploaded_file = request.FILES.get("mapping_file")
+    redirect_url = f"{reverse('gddb_registration_v2')}?tab=configuration"
+    if not uploaded_file:
+        messages.error(request, "Vui lòng chọn file Excel mapping.")
+        return redirect(redirect_url)
+    if not uploaded_file.name.lower().endswith(".xlsx"):
+        messages.error(request, "File mapping phải có định dạng .xlsx.")
+        return redirect(redirect_url)
+    if uploaded_file.size > 5 * 1024 * 1024:
+        messages.error(request, "File mapping không được vượt quá 5 MB.")
+        return redirect(redirect_url)
+
+    try:
+        workbook = load_workbook(uploaded_file, read_only=True, data_only=True)
+        worksheet = workbook.active
+        header_values = next(worksheet.iter_rows(min_row=1, max_row=1, values_only=True), None)
+        if header_values is None:
+            raise ValueError("File Excel đang trống.")
+        raw_headers = [str(value).strip() if value is not None else "" for value in header_values]
+        while raw_headers and not raw_headers[-1]:
+            raw_headers.pop()
+        if [header.casefold() for header in raw_headers] != ["pgd", "định danh"]:
+            raise ValueError("Dòng tiêu đề phải có đúng 2 cột: PGD và Định danh.")
+
+        shop_candidates = {}
+        for shop in Shop.objects.filter(is_shop_active=True, for_borrow_only=False):
+            shop_candidates.setdefault(shop.shop_name.strip().casefold(), []).append(shop)
+        identities = {
+            identity.external_code.casefold(): identity
+            for identity in CollateralRegistrationExternalIdentity.objects.filter(is_active=True)
+        }
+
+        errors = []
+        pending_updates = []
+        seen_shops = set()
+        for row_number, values in enumerate(worksheet.iter_rows(min_row=2, values_only=True), start=2):
+            pgd_name = str(values[0]).strip() if len(values) > 0 and values[0] is not None else ""
+            identity_code = str(values[1]).strip() if len(values) > 1 and values[1] is not None else ""
+            if not pgd_name and not identity_code:
+                continue
+            if not pgd_name:
+                errors.append(f"Dòng {row_number}: thiếu PGD.")
+                continue
+
+            normalized_shop = pgd_name.casefold()
+            if normalized_shop in seen_shops:
+                errors.append(f"Dòng {row_number}: PGD '{pgd_name}' bị lặp trong file.")
+                continue
+            seen_shops.add(normalized_shop)
+            candidates = shop_candidates.get(normalized_shop, [])
+            if not candidates:
+                errors.append(f"Dòng {row_number}: không tìm thấy PGD '{pgd_name}'.")
+                continue
+            if len(candidates) > 1:
+                errors.append(f"Dòng {row_number}: có nhiều PGD cùng tên '{pgd_name}', không thể tự động mapping.")
+                continue
+
+            identity = None
+            if identity_code:
+                identity = identities.get(identity_code.casefold())
+                if not identity:
+                    errors.append(f"Dòng {row_number}: định danh '{identity_code}' không tồn tại hoặc đã ngừng dùng.")
+                    continue
+            shop = candidates[0]
+            shop.default_gddb_identity = identity
+            pending_updates.append(shop)
+
+        if errors:
+            for error in errors[:15]:
+                messages.error(request, error)
+            if len(errors) > 15:
+                messages.error(request, f"Còn {len(errors) - 15} lỗi khác. Không có mapping nào được cập nhật.")
+            return redirect(redirect_url)
+        if not pending_updates:
+            messages.error(request, "File không có dòng mapping nào để cập nhật.")
+            return redirect(redirect_url)
+
+        Shop.objects.bulk_update(pending_updates, ["default_gddb_identity"])
+        mapped_count = sum(1 for shop in pending_updates if shop.default_gddb_identity_id)
+        cleared_count = len(pending_updates) - mapped_count
+        messages.success(
+            request,
+            f"Đã import {len(pending_updates)} PGD: mapping {mapped_count}, để trống {cleared_count}.",
+        )
+    except (ValueError, TypeError, KeyError, openpyxl.utils.exceptions.InvalidFileException) as exc:
+        messages.error(request, f"Không đọc được file mapping: {exc}")
+    except Exception as exc:
+        logger.exception("GDDB shop mapping import failed")
+        messages.error(request, f"Import mapping thất bại: {exc}")
+    return redirect(redirect_url)
+
+
 class CustomPasswordResetView(PasswordResetView):
     form_class = GapoPasswordResetForm
     email_template_name = 'registration/password_reset_email.html'
@@ -1769,6 +2696,359 @@ def receive_folder_view_v2(request):
     return render(request, "app_documents/app_document_receiving_v2.html", context)
 
 
+def _folder_appointment_payload(folder):
+    return {
+        'active': folder.folder_appointment,
+        'appointment_date': folder.folder_appointment_date.isoformat() if folder.folder_appointment_date else '',
+        'reason': folder.folder_appointment_reason or '',
+        'created_at': folder.folder_appointment_created_at,
+        'created_by': folder.folder_appointment_created_by.username if folder.folder_appointment_created_by else '',
+        'updated_at': folder.folder_appointment_updated_at,
+        'resolved_at': folder.folder_appointment_resolved_at,
+        'resolved_by': folder.folder_appointment_resolved_by.username if folder.folder_appointment_resolved_by else '',
+    }
+
+
+def _resolve_folder_appointment(folder, user, received_at, *, source):
+    if not folder.folder_appointment:
+        return False
+    folder.folder_appointment = False
+    folder.folder_appointment_resolved_at = timezone.now()
+    folder.folder_appointment_resolved_by = user
+    folder.folder_appointment_updated_at = timezone.now()
+    folder.save(update_fields=[
+        'folder_appointment',
+        'folder_appointment_resolved_at',
+        'folder_appointment_resolved_by',
+        'folder_appointment_updated_at',
+    ])
+    FolderAppointmentLog.objects.create(
+        folder=folder,
+        action=FolderAppointmentLog.ACTION_RECEIVED,
+        appointment_date=folder.folder_appointment_date,
+        reason=folder.folder_appointment_reason,
+        actor=user,
+        metadata={
+            'received_at': received_at.isoformat() if hasattr(received_at, 'isoformat') else str(received_at or ''),
+            'source': source,
+        },
+    )
+    return True
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def api_folder_appointment_v2(request, folder_id):
+    user_context = get_user_context(request.user)
+    if not user_context['is_admin'] and not user_context['is_checker']:
+        return JsonResponse({'success': False, 'error': 'Unauthorized access.'}, status=403)
+
+    appointment_scope = AccessControls.filter_shop_region_based_on_role(request.user)
+    folder = get_object_or_404(
+        Folder.objects.filter(**appointment_scope).select_related(
+            'folder_status_id',
+            'folder_appointment_created_by',
+            'folder_appointment_resolved_by',
+        ),
+        folder_id=folder_id,
+    )
+    if request.method == "GET":
+        logs = list(folder.appointment_logs.select_related('actor').order_by('-event_at')[:30])
+        return JsonResponse({
+            'success': True,
+            'appointment': _folder_appointment_payload(folder),
+            'is_received': bool(folder.folder_status_id and folder.folder_status_id.is_received),
+            'logs': [
+                {
+                    'action': log.action,
+                    'action_label': log.get_action_display(),
+                    'appointment_date': log.appointment_date.isoformat() if log.appointment_date else '',
+                    'reason': log.reason or '',
+                    'event_at': log.event_at,
+                    'actor': log.actor.username if log.actor else '',
+                    'metadata': log.metadata,
+                }
+                for log in logs
+            ],
+        }, encoder=DjangoJSONEncoder)
+
+    try:
+        payload = _json_body(request)
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'error': 'Payload JSON không hợp lệ.'}, status=400)
+    action = (payload.get('action') or 'schedule').strip()
+    now = timezone.now()
+
+    with transaction.atomic():
+        folder = Folder.objects.select_for_update().filter(**appointment_scope).get(folder_id=folder_id)
+        if action == 'cancel':
+            if not folder.folder_appointment:
+                return JsonResponse({'success': False, 'error': 'Quyển hiện không có lịch hẹn đang hoạt động.'}, status=400)
+            folder.folder_appointment = False
+            folder.folder_appointment_resolved_at = now
+            folder.folder_appointment_resolved_by = request.user
+            folder.folder_appointment_updated_at = now
+            folder.save(update_fields=[
+                'folder_appointment',
+                'folder_appointment_resolved_at',
+                'folder_appointment_resolved_by',
+                'folder_appointment_updated_at',
+            ])
+            FolderAppointmentLog.objects.create(
+                folder=folder,
+                action=FolderAppointmentLog.ACTION_CANCELLED,
+                appointment_date=folder.folder_appointment_date,
+                reason=folder.folder_appointment_reason,
+                actor=request.user,
+            )
+        elif action == 'schedule':
+            if folder.folder_status_id and folder.folder_status_id.is_received:
+                return JsonResponse({'success': False, 'error': 'Quyển đã được nhận, không thể tạo lịch hẹn mới.'}, status=400)
+            appointment_date = dateparse.parse_date(payload.get('appointment_date') or '')
+            reason = (payload.get('reason') or '').strip()
+            if not appointment_date:
+                return JsonResponse({'success': False, 'error': 'Vui lòng chọn ngày hẹn nhận quyển.'}, status=400)
+            if appointment_date < _gddb_current_date():
+                return JsonResponse({'success': False, 'error': 'Ngày hẹn không được nhỏ hơn ngày hiện tại.'}, status=400)
+            if not reason:
+                return JsonResponse({'success': False, 'error': 'Vui lòng nhập lý do hẹn nhận quyển.'}, status=400)
+            if len(reason) > 2000:
+                return JsonResponse({'success': False, 'error': 'Lý do không được vượt quá 2.000 ký tự.'}, status=400)
+
+            was_active = folder.folder_appointment
+            old_date = folder.folder_appointment_date
+            old_reason = folder.folder_appointment_reason or ''
+            folder.folder_appointment = True
+            folder.folder_appointment_date = appointment_date
+            folder.folder_appointment_reason = reason
+            folder.folder_appointment_updated_at = now
+            folder.folder_appointment_resolved_at = None
+            folder.folder_appointment_resolved_by = None
+            if not was_active:
+                folder.folder_appointment_created_at = now
+                folder.folder_appointment_created_by = request.user
+            folder.save(update_fields=[
+                'folder_appointment',
+                'folder_appointment_date',
+                'folder_appointment_reason',
+                'folder_appointment_created_at',
+                'folder_appointment_created_by',
+                'folder_appointment_updated_at',
+                'folder_appointment_resolved_at',
+                'folder_appointment_resolved_by',
+            ])
+            FolderAppointmentLog.objects.create(
+                folder=folder,
+                action=(
+                    FolderAppointmentLog.ACTION_RESCHEDULED
+                    if was_active
+                    else FolderAppointmentLog.ACTION_SCHEDULED
+                ),
+                appointment_date=appointment_date,
+                reason=reason,
+                actor=request.user,
+                metadata={
+                    'previous_appointment_date': old_date.isoformat() if old_date else '',
+                    'previous_reason': old_reason,
+                },
+            )
+        else:
+            return JsonResponse({'success': False, 'error': 'Thao tác lịch hẹn không hợp lệ.'}, status=400)
+
+    folder.refresh_from_db()
+    return JsonResponse({
+        'success': True,
+        'message': 'Đã lưu lịch hẹn nhận quyển.' if action == 'schedule' else 'Đã hủy lịch hẹn nhận quyển.',
+        'appointment': _folder_appointment_payload(folder),
+    }, encoder=DjangoJSONEncoder)
+
+
+def _folder_appointment_status_label(folder):
+    if folder.folder_appointment:
+        return 'Đang hẹn'
+    if folder.folder_status_id and folder.folder_status_id.is_received:
+        return 'Đã nhận'
+    if folder.folder_appointment_resolved_at:
+        return 'Đã đóng lịch hẹn'
+    return 'Chưa hẹn'
+
+
+def _parse_folder_appointment_export_period(request):
+    period_type = (request.GET.get('period_type') or '').strip()
+    date_from = date_to = None
+    label = ''
+    if period_type == 'day':
+        date_from = dateparse.parse_date(request.GET.get('export_day') or '')
+        date_to = date_from
+        label = date_from.strftime('%Y%m%d') if date_from else ''
+    elif period_type == 'month':
+        try:
+            date_from = datetime.strptime(request.GET.get('export_month') or '', '%Y-%m').date().replace(day=1)
+            date_to = date_from.replace(day=calendar.monthrange(date_from.year, date_from.month)[1])
+            label = date_from.strftime('%Y%m')
+        except ValueError:
+            date_from = date_to = None
+    elif period_type == 'year':
+        try:
+            year = int(request.GET.get('export_year') or '')
+            if not 2000 <= year <= 2100:
+                raise ValueError
+            date_from = datetime(year, 1, 1).date()
+            date_to = datetime(year, 12, 31).date()
+            label = str(year)
+        except (TypeError, ValueError):
+            date_from = date_to = None
+    elif period_type == 'range':
+        date_from = dateparse.parse_date(request.GET.get('export_from') or '')
+        date_to = dateparse.parse_date(request.GET.get('export_to') or '')
+        if date_from and date_to:
+            label = f'{date_from:%Y%m%d}-{date_to:%Y%m%d}'
+    if not date_from or not date_to or date_from > date_to:
+        raise ValueError('Vui lòng chọn khoảng ngày hẹn hợp lệ.')
+    return date_from, date_to, label
+
+
+@login_required
+def folder_appointment_report_view(request):
+    if not _is_gddb_admin(request.user):
+        return HttpResponse('Chỉ Admin được xem báo cáo hẹn nhận quyển.', status=403)
+    query = (request.GET.get('q') or '').strip()
+    status = (request.GET.get('status') or '').strip()
+    appointments = Folder.objects.filter(folder_appointment_date__isnull=False).select_related(
+        'folder_type_id',
+        'shop_id',
+        'folder_status_id',
+        'folder_appointment_created_by',
+        'folder_appointment_resolved_by',
+        'lastest_received_by',
+    )
+    if query:
+        appointments = appointments.filter(
+            Q(folder_code__icontains=query)
+            | Q(shop_id__shop_name__icontains=query)
+            | Q(shop_id__shop_code__icontains=query)
+        )
+    if status == 'active':
+        appointments = appointments.filter(folder_appointment=True)
+    elif status == 'resolved':
+        appointments = appointments.filter(folder_appointment=False, folder_appointment_resolved_at__isnull=False)
+    appointments = appointments.order_by('folder_appointment_date', 'shop_id__shop_name', 'folder_code')
+    paginator = Paginator(appointments, 50)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    page_query = request.GET.copy()
+    page_query.pop('page', None)
+    context = get_user_context(request.user)
+    context.update({
+        'page_obj': page_obj,
+        'query': query,
+        'status_filter': status,
+        'page_query_prefix': f'{page_query.urlencode()}&' if page_query else '',
+        'total_count': Folder.objects.filter(folder_appointment_date__isnull=False).count(),
+        'active_count': Folder.objects.filter(folder_appointment=True).count(),
+        'resolved_count': Folder.objects.filter(
+            folder_appointment=False,
+            folder_appointment_resolved_at__isnull=False,
+        ).count(),
+    })
+    for folder in page_obj:
+        folder.appointment_status_label = _folder_appointment_status_label(folder)
+    return render(request, 'app_documents/app_folder_appointment_report_v2.html', context)
+
+
+@login_required
+def folder_appointment_export_view(request):
+    if not _is_gddb_admin(request.user):
+        return HttpResponse('Chỉ Admin được xuất báo cáo hẹn nhận quyển.', status=403)
+    try:
+        date_from, date_to, label = _parse_folder_appointment_export_period(request)
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect('folder_appointment_report_v2')
+
+    appointments = Folder.objects.filter(
+        folder_appointment_date__range=(date_from, date_to),
+    ).select_related(
+        'folder_type_id',
+        'shop_id',
+        'folder_status_id',
+        'folder_appointment_created_by',
+        'folder_appointment_resolved_by',
+        'lastest_received_by',
+    ).order_by('folder_appointment_date', 'shop_id__shop_name', 'folder_code')
+    headers = [
+        'Mã quyển',
+        'Loại quyển',
+        'Phòng giao dịch',
+        'Ngày quyển',
+        'Ngày hẹn nhận',
+        'Lý do hẹn',
+        'Trạng thái hẹn',
+        'Trạng thái quyển',
+        'Loại bản',
+        'Trạng thái lỗi',
+        'Đúng/trễ hạn',
+        'Ngày nhận thực tế',
+        'Người tạo hẹn',
+        'Thời gian tạo hẹn',
+        'Người hoàn tất hẹn',
+        'Thời gian hoàn tất hẹn',
+        'Người nhận quyển',
+        'Ghi chú quyển',
+    ]
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = 'Hen nhan quyen'
+    worksheet.append(headers)
+    for cell in worksheet[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = PatternFill('solid', fgColor='047857')
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    for folder in appointments.iterator():
+        timing_status = 'Đúng hạn' if folder.is_on_time else ('Trễ hạn' if folder.is_late else '')
+        worksheet.append([
+            folder.folder_code,
+            folder.folder_type_id.folder_type_name if folder.folder_type_id else '',
+            folder.shop_id.shop_name if folder.shop_id else '',
+            folder.folder_created_date,
+            folder.folder_appointment_date,
+            folder.folder_appointment_reason or '',
+            _folder_appointment_status_label(folder),
+            folder.folder_status_id.folder_status_name if folder.folder_status_id else '',
+            'Bản gốc' if folder.is_original else 'Bản bổ sung',
+            'Có lỗi' if folder.is_issue else ('Không lỗi' if folder.is_issue is False else ''),
+            timing_status,
+            folder.lastest_received_date,
+            folder.folder_appointment_created_by.username if folder.folder_appointment_created_by else '',
+            folder.folder_appointment_created_at,
+            folder.folder_appointment_resolved_by.username if folder.folder_appointment_resolved_by else '',
+            folder.folder_appointment_resolved_at,
+            folder.lastest_received_by.username if folder.lastest_received_by else '',
+            folder.note or '',
+        ])
+    for row in worksheet.iter_rows(min_row=2):
+        for column_index in (4, 5):
+            row[column_index - 1].number_format = 'dd/mm/yyyy'
+        for column_index in (12, 14, 16):
+            cell = row[column_index - 1]
+            if cell.value and timezone.is_aware(cell.value):
+                cell.value = timezone.localtime(cell.value).replace(tzinfo=None)
+            cell.number_format = 'dd/mm/yyyy hh:mm'
+    for index, header in enumerate(headers, start=1):
+        worksheet.column_dimensions[get_column_letter(index)].width = min(max(len(header) + 4, 14), 40)
+    worksheet.freeze_panes = 'A2'
+    worksheet.auto_filter.ref = worksheet.dimensions
+
+    output = BytesIO()
+    workbook.save(output)
+    response = HttpResponse(
+        output.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = f'attachment; filename="hen-nhan-quyen-{label}.xlsx"'
+    return response
+
+
 @login_required
 def api_receive_folder_update_v2(request):
     user_context = get_user_context(request.user)
@@ -1837,6 +3117,13 @@ def api_receive_folder_update_v2(request):
                 'lastest_received_by',
                 'package_id',
             ])
+            if folder_status.is_received:
+                _resolve_folder_appointment(
+                    folder,
+                    request.user,
+                    received_dt,
+                    source='receive_v2_single',
+                )
 
             check_result = check_on_time(folder, received_dt)
 
@@ -2026,6 +3313,13 @@ def bulk_receive_folder_view(request):
                     folder.lastest_received_by = user
                     folder.note = folder_note_choice
                     folder.save()
+                    if folder_status_instance.is_received:
+                        _resolve_folder_appointment(
+                            folder,
+                            user,
+                            lasted_received_date_submit,
+                            source='receive_v2_bulk',
+                        )
                     # Gọi hàm `check_on_time` để kiểm tra và cập nhật trạng thái đúng/trễ hạn
                     check_on_time(folder,lasted_received_date_submit)
                     # Tạo log nhận quyển chứng từ
@@ -3944,6 +5238,13 @@ def receiving_import_save(request):
             folder.folder_status_id = status_received
             folder.package_id = package_obj
             folder.save(update_fields=['lastest_received_date', 'lastest_received_by', 'folder_status_id', 'package_id'])
+            if status_received.is_received:
+                _resolve_folder_appointment(
+                    folder,
+                    receiver,
+                    received_dt,
+                    source='receive_v2_import',
+                )
             updated_folders += 1
 
             check_on_time(folder, received_dt)
@@ -4091,10 +5392,17 @@ def documents_dashboard (request):
         "end_date": end_date.strftime("%Y-%m-%d"),
         "approved_contracts": metrics["approved_contracts"],
         "first_time_contracts": metrics["first_time_contracts"],
+        "total_actions": metrics["total_actions"],
+        "active_checkers_count": metrics["active_checkers_count"],
+        "avg_actions_per_day": metrics["avg_actions_per_day"],
+        "total_reject_actions": metrics["total_reject_actions"],
+        "reject_rate": metrics["reject_rate"],
+        "approval_rate": metrics["approval_rate"],
         "checker_user_id": checker_user_id or "",
         "drop_checkers": metrics["drop_checkers"],
         "heatmap_list": metrics["heatmap_list"],
         "ranking": metrics["ranking"],
+        "status_breakdown": metrics["status_breakdown"],
         "heatmap_mode": heatmap_mode,
     }
     return render(request, 'app_documents/app_dashboard.html', context)

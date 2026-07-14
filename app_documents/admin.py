@@ -20,6 +20,11 @@ from .models import (
     UiScreen,
     UiPermission,
     GapoWebhookEvent,
+    CollateralRegistration,
+    CollateralRegistrationApiToken,
+    CollateralRegistrationExternalIdentity,
+    CollateralRegistrationImportBatch,
+    CollateralRegistrationLog,
 )
 # Register your models here.
 admin.site.site_header = "Chứng từ F88"  
@@ -180,6 +185,54 @@ class GapoWebhookEventAdmin(admin.ModelAdmin):
 
 
 admin.site.register(GapoWebhookEvent, GapoWebhookEventAdmin)
+
+
+class CollateralRegistrationImportBatchAdmin(admin.ModelAdmin):
+    list_display = ('batch_id', 'source_type', 'total_rows', 'created_rows', 'updated_rows', 'skipped_rows', 'duplicate_rows', 'error_rows', 'created_at')
+    list_filter = ('source_type', 'created_at')
+    readonly_fields = ('created_at', 'summary')
+    search_fields = ('source_url',)
+    list_per_page = 25
+admin.site.register(CollateralRegistrationImportBatch, CollateralRegistrationImportBatchAdmin)
+
+
+class CollateralRegistrationApiTokenAdmin(admin.ModelAdmin):
+    list_display = ('name', 'token_prefix', 'owner', 'is_active', 'last_used_at', 'created_at', 'created_by')
+    list_filter = ('is_active', 'created_at', 'last_used_at')
+    search_fields = ('name', 'token_prefix', 'owner__username', 'owner__email')
+    readonly_fields = ('token_hash', 'token_prefix', 'last_used_at', 'created_at', 'created_by', 'revoked_at', 'revoked_by')
+    list_select_related = ('owner', 'created_by', 'revoked_by')
+    list_per_page = 25
+admin.site.register(CollateralRegistrationApiToken, CollateralRegistrationApiTokenAdmin)
+
+
+class CollateralRegistrationExternalIdentityAdmin(admin.ModelAdmin):
+    list_display = ('external_code', 'display_name', 'is_active', 'updated_at', 'updated_by')
+    list_filter = ('is_active',)
+    search_fields = ('external_code', 'display_name')
+    readonly_fields = ('created_at', 'updated_at', 'created_by', 'updated_by')
+    list_per_page = 25
+admin.site.register(CollateralRegistrationExternalIdentity, CollateralRegistrationExternalIdentityAdmin)
+
+
+class CollateralRegistrationAdmin(admin.ModelAdmin):
+    list_display = ('registration_id', 'contract_code', 'license_plate', 'chassis_number', 'engine_number', 'gddb_status', 'shop_name', 'registered_at', 'registered_by')
+    list_filter = ('gddb_status', 'is_duplicate', 'source_system', 'shop_name')
+    search_fields = ('contract_code', 'license_plate', 'chassis_number', 'engine_number', 'previous_application_no', 'it_ticket_code')
+    readonly_fields = ('dedupe_key', 'raw_payload', 'created_at', 'updated_at', 'registered_at')
+    list_select_related = ('registered_by', 'updated_by', 'import_batch')
+    list_per_page = 50
+admin.site.register(CollateralRegistration, CollateralRegistrationAdmin)
+
+
+class CollateralRegistrationLogAdmin(admin.ModelAdmin):
+    list_display = ('log_id', 'registration', 'action', 'from_status', 'to_status', 'created_at', 'created_by')
+    list_filter = ('action', 'created_at')
+    search_fields = ('registration__contract_code', 'registration__license_plate', 'note')
+    readonly_fields = ('created_at', 'metadata')
+    list_select_related = ('registration', 'created_by')
+    list_per_page = 50
+admin.site.register(CollateralRegistrationLog, CollateralRegistrationLogAdmin)
 
 
 class FolderIssueTypeAdmin(admin.ModelAdmin):
@@ -398,9 +451,9 @@ admin.site.register(UserProfile, UserProfileAdmin)
 
 # ShopAdmin
 class ShopAdmin(admin.ModelAdmin):
-    list_display = ('shop_code', 'shop_name', 'shop_email', 'is_shop_active', 'created_date', 'region_id', 'for_borrow_only')
-    list_filter = ('is_shop_active', 'region_id', 'created_date')
-    search_fields = ('shop_code', 'shop_name')
+    list_display = ('shop_code', 'shop_name', 'default_gddb_identity', 'shop_email', 'is_shop_active', 'created_date', 'region_id', 'for_borrow_only')
+    list_filter = ('is_shop_active', 'region_id', 'created_date', 'default_gddb_identity')
+    search_fields = ('shop_code', 'shop_name', 'default_gddb_identity__external_code')
 admin.site.register(Shop, ShopAdmin)
 
 # FolderTypeAdmin

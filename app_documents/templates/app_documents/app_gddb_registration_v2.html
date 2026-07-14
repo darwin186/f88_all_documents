@@ -1,0 +1,968 @@
+{% extends 'app_documents/base_app_documents_v2.html' %}
+{% block title %}Giao dịch bảo đảm{% endblock %}
+{% block top_nav %}
+  {% include 'app_documents/components/top_nav_v2.html' %}
+{% endblock %}
+{% block main_extra_class %}pt-14{% endblock %}
+
+{% block content %}
+<style>
+  body { font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size: 10px; }
+  .panel { border: 1px solid #e5e7eb; background: #fff; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04); }
+  .metric { border: 1px solid #e5e7eb; background: #fff; }
+  .field { height: 34px; border: 1px solid #e5e7eb; background: #f9fafb; border-radius: 8px; padding: 0 10px; }
+  .field:focus { outline: none; border-color: #10b981; background: #fff; box-shadow: none; }
+  .status-filter { min-height: 38px; border: 1px solid #e5e7eb; background: #f9fafb; border-radius: 8px; cursor: pointer; }
+  .status-filter:focus-within { border-color: #10b981; background: #fff; }
+  .status-chip { display: inline-flex; align-items: center; overflow: hidden; border-radius: 7px; border: 1px solid #a7f3d0; background: #34d399; color: #fff; font-size: 10px; font-weight: 700; line-height: 1; }
+  .status-chip button { display: inline-flex; align-items: center; justify-content: center; width: 20px; align-self: stretch; border-left: 1px solid rgba(255,255,255,.45); line-height: 1; }
+  .status-pill { display: inline-flex; align-items: center; border-radius: 9999px; padding: 4px 8px; font-size: 9px; font-weight: 700; white-space: nowrap; }
+  .status-pending { background: #fef3c7; color: #92400e; }
+  .status-registered { background: #dcfce7; color: #166534; }
+  .status-not-registered { background: #fee2e2; color: #991b1b; }
+  .toast { position: fixed; top: 76px; right: 16px; z-index: 60; min-width: 240px; max-width: 360px; border-radius: 12px; border: 1px solid #e5e7eb; background: #fff; box-shadow: 0 12px 24px rgba(15,23,42,.12); padding: 12px; font-size: 10px; }
+  .toast-success { border-color: #bbf7d0; color: #166534; }
+  .toast-error { border-color: #fecaca; color: #991b1b; }
+  .code-block { overflow-x: auto; border-radius: 10px; border: 1px solid #e5e7eb; background: #111827; color: #f9fafb; padding: 12px; font-size: 10px; line-height: 1.6; }
+  .doc-table th, .doc-table td { border-bottom: 1px solid #f3f4f6; padding: 8px 10px; text-align: left; vertical-align: top; }
+  .drawer-backdrop { position: fixed; inset: 0; z-index: 70; background: rgba(15, 23, 42, .35); }
+  .drawer-panel { position: fixed; inset: 0 0 0 auto; z-index: 80; width: min(620px, 94vw); overflow-y: auto; background: #fff; box-shadow: -18px 0 36px rgba(15, 23, 42, .14); }
+</style>
+
+<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
+  <div id="gddb-toast" class="toast hidden"></div>
+  {% if messages %}
+  <div class="space-y-2">
+    {% for message in messages %}
+    <div class="rounded-lg border px-3 py-2 text-[10px] {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-800{% elif message.tags == 'success' %}border-emerald-200 bg-emerald-50 text-emerald-800{% else %}border-gray-200 bg-white text-gray-700{% endif %}">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="panel flex flex-wrap items-center justify-between gap-3 rounded-lg px-3 py-2 text-[10px]">
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+      <span class="font-bold text-gray-700">Tổng 7 ngày <strong class="ml-1 text-gray-900">{{ total_count }}</strong></span>
+      <span class="text-amber-700">Chưa đăng ký <strong class="ml-1">{{ pending_count }}</strong></span>
+      <span class="text-red-700">Không đăng ký <strong class="ml-1">{{ not_registered_count }}</strong></span>
+      <span class="text-blue-700">Chờ PosMini <strong class="ml-1">{{ processing_posmini_count }}</strong></span>
+      <span class="text-emerald-700">Hoàn tất <strong class="ml-1">{{ done_count }}</strong></span>
+    </div>
+    {% if active_tab == 'list' and page_obj.paginator.num_pages > 1 %}
+    <nav class="ml-auto flex items-center gap-1" aria-label="Phân trang">
+      {% if page_obj.has_previous %}<a href="?{{ pagination_query_prefix }}page=1" class="flex h-7 min-w-7 items-center justify-center rounded border border-gray-200 px-1 font-bold hover:border-emerald-400 hover:text-emerald-700" title="Trang đầu">&lt;&lt;</a>{% else %}<span class="flex h-7 min-w-7 items-center justify-center rounded border border-gray-100 px-1 text-gray-300">&lt;&lt;</span>{% endif %}
+      {% for page_number in pagination_range %}
+        {% if page_number == '…' %}<span class="flex h-7 min-w-7 items-center justify-center text-gray-400">…</span>
+        {% elif page_number == page_obj.number %}<span class="flex h-7 min-w-7 items-center justify-center rounded border border-emerald-600 bg-emerald-600 px-1 font-bold text-white">{{ page_number }}</span>
+        {% else %}<a href="?{{ pagination_query_prefix }}page={{ page_number }}" class="flex h-7 min-w-7 items-center justify-center rounded border border-gray-200 px-1 font-bold hover:border-emerald-400 hover:text-emerald-700">{{ page_number }}</a>{% endif %}
+      {% endfor %}
+      {% if page_obj.has_next %}<a href="?{{ pagination_query_prefix }}page={{ page_obj.paginator.num_pages }}" class="flex h-7 min-w-7 items-center justify-center rounded border border-gray-200 px-1 font-bold hover:border-emerald-400 hover:text-emerald-700" title="Trang cuối">&gt;&gt;</a>{% else %}<span class="flex h-7 min-w-7 items-center justify-center rounded border border-gray-100 px-1 text-gray-300">&gt;&gt;</span>{% endif %}
+    </nav>
+    {% endif %}
+  </div>
+
+  {% if active_tab == 'api_docs' %}
+  <div class="panel rounded-xl p-4 space-y-4">
+    <div>
+      <div class="text-[13px] font-bold text-gray-900">Tài liệu API intake GDĐB</div>
+      <div class="text-[10px] text-gray-500">Dành cho Prefect flow f88_product_pool đẩy dữ liệu đã xử lý lên Production.</div>
+    </div>
+
+    <div class="grid gap-3 lg:grid-cols-2">
+      <div class="rounded-xl border border-gray-100 p-3">
+        <div class="mb-2 text-[10px] font-bold text-gray-800">Endpoint</div>
+        <pre class="code-block">POST {{ request.scheme }}://{{ request.get_host }}{% url 'api_gddb_intake' %}</pre>
+      </div>
+      <div class="rounded-xl border border-gray-100 p-3">
+        <div class="mb-2 text-[10px] font-bold text-gray-800">Authorization</div>
+        <pre class="code-block">Authorization: Bearer &lt;GDDB_INTAKE_TOKEN&gt;
+X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
+        <p class="mt-2 text-[9px] text-gray-500">Chỉ cần gửi một trong hai header. Token được Super Admin tạo và gán cho một tài khoản cụ thể.</p>
+      </div>
+    </div>
+
+    <div class="rounded-xl border border-gray-100 p-3">
+      <div class="mb-2 text-[10px] font-bold text-gray-800">Payload khuyến nghị</div>
+      <pre class="code-block">{
+  "records": [
+    {
+      "contract_code": "HD001",
+      "license_plate": "30A12345",
+      "chassis_number": "RLH...",
+      "engine_number": "E123",
+      "gddb_status": "pending",
+      "contract_status": "Đang vay",
+      "source_created_date": "2026-06-18",
+      "disbursement_date": "2026-06-18",
+      "shop_name": "PGD Hà Nội",
+      "disbursement_source": "Prefect",
+      "postmini_updated": "Chưa cập nhật",
+      "source_user": "f88_product_pool",
+      "reason": "",
+      "note": "",
+      "previous_application_no": "",
+      "previous_registration_date": "",
+      "registered_by_name": "",
+      "it_ticket_code": "",
+      "pgd_note": "",
+      "source_system": "f88_product_pool",
+      "external_ref": "optional-id"
+    }
+  ],
+  "source_type": "prefect",
+  "source_url": "f88_product_pool"
+}</pre>
+    </div>
+
+    <div class="rounded-xl border border-gray-100 p-3">
+      <div class="mb-2 text-[10px] font-bold text-gray-800">Field mapping</div>
+      <div class="overflow-x-auto">
+        <table class="doc-table min-w-full text-[10px]">
+          <thead class="bg-gray-50 text-[9px] uppercase text-gray-500">
+            <tr>
+              <th>Field</th>
+              <th>Bắt buộc</th>
+              <th>Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="font-semibold">contract_code</td><td>Có</td><td>Mã hợp đồng. Thiếu field này sẽ được ghi lỗi theo dòng.</td></tr>
+            <tr><td class="font-semibold">license_plate</td><td>Không</td><td>Biển số xe, dùng trong dedupe.</td></tr>
+            <tr><td class="font-semibold">chassis_number</td><td>Không</td><td>Số khung, dùng trong dedupe.</td></tr>
+            <tr><td class="font-semibold">engine_number</td><td>Không</td><td>Số máy, dùng trong dedupe.</td></tr>
+            <tr><td class="font-semibold">gddb_status</td><td>Không</td><td>Nhận pending/registered hoặc tiếng Việt tương ứng. Mặc định pending.</td></tr>
+            <tr><td class="font-semibold">source_created_date, disbursement_date, previous_registration_date</td><td>Không</td><td>Ưu tiên YYYY-MM-DD; hệ thống cũng parse dd/mm/YYYY, dd-mm-YYYY và serial Excel.</td></tr>
+            <tr><td class="font-semibold">postmini_updated, registered_by_name, reason, note, it_ticket_code, pgd_note</td><td>Không</td><td>Các field phục vụ xử lý trên UI.</td></tr>
+            <tr><td class="font-semibold">source_system, external_ref</td><td>Không</td><td>Thông tin truy vết nguồn; hiện chưa dùng làm khóa dedupe.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="grid gap-3 lg:grid-cols-2">
+      <div class="rounded-xl border border-gray-100 p-3">
+        <div class="mb-2 text-[10px] font-bold text-gray-800">Response thành công</div>
+        <pre class="code-block">{
+  "success": true,
+  "batch_id": 123,
+  "total_rows": 10,
+  "created_rows": 7,
+  "updated_rows": 2,
+  "skipped_rows": 1,
+  "duplicate_rows": 0,
+  "error_rows": 0,
+  "summary": {"errors": []}
+}</pre>
+      </div>
+      <div class="rounded-xl border border-gray-100 p-3">
+        <div class="mb-2 text-[10px] font-bold text-gray-800">Lỗi thường gặp</div>
+        <ul class="space-y-2 text-[10px] text-gray-600">
+          <li><span class="font-semibold text-gray-800">403 Unauthorized:</span> thiếu/sai token, token đã bị thu hồi hoặc người sở hữu đã ngừng hoạt động.</li>
+          <li><span class="font-semibold text-gray-800">400 Payload JSON không hợp lệ:</span> body không parse được JSON.</li>
+          <li><span class="font-semibold text-gray-800">400 records phải là một danh sách:</span> records không phải array.</li>
+          <li><span class="font-semibold text-gray-800">error_rows:</span> dòng thiếu contract_code hoặc lỗi dữ liệu từng record.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-[10px] text-emerald-900">
+      Rule dedupe Production giữ nguyên: hash từ contract_code + license_plate + chassis_number + engine_number sau khi trim, uppercase và bỏ khoảng trắng. Record cùng key đã registered sẽ bị skip; record cùng key chưa registered sẽ được cập nhật.
+    </div>
+  </div>
+  {% elif active_tab == 'tokens' %}
+  <div class="grid gap-4 lg:grid-cols-[360px_1fr]">
+    <div class="panel rounded-xl p-4">
+      <div class="text-[13px] font-bold text-gray-900">Tạo token intake</div>
+      <div class="mt-1 text-[10px] text-gray-500">Mỗi token phải gắn với một tài khoản để truy vết người/luồng gửi dữ liệu.</div>
+      {% if new_api_token %}
+      <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+        <div class="text-[9px] font-bold uppercase text-amber-800">Token mới — chỉ hiển thị một lần</div>
+        <div class="mt-2 flex gap-2">
+          <input id="new-gddb-token" readonly value="{{ new_api_token }}" class="field min-w-0 flex-1 font-mono text-[9px]">
+          <button type="button" data-copy-token class="rounded-lg bg-amber-700 px-3 py-2 font-bold text-white">Sao chép</button>
+        </div>
+      </div>
+      {% endif %}
+      <form method="post" action="{% url 'gddb_token_create' %}" class="mt-4 space-y-3">
+        {% csrf_token %}
+        <label class="block">
+          <span class="mb-1 block font-semibold text-gray-700">Tên token</span>
+          <input name="name" maxlength="100" required class="field w-full" placeholder="Ví dụ: Prefect Production">
+        </label>
+        <label class="block">
+          <span class="mb-1 block font-semibold text-gray-700">Gán thông tin cá nhân</span>
+          <select name="owner_id" required class="field w-full">
+            <option value="">Chọn người sở hữu</option>
+            {% for owner in token_owners %}
+            <option value="{{ owner.id }}">{{ owner.get_full_name|default:owner.username }} — {{ owner.username }}{% if owner.email %} — {{ owner.email }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button class="w-full rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700">Tạo token</button>
+      </form>
+    </div>
+    <div class="panel overflow-hidden rounded-xl">
+      <div class="border-b border-gray-100 p-4">
+        <div class="text-[13px] font-bold text-gray-900">Danh sách token</div>
+        <div class="text-[10px] text-gray-500">Hệ thống chỉ lưu hash; không thể xem lại giá trị token sau khi tạo.</div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-[10px]">
+          <thead class="bg-gray-50 text-left text-[9px] uppercase text-gray-500"><tr><th class="px-3 py-2">Token</th><th class="px-3 py-2">Người sở hữu</th><th class="px-3 py-2">Sử dụng gần nhất</th><th class="px-3 py-2">Trạng thái</th><th class="px-3 py-2"></th></tr></thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for token in api_tokens %}
+            <tr>
+              <td class="px-3 py-3"><div class="font-semibold">{{ token.name }}</div><div class="font-mono text-[9px] text-gray-500">{{ token.token_prefix }}...</div></td>
+              <td class="px-3 py-3"><div>{{ token.owner.get_full_name|default:token.owner.username }}</div><div class="text-[9px] text-gray-500">{{ token.owner.username }}{% if token.owner.email %} · {{ token.owner.email }}{% endif %}</div></td>
+              <td class="px-3 py-3">{{ token.last_used_at|date:"d/m/Y H:i"|default:"Chưa sử dụng" }}</td>
+              <td class="px-3 py-3">{% if token.is_active %}<span class="status-pill status-registered">Đang hoạt động</span>{% else %}<span class="status-pill status-pending">Đã thu hồi</span>{% endif %}</td>
+              <td class="px-3 py-3 text-right">{% if token.is_active %}<form method="post" action="{% url 'gddb_token_revoke' token.token_id %}" onsubmit="return confirm('Thu hồi token này?');">{% csrf_token %}<button class="rounded-lg border border-red-200 px-3 py-2 font-bold text-red-700">Thu hồi</button></form>{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="px-3 py-8 text-center text-gray-500">Chưa có token được quản lý.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% elif active_tab == 'configuration' %}
+  <div class="grid gap-4 lg:grid-cols-[320px_1fr]">
+    <div class="space-y-4">
+      <div class="panel rounded-xl p-4">
+        <div class="text-[13px] font-bold text-gray-900">Thêm định danh external</div>
+        <div class="mt-1 text-[9px] text-gray-500">Ví dụ: ketoan, ketoan1. Đây không phải tài khoản đăng nhập nội bộ.</div>
+        <form method="post" action="{% url 'gddb_identity_create' %}" class="mt-3 space-y-3">
+          {% csrf_token %}
+          <input name="external_code" required maxlength="100" class="field w-full" placeholder="Định danh external">
+          <input name="display_name" maxlength="255" class="field w-full" placeholder="Tên hiển thị (không bắt buộc)">
+          <button class="w-full rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white">Thêm định danh</button>
+        </form>
+      </div>
+      <div class="panel rounded-xl p-4">
+        <div class="text-[11px] font-bold text-gray-900">Danh mục hiện có</div>
+        <div class="mt-3 space-y-2 text-[10px]">
+          {% for identity in configuration_identities %}
+          <div class="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2">
+            <div><div class="font-semibold">{{ identity.external_code }}</div><div class="text-[9px] text-gray-500">{{ identity.display_name }}</div></div>
+            <span class="status-pill {% if identity.is_active %}status-registered{% else %}status-pending{% endif %}">{% if identity.is_active %}Hoạt động{% else %}Ngừng dùng{% endif %}</span>
+          </div>
+          {% empty %}<div class="text-gray-500">Chưa có định danh.</div>{% endfor %}
+        </div>
+      </div>
+      <div class="panel rounded-xl p-4">
+        <div class="text-[11px] font-bold text-gray-900">Excel mapping PGD</div>
+        <div class="mt-1 text-[9px] text-gray-500">File gồm đúng hai cột: PGD và Định danh. Để trống Định danh nếu muốn xóa mapping của PGD.</div>
+        <a href="{% url 'gddb_shop_mapping_export' %}" class="mt-3 flex w-full items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 font-bold text-emerald-700">Tải file Excel</a>
+        <form method="post" action="{% url 'gddb_shop_mapping_import' %}" enctype="multipart/form-data" class="mt-3 space-y-2">
+          {% csrf_token %}
+          <input type="file" name="mapping_file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required class="block w-full rounded-lg border border-gray-200 bg-gray-50 p-2 text-[9px] file:mr-2 file:rounded-md file:border-0 file:bg-gray-200 file:px-2 file:py-1 file:font-semibold">
+          <button class="w-full rounded-lg bg-gray-900 px-3 py-2 font-bold text-white">Upload và cập nhật</button>
+        </form>
+      </div>
+    </div>
+    <div class="space-y-3">
+    <form method="get" action="{% url 'gddb_registration_v2' %}" class="panel flex items-center gap-2 rounded-xl p-3">
+      <input type="hidden" name="tab" value="configuration">
+      <input name="pgd_q" value="{{ pgd_query }}" class="field min-w-0 flex-1" placeholder="Tìm theo tên hoặc mã PGD">
+      <button class="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white">Tìm PGD</button>
+      {% if pgd_query %}<a href="{% url 'gddb_registration_v2' %}?tab=configuration" class="rounded-lg border border-gray-200 px-3 py-2 font-bold text-gray-600">Xóa lọc</a>{% endif %}
+    </form>
+    <form method="post" action="{% url 'gddb_configuration_save' %}" class="panel overflow-hidden rounded-xl">
+      {% csrf_token %}
+      <div class="flex items-center justify-between gap-3 border-b border-gray-100 p-4">
+        <div><div class="text-[13px] font-bold text-gray-900">Mapping mặc định theo PGD</div><div class="text-[9px] text-gray-500">Checker sẽ nhìn thấy định danh đề xuất nhưng vẫn phải xác nhận lại định danh thực tế.</div></div>
+        <button class="rounded-lg bg-gray-900 px-4 py-2 font-bold text-white">Lưu cấu hình</button>
+      </div>
+      <div class="border-b border-gray-100 bg-gray-50 px-4 py-3">
+        <div class="mb-2 text-[9px] font-bold uppercase text-gray-500">Định danh được phép sử dụng</div>
+        <div class="flex flex-wrap gap-3">
+          {% for identity in configuration_identities %}
+          <label class="flex items-center gap-2"><input type="checkbox" name="active_identity" value="{{ identity.identity_id }}" {% if identity.is_active %}checked{% endif %} class="accent-emerald-600">{{ identity.external_code }}</label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="max-h-[620px] overflow-y-auto">
+        <table class="min-w-full text-[10px]">
+          <thead class="sticky top-0 bg-gray-50 text-left text-[9px] uppercase text-gray-500"><tr><th class="px-4 py-2">PGD</th><th class="px-4 py-2">Định danh mặc định</th></tr></thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for shop in configuration_shops %}
+            <tr><td class="px-4 py-2"><div class="font-semibold">{{ shop.shop_name }}</div><div class="text-[9px] text-gray-500">{{ shop.shop_code|default:"-" }}</div></td><td class="px-4 py-2"><select name="shop_identity_{{ shop.shop_id }}" class="field w-full"><option value=""></option>{% for identity in configuration_identities %}<option value="{{ identity.identity_id }}" {% if shop.default_gddb_identity_id == identity.identity_id %}selected{% endif %} {% if not identity.is_active %}disabled{% endif %}>{{ identity.external_code }}</option>{% endfor %}</select></td></tr>
+            {% empty %}<tr><td colspan="2" class="px-4 py-8 text-center text-gray-500">Không có PGD đang hoạt động.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </form>
+    </div>
+  </div>
+  {% elif active_tab == 'manual' %}
+  <div class="panel rounded-xl p-4 space-y-4">
+    <div>
+      <div class="text-[13px] font-bold text-gray-900">Submit manual GDĐB</div>
+      <div class="text-[10px] text-gray-500">Dán trực tiếp dữ liệu từ Excel/Google Sheets, CSV hoặc JSON. Hệ thống tự nhận diện định dạng và chạy cùng logic import với API.</div>
+    </div>
+
+    <div class="grid gap-2 sm:grid-cols-3">
+      <div class="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2"><div class="font-bold text-emerald-800">Copy từ bảng</div><div class="mt-1 text-[9px] text-emerald-700">Có hoặc không có dòng tiêu đề.</div></div>
+      <div class="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2"><div class="font-bold text-blue-800">CSV</div><div class="mt-1 text-[9px] text-blue-700">Nhận dấu phẩy, chấm phẩy hoặc |.</div></div>
+      <div class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"><div class="font-bold text-gray-800">JSON</div><div class="mt-1 text-[9px] text-gray-600">Giữ tương thích payload API hiện tại.</div></div>
+    </div>
+
+    {% if manual_batch %}
+    <div class="grid gap-2 md:grid-cols-6">
+      <div class="metric rounded-lg p-3"><div class="text-[8px] uppercase text-gray-500">Tổng</div><div class="mt-1 text-lg font-bold">{{ manual_batch.total_rows }}</div></div>
+      <div class="metric rounded-lg p-3"><div class="text-[8px] uppercase text-gray-500">Tạo</div><div class="mt-1 text-lg font-bold text-emerald-700">{{ manual_batch.created_rows }}</div></div>
+      <div class="metric rounded-lg p-3"><div class="text-[8px] uppercase text-gray-500">Cập nhật</div><div class="mt-1 text-lg font-bold text-blue-700">{{ manual_batch.updated_rows }}</div></div>
+      <div class="metric rounded-lg p-3"><div class="text-[8px] uppercase text-gray-500">Bỏ qua</div><div class="mt-1 text-lg font-bold text-gray-700">{{ manual_batch.skipped_rows }}</div></div>
+      <div class="metric rounded-lg p-3"><div class="text-[8px] uppercase text-gray-500">Trùng</div><div class="mt-1 text-lg font-bold text-amber-700">{{ manual_batch.duplicate_rows }}</div></div>
+      <div class="metric rounded-lg p-3"><div class="text-[8px] uppercase text-gray-500">Lỗi</div><div class="mt-1 text-lg font-bold text-red-700">{{ manual_batch.error_rows }}</div></div>
+    </div>
+    {% if manual_batch.summary.errors %}
+    <div class="rounded-xl border border-red-100 bg-red-50 p-3">
+      <div class="mb-2 text-[10px] font-bold text-red-800">Lỗi import</div>
+      <pre class="overflow-x-auto text-[10px] text-red-900">{{ manual_batch.summary.errors }}</pre>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <form method="post" action="{% url 'gddb_manual_intake' %}" data-manual-form data-preview-url="{% url 'gddb_manual_preview' %}" class="space-y-3">
+      {% csrf_token %}
+      <textarea name="manual_payload" data-manual-payload rows="18" class="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 font-mono text-[10px] text-gray-800 focus:border-emerald-500 focus:bg-white focus:outline-none" placeholder="Dán các dòng đã copy từ Excel/Google Sheets vào đây…">{{ manual_payload_draft }}</textarea>
+      <div data-manual-detection class="hidden rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-[9px] font-semibold text-blue-700"></div>
+      <div class="flex items-center justify-between gap-3">
+        <div class="text-[9px] text-gray-500">
+          <div>Không tiêu đề: hỗ trợ 10 cột chuẩn, hoặc 11 cột nếu cột đầu là STT/ID external.</div>
+          <details class="mt-1"><summary class="cursor-pointer font-semibold text-emerald-700">Xem thứ tự 10 cột chuẩn</summary><div class="mt-1 max-w-4xl leading-5">Mã hợp đồng · Biển số xe · Số khung · Số máy · Trạng thái GDĐB · Trạng thái hợp đồng · Ngày tạo · Ngày giải ngân · Cửa hàng · Nguồn giải ngân. Cũng nhận 14 cột theo file đối soát.</div></details>
+        </div>
+        <button type="button" data-manual-preview class="shrink-0 rounded-lg bg-emerald-600 px-4 py-2 text-[10px] font-bold text-white hover:bg-emerald-700">Xem mapping</button>
+      </div>
+    </form>
+
+    <div id="gddb-manual-preview-modal" class="fixed inset-0 z-[90] hidden items-center justify-center p-3" aria-hidden="true">
+      <button type="button" class="absolute inset-0 bg-gray-900/40" data-manual-preview-close aria-label="Đóng"></button>
+      <div class="relative z-10 flex max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="flex items-start justify-between border-b border-gray-100 p-4">
+          <div><div class="text-[13px] font-bold text-gray-900">Kiểm tra mapping trước khi submit</div><div data-manual-preview-summary class="mt-1 text-[9px] text-gray-500"></div></div>
+          <button type="button" data-manual-preview-close class="rounded-lg p-2 text-lg leading-none text-gray-400 hover:bg-gray-100">×</button>
+        </div>
+        <div class="overflow-auto p-4">
+          <div data-manual-preview-warning class="mb-3 hidden rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-semibold text-amber-800">Có cột chưa được nhận diện và sẽ không được import. Hãy kiểm tra kỹ các cột màu vàng.</div>
+          <table class="min-w-full border-separate border-spacing-0 text-[9px]">
+            <thead><tr data-manual-preview-head></tr></thead>
+            <tbody data-manual-preview-body></tbody>
+          </table>
+          <div class="mt-2 text-[9px] text-gray-500">Hiển thị tối đa 5 dòng đầu. Dữ liệu chỉ được import sau khi bấm “Xác nhận submit”.</div>
+        </div>
+        <div class="flex flex-col-reverse gap-2 border-t border-gray-100 p-4 sm:flex-row sm:justify-end">
+          <button type="button" data-manual-preview-close class="rounded-lg border border-gray-200 px-4 py-2 font-bold text-gray-700">Quay lại chỉnh sửa</button>
+          <button type="button" data-manual-submit-confirm class="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700">Xác nhận submit</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="panel rounded-xl p-3">
+    <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <div class="text-[13px] font-bold text-gray-900">Giao dịch bảo đảm</div>
+        <div class="text-[10px] text-gray-500">Theo dõi hợp đồng và tài sản cần đăng kí giao dịch bảo đảm.</div>
+      </div>
+      <form id="gddb-filter-form" method="get" action="{% url 'gddb_registration_v2' %}" class="flex flex-wrap items-center gap-3">
+        <input name="q" value="{{ filters.q }}" class="field w-60 text-[10px]" placeholder="Tìm HĐ, biển số, số khung, số máy">
+        <input type="date" name="date_from" value="{{ filters.date_from }}" class="field text-[10px]" title="Đăng ký từ ngày">
+        <input type="date" name="date_to" value="{{ filters.date_to }}" class="field text-[10px]" title="Đăng ký đến ngày">
+        <input type="hidden" name="status_present" value="1">
+        <div class="relative w-[360px]" data-status-filter>
+          <div class="status-filter flex w-full items-center justify-between gap-2 px-2 py-1 text-left" data-status-toggle role="button" tabindex="0" aria-expanded="false">
+            <span class="flex min-w-0 flex-1 flex-wrap items-center gap-1" data-status-chip-wrap>
+              {% for value,label in selected_status_options %}
+              <span class="status-chip" data-status-chip="{{ value }}">
+                <span class="px-2 py-1.5">{{ label }}</span>
+                <button type="button" data-status-remove="{{ value }}" aria-label="Bỏ lọc {{ label }}">×</button>
+              </span>
+              {% empty %}
+              <span class="px-1 text-[10px] text-gray-500">{% if is_default_work_queue %}Cần xử lý{% else %}Chọn trạng thái{% endif %}</span>
+              {% endfor %}
+            </span>
+            <span class="shrink-0 text-gray-400">⌄</span>
+          </div>
+          <div class="absolute left-0 top-full z-30 mt-1 hidden w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg" data-status-menu>
+            <label class="flex cursor-pointer items-center justify-between px-3 py-2 text-[10px] font-bold text-gray-700 hover:bg-gray-50">
+              <span>Chưa đăng kí</span>
+              <input type="checkbox" name="status" value="pending" class="h-3 w-3 accent-emerald-600" {% if 'pending' in filters.statuses %}checked{% endif %}>
+            </label>
+            <label class="flex cursor-pointer items-center justify-between px-3 py-2 text-[10px] font-bold text-gray-700 hover:bg-gray-50">
+              <span>Đã đăng kí</span>
+              <input type="checkbox" name="status" value="registered" class="h-3 w-3 accent-emerald-600" {% if 'registered' in filters.statuses %}checked{% endif %}>
+            </label>
+            <label class="flex cursor-pointer items-center justify-between px-3 py-2 text-[10px] font-bold text-gray-700 hover:bg-gray-50">
+              <span>Không đăng kí</span>
+              <input type="checkbox" name="status" value="not_registered" class="h-3 w-3 accent-emerald-600" {% if 'not_registered' in filters.statuses %}checked{% endif %}>
+            </label>
+            <div class="border-t border-gray-100 p-2">
+              <button type="submit" class="w-full rounded-md bg-emerald-600 px-3 py-2 text-[10px] font-bold text-white hover:bg-emerald-700">Áp dụng</button>
+            </div>
+          </div>
+        </div>
+        <button class="rounded-lg bg-emerald-600 px-4 py-2 text-[10px] font-bold text-white hover:bg-emerald-700" type="submit">Lọc</button>
+        {% if can_export_gddb %}
+        <button type="button" data-export-open class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100">Xuất đối soát</button>
+        {% endif %}
+      </form>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200 text-[10px]">
+        <thead class="bg-gray-50 text-left text-[9px] uppercase text-gray-500">
+          <tr>
+            <th class="px-3 py-2">Thông tin hợp đồng</th>
+            <th class="px-3 py-2">Ngày/giờ dữ liệu được tạo</th>
+            <th class="px-3 py-2">Trạng thái chính</th>
+            <th class="px-3 py-2">Nguồn vay</th>
+            <th class="px-3 py-2">Cửa hàng</th>
+            <th class="px-3 py-2">Cập nhật PosMini</th>
+            <th class="px-3 py-2 text-right">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 bg-white">
+          {% for item in page_obj %}
+          <tr data-gddb-row="{{ item.registration_id }}" data-gddb-scope="{{ item.registration_id }}" data-default-work-queue="{{ is_default_work_queue|yesno:'1,0' }}" class="align-top hover:bg-gray-50">
+            <td class="px-3 py-3">
+              <div class="flex items-center gap-2"><span data-row-contract class="font-bold text-gray-900">{{ item.contract_code }}</span><button type="button" data-copy-contract="{{ item.contract_code }}" class="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-emerald-600" title="Sao chép mã hợp đồng" aria-label="Sao chép mã hợp đồng"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg></button></div>
+              <div data-row-contract-status class="mt-1 text-[9px] text-gray-500">{{ item.contract_status|default:"-" }}</div>
+              <div class="mt-1 text-[9px] text-gray-500">Tạo <span data-row-source-created-date>{{ item.source_created_date|date:"d/m/Y"|default:"-" }}</span> · Giải ngân <span data-row-disbursement-date>{{ item.disbursement_date|date:"d/m/Y"|default:"-" }}</span></div>
+            </td>
+            <td class="px-3 py-3 whitespace-nowrap text-gray-700">{{ item.created_at|date:"d/m/Y H:i"|default:"-" }}</td>
+            <td class="px-3 py-3 min-w-[130px]">
+              <span data-status-label class="status-pill {% if item.gddb_status == 'registered' %}status-registered{% elif item.gddb_status == 'not_registered' %}status-not-registered{% else %}status-pending{% endif %}">{{ item.get_gddb_status_display }}</span>
+            </td>
+            <td data-row-disbursement-source class="px-3 py-3 font-semibold text-gray-800">{{ item.disbursement_source|default:"-" }}</td>
+            <td class="px-3 py-3">
+              <div data-row-shop-name class="font-semibold text-gray-900">{{ item.shop_name|default:"-" }}</div>
+              <div data-row-suggested-identity class="mt-1 text-[9px] text-blue-600 {% if not item.suggested_identity %}hidden{% endif %}">{% if item.suggested_identity %}Đề xuất: {{ item.suggested_identity.external_code }}{% endif %}</div>
+              <div data-registered-by-label class="mt-1 text-[9px] text-gray-500">{% if item.registered_identity %}Đã dùng: {{ item.registered_identity.external_code }}{% elif item.registered_by_name %}Đã dùng: {{ item.registered_by_name }}{% endif %}</div>
+            </td>
+            <td class="px-3 py-3 min-w-[150px]">
+              <span data-postmini-label class="status-pill {% if item.postmini_updated == 'Đã cập nhật' or item.postmini_updated == 'Đã cập nhật 1 dòng' %}status-registered{% else %}status-pending{% endif %}">{{ item.postmini_updated|default:"Chưa cập nhật" }}</span>
+            </td>
+            <td class="px-3 py-3 text-right">
+              <div class="flex flex-wrap justify-end gap-2">
+                {% if can_process_gddb and item.gddb_status != 'registered' %}<button type="button" data-register-open data-registration-id="{{ item.registration_id }}" data-update-url="{% url 'api_gddb_update' item.registration_id %}" data-contract-code="{{ item.contract_code }}" data-shop-name="{{ item.shop_name|default:'' }}" data-suggested-identity-id="{{ item.suggested_identity.identity_id|default:'' }}" data-current-status="{{ item.gddb_status }}" data-current-reason="{{ item.reason|default:'' }}" class="rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white hover:bg-emerald-700">Cập nhật đăng ký</button>{% endif %}
+                {% if can_process_gddb %}<button type="button" data-postmini-open data-registration-id="{{ item.registration_id }}" data-update-url="{% url 'api_gddb_postmini_update' item.registration_id %}" data-current-postmini="{{ item.postmini_updated|default:'Chưa cập nhật' }}" data-contract-code="{{ item.contract_code }}" class="rounded-lg px-3 py-2 font-bold {% if item.gddb_status != 'registered' %}cursor-not-allowed bg-gray-300 text-white{% elif not item.postmini_updated or item.postmini_updated == 'Chưa cập nhật' %}bg-amber-500 text-white ring-2 ring-amber-200 hover:bg-amber-600{% else %}border border-gray-200 bg-white text-gray-700 hover:bg-gray-50{% endif %}" {% if item.gddb_status != 'registered' %}disabled{% endif %}>{% if item.postmini_updated == 'Đã cập nhật' or item.postmini_updated == 'Đã cập nhật 1 dòng' %}Cập nhật lại PosMini{% else %}Cập nhật PosMini{% endif %}</button>{% endif %}
+                <button type="button" data-drawer-open="{{ item.registration_id }}" class="rounded-lg border border-gray-200 px-3 py-2 font-bold text-gray-700 hover:bg-gray-50">Chi tiết</button>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="px-3 py-8 text-center text-gray-500">Chưa có dữ liệu giao dịch bảo đảm phù hợp.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% for item in page_obj %}
+    <div data-gddb-drawer="{{ item.registration_id }}" class="hidden">
+      <button type="button" class="drawer-backdrop" data-drawer-close aria-label="Đóng chi tiết"></button>
+      <aside class="drawer-panel" data-gddb-scope="{{ item.registration_id }}">
+        <div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-5 py-4">
+          <div><div class="text-[13px] font-bold text-gray-900">Chi tiết GDĐB · {{ item.contract_code }}</div><div class="text-[9px] text-gray-500">Chỉ xem thông tin</div></div>
+          <button type="button" data-drawer-close class="rounded-lg border border-gray-200 px-3 py-2 text-lg leading-none text-gray-500">×</button>
+        </div>
+        <div class="space-y-5 p-5">
+          <section class="rounded-xl border border-gray-100 bg-gray-50 p-4">
+            <div class="mb-3 font-bold uppercase text-gray-500">Thông tin hợp đồng và tài sản</div>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div><div class="text-[9px] text-gray-500">Mã hợp đồng</div><div class="font-semibold text-gray-900">{{ item.contract_code }}</div></div>
+              <div><div class="text-[9px] text-gray-500">Trạng thái hợp đồng</div><div class="font-semibold text-gray-900">{{ item.contract_status|default:"-" }}</div></div>
+              <div><div class="text-[9px] text-gray-500">Biển số xe</div><div class="font-semibold text-gray-900">{{ item.license_plate|default:"-" }}</div></div>
+              <div><div class="text-[9px] text-gray-500">Số khung</div><div class="break-all font-semibold text-gray-900">{{ item.chassis_number|default:"-" }}</div></div>
+              <div><div class="text-[9px] text-gray-500">Số máy</div><div class="break-all font-semibold text-gray-900">{{ item.engine_number|default:"-" }}</div></div>
+              <div><div class="text-[9px] text-gray-500">Nguồn giải ngân</div><div class="font-semibold text-gray-900">{{ item.disbursement_source|default:"-" }}</div></div>
+              <div><div class="text-[9px] text-gray-500">Cửa hàng</div><div class="font-semibold text-gray-900">{{ item.shop_name|default:"-" }}</div></div>
+              <div><div class="text-[9px] text-gray-500">Ngày tạo dữ liệu nguồn</div><div class="font-semibold text-gray-900">{{ item.source_created_date|date:"d/m/Y"|default:"-" }}</div></div>
+              <div><div class="text-[9px] text-gray-500">Ngày giải ngân</div><div class="font-semibold text-gray-900">{{ item.disbursement_date|date:"d/m/Y"|default:"-" }}</div></div>
+              <div><span class="mb-1 block text-[9px] text-gray-500">Trạng thái sau cập nhật</span><span data-drawer-post-update class="status-pill {% if item.post_update_status %}status-registered{% else %}status-pending{% endif %}">{{ item.post_update_status|default:"Chưa có" }}</span></div>
+            </div>
+          </section>
+          <section>
+            <div class="mb-3 font-bold uppercase text-gray-500">Xử lý đăng ký</div>
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div><span class="mb-1 block text-[9px] text-gray-500">Trạng thái chính</span><span data-drawer-status class="status-pill {% if item.gddb_status == 'registered' %}status-registered{% elif item.gddb_status == 'not_registered' %}status-not-registered{% else %}status-pending{% endif %}">{{ item.get_gddb_status_display }}</span></div>
+              <div><span class="mb-1 block text-[9px] text-gray-500">Cập nhật PosMini</span><span data-drawer-postmini class="status-pill {% if item.postmini_updated == 'Đã cập nhật' or item.postmini_updated == 'Đã cập nhật 1 dòng' %}status-registered{% else %}status-pending{% endif %}">{{ item.postmini_updated|default:"Chưa cập nhật" }}</span></div>
+              <div><span class="mb-1 block text-[9px] text-gray-500">Định danh thực tế đã dùng đăng ký</span><div data-drawer-identity class="field flex items-center font-semibold">{% if item.registered_identity %}{{ item.registered_identity.external_code }}{% else %}{{ item.registered_by_name|default:"" }}{% endif %}</div><span data-drawer-suggested-identity class="mt-1 block text-[9px] text-blue-600 {% if not item.suggested_identity %}hidden{% endif %}">{% if item.suggested_identity %}PGD đề xuất: {{ item.suggested_identity.external_code }}{% endif %}</span></div>
+              <div><span class="mb-1 block text-[9px] text-gray-500">Thời gian xác nhận đăng ký</span><span data-drawer-registered-at class="status-pill {% if item.registered_at %}status-registered{% else %}status-pending{% endif %}">{{ item.registered_at|date:"d/m/Y H:i"|default:"Chưa đăng ký" }}</span></div>
+              <div><span class="mb-1 block text-[9px] text-gray-500">User đăng ký / Checker cập nhật</span><div class="font-semibold text-gray-900">{{ item.source_user|default:"-" }}</div></div>
+            </div>
+            <div class="mt-3"><span class="mb-1 block text-[9px] text-gray-500">Lý do</span><div data-drawer-reason class="rounded-lg bg-gray-50 p-3 text-gray-800">{{ item.reason|default:"-" }}</div></div>
+            <div class="mt-3"><span class="mb-1 block text-[9px] text-gray-500">Ghi chú</span><div class="whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-gray-800">{{ item.note|default:"-" }}</div></div>
+          </section>
+        </div>
+      </aside>
+    </div>
+    {% endfor %}
+
+    <div id="gddb-register-modal" class="fixed inset-0 z-[90] hidden items-center justify-center p-3" aria-hidden="true">
+      <button type="button" class="absolute inset-0 bg-gray-900/40" data-register-close aria-label="Đóng"></button>
+      <div class="relative z-10 w-full max-w-md rounded-2xl bg-white shadow-2xl">
+        <div class="flex items-start justify-between border-b border-gray-100 p-4">
+          <div><div class="text-[13px] font-bold text-gray-900">Cập nhật trạng thái đăng ký GDĐB</div><div class="mt-1 text-[9px] text-gray-500"><span data-register-contract></span> · <span data-register-shop></span></div></div>
+          <button type="button" data-register-close class="rounded-lg p-2 text-lg leading-none text-gray-400 hover:bg-gray-100">×</button>
+        </div>
+        <div class="space-y-4 p-4">
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-bold text-emerald-800"><input type="radio" name="gddb_registration_action" value="registered" class="h-4 w-4 accent-emerald-600" checked>Đăng ký</label>
+            <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 font-bold text-red-800"><input type="radio" name="gddb_registration_action" value="not_registered" class="h-4 w-4 accent-red-600">Không đăng ký</label>
+          </div>
+          <div data-register-panel>
+            <div class="mb-2 text-[10px] text-gray-600">Chọn định danh external thực tế đã dùng trên hệ thống GDĐB Nhà nước.</div>
+            <div class="grid gap-2 sm:grid-cols-2">
+              {% for identity in registration_identity_choices %}
+              <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 p-3 hover:border-emerald-400 hover:bg-emerald-50/50" data-register-identity-option="{{ identity.identity_id }}">
+                <input type="radio" name="gddb_register_identity" value="{{ identity.identity_id }}" class="h-4 w-4 accent-emerald-600">
+                <span class="min-w-0"><span class="block font-bold text-gray-900">{{ identity.external_code }}</span><span class="hidden text-[8px] font-semibold text-blue-600" data-suggested-badge>PGD đề xuất</span></span>
+              </label>
+              {% empty %}<div class="col-span-2 rounded-lg bg-amber-50 p-3 text-amber-800">Chưa có định danh đang hoạt động.</div>{% endfor %}
+            </div>
+            <label class="mt-3 block"><span class="mb-1 block text-[9px] font-semibold text-gray-600">Lý do/loại đăng ký (không bắt buộc)</span><select data-register-reason class="field w-full"><option value=""></option>{% for reason in registration_reason_choices %}<option value="{{ reason }}">{{ reason }}</option>{% endfor %}</select></label>
+          </div>
+          <div data-not-register-panel class="hidden">
+            <label class="block"><span class="mb-1 block text-[9px] font-semibold text-red-700">Lý do không đăng ký <strong>*</strong></span><select data-not-register-reason class="field w-full"><option value="">Chọn lý do</option>{% for reason in non_registration_reason_choices %}<option value="{{ reason }}">{{ reason }}</option>{% endfor %}</select></label>
+            <div class="mt-2 rounded-lg bg-red-50 p-3 text-[9px] text-red-700">Giao dịch sẽ được đóng khỏi danh sách cần xử lý và không cần cập nhật PosMini.</div>
+          </div>
+        </div>
+        <div class="flex flex-col-reverse gap-2 border-t border-gray-100 p-4 sm:flex-row sm:justify-end">
+          <button type="button" data-register-close class="rounded-lg border border-gray-200 px-4 py-2 font-bold text-gray-700">Hủy</button>
+          <button type="button" data-register-confirm class="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700">Xác nhận</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="gddb-postmini-modal" class="fixed inset-0 z-[90] hidden items-center justify-center p-3" aria-hidden="true">
+      <button type="button" class="absolute inset-0 bg-gray-900/40" data-postmini-close aria-label="Đóng"></button>
+      <div class="relative z-10 w-full max-w-sm rounded-2xl bg-white shadow-2xl">
+        <div class="flex items-start justify-between border-b border-gray-100 p-4">
+          <div><div class="text-[13px] font-bold text-gray-900">Xác nhận cập nhật PosMini</div><div class="mt-1 text-[9px] text-gray-500" data-postmini-contract></div></div>
+          <button type="button" data-postmini-close class="rounded-lg p-2 text-lg leading-none text-gray-400 hover:bg-gray-100">×</button>
+        </div>
+        <div class="space-y-2 p-4">
+          {% for value,label in postmini_status_choices %}
+          <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 p-3 hover:border-emerald-400 hover:bg-emerald-50/50"><input type="radio" name="gddb_postmini_status" value="{{ value }}" class="h-4 w-4 accent-emerald-600"><span class="font-bold text-gray-800">{{ label }}</span></label>
+          {% endfor %}
+        </div>
+        <div class="flex flex-col-reverse gap-2 border-t border-gray-100 p-4 sm:flex-row sm:justify-end">
+          <button type="button" data-postmini-close class="rounded-lg border border-gray-200 px-4 py-2 font-bold text-gray-700">Hủy</button>
+          <button type="button" data-postmini-confirm class="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700">Xác nhận cập nhật</button>
+        </div>
+      </div>
+    </div>
+
+    {% if can_export_gddb %}
+    <div id="gddb-export-modal" class="fixed inset-0 z-[90] hidden items-center justify-center p-3" aria-hidden="true">
+      <button type="button" class="absolute inset-0 bg-gray-900/40" data-export-close aria-label="Đóng"></button>
+      <form method="get" action="{% url 'gddb_export' %}" class="relative z-10 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="flex items-start justify-between border-b border-gray-100 p-4">
+          <div><div class="text-[13px] font-bold text-gray-900">Xuất đối soát GDĐB</div><div class="mt-1 text-[9px] text-gray-500">Timeline được tính theo thời gian Checker xác nhận đăng ký.</div></div>
+          <button type="button" data-export-close class="rounded-lg p-2 text-lg leading-none text-gray-400 hover:bg-gray-100">×</button>
+        </div>
+        <div class="space-y-4 p-4">
+          <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 p-2 font-bold"><input type="radio" name="period_type" value="day" class="accent-emerald-600" checked>Ngày</label>
+            <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 p-2 font-bold"><input type="radio" name="period_type" value="month" class="accent-emerald-600">Tháng</label>
+            <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 p-2 font-bold"><input type="radio" name="period_type" value="year" class="accent-emerald-600">Năm</label>
+            <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 p-2 font-bold"><input type="radio" name="period_type" value="range" class="accent-emerald-600">Khoảng ngày</label>
+          </div>
+          <div data-export-period="day"><label><span class="mb-1 block text-[9px] font-semibold text-gray-600">Ngày đăng ký</span><input type="date" name="export_day" value="{% now 'Y-m-d' %}" class="field w-full"></label></div>
+          <div data-export-period="month" class="hidden"><label><span class="mb-1 block text-[9px] font-semibold text-gray-600">Tháng đăng ký</span><input type="month" name="export_month" value="{% now 'Y-m' %}" class="field w-full"></label></div>
+          <div data-export-period="year" class="hidden"><label><span class="mb-1 block text-[9px] font-semibold text-gray-600">Năm đăng ký</span><input type="number" min="2000" max="2100" name="export_year" value="{% now 'Y' %}" class="field w-full"></label></div>
+          <div data-export-period="range" class="hidden grid-cols-2 gap-2"><label><span class="mb-1 block text-[9px] font-semibold text-gray-600">Từ ngày</span><input type="date" name="export_from" value="{% now 'Y-m-d' %}" class="field w-full"></label><label><span class="mb-1 block text-[9px] font-semibold text-gray-600">Đến ngày</span><input type="date" name="export_to" value="{% now 'Y-m-d' %}" class="field w-full"></label></div>
+        </div>
+        <div class="flex flex-col-reverse gap-2 border-t border-gray-100 p-4 sm:flex-row sm:justify-end">
+          <button type="button" data-export-close class="rounded-lg border border-gray-200 px-4 py-2 font-bold text-gray-700">Hủy</button>
+          <button class="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700">Xuất Excel</button>
+        </div>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<script>
+  const manualPayload = document.querySelector('[data-manual-payload]');
+  const manualDetection = document.querySelector('[data-manual-detection]');
+  if (manualPayload && manualDetection) {
+    const detectManualInput = () => {
+      const value = manualPayload.value.trim();
+      manualDetection.classList.toggle('hidden', !value);
+      if (!value) return;
+      if (value.startsWith('{') || value.startsWith('[')) {
+        manualDetection.textContent = 'Nhận diện sơ bộ: JSON';
+        return;
+      }
+      const lines = value.split(/\r?\n/).filter((line) => line.trim());
+      const firstLine = lines[0] || '';
+      const delimiter = firstLine.includes('\t') ? '\t' : (firstLine.includes(';') ? ';' : (firstLine.includes('|') ? '|' : ','));
+      const columns = firstLine.split(delimiter).length;
+      manualDetection.textContent = `Nhận diện sơ bộ: ${lines.length} dòng · ${columns} cột. Hệ thống sẽ kiểm tra lại trước khi import.`;
+    };
+    manualPayload.addEventListener('input', detectManualInput);
+    detectManualInput();
+  }
+
+  const manualForm = document.querySelector('[data-manual-form]');
+  const manualPreviewModal = document.getElementById('gddb-manual-preview-modal');
+  if (manualForm && manualPreviewModal) {
+    const previewButton = manualForm.querySelector('[data-manual-preview]');
+    let manualSubmitConfirmed = false;
+    const setManualPreviewOpen = (open) => {
+      manualPreviewModal.classList.toggle('hidden', !open);
+      manualPreviewModal.classList.toggle('flex', open);
+      manualPreviewModal.setAttribute('aria-hidden', open ? 'false' : 'true');
+      document.body.style.overflow = open ? 'hidden' : '';
+    };
+    const loadManualPreview = async () => {
+      previewButton.disabled = true;
+      previewButton.textContent = 'Đang đọc dữ liệu…';
+      try {
+        const response = await fetch(manualForm.dataset.previewUrl, { method: 'POST', body: new FormData(manualForm) });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || 'Không xem trước được dữ liệu.');
+        manualPreviewModal.querySelector('[data-manual-preview-summary]').textContent = `${data.input_mode} · ${data.total_rows} dòng dữ liệu · ${data.columns.length} cột`;
+        manualPreviewModal.querySelector('[data-manual-preview-warning]').classList.toggle('hidden', !data.has_ignored_columns);
+        const head = manualPreviewModal.querySelector('[data-manual-preview-head]');
+        const body = manualPreviewModal.querySelector('[data-manual-preview-body]');
+        head.replaceChildren();
+        body.replaceChildren();
+        data.columns.forEach((column) => {
+          const cell = document.createElement('th');
+          cell.className = `min-w-[145px] border border-gray-200 p-2 text-left align-top ${column.ignored ? 'bg-amber-50 text-amber-800' : 'bg-gray-50 text-gray-700'}`;
+          const source = document.createElement('div');
+          source.className = 'font-bold';
+          source.textContent = column.source;
+          const target = document.createElement('div');
+          target.className = `mt-1 ${column.ignored ? 'text-amber-700' : 'text-emerald-700'}`;
+          target.textContent = `→ ${column.label}`;
+          cell.append(source, target);
+          head.appendChild(cell);
+        });
+        data.rows.forEach((row) => {
+          const tableRow = document.createElement('tr');
+          row.forEach((value, index) => {
+            const cell = document.createElement('td');
+            cell.className = `border border-gray-200 p-2 align-top ${data.columns[index]?.ignored ? 'bg-amber-50/60' : 'bg-white'}`;
+            cell.textContent = value ?? '';
+            tableRow.appendChild(cell);
+          });
+          body.appendChild(tableRow);
+        });
+        setManualPreviewOpen(true);
+      } catch (error) {
+        showGddbToast(error.message, false);
+      } finally {
+        previewButton.disabled = false;
+        previewButton.textContent = 'Xem mapping';
+      }
+    };
+    previewButton.addEventListener('click', loadManualPreview);
+    manualForm.addEventListener('submit', (event) => {
+      if (manualSubmitConfirmed) return;
+      event.preventDefault();
+      loadManualPreview();
+    });
+    manualPreviewModal.querySelectorAll('[data-manual-preview-close]').forEach((button) => button.addEventListener('click', () => setManualPreviewOpen(false)));
+    manualPreviewModal.querySelector('[data-manual-submit-confirm]').addEventListener('click', () => {
+      manualSubmitConfirmed = true;
+      manualPreviewModal.querySelector('[data-manual-submit-confirm]').disabled = true;
+      manualForm.submit();
+    });
+  }
+
+  const filterForm = document.getElementById('gddb-filter-form');
+  const statusFilter = document.querySelector('[data-status-filter]');
+  if (filterForm && statusFilter) {
+    const toggle = statusFilter.querySelector('[data-status-toggle]');
+    const menu = statusFilter.querySelector('[data-status-menu]');
+    const checkboxes = Array.from(statusFilter.querySelectorAll('input[name="status"]'));
+    const submitWithStatuses = (statuses) => {
+      checkboxes.forEach((checkbox) => {
+        checkbox.checked = statuses.includes(checkbox.value);
+      });
+      filterForm.submit();
+    };
+    const selectedStatuses = () => checkboxes.filter((checkbox) => checkbox.checked).map((checkbox) => checkbox.value);
+
+    toggle.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const nextOpen = menu.classList.contains('hidden');
+      menu.classList.toggle('hidden', !nextOpen);
+      toggle.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+    });
+    document.addEventListener('click', (event) => {
+      if (!statusFilter.contains(event.target)) {
+        menu.classList.add('hidden');
+        toggle.setAttribute('aria-expanded', 'false');
+      }
+    });
+    statusFilter.querySelectorAll('[data-status-remove]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        submitWithStatuses(selectedStatuses().filter((value) => value !== button.dataset.statusRemove));
+      });
+    });
+  }
+
+  function showGddbToast(message, ok) {
+    const toast = document.getElementById('gddb-toast');
+    toast.textContent = message;
+    toast.className = 'toast ' + (ok ? 'toast-success' : 'toast-error');
+    setTimeout(() => toast.classList.add('hidden'), 2400);
+  }
+
+  document.querySelectorAll('[data-drawer-open]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const drawer = document.querySelector(`[data-gddb-drawer="${button.dataset.drawerOpen}"]`);
+      if (drawer) {
+        drawer.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+      }
+    });
+  });
+  document.querySelectorAll('[data-drawer-close]').forEach((button) => {
+    button.addEventListener('click', () => {
+      button.closest('[data-gddb-drawer]').classList.add('hidden');
+      document.body.style.overflow = '';
+    });
+  });
+
+  const copyTokenButton = document.querySelector('[data-copy-token]');
+  if (copyTokenButton) {
+    copyTokenButton.addEventListener('click', async () => {
+      const tokenInput = document.getElementById('new-gddb-token');
+      await navigator.clipboard.writeText(tokenInput.value);
+      copyTokenButton.textContent = 'Đã sao chép';
+    });
+  }
+
+  document.querySelectorAll('[data-copy-contract]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(button.dataset.copyContract);
+      } catch (error) {
+        const input = document.createElement('textarea');
+        input.value = button.dataset.copyContract;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        input.remove();
+      }
+      showGddbToast('Đã sao chép mã hợp đồng.', true);
+    });
+  });
+
+  const setGddbModalOpen = (modal, open) => {
+    modal.classList.toggle('hidden', !open);
+    modal.classList.toggle('flex', open);
+    modal.setAttribute('aria-hidden', open ? 'false' : 'true');
+    document.body.style.overflow = open ? 'hidden' : '';
+  };
+
+  const exportModal = document.getElementById('gddb-export-modal');
+  if (exportModal) {
+    document.querySelector('[data-export-open]')?.addEventListener('click', () => setGddbModalOpen(exportModal, true));
+    exportModal.querySelectorAll('[data-export-close]').forEach((button) => button.addEventListener('click', () => setGddbModalOpen(exportModal, false)));
+    const syncExportPeriod = () => {
+      const selectedPeriod = exportModal.querySelector('input[name="period_type"]:checked')?.value || 'day';
+      exportModal.querySelectorAll('[data-export-period]').forEach((panel) => {
+        const visible = panel.dataset.exportPeriod === selectedPeriod;
+        panel.classList.toggle('hidden', !visible);
+        if (panel.dataset.exportPeriod === 'range') panel.classList.toggle('grid', visible);
+      });
+    };
+    exportModal.querySelectorAll('input[name="period_type"]').forEach((radio) => radio.addEventListener('change', syncExportPeriod));
+    syncExportPeriod();
+  }
+
+  const registerModal = document.getElementById('gddb-register-modal');
+  if (registerModal) {
+    const syncRegistrationAction = () => {
+      const action = registerModal.querySelector('input[name="gddb_registration_action"]:checked')?.value || 'registered';
+      registerModal.querySelector('[data-register-panel]').classList.toggle('hidden', action !== 'registered');
+      registerModal.querySelector('[data-not-register-panel]').classList.toggle('hidden', action !== 'not_registered');
+    };
+    registerModal.querySelectorAll('input[name="gddb_registration_action"]').forEach((radio) => radio.addEventListener('change', syncRegistrationAction));
+    document.querySelectorAll('[data-register-open]').forEach((button) => {
+      button.addEventListener('click', () => {
+        registerModal.dataset.registrationId = button.dataset.registrationId;
+        registerModal.dataset.updateUrl = button.dataset.updateUrl;
+        registerModal.querySelector('[data-register-contract]').textContent = button.dataset.contractCode || '';
+        registerModal.querySelector('[data-register-shop]').textContent = button.dataset.shopName || '';
+        registerModal.querySelectorAll('input[name="gddb_register_identity"]').forEach((radio) => { radio.checked = false; });
+        const currentAction = button.dataset.currentStatus === 'not_registered' ? 'not_registered' : 'registered';
+        registerModal.querySelector(`input[name="gddb_registration_action"][value="${currentAction}"]`).checked = true;
+        registerModal.querySelector('[data-register-reason]').value = currentAction === 'registered' ? (button.dataset.currentReason || '') : '';
+        registerModal.querySelector('[data-not-register-reason]').value = currentAction === 'not_registered' ? (button.dataset.currentReason || '') : '';
+        syncRegistrationAction();
+        registerModal.querySelectorAll('[data-register-identity-option]').forEach((option) => {
+          const isSuggested = option.dataset.registerIdentityOption === button.dataset.suggestedIdentityId;
+          option.querySelector('[data-suggested-badge]').classList.toggle('hidden', !isSuggested);
+        });
+        setGddbModalOpen(registerModal, true);
+      });
+    });
+    registerModal.querySelectorAll('[data-register-close]').forEach((button) => button.addEventListener('click', () => setGddbModalOpen(registerModal, false)));
+    registerModal.querySelector('[data-register-confirm]').addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      const action = registerModal.querySelector('input[name="gddb_registration_action"]:checked')?.value || 'registered';
+      const selectedIdentity = registerModal.querySelector('input[name="gddb_register_identity"]:checked');
+      const reason = action === 'registered'
+        ? registerModal.querySelector('[data-register-reason]').value
+        : registerModal.querySelector('[data-not-register-reason]').value;
+      if (action === 'registered' && !selectedIdentity) {
+        showGddbToast('Vui lòng chọn định danh thực tế đã dùng đăng ký.', false);
+        return;
+      }
+      if (action === 'not_registered' && !reason) {
+        showGddbToast('Vui lòng chọn lý do không đăng ký.', false);
+        return;
+      }
+      button.disabled = true;
+      button.textContent = 'Đang xác nhận';
+      try {
+        const response = await fetch(registerModal.dataset.updateUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN || '' },
+          body: JSON.stringify({
+            gddb_status: action,
+            registered_identity_id: action === 'registered' ? selectedIdentity.value : null,
+            reason,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || 'Không xác nhận được đăng ký.');
+        const row = document.querySelector(`[data-gddb-row="${registerModal.dataset.registrationId}"]`);
+        const statusLabel = row.querySelector('[data-status-label]');
+        statusLabel.textContent = data.gddb_status_label;
+        statusLabel.classList.remove('status-pending', 'status-registered', 'status-not-registered');
+        statusLabel.classList.add(action === 'registered' ? 'status-registered' : 'status-not-registered');
+        const registeredByLabel = row.querySelector('[data-registered-by-label]');
+        registeredByLabel.textContent = action === 'registered' ? 'Đã dùng: ' + data.registered_identity_code : data.reason;
+        const drawer = document.querySelector(`[data-gddb-drawer="${registerModal.dataset.registrationId}"]`);
+        const drawerStatus = drawer?.querySelector('[data-drawer-status]');
+        if (drawerStatus) {
+          drawerStatus.textContent = data.gddb_status_label;
+          drawerStatus.classList.remove('status-pending', 'status-registered', 'status-not-registered');
+          drawerStatus.classList.add(action === 'registered' ? 'status-registered' : 'status-not-registered');
+        }
+        const drawerIdentity = drawer?.querySelector('[data-drawer-identity]');
+        if (drawerIdentity) drawerIdentity.textContent = data.registered_identity_code || '';
+        const drawerReason = drawer?.querySelector('[data-drawer-reason]');
+        if (drawerReason) drawerReason.textContent = data.reason || '-';
+        const drawerPostUpdate = drawer?.querySelector('[data-drawer-post-update]');
+        if (drawerPostUpdate) drawerPostUpdate.textContent = data.post_update_status || '-';
+        const drawerRegisteredAt = drawer?.querySelector('[data-drawer-registered-at]');
+        if (drawerRegisteredAt && data.registered_at && action === 'registered') {
+          drawerRegisteredAt.textContent = new Date(data.registered_at).toLocaleString('vi-VN', { hour12: false });
+          drawerRegisteredAt.classList.remove('status-pending');
+          drawerRegisteredAt.classList.add('status-registered');
+        } else if (drawerRegisteredAt && action === 'not_registered') {
+          drawerRegisteredAt.textContent = 'Chưa đăng ký';
+          drawerRegisteredAt.classList.remove('status-registered');
+          drawerRegisteredAt.classList.add('status-pending');
+        }
+        const postminiButton = row.querySelector('[data-postmini-open]');
+        if (action === 'registered') {
+          row.querySelector('[data-register-open]')?.remove();
+          postminiButton.disabled = false;
+          postminiButton.classList.remove('cursor-not-allowed', 'bg-gray-300');
+          postminiButton.classList.add('bg-amber-500', 'text-white', 'ring-2', 'ring-amber-200', 'hover:bg-amber-600');
+        } else {
+          const registerButton = row.querySelector('[data-register-open]');
+          if (registerButton) {
+            registerButton.dataset.currentStatus = 'not_registered';
+            registerButton.dataset.currentReason = data.reason || '';
+          }
+          postminiButton.disabled = true;
+          postminiButton.className = 'cursor-not-allowed rounded-lg bg-gray-300 px-3 py-2 font-bold text-white';
+        }
+        setGddbModalOpen(registerModal, false);
+        if (action === 'registered') {
+          showGddbToast('Đã xác nhận đăng ký GDĐB. Tiếp tục cập nhật PosMini.', true);
+        } else {
+          showGddbToast('Đã chuyển sang Không đăng ký.', true);
+          if (row.dataset.defaultWorkQueue === '1') setTimeout(() => row.remove(), 600);
+        }
+      } catch (error) {
+        showGddbToast(error.message, false);
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Xác nhận';
+      }
+    });
+  }
+
+  const postminiModal = document.getElementById('gddb-postmini-modal');
+  if (postminiModal) {
+    document.querySelectorAll('[data-postmini-open]').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (button.disabled) return;
+        postminiModal.dataset.registrationId = button.dataset.registrationId;
+        postminiModal.dataset.updateUrl = button.dataset.updateUrl;
+        postminiModal.querySelector('[data-postmini-contract]').textContent = button.dataset.contractCode || '';
+        postminiModal.querySelectorAll('input[name="gddb_postmini_status"]').forEach((radio) => {
+          radio.checked = radio.value === button.dataset.currentPostmini;
+        });
+        setGddbModalOpen(postminiModal, true);
+      });
+    });
+    postminiModal.querySelectorAll('[data-postmini-close]').forEach((button) => button.addEventListener('click', () => setGddbModalOpen(postminiModal, false)));
+    postminiModal.querySelector('[data-postmini-confirm]').addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      const selectedStatus = postminiModal.querySelector('input[name="gddb_postmini_status"]:checked');
+      if (!selectedStatus) {
+        showGddbToast('Vui lòng chọn trạng thái PosMini.', false);
+        return;
+      }
+      button.disabled = true;
+      button.textContent = 'Đang cập nhật';
+      try {
+        const response = await fetch(postminiModal.dataset.updateUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN || '' },
+          body: JSON.stringify({ postmini_updated: selectedStatus.value }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || 'Không cập nhật được PosMini.');
+        const row = document.querySelector(`[data-gddb-row="${postminiModal.dataset.registrationId}"]`);
+        const statusLabel = row.querySelector('[data-postmini-label]');
+        statusLabel.textContent = data.postmini_updated;
+        statusLabel.classList.toggle('status-registered', data.process_done);
+        statusLabel.classList.toggle('status-pending', !data.process_done);
+        const actionButton = row.querySelector('[data-postmini-open]');
+        actionButton.dataset.currentPostmini = data.postmini_updated;
+        actionButton.classList.remove('bg-amber-500', 'ring-2', 'ring-amber-200', 'hover:bg-amber-600', 'border', 'border-gray-200', 'bg-white', 'text-gray-700', 'hover:bg-gray-50');
+        if (data.process_done) {
+          actionButton.classList.remove('text-white');
+          actionButton.classList.add('border', 'border-gray-200', 'bg-white', 'text-gray-700', 'hover:bg-gray-50');
+          actionButton.textContent = 'Cập nhật lại PosMini';
+        } else {
+          actionButton.classList.add('bg-amber-500', 'text-white', 'ring-2', 'ring-amber-200', 'hover:bg-amber-600');
+          actionButton.textContent = 'Cập nhật PosMini';
+        }
+        const drawerPostmini = document.querySelector(`[data-gddb-drawer="${postminiModal.dataset.registrationId}"] [data-drawer-postmini]`);
+        if (drawerPostmini) {
+          drawerPostmini.textContent = data.postmini_updated;
+          drawerPostmini.classList.toggle('status-registered', data.process_done);
+          drawerPostmini.classList.toggle('status-pending', !data.process_done);
+        }
+        setGddbModalOpen(postminiModal, false);
+        showGddbToast(data.process_done ? 'Quy trình GDĐB đã hoàn tất.' : 'Đã cập nhật trạng thái PosMini.', true);
+      } catch (error) {
+        showGddbToast(error.message, false);
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Xác nhận cập nhật';
+      }
+    });
+  }
+</script>
+{% endblock %}

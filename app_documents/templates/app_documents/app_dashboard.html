@@ -1,144 +1,215 @@
-{% extends 'app_documents/base.html' %} 
+{% extends 'app_documents/base_app_documents_v2.html' %}
+{% load humanize %}
+{% block title %}Dashboard hiệu suất CTV{% endblock %}
+{% block top_nav %}
+  {% include 'app_documents/components/top_nav_v2.html' %}
+{% endblock %}
+{% block main_extra_class %}pt-14{% endblock %}
+
 {% block content %}
-<section class="py-4">
-  <div class="container">
-    <div class="row mb-3">
-      <div class="col">
-        <h3 class="fw-bold text-success">Dashboard - Hiệu suất CTV</h3>
-        <p class="text-muted mb-0">Chỉ tiêu theo thời gian.</p>
-      </div>
-    </div>
+<style>
+  body { font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size: 10px; }
+  .dashboard-card { border: 1px solid #e5e7eb; border-radius: 14px; background: #fff; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
+  .metric-label { font-size: 9px; text-transform: uppercase; color: #6b7280; letter-spacing: .04em; }
+  .metric-value { font-size: 22px; line-height: 1.1; font-weight: 700; color: #111827; }
+  .metric-sub { font-size: 9px; color: #6b7280; }
+  .bar-track { height: 8px; border-radius: 999px; background: #eef2f7; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 999px; background: #10b981; }
+  .table-xs th, .table-xs td { padding: 8px 10px; font-size: 10px; }
+  .table-xs thead th { background: #f8fafc; color: #6b7280; text-transform: uppercase; font-size: 9px; }
+  .heat-cell { min-height: 64px; transition: transform .15s ease, box-shadow .15s ease; }
+  .heat-cell:hover { transform: translateY(-1px); box-shadow: 0 8px 16px rgba(15, 23, 42, .08); }
+  .filter-input { height: 34px; }
+</style>
 
-    <form method="get" class="row g-3 align-items-end mb-4">
-      <div class="col-sm-4 col-md-3">
-        <label for="start_date" class="form-label">Từ ngày</label>
-        <input type="date" id="start_date" name="start_date" value="{{ start_date }}" class="form-control">
+<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
+  <div class="dashboard-card p-4">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-[13px] font-semibold text-gray-900">Dashboard hiệu suất CTV</h1>
+        <p class="text-[9px] text-gray-500 mt-1">Theo dõi lượt duyệt, hợp đồng duyệt lần đầu, tỷ lệ từ chối và phân bố thao tác trong khoảng lọc.</p>
       </div>
-      <div class="col-sm-4 col-md-3">
-        <label for="end_date" class="form-label">Đến ngày</label>
-        <input type="date" id="end_date" name="end_date" value="{{ end_date }}" class="form-control">
-      </div>
-      <div class="col-sm-4 col-md-3">
-        <label for="checker_user" class="form-label">Người duyệt (CTV)</label>
-        <select id="checker_user" name="checker_user" class="form-select">
-          <option value="">Tất cả</option>
-          {% for checker in drop_checkers %}
-            <option value="{{ checker.id }}" {% if checker_user_id|stringformat:"s" == checker.id|stringformat:"s" %}selected{% endif %}>{{ checker.username }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-sm-4 col-md-3">
-        <label for="heatmap_mode" class="form-label">Chế độ heatmap</label>
-        <select id="heatmap_mode" name="heatmap_mode" class="form-select">
-          <option value="hour" {% if heatmap_mode == 'hour' %}selected{% endif %}>Theo giờ (8h-18h)</option>
-          <option value="week" {% if heatmap_mode == 'week' %}selected{% endif %}>Theo tuần (Th2-Th7)</option>
-          <option value="month" {% if heatmap_mode == 'month' %}selected{% endif %}>Theo ngày trong tháng</option>
-        </select>
-      </div>
-      <div class="col-sm-4 col-md-3 d-flex gap-2">
-        <button type="submit" class="btn btn-success">Lọc</button>
-        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">Xóa lọc</a>
-      </div>
-    </form>
-
-    <div class="row g-3">
-      <div class="col-12 col-md-6 col-lg-4">
-        <div class="card border-0 shadow-sm h-100">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-              <div>
-                <div class="text-uppercase text-muted small">Hợp đồng CTV đã duyệt</div>
-                <h2 class="fw-bold text-success mb-0">{{ approved_contracts|default:0 }}</h2>
-              </div>
-              <span class="badge bg-success-subtle text-success">Distinct contract</span>
-            </div>
-            <p class="mb-0 text-muted">Số lượng HĐCC có trạng thái đã duyệt (document_status.is_checked=True) trong khoảng {{ start_date }} → {{ end_date }}.</p>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-md-6 col-lg-4">
-        <div class="card border-0 shadow-sm h-100">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-start mb-2">
-              <div>
-                <div class="text-uppercase text-muted small">Duyệt lần đầu</div>
-                <h2 class="fw-bold text-primary mb-0">{{ first_time_contracts|default:0 }}</h2>
-              </div>
-              <span class="badge bg-primary-subtle text-primary">First approval</span>
-            </div>
-            <p class="mb-0 text-muted">Cộng tác viên thao tác duyệt lần đầu (ghi log DocumentTransactionChecking) cho HĐCC bất kỳ trong khoảng {{ start_date }} → {{ end_date }}.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="row g-3 mt-2">
-            <div class="col-12 col-lg-8">
-              <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                  <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="mb-0 fw-semibold">Heatmap (lượt duyệt)</h5>
-                    <span class="text-muted small">Dựa trên thời gian lọc hiện tại</span>
-                  </div>
-                  <div class="row row-cols-6 g-2">
-                    {% for item in heatmap_list %}
-                    <div class="col">
-                      <div class="p-2 text-center rounded border {% if item.count > 0 %}bg-success-subtle{% else %}bg-light{% endif %}">
-                        <div class="fw-semibold">
-                          {% if heatmap_mode == 'week' %}
-                            T{{ item.hour }}
-                          {% elif heatmap_mode == 'month' %}
-                            Ngày {{ item.hour }}
-                          {% else %}
-                            {{ item.hour }}h
-                          {% endif %}
-                        </div>
-                        <div class="text-muted small">{{ item.count }} lượt</div>
-                      </div>
-                    </div>
-                    {% endfor %}
-                  </div>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-lg-4">
-              <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                  <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="mb-0 fw-semibold">Danh sách cộng tác viên duyệt</h5>
-                    <span class="text-muted small">Theo thời gian lọc</span>
-                  </div>
-                  <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                      <thead class="table-light">
-                        <tr>
-                          <th>#</th>
-                          <th>CTV</th>
-                          <th class="text-end">Lượt</th>
-                          <th class="text-end">HĐ duyệt</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {% for row in ranking %}
-                        <tr>
-                          <td>{{ forloop.counter }}</td>
-                          <td>
-                            <div class="fw-semibold">{{ row.name }}</div>
-                            <div class="text-muted small">First: {{ row.first_approvals }}</div>
-                          </td>
-                          <td class="text-end">{{ row.total_actions }}</td>
-                          <td class="text-end">{{ row.approved_contracts }}</td>
-                        </tr>
-                  {% empty %}
-                  <tr><td colspan="4" class="text-muted text-center">Không có dữ liệu</td></tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+      <div class="flex items-center gap-2 text-[9px] text-gray-500">
+        <span class="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">{{ start_date }} -> {{ end_date }}</span>
       </div>
     </div>
   </div>
-</section>
+
+  <form method="get" class="dashboard-card p-3 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1fr,1fr,1.2fr,1.1fr,auto] gap-3 items-end">
+    <div>
+      <label for="start_date" class="block text-[9px] text-gray-500 mb-1">Từ ngày</label>
+      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 filter-input focus-within:border-emerald-500">
+        <input type="date" id="start_date" name="start_date" value="{{ start_date }}" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none">
+      </div>
+    </div>
+    <div>
+      <label for="end_date" class="block text-[9px] text-gray-500 mb-1">Đến ngày</label>
+      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 filter-input focus-within:border-emerald-500">
+        <input type="date" id="end_date" name="end_date" value="{{ end_date }}" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none">
+      </div>
+    </div>
+    <div>
+      <label for="checker_user" class="block text-[9px] text-gray-500 mb-1">Người duyệt</label>
+      <select id="checker_user" name="checker_user" class="w-full h-[34px] rounded-xl border border-gray-200 bg-gray-50 px-2 text-[10px] text-gray-700 focus:border-emerald-500 focus:outline-none">
+        <option value="">Tất cả CTV</option>
+        {% for checker in drop_checkers %}
+          <option value="{{ checker.id }}" {% if checker_user_id|stringformat:"s" == checker.id|stringformat:"s" %}selected{% endif %}>
+            {% if checker.last_name or checker.first_name %}{{ checker.last_name }} {{ checker.first_name }}{% else %}{{ checker.username }}{% endif %}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="heatmap_mode" class="block text-[9px] text-gray-500 mb-1">Phân bố thao tác</label>
+      <select id="heatmap_mode" name="heatmap_mode" class="w-full h-[34px] rounded-xl border border-gray-200 bg-gray-50 px-2 text-[10px] text-gray-700 focus:border-emerald-500 focus:outline-none">
+        <option value="hour" {% if heatmap_mode == 'hour' %}selected{% endif %}>Theo giờ</option>
+        <option value="week" {% if heatmap_mode == 'week' %}selected{% endif %}>Theo ngày trong tuần</option>
+        <option value="month" {% if heatmap_mode == 'month' %}selected{% endif %}>Theo ngày trong tháng</option>
+      </select>
+    </div>
+    <div class="flex items-center gap-2">
+      <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700">Lọc</button>
+      <a href="{% url 'dashboard' %}" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 text-[10px] font-semibold hover:bg-gray-50">Xóa</a>
+    </div>
+  </form>
+
+  <div class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+    <div class="dashboard-card p-4">
+      <div class="metric-label">Tổng lượt thao tác</div>
+      <div class="mt-1 metric-value">{{ total_actions|default:0|intcomma }}</div>
+      <div class="metric-sub mt-1">TB {{ avg_actions_per_day|default:0 }} lượt/ngày</div>
+    </div>
+    <div class="dashboard-card p-4">
+      <div class="metric-label">HĐ đã duyệt</div>
+      <div class="mt-1 metric-value text-emerald-700">{{ approved_contracts|default:0|intcomma }}</div>
+      <div class="metric-sub mt-1">Distinct contract</div>
+    </div>
+    <div class="dashboard-card p-4">
+      <div class="metric-label">Duyệt lần đầu</div>
+      <div class="mt-1 metric-value text-sky-700">{{ first_time_contracts|default:0|intcomma }}</div>
+      <div class="metric-sub mt-1">{{ approval_rate|default:0 }}% trên HĐ đã duyệt</div>
+    </div>
+    <div class="dashboard-card p-4">
+      <div class="metric-label">CTV có thao tác</div>
+      <div class="mt-1 metric-value">{{ active_checkers_count|default:0|intcomma }}</div>
+      <div class="metric-sub mt-1">Trong khoảng lọc</div>
+    </div>
+    <div class="dashboard-card p-4">
+      <div class="metric-label">Lượt từ chối</div>
+      <div class="mt-1 metric-value text-rose-700">{{ total_reject_actions|default:0|intcomma }}</div>
+      <div class="metric-sub mt-1">Tỷ lệ {{ reject_rate|default:0 }}%</div>
+    </div>
+    <div class="dashboard-card p-4">
+      <div class="metric-label">Quyển đã nhận</div>
+      <div class="mt-1 metric-value text-amber-700">{{ folder_received_count|default:0|intcomma }}</div>
+      <div class="metric-sub mt-1">Theo ngày nhận</div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-[1.5fr,1fr] gap-3">
+    <div class="dashboard-card p-4">
+      <div class="flex items-center justify-between gap-3 mb-3">
+        <div>
+          <h2 class="text-[12px] font-semibold text-gray-900">Phân bố lượt duyệt</h2>
+          <p class="text-[9px] text-gray-500">Ô đậm hơn tương ứng với nhiều thao tác hơn trong khoảng lọc.</p>
+        </div>
+        <span class="text-[9px] text-gray-500">
+          {% if heatmap_mode == 'week' %}Thứ 2 - Thứ 7{% elif heatmap_mode == 'month' %}Theo ngày{% else %}8h - 18h{% endif %}
+        </span>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-6 gap-2">
+        {% for item in heatmap_list %}
+        <div class="heat-cell rounded-xl border border-gray-100 p-3 bg-emerald-50" style="background-color: rgba(16, 185, 129, {{ item.alpha }});">
+          <div class="font-semibold text-gray-900">
+            {% if heatmap_mode == 'week' %}
+              T{{ item.hour }}
+            {% elif heatmap_mode == 'month' %}
+              Ngày {{ item.hour }}
+            {% else %}
+              {{ item.hour }}h
+            {% endif %}
+          </div>
+          <div class="mt-2 text-[14px] font-semibold text-gray-900">{{ item.count|default:0|intcomma }}</div>
+          <div class="metric-sub">lượt thao tác</div>
+        </div>
+        {% empty %}
+        <div class="col-span-full text-center text-[10px] text-gray-500 py-6">Không có dữ liệu.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="dashboard-card p-4">
+      <div class="flex items-center justify-between gap-3 mb-3">
+        <div>
+          <h2 class="text-[12px] font-semibold text-gray-900">Cơ cấu trạng thái</h2>
+          <p class="text-[9px] text-gray-500">Top trạng thái theo log duyệt.</p>
+        </div>
+      </div>
+      <div class="space-y-3">
+        {% for row in status_breakdown %}
+        <div>
+          <div class="flex items-center justify-between gap-2 text-[10px]">
+            <span class="font-semibold text-gray-700 truncate">{{ row.name }}</span>
+            <span class="text-gray-500">{{ row.total|intcomma }} lượt</span>
+          </div>
+          <div class="mt-1 bar-track">
+            <div class="bar-fill bg-sky-500" style="width: {{ row.pct }}%;"></div>
+          </div>
+          <div class="mt-1 text-[9px] text-gray-500">{{ row.pct }}%</div>
+        </div>
+        {% empty %}
+        <div class="text-center text-[10px] text-gray-500 py-6">Không có dữ liệu.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="dashboard-card overflow-hidden">
+    <div class="p-4 flex items-center justify-between gap-3">
+      <div>
+        <h2 class="text-[12px] font-semibold text-gray-900">Xếp hạng CTV</h2>
+        <p class="text-[9px] text-gray-500">Sắp xếp theo tổng lượt thao tác trong khoảng lọc.</p>
+      </div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full table-xs text-left">
+        <thead>
+          <tr>
+            <th class="w-12">#</th>
+            <th>CTV</th>
+            <th class="text-right">Lượt</th>
+            <th class="text-right">HĐ duyệt</th>
+            <th class="text-right">Duyệt lần đầu</th>
+            <th class="text-right">Từ chối</th>
+            <th class="text-right">Tỷ lệ từ chối</th>
+            <th class="min-w-48">So sánh</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for row in ranking %}
+          <tr class="hover:bg-gray-50">
+            <td class="text-gray-500">{{ forloop.counter }}</td>
+            <td>
+              <div class="font-semibold text-gray-900">{{ row.name }}</div>
+              <div class="text-[9px] text-gray-500">ID {{ row.checker_id }}</div>
+            </td>
+            <td class="text-right font-semibold text-gray-900">{{ row.total_actions|intcomma }}</td>
+            <td class="text-right">{{ row.approved_contracts|intcomma }}</td>
+            <td class="text-right">{{ row.first_approvals|intcomma }}</td>
+            <td class="text-right">{{ row.reject_actions|intcomma }}</td>
+            <td class="text-right">{{ row.reject_rate }}%</td>
+            <td>
+              <div class="bar-track">
+                <div class="bar-fill" style="width: {{ row.action_pct }}%;"></div>
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="8" class="px-3 py-6 text-center text-gray-500">Không có dữ liệu.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
 {% endblock %}

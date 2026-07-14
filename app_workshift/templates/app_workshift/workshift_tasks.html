@@ -284,23 +284,25 @@
                     {% endwith %}
                   </div>
                   {% if is_admin %}
-                  <form method="post" class="space-y-1" data-task-assign-form>
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="assign">
-                    <input type="hidden" name="shift_id" value="{{ shift.shift_id }}">
-                    <select name="task_id" class="w-full rounded-md border border-gray-200 px-2 py-1 text-[8px]">
-                      <option value="">Chọn công việc</option>
-                      {% for task in tasks %}
-                        <option value="{{ task.task_id }}">{{ task.task_name }}</option>
-                      {% endfor %}
-                    </select>
-                    <div class="flex items-center gap-1">
-                      <input type="number" step="0.25" name="planned_hours" class="w-full rounded-md border border-gray-200 px-2 py-1 text-[8px]" placeholder="Giờ" data-planned-hours-input>
-                      <input type="text" name="note" class="w-full rounded-md border border-gray-200 px-2 py-1 text-[8px]" placeholder="Ghi chú">
-                    </div>
-                    <p class="hidden text-[8px] text-red-600" data-over-hours-warning>Vượt giờ ca đăng ký.</p>
-                    <button type="submit" class="w-full rounded-md bg-emerald-600 text-white text-[8px] font-semibold py-1" data-submit-button>Gán</button>
-                  </form>
+                    {% if not assigned_total or assigned_total < shift.total_hours %}
+                    <form method="post" class="space-y-1" data-task-assign-form>
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="assign">
+                      <input type="hidden" name="shift_id" value="{{ shift.shift_id }}">
+                      <select name="task_id" class="w-full rounded-md border border-gray-200 px-2 py-1 text-[8px]">
+                        <option value="">Chọn công việc</option>
+                        {% for task in tasks %}
+                          <option value="{{ task.task_id }}">{{ task.task_name }}</option>
+                        {% endfor %}
+                      </select>
+                      <div class="flex items-center gap-1">
+                        <input type="number" step="0.25" name="planned_hours" class="w-full rounded-md border border-gray-200 px-2 py-1 text-[8px]" placeholder="Giờ" data-planned-hours-input>
+                        <input type="text" name="note" class="w-full rounded-md border border-gray-200 px-2 py-1 text-[8px]" placeholder="Ghi chú">
+                      </div>
+                      <p class="hidden text-[8px] text-red-600" data-over-hours-warning>Vượt giờ ca đăng ký.</p>
+                      <button type="submit" class="w-full rounded-md bg-emerald-600 text-white text-[8px] font-semibold py-1" data-submit-button>Gán</button>
+                    </form>
+                    {% endif %}
                   {% endif %}
                   {% endwith %}
                 {% else %}

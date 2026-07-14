@@ -11,6 +11,7 @@ UI_SCREENS = [
     {'key': 'receiving_v2', 'name': 'Nhận chứng từ v2', 'path': '/nhan-chung-tu-v2', 'group': 'documents'},
     {'key': 'receiving_import_v2', 'name': 'Import nhận chứng từ', 'path': '/nhan-chung-tu-v2/import', 'group': 'documents'},
     {'key': 'checking_v2', 'name': 'Duyệt chứng từ v2', 'path': '/duyet-chung-tu-v2', 'group': 'documents'},
+    {'key': 'gddb_registration', 'name': 'Giao dịch bảo đảm', 'path': '/giao-dich-dam-bao/', 'group': 'documents'},
     {'key': 'kpi_v2', 'name': 'Chỉ tiêu chứng từ v2', 'path': '/chi-tieu-chung-tu-v2', 'group': 'kpi'},
     {'key': 'package_v2', 'name': 'Quản lý thùng v2', 'path': '/package-list-management', 'group': 'package'},
     {'key': 'borrow_request_v2', 'name': 'Yêu cầu mượn v2', 'path': '/yeu-cau-muon-chung-tu-v2/', 'group': 'borrow'},
@@ -31,6 +32,12 @@ ROLE_CODES = [
     ('supervisor', 'Supervisor'),
     ('risk', 'Risk'),
 ]
+
+
+def _default_can_view(screen_key, role_code):
+    if role_code in ('admin', 'super_admin'):
+        return True
+    return screen_key == 'gddb_registration' and role_code == 'checker'
 
 
 def get_role_codes(user):
@@ -63,6 +70,20 @@ def ensure_ui_screens():
             ))
     if to_create:
         UiScreen.objects.bulk_create(to_create)
+    existing_pairs = set(UiPermission.objects.values_list('screen__screen_key', 'role_code'))
+    screens = UiScreen.objects.all()
+    missing_permissions = []
+    for screen in screens:
+        for code, _ in ROLE_CODES:
+            if (screen.screen_key, code) in existing_pairs:
+                continue
+            missing_permissions.append(UiPermission(
+                screen=screen,
+                role_code=code,
+                can_view=_default_can_view(screen.screen_key, code),
+            ))
+    if missing_permissions:
+        UiPermission.objects.bulk_create(missing_permissions)
     if not UiPermission.objects.exists():
         screens = UiScreen.objects.all()
         perms = []
@@ -71,7 +92,7 @@ def ensure_ui_screens():
                 perms.append(UiPermission(
                     screen=screen,
                     role_code=code,
-                    can_view=code in ('admin', 'super_admin'),
+                    can_view=_default_can_view(screen.screen_key, code),
                 ))
         if perms:
             UiPermission.objects.bulk_create(perms)

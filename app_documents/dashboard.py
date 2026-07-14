@@ -89,7 +89,6 @@ def get_dashboard_metrics(start_date, end_date, checker_user_id=None, heatmap_mo
         )
         first_time_contracts = grouped_first.count()
 
-    # Heatmap
     # Heatmap by mode
     heatmap_data: Dict[int, int] = {}
     if heatmap_mode == "hour":
@@ -111,7 +110,16 @@ def get_dashboard_metrics(start_date, end_date, checker_user_id=None, heatmap_mo
         for log in base_all_qs:
             day_num = log.trans_created_date.day
             heatmap_data[day_num] = heatmap_data.get(day_num, 0) + 1
-    heatmap_list = [{"hour": k, "count": v} for k, v in heatmap_data.items()]
+    heatmap_max = max(heatmap_data.values()) if heatmap_data else 0
+    heatmap_list = [
+        {
+            "hour": k,
+            "count": v,
+            "intensity": round((v / heatmap_max) * 100, 1) if heatmap_max else 0,
+            "alpha": round(0.08 + ((v / heatmap_max) * 0.5), 2) if heatmap_max and v else 0.04,
+        }
+        for k, v in heatmap_data.items()
+    ]
 
     # Productivity per checker
     valid_type_code = 101
@@ -183,6 +191,9 @@ def get_dashboard_metrics(start_date, end_date, checker_user_id=None, heatmap_mo
             }
         )
     ranking = sorted(ranking, key=lambda x: x["total_actions"], reverse=True)[:10]
+    max_ranking_actions = max([row["total_actions"] for row in ranking], default=0)
+    for row in ranking:
+        row["action_pct"] = round((row["total_actions"] / max_ranking_actions) * 100, 1) if max_ranking_actions else 0
 
     # Folder received count
     folder_received_count = (
@@ -192,12 +203,43 @@ def get_dashboard_metrics(start_date, end_date, checker_user_id=None, heatmap_mo
         ).count()
     )
 
+    total_actions = base_all_qs.count()
+    active_checkers_count = len(stats)
+    date_span_days = max((end_date - start_date).days + 1, 1)
+    avg_actions_per_day = round(total_actions / date_span_days, 1)
+    total_reject_actions = sum(data["reject_actions"] for data in stats.values())
+    reject_rate = round((total_reject_actions / total_actions) * 100, 1) if total_actions else 0
+    approval_rate = round((first_time_contracts / approved_contracts) * 100, 1) if approved_contracts else 0
+
+    status_counts = (
+        base_all_qs.values("checking_status_id__checking_status_name")
+        .annotate(total=Count("trans_id"))
+        .order_by("-total")[:8]
+    )
+    status_breakdown = []
+    for row in status_counts:
+        total = row["total"] or 0
+        status_breakdown.append(
+            {
+                "name": row["checking_status_id__checking_status_name"] or "Chưa xác định",
+                "total": total,
+                "pct": round((total / total_actions) * 100, 1) if total_actions else 0,
+            }
+        )
+
     return {
         "drop_checkers": drop_checkers,
         "approved_contracts": approved_contracts,
         "first_time_contracts": first_time_contracts,
+        "total_actions": total_actions,
+        "active_checkers_count": active_checkers_count,
+        "avg_actions_per_day": avg_actions_per_day,
+        "total_reject_actions": total_reject_actions,
+        "reject_rate": reject_rate,
+        "approval_rate": approval_rate,
         "heatmap_list": heatmap_list,
         "ranking": ranking,
+        "status_breakdown": status_breakdown,
         "folder_received_count": folder_received_count,
     }
 
