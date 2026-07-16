@@ -4,122 +4,290 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Chứng từ F88</title>
-  <link rel="stylesheet" href="{% static 'css/style.css' %}">
+  <title>Hệ thống chứng từ F88</title>
   <style>
     :root {
-      --f88-green: #00844a;
-      --f88-green-dark: #006837;
-      --card-bg: #0d1f16;
+      --green: #008c4a;
+      --green-dark: #006b3a;
+      --green-soft: #edf9f3;
+      --green-border: #d6eee2;
+      --ink: #13251d;
+      --muted: #64726b;
+      --line: #e5ece8;
+      --surface: #ffffff;
     }
-    body { font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: radial-gradient(circle at 20% 20%, rgba(0,132,74,0.08), transparent 35%), radial-gradient(circle at 80% 0%, rgba(0,132,74,0.08), transparent 32%), #f4f6f8; color: #0f172a; }
-    .wrap { max-width: 1100px; margin: 3.5rem auto 4rem; padding: 0 1.25rem; }
-    .topnav { display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding: 1.25rem 1rem; border-bottom: 1px solid #e5e7eb; }
-    .topnav a { color: var(--f88-green); text-decoration: none; font-weight: 600; }
-    .header { text-align: center; margin: 0 auto 2.75rem; max-width: 780px; }
-    .eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: #eaf7f0; color: var(--f88-green); font-weight: 600; letter-spacing: 0.3px; }
-    .header h1 { color: #0b1f17; font-size: 2.28rem; font-weight: 800; letter-spacing: -0.4px; margin: 0.75rem 0 0.35rem; }
-    .header p { color: #4b5563; font-size: 1.02rem; margin: 0; }
-    .user-menu { position: relative; display: inline-flex; align-items: center; }
-    .user-menu summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; border: 1px solid #e5e7eb; border-radius: 999px; padding: 6px 12px; font-weight: 600; color: #0b1f17; }
-    .user-menu summary::-webkit-details-marker { display: none; }
-    .user-dropdown { position: absolute; right: 0; top: calc(100% + 8px); background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); min-width: 180px; padding: 8px; z-index: 20; }
-    .user-dropdown a, .user-dropdown button { display: block; width: 100%; text-align: left; padding: 8px 10px; border-radius: 8px; color: #0f172a; text-decoration: none; font-weight: 600; border: 0; background: transparent; }
-    .user-dropdown a:hover, .user-dropdown button:hover { background: #f3f4f6; }
-    .hero-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; margin-bottom: 2rem; }
-    .hero-card { position: relative; padding: 1.6rem; border-radius: 22px; background: linear-gradient(135deg, #f8fbf9, #eaf7f0); color: #0f172a; box-shadow: 0 16px 34px rgba(0,0,0,0.08); overflow: hidden; min-height: 210px; border: 1px solid #d7efe2; display: flex; flex-direction: column; text-decoration: none; transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease; }
-    .hero-card:hover { transform: translateY(-4px); box-shadow: 0 18px 38px rgba(0,0,0,0.1); border-color: rgba(0,132,74,0.4); }
-    .hero-card.light { background: linear-gradient(135deg, #f8fbf9, #eaf7f0); color: #0f172a; border-color: #d7efe2; }
-    .hero-card.disabled { cursor: not-allowed; opacity: 0.7; }
-    .hero-card:after { content: ""; position: absolute; inset: auto -10% -50% auto; width: 220px; height: 220px; background: radial-gradient(circle, rgba(0,132,74,0.18), transparent 60%); transform: rotate(-12deg); opacity: 0.8; pointer-events: none; }
-    .hero-card h2, .hero-card h3 { margin: 0 0 .4rem; font-size: 1.4rem; font-weight: 800; }
-    .hero-card p { margin: 0; color: inherit; opacity: 0.9; line-height: 1.5; }
-    .hero-card .pill { margin-bottom: .5rem; background: rgba(0,132,74,0.12); color: var(--f88-green); }
-    .hero-card.light .pill { background: rgba(0,132,74,0.12); color: var(--f88-green); }
-    .muted { color: #6b7280; font-size: .98rem; line-height: 1.5; }
-    .cta { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0.55rem 1rem; border-radius: 12px; background: #fff; color: var(--f88-green); border: 1px solid var(--f88-green); font-weight: 700; width: max-content; }
-    .pill { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: rgba(0,132,74,0.08); color: var(--f88-green); font-weight: 600; font-size: 0.95rem; line-height: 1.2; white-space: nowrap; align-self: flex-start; width: max-content; min-width: 0; }
-    .pill-disabled { background: rgba(107,114,128,0.12); color: #6b7280; border: 1px dashed #cbd5e1; }
-    .auth { display: inline-flex; align-items: center; gap: 12px; }
-    .auth .cta { padding: 0.6rem 1rem; box-shadow: none; }
-    @media (max-width: 1100px) {
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background: #f7faf8;
+      font-family: Inter, "SF Pro Text", "Segoe UI", Roboto, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; }
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .94);
+      backdrop-filter: blur(14px);
+    }
+    .topbar-inner {
+      width: min(1080px, calc(100% - 32px));
+      min-height: 68px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .brand { display: inline-flex; align-items: center; gap: 12px; color: var(--ink); text-decoration: none; }
+    .brand img { width: auto; height: 34px; display: block; }
+    .user-menu { position: relative; }
+    .user-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 42px;
+      padding: 5px 10px 5px 6px;
+      border: 1px solid var(--green-border);
+      border-radius: 14px;
+      color: var(--ink);
+      background: var(--surface);
+      cursor: pointer;
+      transition: border-color .18s ease, background .18s ease;
+    }
+    .user-trigger:hover, .user-trigger[aria-expanded="true"] { border-color: #9ed8bb; background: var(--green-soft); }
+    .avatar {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border-radius: 10px;
+      background: var(--green);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .user-copy { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
+    .user-name { max-width: 170px; overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+    .user-role { margin-top: 2px; color: var(--muted); font-size: 10px; }
+    .chevron { width: 14px; height: 14px; color: #7b8a82; transition: transform .18s ease; }
+    .user-trigger[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+    .user-dropdown {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      width: 230px;
+      padding: 7px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 18px 45px rgba(18, 48, 34, .12);
+    }
+    .user-dropdown[hidden] { display: none; }
+    .menu-link, .menu-button {
+      width: 100%;
+      min-height: 40px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 10px;
+      border: 0;
+      border-radius: 10px;
+      color: #33463c;
+      background: transparent;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: left;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .menu-link:hover, .menu-button:hover { color: var(--green-dark); background: var(--green-soft); }
+    .menu-icon { width: 18px; height: 18px; color: #668074; }
+    .menu-separator { height: 1px; margin: 6px 4px; background: var(--line); }
+    .page {
+      width: min(1080px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 44px 0 64px;
+    }
+    .intro { max-width: 720px; }
+    .intro h1 { margin: 0 0 6px; color: #102219; font-size: clamp(28px, 3.4vw, 38px); line-height: 1.12; letter-spacing: -.04em; }
+    .intro p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+    .hero-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 14px; margin-top: 28px; }
+    .module-stack { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+    .module-stack .hero-card { width: 100%; flex: none; }
+    .legacy-link {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 34px;
+      padding: 6px 11px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: #6d7b74;
+      background: rgba(255, 255, 255, .72);
+      font-size: 10px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: color .18s ease, border-color .18s ease, background .18s ease;
+    }
+    .legacy-link:hover { color: var(--green-dark); border-color: var(--green-border); background: var(--green-soft); }
+    .legacy-link svg { width: 14px; height: 14px; flex: 0 0 auto; }
+    .hero-card {
+      position: relative;
+      height: 148px;
+      min-height: 148px;
+      display: flex;
+      flex-direction: column;
+      padding: 18px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      color: var(--ink);
+      background: var(--surface);
+      text-decoration: none;
+      box-shadow: 0 5px 18px rgba(25, 58, 42, .035);
+      transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+    }
+    .hero-card:hover { transform: translateY(-3px); border-color: #acd9c1; box-shadow: 0 14px 30px rgba(25, 58, 42, .09); }
+    .card-icon {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--green-border);
+      border-radius: 13px;
+      color: var(--green);
+      background: var(--green-soft);
+    }
+    .card-icon svg { width: 19px; height: 19px; }
+    .card-kicker { margin-top: 16px; color: var(--green-dark); font-size: 9px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .hero-card h3 { margin: 6px 0 0; color: #172a21; font-size: 15px; line-height: 1.35; letter-spacing: -.015em; }
+    .hero-card.disabled { opacity: .62; cursor: default; background: #fafcfb; box-shadow: none; }
+    .hero-card.disabled:hover { transform: none; border-color: var(--line); box-shadow: none; }
+    .hero-card.disabled .card-icon { border-color: #e2e8e5; color: #809087; background: #f2f5f3; }
+    .hero-card.disabled .card-kicker { color: #849189; }
+    .soft-card { grid-column: 2; }
+    @media (max-width: 900px) {
       .hero-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .soft-card { grid-column: auto; }
     }
-    @media (max-width: 760px) {
+    @media (max-width: 620px) {
+      .topbar-inner, .page { width: min(100% - 24px, 1180px); }
+      .user-copy { display: none; }
+      .page { padding-top: 36px; }
       .hero-grid { grid-template-columns: 1fr; }
+      .soft-card { grid-column: auto; }
     }
   </style>
 </head>
 <body>
-  <div class="topnav">
-    <div>
-      <a href="{% url 'home' %}" title="Vào ứng dụng nghiệp vụ">
-        <img src="https://f88.vn/images/root/logo-f88-primary.svg" alt="F88" style="height:36px;"/>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="{% url 'home' %}">
+        <img src="https://f88.vn/images/root/logo-f88-primary.svg" alt="F88">
       </a>
-    </div>
-    <div>
-    {% if user.is_authenticated %}
-      <details class="user-menu">
-        <summary>
-          {% if is_admin %}Admin{% elif is_risk %}Risk{% elif is_supervisor %}Supervisor{% elif is_checker %}CTV{% elif is_shop_user %}PGD{% else %}User{% endif %}
-        </summary>
-        <div class="user-dropdown">
-          <a href="{% url 'user_profile_v2' %}">Cài đặt thông tin user</a>
-          <form action="{% url 'logout' %}" method="post" style="margin:0;">
+
+      <div class="user-menu" data-user-menu>
+        <button type="button" class="user-trigger" data-user-trigger aria-expanded="false">
+          <span class="avatar">{{ user.username|first }}</span>
+          <span class="user-copy">
+            <span class="user-name">{% if user.last_name or user.first_name %}{{ user.last_name }} {{ user.first_name }}{% else %}{{ user.username }}{% endif %}</span>
+            <span class="user-role">{% if is_super_admin %}Super Admin{% elif is_admin %}Admin{% elif is_risk %}Risk{% elif is_supervisor %}Supervisor{% elif is_checker %}Checker{% elif is_shop_user %}Phòng giao dịch{% else %}User{% endif %}</span>
+          </span>
+          <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m7 10 5 5 5-5"/></svg>
+        </button>
+        <div class="user-dropdown" data-user-dropdown hidden>
+          <a class="menu-link" href="{% url 'user_profile_v2' %}">
+            <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.5"/><path d="M5.5 20c.8-4 3-6 6.5-6s5.7 2 6.5 6"/></svg>
+            Cài đặt thông tin user
+          </a>
+          {% if is_admin or is_super_admin %}
+          <a class="menu-link" href="/admin/">
+            <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3 4.5 6v5c0 4.8 2.8 8.1 7.5 10 4.7-1.9 7.5-5.2 7.5-10V6L12 3Z"/><path d="M9.5 12 11 13.5l3.5-3.5"/></svg>
+            Admin Panel
+          </a>
+          {% endif %}
+          <div class="menu-separator"></div>
+          <form action="{% url 'logout' %}" method="post">
             {% csrf_token %}
-            <button type="submit">Đăng xuất</button>
+            <button class="menu-button" type="submit">
+              <svg class="menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></svg>
+              Đăng xuất
+            </button>
           </form>
         </div>
-      </details>
-    {% else %}
-      <a href="{% url 'login' %}">Đăng nhập</a>
-    {% endif %}
+      </div>
     </div>
-  </div>
-  <div class="wrap">
-    <div class="header">
+  </header>
+
+  <main class="page">
+    <section class="intro">
       <h1>Hệ thống chứng từ</h1>
-      <p>Xin chào, {% if user.last_name or user.first_name %}{{ user.last_name }} {{ user.first_name }}{% else %}{{ user.username }}{% endif %}!</p>
-    </div>
+      <p>Xin chào <strong>{% if user.last_name or user.first_name %}{{ user.last_name }} {{ user.first_name }}{% else %}{{ user.username }}{% endif %}</strong>.</p>
+    </section>
 
-    <div class="hero-grid">
-      <a class="hero-card" href="{% url 'receiving_transaction' %}">
-        <div class="pill">Vận hành</div>
-        <h2>Chứng từ bản cứng</h2>
-        <p>Nhận, duyệt, quản lý thùng lữu trữ chứng từ bản cứng</p>
-      </a>
-
-      <a class="hero-card disabled" href="{% url 'app_notification:notification_dashboard' %}">
-        <div class="pill">Vận hành</div>
-        <h2>Nhận thông báo tin nhắn</h2>
-        <p>Đăng kí nhận thông báo tin nhắn từ hệ thống; hẹn giờ, theo dõi trạng thái gửi.</p>
-      </a>
-
-      <a class="hero-card light" href="{% url 'admindocuments:admindocuments_list' %}">
-        <div class="pill">Hành chính</div>
-        <h2>Quản lý văn bản hiện hành</h2>
-        <p>Quản lý văn bản hiện hành, theo dõi trạng thái ban hành và hiệu lực.</p>
-      </a>
-
-      <a class="hero-card" href="{% url 'receiving_transaction_v2' %}">
-        <div class="pill">Vận hành</div>
-        <h2>Chứng từ bản cứng ver 2</h2>
-        <p>Cũng là chứng từ bản cứng nhưng Giao diện mới xịn hơn</p>
-      </a>
-
-      <div class="hero-card disabled">
-        <div class="pill">Vận hành</div>
-        <h2>Chứng từ bản mềm</h2>
-        <p>Quản lý, duyệt chứng từ bản mềm</p>
-        <div class="pill pill-disabled" style="margin-top:1rem;">Đang phát triển</div>
+    <section class="hero-grid">
+      <div class="module-stack">
+        <a class="hero-card" href="{% url 'receiving_transaction_v2' %}">
+          <span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>
+          <span class="card-kicker">Vận hành</span>
+          <h3>Chứng từ bản cứng V2</h3>
+        </a>
+        <a class="legacy-link" href="{% url 'receiving_transaction' %}">
+          <span>Chứng từ bản cứng V1</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M14 7l5 5-5 5"/></svg>
+        </a>
       </div>
 
       <a class="hero-card" href="{% url 'gddb_registration_v2' %}">
-        <div class="pill">Vận hành</div>
-        <h2>Đăng ký giao dịch bảo đảm</h2>
-        <p>Quản lý thông tin đăng kí giao dịch bảo đảm</p>
+        <span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 9h16l-2-4H6L4 9Z"/><path d="M5 9v8h14V9M8 17v2h8v-2M8 13h.01M16 13h.01"/></svg></span>
+        <span class="card-kicker">Vận hành</span>
+        <h3>Đăng ký GDĐB</h3>
       </a>
-    </div>
-  </div>
+
+      <a class="hero-card" href="{% url 'admindocuments:admindocuments_list' %}">
+        <span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v5h4M10 12h6M10 16h6"/></svg></span>
+        <span class="card-kicker">Hành chính</span>
+        <h3>Quản lý văn bản</h3>
+      </a>
+
+      <div class="hero-card disabled soft-card">
+        <span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 6h16v12H4z"/><path d="m8 10 3 2-3 2M13 14h3"/></svg></span>
+        <span class="card-kicker">Sắp ra mắt</span>
+        <h3>Chứng từ bản mềm</h3>
+      </div>
+
+    </section>
+  </main>
+
+  <script>
+    const userMenu = document.querySelector('[data-user-menu]');
+    const userTrigger = userMenu?.querySelector('[data-user-trigger]');
+    const userDropdown = userMenu?.querySelector('[data-user-dropdown]');
+    const closeUserMenu = () => {
+      if (!userTrigger || !userDropdown) return;
+      userDropdown.hidden = true;
+      userTrigger.setAttribute('aria-expanded', 'false');
+    };
+    userTrigger?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const willOpen = userDropdown.hidden;
+      userDropdown.hidden = !willOpen;
+      userTrigger.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    });
+    document.addEventListener('click', (event) => {
+      if (userMenu && !userMenu.contains(event.target)) closeUserMenu();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeUserMenu();
+    });
+  </script>
 </body>
 </html>

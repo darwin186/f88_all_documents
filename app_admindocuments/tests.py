@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from app_documents.models import GapoScheduledMessage, UserProfile
-from app_notification.services import NotificationSendError
+from .services import NotificationSendError
 from openpyxl import Workbook
 
 from .forms import AdmIncomingDispatchForm, AdmParcelReceiptForm

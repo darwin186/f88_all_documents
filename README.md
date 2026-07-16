@@ -285,7 +285,6 @@ Mỗi màn v2 phải phục vụ đúng một bước trong vòng đời này, �
 ### 2) Ứng dụng chính
 - `app_documents`: nghiệp vụ chứng từ, nhận/duyệt, thùng, KPI, mượn.
 - `app_admindocuments`: cấp số văn bản hành chính/giấy tờ (khác mảng chứng từ).
-- `app_notification`: thông báo hệ thống (gửi, template).
 - `documents/`: project settings, urls, celery.
 
 ### 3) Vai trò & phân quyền

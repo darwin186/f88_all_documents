@@ -44,7 +44,6 @@ INSTALLED_APPS = [
     'django.contrib.humanize',
     "app_documents.apps.AppDocumentsConfig",
     "app_admindocuments.apps.AdmindocumentsConfig",
-    "app_notification.apps.AppNotificationConfig",
     "app_workshift.apps.AppWorkshiftConfig",
 ]
 

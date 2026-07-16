@@ -55,7 +55,7 @@
         {% if 'receiving_import_v2' in allowed_screens or is_admin or is_super_admin %}
         <span class="text-gray-300">•</span>
         <div class="relative group inline-flex items-center">
-          <span class="cursor-pointer {% if request.resolver_match.url_name == 'receiving_import_v2' or request.resolver_match.url_name == 'folder_appointment_report_v2' or request.resolver_match.url_name == 'folder_appointment_export' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Khác</span>
+          <span class="cursor-pointer {% if request.resolver_match.url_name == 'receiving_import_v2' or request.resolver_match.url_name == 'folder_appointment_report_v2' or request.resolver_match.url_name == 'folder_appointment_export' or request.resolver_match.url_name == 'ui_permission_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Khác</span>
           <div class="absolute left-0 top-full mt-1 min-w-[180px] rounded-xl border border-gray-200 bg-white shadow-lg py-1 hidden group-hover:block">
             <div class="absolute -top-2 left-0 right-0 h-2"></div>
             {% if 'receiving_import_v2' in allowed_screens %}
@@ -66,6 +66,9 @@
             {% if is_admin or is_super_admin %}
             <a href="{% url 'folder_appointment_report_v2' %}" class="flex items-center gap-2 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50">
               Hẹn nhận quyển
+            </a>
+            <a href="{% url 'ui_permission_v2' %}" class="flex items-center gap-2 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50">
+              Phân quyền UI V2
             </a>
             {% endif %}
           </div>

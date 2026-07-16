@@ -1448,8 +1448,9 @@ def switch_region(request, region_id):
 
     return redirect(request.META.get('HTTP_REFERER', 'home'))  # Chuyển hướng lại trang trước đó hoặc về trang chủ
 
-@login_required
-def home_view(request): 
+def home_view(request):
+    if not request.user.is_authenticated:
+        return redirect("login")
     # Get user context from the utility function
     user = request.user
     user_context = get_user_context(user)

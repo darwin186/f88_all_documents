@@ -33,7 +33,6 @@ from openpyxl import load_workbook
 
 from app_documents.models import GapoScheduledMessage, Shop, Region, UserProfile
 from app_documents.tasks import send_gapo_scheduled_message
-from app_notification.services import send_via_gapo, NotificationSendError
 
 from .forms import (
     AdmAdministrativeDocumentForm,
@@ -84,7 +83,12 @@ from .models import (
     AdmSignerRole,
     AdmAdministrativeDocumentHistory,
 )
-from .services import allocate_running_number, allocate_paper_running_number
+from .services import (
+    NotificationSendError,
+    allocate_paper_running_number,
+    allocate_running_number,
+    send_via_gapo,
+)
 
 
 def _has_admin_docs_access(user) -> bool:

@@ -36,11 +36,6 @@
         Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng thử lại.
       </div>
     {% endif %}
-    {% if next %}
-      <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 px-4 py-3 text-sm">
-        Bạn không có quyền truy cập vào trang này hoặc thông tin đăng nhập không chính xác.
-      </div>
-    {% endif %}
     {% if messages %}
       {% for message in messages %}
         <div class="mb-4 rounded-lg px-4 py-3 text-sm border
