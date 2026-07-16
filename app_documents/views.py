@@ -274,12 +274,21 @@ def gddb_registration_view(request):
     registrations, selected_statuses, query, date_from, date_to = _gddb_filtered_registrations(
         request, rollup_days=7
     )
-    registrations = registrations.select_related("registered_by", "updated_by", "registered_identity")
+    sort_param = request.GET.get("sort", "-created_at")
+    if sort_param not in {"created_at", "-created_at"}:
+        sort_param = "-created_at"
+    registrations = registrations.select_related(
+        "registered_by", "updated_by", "registered_identity"
+    ).order_by(sort_param, "-registration_id")
     paginator = Paginator(registrations, 50)
     page_obj = paginator.get_page(request.GET.get("page"))
     page_query = request.GET.copy()
     page_query.pop("page", None)
     pagination_query_prefix = f"{page_query.urlencode()}&" if page_query else ""
+    sort_query = request.GET.copy()
+    sort_query.pop("page", None)
+    sort_query.pop("sort", None)
+    sort_query_prefix = f"{sort_query.urlencode()}&" if sort_query else ""
     pagination_range = paginator.get_elided_page_range(page_obj.number, on_each_side=2, on_ends=1)
     base_qs = CollateralRegistration.objects.filter(
         is_duplicate=False,
@@ -296,7 +305,7 @@ def gddb_registration_view(request):
     active_tab = request.GET.get("tab", "list")
     allowed_tabs = {"list"}
     if _is_gddb_admin(request.user):
-        allowed_tabs.update({"api_docs", "manual", "configuration"})
+        allowed_tabs.update({"api_docs", "manual", "batches", "configuration"})
     if request.user.is_superuser:
         allowed_tabs.add("tokens")
     if active_tab not in allowed_tabs:
@@ -308,6 +317,49 @@ def gddb_registration_view(request):
     if manual_batch_id:
         manual_batch = CollateralRegistrationImportBatch.objects.filter(batch_id=manual_batch_id).first()
     manual_payload_draft = request.session.pop("gddb_manual_payload_draft", "") if active_tab == "manual" else ""
+    batch_page_obj = None
+    batch_pagination_range = []
+    batch_pagination_query_prefix = ""
+    batch_query = (request.GET.get("batch_q") or "").strip()
+    batch_source = (request.GET.get("batch_source") or "").strip()
+    batch_date_from = dateparse.parse_date(request.GET.get("batch_date_from") or "")
+    batch_date_to = dateparse.parse_date(request.GET.get("batch_date_to") or "")
+    if active_tab == "batches":
+        batch_queryset = CollateralRegistrationImportBatch.objects.select_related("created_by")
+        if batch_source == "manual":
+            batch_queryset = batch_queryset.filter(source_type__startswith="manual")
+        elif batch_source == "api":
+            batch_queryset = batch_queryset.exclude(source_type__startswith="manual")
+        if batch_date_from:
+            batch_queryset = batch_queryset.filter(created_at__date__gte=batch_date_from)
+        if batch_date_to:
+            batch_queryset = batch_queryset.filter(created_at__date__lte=batch_date_to)
+        if batch_query:
+            batch_id_query = batch_query.removeprefix("#")
+            batch_search = (
+                Q(source_type__icontains=batch_query)
+                | Q(source_url__icontains=batch_query)
+                | Q(created_by__username__icontains=batch_query)
+                | Q(created_by__first_name__icontains=batch_query)
+                | Q(created_by__last_name__icontains=batch_query)
+            )
+            if batch_id_query.isdigit():
+                batch_search |= Q(batch_id=int(batch_id_query))
+            batch_queryset = batch_queryset.filter(batch_search)
+        batch_paginator = Paginator(batch_queryset.order_by("-created_at", "-batch_id"), 50)
+        batch_page_obj = batch_paginator.get_page(request.GET.get("batch_page"))
+        batch_page_query = request.GET.copy()
+        batch_page_query.pop("batch_page", None)
+        batch_pagination_query_prefix = (
+            f"{batch_page_query.urlencode()}&" if batch_page_query else ""
+        )
+        batch_pagination_range = batch_paginator.get_elided_page_range(
+            batch_page_obj.number, on_each_side=2, on_ends=1
+        )
+        for batch_item in batch_page_obj:
+            is_manual = (batch_item.source_type or "").startswith("manual")
+            batch_item.source_channel = "manual" if is_manual else "api"
+            batch_item.source_channel_label = "Manual submit" if is_manual else "API"
     api_tokens = CollateralRegistrationApiToken.objects.select_related("owner", "created_by", "revoked_by") if request.user.is_superuser else []
     new_api_token = request.session.pop("gddb_new_api_token", None) if request.user.is_superuser else None
     registration_identities = CollateralRegistrationExternalIdentity.objects.filter(is_active=True).order_by("external_code")
@@ -363,6 +415,15 @@ def gddb_registration_view(request):
         "active_tab": active_tab,
         "manual_batch": manual_batch,
         "manual_payload_draft": manual_payload_draft,
+        "batch_page_obj": batch_page_obj,
+        "batch_pagination_range": batch_pagination_range,
+        "batch_pagination_query_prefix": batch_pagination_query_prefix,
+        "batch_filters": {
+            "q": batch_query,
+            "source": batch_source,
+            "date_from": batch_date_from.isoformat() if batch_date_from else "",
+            "date_to": batch_date_to.isoformat() if batch_date_to else "",
+        },
         "api_tokens": api_tokens,
         "new_api_token": new_api_token,
         "token_owners": token_owners,
@@ -371,6 +432,8 @@ def gddb_registration_view(request):
         "pgd_query": pgd_query,
         "pagination_range": pagination_range,
         "pagination_query_prefix": pagination_query_prefix,
+        "sort_query_prefix": sort_query_prefix,
+        "sort_param": sort_param,
         "can_process_gddb": _is_gddb_checker(request.user),
         "can_export_gddb": _is_gddb_admin(request.user),
     })
@@ -668,7 +731,63 @@ def api_gddb_update(request, registration_id):
         "postmini_updated": registration.postmini_updated,
         "post_update_status": registration.post_update_status,
         "reason": registration.reason,
+        "updated_by_username": request.user.username,
     }, encoder=DjangoJSONEncoder)
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+@require_http_methods(["POST"])
+def api_gddb_note_update(request, registration_id):
+    if not _is_gddb_checker(request.user):
+        return JsonResponse(
+            {"success": False, "error": "Chỉ Checker được cập nhật ghi chú GDĐB."},
+            status=403,
+        )
+    registration = get_object_or_404(
+        CollateralRegistration,
+        registration_id=registration_id,
+        is_duplicate=False,
+    )
+    try:
+        payload = _json_body(request)
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {"success": False, "error": "Payload JSON không hợp lệ."}, status=400
+        )
+
+    note_value = payload.get("note", "")
+    if not isinstance(note_value, str):
+        return JsonResponse(
+            {"success": False, "error": "Ghi chú không hợp lệ."}, status=400
+        )
+    note_value = note_value.strip()
+    if len(note_value) > 5000:
+        return JsonResponse(
+            {"success": False, "error": "Ghi chú không được vượt quá 5.000 ký tự."},
+            status=400,
+        )
+
+    old_note = registration.note or ""
+    if old_note != note_value:
+        registration.note = note_value or None
+        registration.updated_by = request.user
+        registration.save(update_fields=["note", "updated_by", "updated_at"])
+        CollateralRegistrationLog.objects.create(
+            registration=registration,
+            action="note_update",
+            from_status=registration.gddb_status,
+            to_status=registration.gddb_status,
+            note=note_value or None,
+            metadata={"old_note": old_note, "new_note": note_value},
+            created_by=request.user,
+        )
+
+    return JsonResponse({
+        "success": True,
+        "note": note_value,
+        "updated_by_username": request.user.username,
+    })
 
 
 @login_required
@@ -705,6 +824,7 @@ def api_gddb_postmini_update(request, registration_id):
         "postmini_updated": postmini_status,
         "process_done": postmini_status != "Chưa cập nhật",
         "source_user": registration.source_user,
+        "updated_by_username": request.user.username,
     })
 
 

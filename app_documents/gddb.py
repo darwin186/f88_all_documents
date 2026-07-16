@@ -332,10 +332,7 @@ def import_collateral_registrations(records, *, user=None, source_type="api", so
             continue
 
         dedupe_key = CollateralRegistration.build_dedupe_key(
-            data.get("contract_code"),
-            data.get("license_plate"),
-            data.get("chassis_number"),
-            data.get("engine_number"),
+            data.get("contract_code")
         )
         existing = CollateralRegistration.objects.filter(dedupe_key=dedupe_key).first()
         if existing:

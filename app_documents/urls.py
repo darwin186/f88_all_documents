@@ -94,5 +94,6 @@ urlpatterns = [
     path('giao-dich-dam-bao/configuration/import/', views.gddb_shop_mapping_import_view, name='gddb_shop_mapping_import'),
     path('api/gddb/intake/', views.api_gddb_intake, name='api_gddb_intake'),
     path('api/gddb/<int:registration_id>/update/', views.api_gddb_update, name='api_gddb_update'),
+    path('api/gddb/<int:registration_id>/note/', views.api_gddb_note_update, name='api_gddb_note_update'),
     path('api/gddb/<int:registration_id>/postmini/', views.api_gddb_postmini_update, name='api_gddb_postmini_update'),
 ]   

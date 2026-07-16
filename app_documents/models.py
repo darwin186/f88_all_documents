@@ -1274,21 +1274,22 @@ class CollateralRegistration(models.Model):
 
     @classmethod
     def build_dedupe_key(cls, contract_code, license_plate="", chassis_number="", engine_number=""):
-        raw_key = "|".join([
-            cls.normalize_key_part(contract_code),
-            cls.normalize_key_part(license_plate),
-            cls.normalize_key_part(chassis_number),
-            cls.normalize_key_part(engine_number),
-        ])
+        """Build the business dedupe key from contract code only."""
+        raw_key = cls.normalize_key_part(contract_code)
+        return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def build_duplicate_dedupe_key(cls, registration_id, contract_code):
+        raw_key = f"DUPLICATE|{registration_id}|{cls.normalize_key_part(contract_code)}"
         return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
 
     def save(self, *args, **kwargs):
-        self.dedupe_key = self.build_dedupe_key(
-            self.contract_code,
-            self.license_plate,
-            self.chassis_number,
-            self.engine_number,
-        )
+        if self.is_duplicate and self.pk:
+            self.dedupe_key = self.build_duplicate_dedupe_key(
+                self.pk, self.contract_code
+            )
+        else:
+            self.dedupe_key = self.build_dedupe_key(self.contract_code)
         if self.gddb_status == CollateralRegistrationStatus.REGISTERED and not self.registered_at:
             self.registered_at = timezone.now()
         super().save(*args, **kwargs)

@@ -22,6 +22,7 @@
               <a href="{% url 'gddb_registration_v2' %}" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Danh sách giao dịch</a>
               <a href="{% url 'gddb_registration_v2' %}?tab=api_docs" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Tài liệu API</a>
               <a href="{% url 'gddb_registration_v2' %}?tab=manual" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Submit manual</a>
+              <a href="{% url 'gddb_registration_v2' %}?tab=batches" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Quản lý batch</a>
               <a href="{% url 'gddb_registration_v2' %}?tab=configuration" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Cấu hình định danh</a>
               {% if is_super_admin %}<a href="{% url 'gddb_registration_v2' %}?tab=tokens" class="block border-t border-gray-100 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Quản lý token</a>{% endif %}
             </div>

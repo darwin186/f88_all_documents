@@ -165,7 +165,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
     </div>
 
     <div class="rounded-xl border border-emerald-100 bg-emerald-50 p-3 text-[10px] text-emerald-900">
-      Rule dedupe Production giữ nguyên: hash từ contract_code + license_plate + chassis_number + engine_number sau khi trim, uppercase và bỏ khoảng trắng. Record cùng key đã registered sẽ bị skip; record cùng key chưa registered sẽ được cập nhật.
+      Rule dedupe Production: chỉ dùng Mã hợp đồng sau khi trim, viết hoa và bỏ khoảng trắng. Mã hợp đồng đã registered sẽ bị skip; mã hợp đồng chưa registered sẽ được cập nhật bằng dữ liệu mới nhất.
     </div>
   </div>
   {% elif active_tab == 'tokens' %}
@@ -294,6 +294,82 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
     </form>
     </div>
   </div>
+  {% elif active_tab == 'batches' %}
+  <div class="space-y-4">
+    <div class="panel rounded-xl p-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div class="text-[13px] font-bold text-gray-900">Quản lý batch GDĐB</div>
+          <div class="mt-1 text-[10px] text-gray-500">Quản lý chung dữ liệu nhận từ API và Submit manual. Batch được tạo ngay khi hệ thống nhận request nên thời gian nhận cũng là thời gian tạo batch.</div>
+        </div>
+        {% if batch_page_obj %}<span class="rounded-full bg-gray-100 px-3 py-1 text-[9px] font-bold text-gray-600">{{ batch_page_obj.paginator.count }} batch</span>{% endif %}
+      </div>
+      <form method="get" action="{% url 'gddb_registration_v2' %}" class="mt-4 flex flex-wrap items-center gap-2">
+        <input type="hidden" name="tab" value="batches">
+        <input name="batch_q" value="{{ batch_filters.q }}" class="field min-w-[240px] flex-1 text-[10px]" placeholder="Mã batch, người gửi/submit, nguồn dữ liệu">
+        <select name="batch_source" class="field text-[10px]">
+          <option value="">Tất cả kênh nhận</option>
+          <option value="api" {% if batch_filters.source == 'api' %}selected{% endif %}>API</option>
+          <option value="manual" {% if batch_filters.source == 'manual' %}selected{% endif %}>Manual submit</option>
+        </select>
+        <input type="date" name="batch_date_from" value="{{ batch_filters.date_from }}" class="field text-[10px]" title="Nhận từ ngày">
+        <input type="date" name="batch_date_to" value="{{ batch_filters.date_to }}" class="field text-[10px]" title="Nhận đến ngày">
+        <button type="submit" class="rounded-lg bg-emerald-600 px-4 py-2.5 text-[10px] font-bold text-white hover:bg-emerald-700">Lọc batch</button>
+        {% if batch_filters.q or batch_filters.source or batch_filters.date_from or batch_filters.date_to %}<a href="{% url 'gddb_registration_v2' %}?tab=batches" class="rounded-lg border border-gray-200 px-4 py-2.5 text-[10px] font-bold text-gray-600 hover:bg-gray-50">Xóa lọc</a>{% endif %}
+      </form>
+    </div>
+
+    <div class="panel overflow-hidden rounded-xl">
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-[10px]">
+          <thead class="bg-gray-50 text-left text-[9px] uppercase text-gray-500">
+            <tr>
+              <th class="px-3 py-2">Batch</th>
+              <th class="px-3 py-2">Kênh nhận</th>
+              <th class="px-3 py-2">Ngày/giờ nhận</th>
+              <th class="px-3 py-2">Người gửi / submit</th>
+              <th class="px-3 py-2">Nguồn dữ liệu</th>
+              <th class="px-3 py-2 text-right">Tổng</th>
+              <th class="px-3 py-2">Kết quả xử lý</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100 bg-white">
+            {% for batch in batch_page_obj %}
+            <tr class="align-top hover:bg-gray-50">
+              <td class="whitespace-nowrap px-3 py-3 font-bold text-gray-900">#{{ batch.batch_id }}</td>
+              <td class="px-3 py-3"><span class="status-pill {% if batch.source_channel == 'manual' %}bg-blue-100 text-blue-700{% else %}status-registered{% endif %}">{{ batch.source_channel_label }}</span><div class="mt-1 text-[9px] text-gray-500">{{ batch.source_type|default:"api" }}</div></td>
+              <td class="whitespace-nowrap px-3 py-3"><div class="font-semibold text-gray-900">{{ batch.created_at|date:"d/m/Y H:i:s" }}</div><div class="mt-1 text-[9px] text-gray-500">Ngày tạo batch</div></td>
+              <td class="px-3 py-3">{% if batch.created_by %}<div class="font-semibold text-gray-900">{{ batch.created_by.get_full_name|default:batch.created_by.username }}</div><div class="mt-1 text-[9px] text-gray-500">{{ batch.created_by.username }}</div>{% else %}<span class="text-gray-500">Hệ thống / token legacy</span>{% endif %}</td>
+              <td class="max-w-[260px] px-3 py-3"><div class="break-all text-gray-700">{{ batch.source_url|default:"-" }}</div></td>
+              <td class="px-3 py-3 text-right text-base font-bold text-gray-900">{{ batch.total_rows }}</td>
+              <td class="min-w-[260px] px-3 py-3">
+                <div class="flex flex-wrap gap-1.5">
+                  <span class="rounded bg-emerald-50 px-2 py-1 font-bold text-emerald-700">Tạo {{ batch.created_rows }}</span>
+                  <span class="rounded bg-blue-50 px-2 py-1 font-bold text-blue-700">Cập nhật {{ batch.updated_rows }}</span>
+                  <span class="rounded bg-gray-100 px-2 py-1 font-bold text-gray-600">Bỏ qua {{ batch.skipped_rows }}</span>
+                  <span class="rounded bg-amber-50 px-2 py-1 font-bold text-amber-700">Trùng {{ batch.duplicate_rows }}</span>
+                  <span class="rounded bg-red-50 px-2 py-1 font-bold text-red-700">Lỗi {{ batch.error_rows }}</span>
+                </div>
+                {% if batch.summary.errors %}<details class="mt-2"><summary class="cursor-pointer font-semibold text-red-700">Xem lỗi batch</summary><pre class="mt-2 max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-red-50 p-2 text-[9px] text-red-800">{{ batch.summary.errors }}</pre></details>{% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" class="px-4 py-10 text-center text-gray-500">Chưa có batch phù hợp.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if batch_page_obj.paginator.num_pages > 1 %}
+      <nav class="flex items-center justify-end gap-1 border-t border-gray-100 px-4 py-3" aria-label="Phân trang batch">
+        {% if batch_page_obj.has_previous %}<a href="?{{ batch_pagination_query_prefix }}batch_page=1" class="flex h-7 min-w-7 items-center justify-center rounded border border-gray-200 px-1 font-bold">&lt;&lt;</a>{% endif %}
+        {% for page_number in batch_pagination_range %}
+          {% if page_number == '…' %}<span class="px-1 text-gray-400">…</span>{% elif page_number == batch_page_obj.number %}<span class="flex h-7 min-w-7 items-center justify-center rounded bg-emerald-600 px-1 font-bold text-white">{{ page_number }}</span>{% else %}<a href="?{{ batch_pagination_query_prefix }}batch_page={{ page_number }}" class="flex h-7 min-w-7 items-center justify-center rounded border border-gray-200 px-1 font-bold">{{ page_number }}</a>{% endif %}
+        {% endfor %}
+        {% if batch_page_obj.has_next %}<a href="?{{ batch_pagination_query_prefix }}batch_page={{ batch_page_obj.paginator.num_pages }}" class="flex h-7 min-w-7 items-center justify-center rounded border border-gray-200 px-1 font-bold">&gt;&gt;</a>{% endif %}
+      </nav>
+      {% endif %}
+    </div>
+  </div>
   {% elif active_tab == 'manual' %}
   <div class="panel rounded-xl p-4 space-y-4">
     <div>
@@ -367,6 +443,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         <div class="text-[10px] text-gray-500">Theo dõi hợp đồng và tài sản cần đăng kí giao dịch bảo đảm.</div>
       </div>
       <form id="gddb-filter-form" method="get" action="{% url 'gddb_registration_v2' %}" class="flex flex-wrap items-center gap-3">
+        <input type="hidden" name="sort" value="{{ sort_param }}">
         <input name="q" value="{{ filters.q }}" class="field w-60 text-[10px]" placeholder="Tìm HĐ, biển số, số khung, số máy">
         <input type="date" name="date_from" value="{{ filters.date_from }}" class="field text-[10px]" title="Đăng ký từ ngày">
         <input type="date" name="date_to" value="{{ filters.date_to }}" class="field text-[10px]" title="Đăng ký đến ngày">
@@ -414,7 +491,12 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         <thead class="bg-gray-50 text-left text-[9px] uppercase text-gray-500">
           <tr>
             <th class="px-3 py-2">Thông tin hợp đồng</th>
-            <th class="px-3 py-2">Ngày/giờ dữ liệu được tạo</th>
+            <th class="px-3 py-2">
+              <a href="?{{ sort_query_prefix }}sort={% if sort_param == '-created_at' %}created_at{% else %}-created_at{% endif %}" class="inline-flex items-center gap-1 hover:text-emerald-700" title="Sắp xếp theo ngày tạo">
+                Ngày/giờ dữ liệu được tạo
+                <span aria-hidden="true">{% if sort_param == 'created_at' %}▲{% else %}▼{% endif %}</span>
+              </a>
+            </th>
             <th class="px-3 py-2">Trạng thái chính</th>
             <th class="px-3 py-2">Nguồn vay</th>
             <th class="px-3 py-2">Cửa hàng</th>
@@ -491,10 +573,18 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
               <div><span class="mb-1 block text-[9px] text-gray-500">Cập nhật PosMini</span><span data-drawer-postmini class="status-pill {% if item.postmini_updated == 'Đã cập nhật' or item.postmini_updated == 'Đã cập nhật 1 dòng' %}status-registered{% else %}status-pending{% endif %}">{{ item.postmini_updated|default:"Chưa cập nhật" }}</span></div>
               <div><span class="mb-1 block text-[9px] text-gray-500">Định danh thực tế đã dùng đăng ký</span><div data-drawer-identity class="field flex items-center font-semibold">{% if item.registered_identity %}{{ item.registered_identity.external_code }}{% else %}{{ item.registered_by_name|default:"" }}{% endif %}</div><span data-drawer-suggested-identity class="mt-1 block text-[9px] text-blue-600 {% if not item.suggested_identity %}hidden{% endif %}">{% if item.suggested_identity %}PGD đề xuất: {{ item.suggested_identity.external_code }}{% endif %}</span></div>
               <div><span class="mb-1 block text-[9px] text-gray-500">Thời gian xác nhận đăng ký</span><span data-drawer-registered-at class="status-pill {% if item.registered_at %}status-registered{% else %}status-pending{% endif %}">{{ item.registered_at|date:"d/m/Y H:i"|default:"Chưa đăng ký" }}</span></div>
-              <div><span class="mb-1 block text-[9px] text-gray-500">User đăng ký / Checker cập nhật</span><div class="font-semibold text-gray-900">{{ item.source_user|default:"-" }}</div></div>
+              <div><span class="mb-1 block text-[9px] text-gray-500">Người thao tác gần nhất</span><div data-drawer-operator class="font-semibold text-gray-900">{{ item.updated_by.username|default:item.source_user|default:"-" }}</div></div>
             </div>
             <div class="mt-3"><span class="mb-1 block text-[9px] text-gray-500">Lý do</span><div data-drawer-reason class="rounded-lg bg-gray-50 p-3 text-gray-800">{{ item.reason|default:"-" }}</div></div>
-            <div class="mt-3"><span class="mb-1 block text-[9px] text-gray-500">Ghi chú</span><div class="whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-gray-800">{{ item.note|default:"-" }}</div></div>
+            <div class="mt-3">
+              <span class="mb-1 block text-[9px] text-gray-500">Ghi chú</span>
+              {% if can_process_gddb %}
+              <textarea data-gddb-live-note data-save-url="{% url 'api_gddb_note_update' item.registration_id %}" rows="3" maxlength="5000" class="w-full resize-y rounded-lg border border-gray-200 bg-white p-3 text-gray-800 outline-none focus:border-emerald-500" placeholder="Nhập ghi chú, nhấn Enter để lưu">{{ item.note|default:"" }}</textarea>
+              <span data-gddb-note-status class="mt-1 block min-h-[14px] text-[9px] text-gray-500">Nhấn Enter để lưu · Shift+Enter để xuống dòng</span>
+              {% else %}
+              <div class="whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-gray-800">{{ item.note|default:"-" }}</div>
+              {% endif %}
+            </div>
           </section>
         </div>
       </aside>
@@ -718,6 +808,12 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
     setTimeout(() => toast.classList.add('hidden'), 2400);
   }
 
+  function updateGddbDrawerOperator(registrationId, username) {
+    if (!registrationId || !username) return;
+    const operator = document.querySelector(`[data-gddb-drawer="${registrationId}"] [data-drawer-operator]`);
+    if (operator) operator.textContent = username;
+  }
+
   document.querySelectorAll('[data-drawer-open]').forEach((button) => {
     button.addEventListener('click', () => {
       const drawer = document.querySelector(`[data-gddb-drawer="${button.dataset.drawerOpen}"]`);
@@ -731,6 +827,40 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
     button.addEventListener('click', () => {
       button.closest('[data-gddb-drawer]').classList.add('hidden');
       document.body.style.overflow = '';
+    });
+  });
+
+  document.querySelectorAll('[data-gddb-live-note]').forEach((input) => {
+    const status = input.parentElement.querySelector('[data-gddb-note-status]');
+    let saving = false;
+    input.addEventListener('keydown', async (event) => {
+      if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+      event.preventDefault();
+      if (saving) return;
+      saving = true;
+      input.disabled = true;
+      status.textContent = 'Đang lưu...';
+      status.className = 'mt-1 block min-h-[14px] text-[9px] text-amber-600';
+      try {
+        const response = await fetch(input.dataset.saveUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN || '' },
+          body: JSON.stringify({ note: input.value }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || 'Không lưu được ghi chú.');
+        input.value = data.note || '';
+        updateGddbDrawerOperator(input.closest('[data-gddb-drawer]')?.dataset.gddbDrawer, data.updated_by_username);
+        status.textContent = 'Đã lưu';
+        status.className = 'mt-1 block min-h-[14px] text-[9px] font-semibold text-emerald-600';
+      } catch (error) {
+        status.textContent = error.message;
+        status.className = 'mt-1 block min-h-[14px] text-[9px] font-semibold text-red-600';
+      } finally {
+        input.disabled = false;
+        input.focus();
+        saving = false;
+      }
     });
   });
 
@@ -859,6 +989,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         if (drawerReason) drawerReason.textContent = data.reason || '-';
         const drawerPostUpdate = drawer?.querySelector('[data-drawer-post-update]');
         if (drawerPostUpdate) drawerPostUpdate.textContent = data.post_update_status || '-';
+        updateGddbDrawerOperator(registerModal.dataset.registrationId, data.updated_by_username);
         const drawerRegisteredAt = drawer?.querySelector('[data-drawer-registered-at]');
         if (drawerRegisteredAt && data.registered_at && action === 'registered') {
           drawerRegisteredAt.textContent = new Date(data.registered_at).toLocaleString('vi-VN', { hour12: false });
@@ -954,6 +1085,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           drawerPostmini.classList.toggle('status-registered', data.process_done);
           drawerPostmini.classList.toggle('status-pending', !data.process_done);
         }
+        updateGddbDrawerOperator(postminiModal.dataset.registrationId, data.updated_by_username);
         setGddbModalOpen(postminiModal, false);
         showGddbToast(data.process_done ? 'Quy trình GDĐB đã hoàn tất.' : 'Đã cập nhật trạng thái PosMini.', true);
       } catch (error) {
