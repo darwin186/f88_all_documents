@@ -17,7 +17,7 @@ from django.utils import timezone, dateparse
 from django.utils.dateparse import parse_datetime
 from django.conf import settings
 from django.db import IntegrityError, transaction, connection
-from django.db.models import Count, Max, Q, Min, Prefetch, F, Sum
+from django.db.models import Case, Count, DateTimeField, IntegerField, Max, Q, Min, Prefetch, F, Sum, Value, When
 from django.forms.models import model_to_dict
 from django.core.serializers.json import DjangoJSONEncoder
 from urllib.parse import urlencode
@@ -35,7 +35,7 @@ import requests
 import pandas as pd
 from datetime import datetime, timedelta
 import calendar
-from django.db.models.functions import ExtractHour, TruncMonth
+from django.db.models.functions import Coalesce, ExtractHour, TruncMonth
 import openpyxl
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -195,6 +195,93 @@ def _is_gddb_checker(user):
     return user.is_superuser or user.groups.filter(name="checker").exists()
 
 
+def _can_process_gddb(user):
+    return _is_gddb_admin(user) or _is_gddb_checker(user)
+
+
+def _gddb_claim_duration():
+    return timedelta(minutes=max(1, int(getattr(settings, "GDDB_CASE_CLAIM_MINUTES", 5))))
+
+
+def _gddb_loan_source_group(value):
+    source = (value or "").strip()
+    normalized = source.casefold()
+    if normalized in {"f88", "f88 fund"}:
+        return "F88", "f88"
+    if normalized in {"cimb", "cimb fund"}:
+        return "CIMB", "cimb"
+    if not normalized or normalized in {"mb", "mb fund"}:
+        return "MB", "mb"
+    return source, "other"
+
+
+def _gddb_loan_source_query(group):
+    if group == "f88":
+        return Q(disbursement_source__iexact="F88") | Q(disbursement_source__iexact="F88 Fund")
+    if group == "cimb":
+        return Q(disbursement_source__iexact="CIMB") | Q(disbursement_source__iexact="CIMB Fund")
+    if group == "mb":
+        return (
+            Q(disbursement_source__isnull=True)
+            | Q(disbursement_source="")
+            | Q(disbursement_source__iexact="MB")
+            | Q(disbursement_source__iexact="MB Fund")
+        )
+    return Q(disbursement_source__iexact=group)
+
+
+def _gddb_batch_group(registration):
+    source_label, source_group = _gddb_loan_source_group(registration.disbursement_source)
+    if registration.import_batch_id:
+        batch_key = f"batch:{registration.import_batch_id}"
+        batch_time = registration.import_batch.created_at if registration.import_batch else None
+    else:
+        batch_time = registration.created_at
+        batch_key = f"time:{batch_time:%Y%m%d%H}" if batch_time else f"case:{registration.pk}"
+    batch_label = f"Batch {batch_time:%d/%m %H:%M}" if batch_time else "Batch không xác định"
+    return batch_key, batch_label, source_group, source_label
+
+
+def _gddb_claim_is_active(registration, now=None):
+    now = now or timezone.now()
+    return bool(
+        registration.processing_by_id
+        and registration.processing_expires_at
+        and registration.processing_expires_at > now
+    )
+
+
+def _gddb_is_case_owner(registration, user):
+    return bool(
+        registration.processing_by_id == user.id
+        or (
+            not registration.processing_by_id
+            and registration.registered_by_id == user.id
+        )
+    )
+
+
+def _gddb_can_edit_case(registration, user):
+    return _is_gddb_admin(user) or _gddb_is_case_owner(registration, user)
+
+
+def _gddb_case_permission_error(registration, user, *, require_active_claim=False):
+    if _is_gddb_admin(user):
+        return None
+    if not _gddb_is_case_owner(registration, user):
+        owner = registration.processing_by or registration.registered_by
+        if owner:
+            return f"Case này thuộc quyền xử lý của {owner.username}."
+        return "Bạn cần nhận case trước khi thao tác."
+    if (
+        require_active_claim
+        and registration.gddb_status == CollateralRegistrationStatus.PENDING
+        and not _gddb_claim_is_active(registration)
+    ):
+        return "Phiên giữ case đã hết hạn. Vui lòng nhận lại case."
+    return None
+
+
 def _gddb_current_date():
     current_time = timezone.now()
     if timezone.is_aware(current_time):
@@ -238,6 +325,8 @@ def _gddb_filtered_registrations(request, *, default_pending=True, rollup_days=N
         selected_statuses = []
 
     query = (request.GET.get("q") or "").strip()
+    loan_source = (request.GET.get("loan_source") or "").strip()
+    external_identity_id = (request.GET.get("external_identity") or "").strip()
     date_from = dateparse.parse_date(request.GET.get("date_from") or "")
     date_to = dateparse.parse_date(request.GET.get("date_to") or "")
     registrations = CollateralRegistration.objects.filter(is_duplicate=False)
@@ -261,25 +350,75 @@ def _gddb_filtered_registrations(request, *, default_pending=True, rollup_days=N
             | Q(engine_number__icontains=query)
             | Q(shop_name__icontains=query)
         )
+    if loan_source:
+        registrations = registrations.filter(_gddb_loan_source_query(loan_source))
+    if external_identity_id.isdigit():
+        identity_id = int(external_identity_id)
+        mapped_shop_names = Shop.objects.filter(
+            is_shop_active=True,
+            for_borrow_only=False,
+            default_gddb_identity_id=identity_id,
+        ).values_list("shop_name", flat=True)
+        mapped_shop_query = Q()
+        for shop_name in mapped_shop_names:
+            mapped_shop_query |= Q(shop_name__iexact=(shop_name or "").strip())
+        identity_query = Q(registered_identity_id=identity_id)
+        if mapped_shop_query:
+            identity_query |= Q(registered_identity__isnull=True) & mapped_shop_query
+        registrations = registrations.filter(identity_query)
     if date_from:
-        registrations = registrations.filter(registered_at__date__gte=date_from)
+        registrations = registrations.filter(created_at__date__gte=date_from)
     if date_to:
-        registrations = registrations.filter(registered_at__date__lte=date_to)
-    return registrations, selected_statuses, query, date_from, date_to
+        registrations = registrations.filter(created_at__date__lte=date_to)
+    return (
+        registrations,
+        selected_statuses,
+        query,
+        loan_source,
+        external_identity_id,
+        date_from,
+        date_to,
+    )
 
 
 @login_required
 @require_ui_permission("gddb_registration")
 def gddb_registration_view(request):
-    registrations, selected_statuses, query, date_from, date_to = _gddb_filtered_registrations(
-        request, rollup_days=7
-    )
-    sort_param = request.GET.get("sort", "-created_at")
-    if sort_param not in {"created_at", "-created_at"}:
-        sort_param = "-created_at"
+    (
+        registrations,
+        selected_statuses,
+        query,
+        loan_source,
+        external_identity_id,
+        date_from,
+        date_to,
+    ) = _gddb_filtered_registrations(request, rollup_days=7)
+    sort_param = request.GET.get("sort", "priority")
+    if sort_param not in {"priority", "created_at", "-created_at"}:
+        sort_param = "priority"
     registrations = registrations.select_related(
-        "registered_by", "updated_by", "registered_identity"
-    ).order_by(sort_param, "-registration_id")
+        "registered_by", "updated_by", "registered_identity", "processing_by", "import_batch"
+    )
+    if sort_param == "priority":
+        now = timezone.now()
+        registrations = registrations.annotate(
+            claim_priority=Case(
+                When(
+                    processing_by__isnull=False,
+                    processing_expires_at__gt=now,
+                    then=Value(0),
+                ),
+                default=Value(1),
+                output_field=IntegerField(),
+            ),
+            batch_sort_time=Coalesce(
+                "import_batch__created_at",
+                "created_at",
+                output_field=DateTimeField(),
+            ),
+        ).order_by("claim_priority", "batch_sort_time", "created_at", "registration_id")
+    else:
+        registrations = registrations.order_by(sort_param, "-registration_id")
     paginator = Paginator(registrations, 50)
     page_obj = paginator.get_page(request.GET.get("page"))
     page_query = request.GET.copy()
@@ -302,6 +441,14 @@ def gddb_registration_view(request):
         postmini_updated__in=["Đã cập nhật", "Đã cập nhật 1 dòng"],
     ).count()
     total_count = base_qs.count()
+    f88_count = base_qs.filter(_gddb_loan_source_query("f88")).count()
+    cimb_count = base_qs.filter(_gddb_loan_source_query("cimb")).count()
+    mb_count = base_qs.filter(_gddb_loan_source_query("mb")).count()
+    held_count = base_qs.filter(
+        gddb_status=CollateralRegistrationStatus.PENDING,
+        processing_by__isnull=False,
+        processing_expires_at__gt=timezone.now(),
+    ).count()
     active_tab = request.GET.get("tab", "list")
     allowed_tabs = {"list"}
     if _is_gddb_admin(request.user):
@@ -363,6 +510,12 @@ def gddb_registration_view(request):
     api_tokens = CollateralRegistrationApiToken.objects.select_related("owner", "created_by", "revoked_by") if request.user.is_superuser else []
     new_api_token = request.session.pop("gddb_new_api_token", None) if request.user.is_superuser else None
     registration_identities = CollateralRegistrationExternalIdentity.objects.filter(is_active=True).order_by("external_code")
+    report_identity_choices = CollateralRegistrationExternalIdentity.objects.order_by("external_code")
+    loan_source_choices = [
+        ("f88", "F88"),
+        ("cimb", "CIMB"),
+        ("mb", "MB"),
+    ]
     shop_names = {item.shop_name.strip().casefold() for item in page_obj if item.shop_name and item.shop_name.strip()}
     suggested_by_shop = {}
     if shop_names:
@@ -372,6 +525,57 @@ def gddb_registration_view(request):
                 suggested_by_shop.setdefault(normalized_name, shop.default_gddb_identity)
     for item in page_obj:
         item.suggested_identity = suggested_by_shop.get((item.shop_name or "").strip().casefold())
+        item.loan_source_label, item.loan_source_group = _gddb_loan_source_group(item.disbursement_source)
+        (
+            item.bulk_batch_key,
+            item.bulk_batch_label,
+            item.bulk_source_group,
+            item.bulk_source_label,
+        ) = _gddb_batch_group(item)
+        item.bulk_group_key = f"{item.bulk_batch_key}|{item.bulk_source_group}"
+        item.bulk_group_label = f"{item.bulk_batch_label} · {item.bulk_source_label}"
+        item.claim_is_active = _gddb_claim_is_active(item)
+        item.claim_is_mine = _gddb_is_case_owner(item, request.user)
+        item.can_edit_case = _gddb_can_edit_case(item, request.user)
+        item.can_mutate_case = bool(
+            _is_gddb_admin(request.user)
+            or (
+                item.claim_is_mine
+                and (
+                    item.gddb_status != CollateralRegistrationStatus.PENDING
+                    or item.claim_is_active
+                )
+            )
+        )
+        item.can_claim_case = bool(
+            not _is_gddb_admin(request.user)
+            and (
+                (
+                    item.gddb_status == CollateralRegistrationStatus.PENDING
+                    and (item.claim_is_mine or not item.claim_is_active)
+                )
+                or (
+                    item.gddb_status != CollateralRegistrationStatus.PENDING
+                    and not item.processing_by_id
+                    and not item.registered_by_id
+                )
+            )
+        )
+        item.bulk_claim_eligible = bool(
+            _can_process_gddb(request.user)
+            and item.gddb_status == CollateralRegistrationStatus.PENDING
+            and not item.claim_is_active
+        )
+        item.needs_case_claim = bool(
+            not _is_gddb_admin(request.user)
+            and (
+                not item.claim_is_mine
+                or (
+                    item.gddb_status == CollateralRegistrationStatus.PENDING
+                    and not item.claim_is_active
+                )
+            )
+        )
 
     configuration_identities = []
     configuration_shops = []
@@ -395,13 +599,17 @@ def gddb_registration_view(request):
         "non_registration_reason_choices": GDDB_NON_REGISTRATION_REASON_CHOICES,
         "registration_reason_choices": GDDB_REGISTRATION_REASON_CHOICES,
         "registration_identity_choices": registration_identities,
+        "report_identity_choices": report_identity_choices,
         "filters": {
             "status": selected_statuses[0] if len(selected_statuses) == 1 else "",
             "statuses": selected_statuses,
             "q": query,
+            "loan_source": loan_source,
+            "external_identity": external_identity_id,
             "date_from": date_from.isoformat() if date_from else "",
             "date_to": date_to.isoformat() if date_to else "",
         },
+        "loan_source_choices": loan_source_choices,
         "is_default_work_queue": "status_present" not in request.GET,
         "selected_status_options": [
             (value, label) for value, label in CollateralRegistrationStatus.choices if value in selected_statuses
@@ -410,6 +618,10 @@ def gddb_registration_view(request):
         "not_registered_count": not_registered_count,
         "registered_count": registered_count,
         "done_count": done_count,
+        "f88_count": f88_count,
+        "cimb_count": cimb_count,
+        "mb_count": mb_count,
+        "held_count": held_count,
         "processing_posmini_count": registered_count - done_count,
         "total_count": total_count,
         "active_tab": active_tab,
@@ -434,7 +646,7 @@ def gddb_registration_view(request):
         "pagination_query_prefix": pagination_query_prefix,
         "sort_query_prefix": sort_query_prefix,
         "sort_param": sort_param,
-        "can_process_gddb": _is_gddb_checker(request.user),
+        "can_process_gddb": _can_process_gddb(request.user),
         "can_export_gddb": _is_gddb_admin(request.user),
     })
     return render(request, "app_documents/app_gddb_registration_v2.html", context)
@@ -637,17 +849,265 @@ def api_gddb_intake(request):
 @login_required
 @require_ui_permission("gddb_registration")
 @require_http_methods(["POST"])
+def api_gddb_case_claim(request, registration_id):
+    if not _can_process_gddb(request.user):
+        return JsonResponse({"success": False, "error": "Bạn không có quyền xử lý case GDĐB."}, status=403)
+    try:
+        payload = _json_body(request)
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Payload JSON không hợp lệ."}, status=400)
+    action = (payload.get("action") or "claim").strip()
+    if action not in {"claim", "heartbeat", "release"}:
+        return JsonResponse({"success": False, "error": "Thao tác giữ case không hợp lệ."}, status=400)
+
+    now = timezone.now()
+    with transaction.atomic():
+        try:
+            registration = CollateralRegistration.objects.select_for_update().get(
+                registration_id=registration_id,
+                is_duplicate=False,
+            )
+        except CollateralRegistration.DoesNotExist:
+            return JsonResponse({"success": False, "error": "Không tìm thấy case GDĐB."}, status=404)
+
+        is_admin = _is_gddb_admin(request.user)
+        is_owner = _gddb_is_case_owner(registration, request.user)
+        is_active = _gddb_claim_is_active(registration, now)
+
+        if action == "heartbeat":
+            if not is_owner or registration.gddb_status != CollateralRegistrationStatus.PENDING:
+                return JsonResponse({"success": False, "error": "Bạn không còn giữ case này."}, status=409)
+            registration.processing_expires_at = now + _gddb_claim_duration()
+            registration.save(update_fields=["processing_expires_at", "updated_at"])
+            return JsonResponse({
+                "success": True,
+                "action": action,
+                "processing_by_username": request.user.username,
+                "processing_expires_at": registration.processing_expires_at,
+            }, encoder=DjangoJSONEncoder)
+
+        if action == "release":
+            if not is_admin and (not is_owner or registration.gddb_status != CollateralRegistrationStatus.PENDING):
+                return JsonResponse({"success": False, "error": "Bạn không có quyền trả case này."}, status=403)
+            old_owner = registration.processing_by
+            registration.processing_by = None
+            registration.processing_started_at = None
+            registration.processing_expires_at = None
+            registration.save(update_fields=[
+                "processing_by", "processing_started_at", "processing_expires_at", "updated_at"
+            ])
+            CollateralRegistrationLog.objects.create(
+                registration=registration,
+                action="case_release",
+                from_status=registration.gddb_status,
+                to_status=registration.gddb_status,
+                note=f"Trả case của {old_owner.username if old_owner else '-'}",
+                metadata={"previous_owner_id": old_owner.id if old_owner else None},
+                created_by=request.user,
+            )
+            return JsonResponse({"success": True, "action": action})
+
+        if not is_admin:
+            if registration.gddb_status != CollateralRegistrationStatus.PENDING:
+                completed_owner = registration.processing_by or registration.registered_by
+                if completed_owner and not is_owner:
+                    return JsonResponse({
+                        "success": False,
+                        "error": f"Case này chỉ {completed_owner.username} hoặc Admin được chỉnh sửa.",
+                    }, status=409)
+            elif is_active and not is_owner:
+                return JsonResponse({
+                    "success": False,
+                    "error": f"{registration.processing_by.username} đang xử lý case này.",
+                    "processing_by_username": registration.processing_by.username,
+                    "processing_expires_at": registration.processing_expires_at,
+                }, status=409, encoder=DjangoJSONEncoder)
+
+        previous_owner = registration.processing_by
+        ownership_changed = registration.processing_by_id != request.user.id
+        if not is_admin or not registration.processing_by_id:
+            registration.processing_by = request.user
+        if ownership_changed and registration.processing_by_id == request.user.id:
+            registration.processing_started_at = now
+        if registration.gddb_status == CollateralRegistrationStatus.PENDING:
+            registration.processing_expires_at = now + _gddb_claim_duration()
+        registration.save(update_fields=[
+            "processing_by", "processing_started_at", "processing_expires_at", "updated_at"
+        ])
+        if ownership_changed and registration.processing_by_id == request.user.id:
+            CollateralRegistrationLog.objects.create(
+                registration=registration,
+                action="case_claim",
+                from_status=registration.gddb_status,
+                to_status=registration.gddb_status,
+                note=f"{request.user.username} nhận xử lý case",
+                metadata={"previous_owner_id": previous_owner.id if previous_owner else None},
+                created_by=request.user,
+            )
+
+    return JsonResponse({
+        "success": True,
+        "action": action,
+        "processing_by_username": registration.processing_by.username if registration.processing_by else "",
+        "processing_expires_at": registration.processing_expires_at,
+    }, encoder=DjangoJSONEncoder)
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+@require_http_methods(["POST"])
+def api_gddb_bulk_claim(request):
+    if not _can_process_gddb(request.user):
+        return JsonResponse({"success": False, "error": "Bạn không có quyền nhận case GDĐB."}, status=403)
+    try:
+        payload = _json_body(request)
+    except json.JSONDecodeError:
+        return JsonResponse({"success": False, "error": "Payload JSON không hợp lệ."}, status=400)
+    if not isinstance(payload, dict):
+        return JsonResponse({"success": False, "error": "Payload phải là object JSON."}, status=400)
+
+    action = (payload.get("action") or "claim").strip()
+    now = timezone.now()
+    if action == "heartbeat":
+        heartbeat_ids = payload.get("registration_ids") or []
+        try:
+            heartbeat_ids = list(dict.fromkeys(int(value) for value in heartbeat_ids))
+        except (TypeError, ValueError):
+            return JsonResponse({"success": False, "error": "Danh sách heartbeat không hợp lệ."}, status=400)
+        heartbeat_qs = CollateralRegistration.objects.filter(
+            processing_by=request.user,
+            processing_expires_at__gt=now,
+            gddb_status=CollateralRegistrationStatus.PENDING,
+            is_duplicate=False,
+        )
+        if heartbeat_ids:
+            heartbeat_qs = heartbeat_qs.filter(registration_id__in=heartbeat_ids)
+        renewed_ids = list(heartbeat_qs.values_list("registration_id", flat=True))
+        if renewed_ids:
+            CollateralRegistration.objects.filter(registration_id__in=renewed_ids).update(
+                processing_expires_at=now + _gddb_claim_duration()
+            )
+        return JsonResponse({
+            "success": True,
+            "action": action,
+            "renewed_count": len(renewed_ids),
+            "renewed_ids": renewed_ids,
+        })
+    if action != "claim":
+        return JsonResponse({"success": False, "error": "Thao tác nhận hàng loạt không hợp lệ."}, status=400)
+
+    raw_ids = payload.get("registration_ids")
+    if not isinstance(raw_ids, list):
+        return JsonResponse({"success": False, "error": "Danh sách case không hợp lệ."}, status=400)
+    try:
+        registration_ids = list(dict.fromkeys(int(value) for value in raw_ids))
+    except (TypeError, ValueError):
+        return JsonResponse({"success": False, "error": "Danh sách case không hợp lệ."}, status=400)
+    if not registration_ids:
+        return JsonResponse({"success": False, "error": "Vui lòng chọn ít nhất một case."}, status=400)
+    if len(registration_ids) > 50:
+        return JsonResponse({"success": False, "error": "Mỗi lần chỉ được nhận tối đa 50 case."}, status=400)
+
+    with transaction.atomic():
+        registrations = list(
+            CollateralRegistration.objects.select_for_update()
+            .filter(registration_id__in=registration_ids, is_duplicate=False)
+            .order_by("registration_id")
+        )
+        if len(registrations) != len(registration_ids):
+            return JsonResponse({"success": False, "error": "Có case không tồn tại hoặc đã bị loại trùng."}, status=404)
+
+        group_details = [_gddb_batch_group(registration) for registration in registrations]
+        group_keys = {(detail[0], detail[2]) for detail in group_details}
+        if len(group_keys) != 1:
+            return JsonResponse({
+                "success": False,
+                "error": "Chỉ được nhận các case thuộc cùng một batch và cùng một nguồn vay.",
+            }, status=409)
+
+        for registration in registrations:
+            if registration.gddb_status != CollateralRegistrationStatus.PENDING:
+                return JsonResponse({
+                    "success": False,
+                    "error": f"Case {registration.contract_code} không còn ở trạng thái Chưa đăng ký.",
+                }, status=409)
+            if _gddb_claim_is_active(registration, now) and registration.processing_by_id != request.user.id:
+                return JsonResponse({
+                    "success": False,
+                    "error": f"Case {registration.contract_code} đang được người khác xử lý.",
+                }, status=409)
+
+        claim_expires_at = now + _gddb_claim_duration()
+        previous_owner_ids = {registration.pk: registration.processing_by_id for registration in registrations}
+        CollateralRegistration.objects.filter(registration_id__in=registration_ids).update(
+            processing_by=request.user,
+            processing_started_at=now,
+            processing_expires_at=claim_expires_at,
+        )
+        CollateralRegistrationLog.objects.bulk_create([
+            CollateralRegistrationLog(
+                registration_id=registration.pk,
+                action="case_claim",
+                from_status=registration.gddb_status,
+                to_status=registration.gddb_status,
+                note=f"{request.user.username} nhận xử lý case theo nhóm",
+                metadata={
+                    "previous_owner_id": previous_owner_ids[registration.pk],
+                    "bulk": True,
+                    "batch_group": group_details[index][0],
+                    "source_group": group_details[index][2],
+                },
+                created_by=request.user,
+            )
+            for index, registration in enumerate(registrations)
+            if previous_owner_ids[registration.pk] != request.user.id
+        ])
+
+    return JsonResponse({
+        "success": True,
+        "claimed_count": len(registrations),
+        "group_label": f"{group_details[0][1]} · {group_details[0][3]}",
+        "processing_expires_at": claim_expires_at,
+    }, encoder=DjangoJSONEncoder)
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+@require_http_methods(["POST"])
 def api_gddb_update(request, registration_id):
-    if not _is_gddb_checker(request.user):
-        return JsonResponse({"success": False, "error": "Chỉ Checker được xử lý giao dịch GDĐB."}, status=403)
-    registration = get_object_or_404(CollateralRegistration, registration_id=registration_id, is_duplicate=False)
+    if not _can_process_gddb(request.user):
+        return JsonResponse({"success": False, "error": "Bạn không có quyền xử lý giao dịch GDĐB."}, status=403)
     try:
         payload = _json_body(request)
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Payload JSON không hợp lệ."}, status=400)
 
+    try:
+        with transaction.atomic():
+            registration = CollateralRegistration.objects.select_for_update().get(
+                registration_id=registration_id,
+                is_duplicate=False,
+            )
+            permission_error = _gddb_case_permission_error(
+                registration,
+                request.user,
+                require_active_claim=True,
+            )
+            if permission_error:
+                return JsonResponse({"success": False, "error": permission_error}, status=409)
+
+            return _update_gddb_registration_locked(request, registration, payload)
+    except CollateralRegistration.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Không tìm thấy case GDĐB."}, status=404)
+
+
+def _update_gddb_registration_locked(request, registration, payload):
+
     status = payload.get("gddb_status")
-    if status not in dict(CollateralRegistrationStatus.choices):
+    if status not in {
+        CollateralRegistrationStatus.REGISTERED,
+        CollateralRegistrationStatus.NOT_REGISTERED,
+    }:
         return JsonResponse({"success": False, "error": "Trạng thái giao dịch bảo đảm không hợp lệ."}, status=400)
     postmini_updated = payload.get("postmini_updated", registration.postmini_updated) or "Chưa cập nhật"
     if postmini_updated not in dict(GDDB_POSTMINI_STATUS_CHOICES):
@@ -688,6 +1148,9 @@ def api_gddb_update(request, registration_id):
     registration.registered_identity = registered_identity
     registration.registered_by_name = registered_identity.external_code if registered_identity else ""
     registration.updated_by = request.user
+    if not registration.processing_by_id and not _is_gddb_admin(request.user):
+        registration.processing_by = request.user
+        registration.processing_started_at = timezone.now()
     if status == CollateralRegistrationStatus.REGISTERED:
         registration.registered_by = request.user
         if old_status != CollateralRegistrationStatus.REGISTERED or not registration.registered_at:
@@ -698,6 +1161,8 @@ def api_gddb_update(request, registration_id):
         registration.registered_identity = None
         registration.registered_by_name = ""
         registration.postmini_updated = "Chưa cập nhật"
+    if status != CollateralRegistrationStatus.PENDING:
+        registration.processing_expires_at = None
     registration.save()
     CollateralRegistrationLog.objects.create(
         registration=registration,
@@ -732,6 +1197,7 @@ def api_gddb_update(request, registration_id):
         "post_update_status": registration.post_update_status,
         "reason": registration.reason,
         "updated_by_username": request.user.username,
+        "processing_by_username": registration.processing_by.username if registration.processing_by else "",
     }, encoder=DjangoJSONEncoder)
 
 
@@ -739,16 +1205,11 @@ def api_gddb_update(request, registration_id):
 @require_ui_permission("gddb_registration")
 @require_http_methods(["POST"])
 def api_gddb_note_update(request, registration_id):
-    if not _is_gddb_checker(request.user):
+    if not _can_process_gddb(request.user):
         return JsonResponse(
-            {"success": False, "error": "Chỉ Checker được cập nhật ghi chú GDĐB."},
+            {"success": False, "error": "Bạn không có quyền cập nhật ghi chú GDĐB."},
             status=403,
         )
-    registration = get_object_or_404(
-        CollateralRegistration,
-        registration_id=registration_id,
-        is_duplicate=False,
-    )
     try:
         payload = _json_body(request)
     except json.JSONDecodeError:
@@ -768,20 +1229,35 @@ def api_gddb_note_update(request, registration_id):
             status=400,
         )
 
-    old_note = registration.note or ""
-    if old_note != note_value:
-        registration.note = note_value or None
-        registration.updated_by = request.user
-        registration.save(update_fields=["note", "updated_by", "updated_at"])
-        CollateralRegistrationLog.objects.create(
-            registration=registration,
-            action="note_update",
-            from_status=registration.gddb_status,
-            to_status=registration.gddb_status,
-            note=note_value or None,
-            metadata={"old_note": old_note, "new_note": note_value},
-            created_by=request.user,
-        )
+    try:
+        with transaction.atomic():
+            registration = CollateralRegistration.objects.select_for_update().get(
+                registration_id=registration_id,
+                is_duplicate=False,
+            )
+            permission_error = _gddb_case_permission_error(
+                registration,
+                request.user,
+                require_active_claim=True,
+            )
+            if permission_error:
+                return JsonResponse({"success": False, "error": permission_error}, status=409)
+            old_note = registration.note or ""
+            if old_note != note_value:
+                registration.note = note_value or None
+                registration.updated_by = request.user
+                registration.save(update_fields=["note", "updated_by", "updated_at"])
+                CollateralRegistrationLog.objects.create(
+                    registration=registration,
+                    action="note_update",
+                    from_status=registration.gddb_status,
+                    to_status=registration.gddb_status,
+                    note=note_value or None,
+                    metadata={"old_note": old_note, "new_note": note_value},
+                    created_by=request.user,
+                )
+    except CollateralRegistration.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Không tìm thấy case GDĐB."}, status=404)
 
     return JsonResponse({
         "success": True,
@@ -794,11 +1270,8 @@ def api_gddb_note_update(request, registration_id):
 @require_ui_permission("gddb_registration")
 @require_http_methods(["POST"])
 def api_gddb_postmini_update(request, registration_id):
-    if not _is_gddb_checker(request.user):
-        return JsonResponse({"success": False, "error": "Chỉ Checker được cập nhật PosMini."}, status=403)
-    registration = get_object_or_404(CollateralRegistration, registration_id=registration_id, is_duplicate=False)
-    if registration.gddb_status != CollateralRegistrationStatus.REGISTERED:
-        return JsonResponse({"success": False, "error": "Cần xác nhận đăng ký GDĐB trước khi cập nhật PosMini."}, status=400)
+    if not _can_process_gddb(request.user):
+        return JsonResponse({"success": False, "error": "Bạn không có quyền cập nhật PosMini."}, status=403)
     try:
         payload = _json_body(request)
     except json.JSONDecodeError:
@@ -806,25 +1279,52 @@ def api_gddb_postmini_update(request, registration_id):
     postmini_status = payload.get("postmini_updated")
     if postmini_status not in dict(GDDB_POSTMINI_STATUS_CHOICES):
         return JsonResponse({"success": False, "error": "Trạng thái PosMini không hợp lệ."}, status=400)
+    try:
+        with transaction.atomic():
+            registration = CollateralRegistration.objects.select_for_update().get(
+                registration_id=registration_id,
+                is_duplicate=False,
+            )
+            if registration.gddb_status != CollateralRegistrationStatus.REGISTERED:
+                return JsonResponse({"success": False, "error": "Cần xác nhận đăng ký GDĐB trước khi cập nhật PosMini."}, status=400)
+            permission_error = _gddb_case_permission_error(registration, request.user)
+            if permission_error:
+                return JsonResponse({"success": False, "error": permission_error}, status=409)
+            note_value = payload.get("note", registration.note or "")
+            if not isinstance(note_value, str):
+                return JsonResponse({"success": False, "error": "Ghi chú không hợp lệ."}, status=400)
+            note_value = note_value.strip()
+            if len(note_value) > 5000:
+                return JsonResponse({"success": False, "error": "Ghi chú không được vượt quá 5.000 ký tự."}, status=400)
 
-    old_status = registration.postmini_updated or "Chưa cập nhật"
-    registration.postmini_updated = postmini_status
-    registration.updated_by = request.user
-    registration.source_user = request.user.username
-    registration.save(update_fields=["postmini_updated", "updated_by", "source_user", "updated_at"])
-    CollateralRegistrationLog.objects.create(
-        registration=registration,
-        action="postmini_update",
-        note=f"PosMini: {old_status} → {postmini_status}",
-        metadata={"from_postmini_status": old_status, "to_postmini_status": postmini_status},
-        created_by=request.user,
-    )
+            old_status = registration.postmini_updated or "Chưa cập nhật"
+            old_note = registration.note or ""
+            registration.postmini_updated = postmini_status
+            registration.note = note_value or None
+            registration.updated_by = request.user
+            registration.source_user = request.user.username
+            registration.save(update_fields=["postmini_updated", "note", "updated_by", "source_user", "updated_at"])
+            CollateralRegistrationLog.objects.create(
+                registration=registration,
+                action="postmini_update",
+                note=f"PosMini: {old_status} → {postmini_status}",
+                metadata={
+                    "from_postmini_status": old_status,
+                    "to_postmini_status": postmini_status,
+                    "old_note": old_note,
+                    "new_note": note_value,
+                },
+                created_by=request.user,
+            )
+    except CollateralRegistration.DoesNotExist:
+        return JsonResponse({"success": False, "error": "Không tìm thấy case GDĐB."}, status=404)
     return JsonResponse({
         "success": True,
         "postmini_updated": postmini_status,
         "process_done": postmini_status != "Chưa cập nhật",
         "source_user": registration.source_user,
         "updated_by_username": request.user.username,
+        "note": note_value,
     })
 
 
@@ -868,12 +1368,27 @@ def gddb_export_view(request):
         messages.error(request, "Vui lòng chọn khoảng thời gian xuất đối soát hợp lệ.")
         return redirect("gddb_registration_v2")
 
+    external_identity_id = (request.GET.get("external_identity") or "").strip()
+    selected_identity = None
+    if external_identity_id:
+        if not external_identity_id.isdigit():
+            messages.error(request, "External ID xuất đối soát không hợp lệ.")
+            return redirect("gddb_registration_v2")
+        selected_identity = CollateralRegistrationExternalIdentity.objects.filter(
+            identity_id=int(external_identity_id),
+        ).first()
+        if not selected_identity:
+            messages.error(request, "External ID xuất đối soát không tồn tại.")
+            return redirect("gddb_registration_v2")
+
     registrations = CollateralRegistration.objects.filter(
         is_duplicate=False,
         registered_at__date__range=(export_from, export_to),
     ).select_related(
         "registered_by", "registered_identity"
     ).order_by("registered_at", "contract_code")
+    if selected_identity:
+        registrations = registrations.filter(registered_identity=selected_identity)
     headers = [
         "Mã hợp đồng",
         "Biển số xe",
@@ -930,7 +1445,9 @@ def gddb_export_view(request):
     output = BytesIO()
     workbook.save(output)
     output.seek(0)
-    filename = f"doi-soat-gddb-{export_label}.xlsx"
+    identity_suffix = f"-{selected_identity.external_code}" if selected_identity else ""
+    safe_identity_suffix = re.sub(r"[^A-Za-z0-9._-]+", "-", identity_suffix)
+    filename = f"doi-soat-gddb-{export_label}{safe_identity_suffix}.xlsx"
     response = HttpResponse(
         output.getvalue(),
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

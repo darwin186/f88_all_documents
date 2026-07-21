@@ -1253,6 +1253,16 @@ class CollateralRegistration(models.Model):
     updated_by = models.ForeignKey(User, db_column="updated_by", related_name="gddb_updated", on_delete=models.SET_NULL, null=True, blank=True)
     registered_at = models.DateTimeField(null=True, blank=True)
     registered_by = models.ForeignKey(User, db_column="registered_by", related_name="gddb_registered", on_delete=models.SET_NULL, null=True, blank=True)
+    processing_by = models.ForeignKey(
+        User,
+        db_column="processing_by",
+        related_name="gddb_processing",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    processing_started_at = models.DateTimeField(null=True, blank=True)
+    processing_expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "f_CollateralRegistration"
@@ -1263,6 +1273,7 @@ class CollateralRegistration(models.Model):
             models.Index(fields=["license_plate"]),
             models.Index(fields=["chassis_number"]),
             models.Index(fields=["engine_number"]),
+            models.Index(fields=["processing_by", "processing_expires_at"], name="gddb_processing_lease_idx"),
         ]
 
     def __str__(self):

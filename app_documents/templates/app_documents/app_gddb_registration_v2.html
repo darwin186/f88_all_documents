@@ -27,6 +27,8 @@
   .doc-table th, .doc-table td { border-bottom: 1px solid #f3f4f6; padding: 8px 10px; text-align: left; vertical-align: top; }
   .drawer-backdrop { position: fixed; inset: 0; z-index: 70; background: rgba(15, 23, 42, .35); }
   .drawer-panel { position: fixed; inset: 0 0 0 auto; z-index: 80; width: min(620px, 94vw); overflow-y: auto; background: #fff; box-shadow: -18px 0 36px rgba(15, 23, 42, .14); }
+  .gddb-data-scroll { min-height: 240px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+  .gddb-data-scroll thead th { position: sticky; top: 0; z-index: 12; background: #f9fafb; box-shadow: inset 0 -1px 0 #e5e7eb; }
 </style>
 
 <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
@@ -39,16 +41,21 @@
   </div>
   {% endif %}
 
-  <div class="panel flex flex-wrap items-center justify-between gap-3 rounded-lg px-3 py-2 text-[10px]">
-    <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+  <div class="panel grid items-center gap-3 rounded-lg px-4 py-2.5 text-[10px] md:grid-cols-[auto_1fr_auto]">
+    <div class="text-[13px] font-bold text-gray-900">Giao dịch bảo đảm</div>
+    <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
       <span class="font-bold text-gray-700">Tổng 7 ngày <strong class="ml-1 text-gray-900">{{ total_count }}</strong></span>
       <span class="text-amber-700">Chưa đăng ký <strong class="ml-1">{{ pending_count }}</strong></span>
       <span class="text-red-700">Không đăng ký <strong class="ml-1">{{ not_registered_count }}</strong></span>
       <span class="text-blue-700">Chờ PosMini <strong class="ml-1">{{ processing_posmini_count }}</strong></span>
       <span class="text-emerald-700">Hoàn tất <strong class="ml-1">{{ done_count }}</strong></span>
+      <span class="text-emerald-700">F88 <strong class="ml-1">{{ f88_count }}</strong></span>
+      <span class="text-red-700">CIMB <strong class="ml-1">{{ cimb_count }}</strong></span>
+      <span class="text-sky-700">MB <strong class="ml-1">{{ mb_count }}</strong></span>
+      <span class="font-semibold text-violet-700">Đang được giữ <strong class="ml-1">{{ held_count }}/{{ total_count }}</strong></span>
     </div>
     {% if active_tab == 'list' and page_obj.paginator.num_pages > 1 %}
-    <nav class="ml-auto flex items-center gap-1" aria-label="Phân trang">
+    <nav class="flex items-center justify-end gap-1" aria-label="Phân trang">
       {% if page_obj.has_previous %}<a href="?{{ pagination_query_prefix }}page=1" class="flex h-7 min-w-7 items-center justify-center rounded border border-gray-200 px-1 font-bold hover:border-emerald-400 hover:text-emerald-700" title="Trang đầu">&lt;&lt;</a>{% else %}<span class="flex h-7 min-w-7 items-center justify-center rounded border border-gray-100 px-1 text-gray-300">&lt;&lt;</span>{% endif %}
       {% for page_number in pagination_range %}
         {% if page_number == '…' %}<span class="flex h-7 min-w-7 items-center justify-center text-gray-400">…</span>
@@ -437,16 +444,34 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
   </div>
   {% else %}
   <div class="panel rounded-xl p-3">
-    <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <div class="text-[13px] font-bold text-gray-900">Giao dịch bảo đảm</div>
-        <div class="text-[10px] text-gray-500">Theo dõi hợp đồng và tài sản cần đăng kí giao dịch bảo đảm.</div>
-      </div>
-      <form id="gddb-filter-form" method="get" action="{% url 'gddb_registration_v2' %}" class="flex flex-wrap items-center gap-3">
+    <div class="mb-3 flex justify-end">
+      <form id="gddb-filter-form" method="get" action="{% url 'gddb_registration_v2' %}" class="flex w-full flex-wrap items-center justify-end gap-3">
         <input type="hidden" name="sort" value="{{ sort_param }}">
         <input name="q" value="{{ filters.q }}" class="field w-60 text-[10px]" placeholder="Tìm HĐ, biển số, số khung, số máy">
-        <input type="date" name="date_from" value="{{ filters.date_from }}" class="field text-[10px]" title="Đăng ký từ ngày">
-        <input type="date" name="date_to" value="{{ filters.date_to }}" class="field text-[10px]" title="Đăng ký đến ngày">
+        <select name="loan_source" class="field min-w-40 text-[10px]" aria-label="Lọc theo nguồn vay">
+          <option value="">Tất cả nguồn vay</option>
+          {% for value,label in loan_source_choices %}<option value="{{ value }}" {% if filters.loan_source == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <select name="external_identity" class="field min-w-40 text-[10px]" aria-label="Lọc theo User đăng ký">
+          <option value="">User đăng ký</option>
+          {% for identity in report_identity_choices %}<option value="{{ identity.identity_id }}" {% if filters.external_identity == identity.identity_id|stringformat:'s' %}selected{% endif %}>{{ identity.external_code }}{% if not identity.is_active %} (Ngừng sử dụng){% endif %}</option>{% endfor %}
+        </select>
+        <div class="relative w-[230px]" data-date-range-filter>
+          <button type="button" data-date-range-toggle class="field flex w-full items-center justify-between gap-2 text-left text-[10px] text-gray-600" aria-expanded="false">
+            <span class="truncate" data-date-range-label>Ngày tạo case</span>
+            <svg class="h-3.5 w-3.5 shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path></svg>
+          </button>
+          <div data-date-range-menu class="absolute left-0 top-full z-40 mt-1 hidden w-[320px] max-w-[calc(100vw-2rem)] rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
+            <div class="grid grid-cols-2 gap-2">
+              <label><span class="mb-1 block text-[9px] font-semibold text-gray-600">Từ ngày</span><input type="date" name="date_from" value="{{ filters.date_from }}" class="field w-full text-[10px]" data-date-range-from></label>
+              <label><span class="mb-1 block text-[9px] font-semibold text-gray-600">Đến ngày</span><input type="date" name="date_to" value="{{ filters.date_to }}" class="field w-full text-[10px]" data-date-range-to></label>
+            </div>
+            <div class="mt-3 flex items-center justify-end gap-2 border-t border-gray-100 pt-3">
+              <button type="button" data-date-range-clear class="rounded-lg border border-gray-200 px-3 py-2 text-[9px] font-bold text-gray-600 hover:bg-gray-50">Xóa ngày</button>
+              <button type="button" data-date-range-apply class="rounded-lg bg-emerald-600 px-3 py-2 text-[9px] font-bold text-white hover:bg-emerald-700">Áp dụng</button>
+            </div>
+          </div>
+        </div>
         <input type="hidden" name="status_present" value="1">
         <div class="relative w-[360px]" data-status-filter>
           <div class="status-filter flex w-full items-center justify-between gap-2 px-2 py-1 text-left" data-status-toggle role="button" tabindex="0" aria-expanded="false">
@@ -481,16 +506,21 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           </div>
         </div>
         <button class="rounded-lg bg-emerald-600 px-4 py-2 text-[10px] font-bold text-white hover:bg-emerald-700" type="submit">Lọc</button>
-        {% if can_export_gddb %}
-        <button type="button" data-export-open class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100">Xuất đối soát</button>
+        {% if can_process_gddb %}
+        <div data-bulk-claim-toolbar data-bulk-claim-url="{% url 'api_gddb_bulk_claim' %}">
+          <span data-bulk-selection-label class="hidden">Chọn một case để khóa nhóm batch và nguồn vay.</span>
+          <button type="button" data-bulk-claim-submit disabled class="cursor-not-allowed rounded-lg bg-gray-300 px-4 py-2 text-[10px] font-bold text-white">Nhận các case đã chọn</button>
+        </div>
         {% endif %}
       </form>
     </div>
-    <div class="overflow-x-auto">
+    <div class="gddb-data-scroll" data-gddb-list-scroll>
       <table class="min-w-full divide-y divide-gray-200 text-[10px]">
         <thead class="bg-gray-50 text-left text-[9px] uppercase text-gray-500">
           <tr>
+            <th class="w-9 px-3 py-2 text-center"><input type="checkbox" data-bulk-select-all class="h-3.5 w-3.5 rounded border-gray-300 accent-emerald-600" title="Chọn tất cả case cùng nhóm đầu tiên"></th>
             <th class="px-3 py-2">Thông tin hợp đồng</th>
+            <th class="px-3 py-2">Nguồn vay</th>
             <th class="px-3 py-2">
               <a href="?{{ sort_query_prefix }}sort={% if sort_param == '-created_at' %}created_at{% else %}-created_at{% endif %}" class="inline-flex items-center gap-1 hover:text-emerald-700" title="Sắp xếp theo ngày tạo">
                 Ngày/giờ dữ liệu được tạo
@@ -498,7 +528,6 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
               </a>
             </th>
             <th class="px-3 py-2">Trạng thái chính</th>
-            <th class="px-3 py-2">Nguồn vay</th>
             <th class="px-3 py-2">Cửa hàng</th>
             <th class="px-3 py-2">Cập nhật PosMini</th>
             <th class="px-3 py-2 text-right">Thao tác</th>
@@ -506,17 +535,23 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         </thead>
         <tbody class="divide-y divide-gray-100 bg-white">
           {% for item in page_obj %}
-          <tr data-gddb-row="{{ item.registration_id }}" data-gddb-scope="{{ item.registration_id }}" data-default-work-queue="{{ is_default_work_queue|yesno:'1,0' }}" class="align-top hover:bg-gray-50">
+          <tr data-gddb-row="{{ item.registration_id }}" data-gddb-scope="{{ item.registration_id }}" data-default-work-queue="{{ is_default_work_queue|yesno:'1,0' }}" data-case-status="{{ item.gddb_status }}" data-claim-active="{{ item.claim_is_active|yesno:'1,0' }}" data-claim-mine="{{ item.claim_is_mine|yesno:'1,0' }}" data-claim-url="{% url 'api_gddb_case_claim' item.registration_id %}" class="align-top transition-colors {% if item.claim_is_active %}bg-red-50 hover:bg-red-100{% else %}hover:bg-gray-50{% endif %}">
+            <td class="px-3 py-3 text-center">{% if item.bulk_claim_eligible %}<input type="checkbox" data-bulk-case value="{{ item.registration_id }}" data-bulk-group="{{ item.bulk_group_key }}" data-bulk-group-label="{{ item.bulk_group_label }}" class="h-3.5 w-3.5 rounded border-gray-300 accent-emerald-600" title="{{ item.bulk_group_label }}">{% endif %}</td>
             <td class="px-3 py-3">
               <div class="flex items-center gap-2"><span data-row-contract class="font-bold text-gray-900">{{ item.contract_code }}</span><button type="button" data-copy-contract="{{ item.contract_code }}" class="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-emerald-600" title="Sao chép mã hợp đồng" aria-label="Sao chép mã hợp đồng"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg></button></div>
               <div data-row-contract-status class="mt-1 text-[9px] text-gray-500">{{ item.contract_status|default:"-" }}</div>
               <div class="mt-1 text-[9px] text-gray-500">Tạo <span data-row-source-created-date>{{ item.source_created_date|date:"d/m/Y"|default:"-" }}</span> · Giải ngân <span data-row-disbursement-date>{{ item.disbursement_date|date:"d/m/Y"|default:"-" }}</span></div>
             </td>
-            <td class="px-3 py-3 whitespace-nowrap text-gray-700">{{ item.created_at|date:"d/m/Y H:i"|default:"-" }}</td>
+            <td data-row-disbursement-source class="px-3 py-3">
+              <span class="inline-flex items-center rounded-full border px-2.5 py-1 font-bold {% if item.loan_source_group == 'f88' %}border-emerald-200 bg-emerald-50 text-emerald-700{% elif item.loan_source_group == 'cimb' %}border-red-200 bg-red-50 text-red-700{% elif item.loan_source_group == 'mb' %}border-sky-200 bg-sky-50 text-sky-700{% else %}border-gray-200 bg-gray-50 text-gray-700{% endif %}">{{ item.loan_source_label }}</span>
+            </td>
+            <td class="px-3 py-3 whitespace-nowrap text-gray-700">{{ item.created_at|date:"d/m/Y H:i"|default:"-" }}<div class="mt-1 text-[8px] text-gray-400">{{ item.bulk_batch_label }}</div></td>
             <td class="px-3 py-3 min-w-[130px]">
               <span data-status-label class="status-pill {% if item.gddb_status == 'registered' %}status-registered{% elif item.gddb_status == 'not_registered' %}status-not-registered{% else %}status-pending{% endif %}">{{ item.get_gddb_status_display }}</span>
+              <div data-claim-label class="mt-1 text-[9px] {% if item.claim_is_active %}flex items-center gap-1 font-bold text-red-700{% else %}text-gray-500{% endif %}">
+                {% if item.processing_by %}{% if item.claim_is_active %}<svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3 2.5 20h19L12 3Z"></path><path d="M12 9v5M12 17.5h.01"></path></svg><span>{{ item.processing_by.username }} đang xử lý</span>{% else %}Checker: {{ item.processing_by.username }}{% endif %}{% endif %}
+              </div>
             </td>
-            <td data-row-disbursement-source class="px-3 py-3 font-semibold text-gray-800">{{ item.disbursement_source|default:"-" }}</td>
             <td class="px-3 py-3">
               <div data-row-shop-name class="font-semibold text-gray-900">{{ item.shop_name|default:"-" }}</div>
               <div data-row-suggested-identity class="mt-1 text-[9px] text-blue-600 {% if not item.suggested_identity %}hidden{% endif %}">{% if item.suggested_identity %}Đề xuất: {{ item.suggested_identity.external_code }}{% endif %}</div>
@@ -527,15 +562,24 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
             </td>
             <td class="px-3 py-3 text-right">
               <div class="flex flex-wrap justify-end gap-2">
-                {% if can_process_gddb and item.gddb_status != 'registered' %}<button type="button" data-register-open data-registration-id="{{ item.registration_id }}" data-update-url="{% url 'api_gddb_update' item.registration_id %}" data-contract-code="{{ item.contract_code }}" data-shop-name="{{ item.shop_name|default:'' }}" data-suggested-identity-id="{{ item.suggested_identity.identity_id|default:'' }}" data-current-status="{{ item.gddb_status }}" data-current-reason="{{ item.reason|default:'' }}" class="rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white hover:bg-emerald-700">Cập nhật đăng ký</button>{% endif %}
-                {% if can_process_gddb %}<button type="button" data-postmini-open data-registration-id="{{ item.registration_id }}" data-update-url="{% url 'api_gddb_postmini_update' item.registration_id %}" data-current-postmini="{{ item.postmini_updated|default:'Chưa cập nhật' }}" data-contract-code="{{ item.contract_code }}" class="rounded-lg px-3 py-2 font-bold {% if item.gddb_status != 'registered' %}cursor-not-allowed bg-gray-300 text-white{% elif not item.postmini_updated or item.postmini_updated == 'Chưa cập nhật' %}bg-amber-500 text-white ring-2 ring-amber-200 hover:bg-amber-600{% else %}border border-gray-200 bg-white text-gray-700 hover:bg-gray-50{% endif %}" {% if item.gddb_status != 'registered' %}disabled{% endif %}>{% if item.postmini_updated == 'Đã cập nhật' or item.postmini_updated == 'Đã cập nhật 1 dòng' %}Cập nhật lại PosMini{% else %}Cập nhật PosMini{% endif %}</button>{% endif %}
+                {% if can_process_gddb %}
+                  {% if item.can_mutate_case %}
+                  <button type="button" data-register-open data-registration-id="{{ item.registration_id }}" data-update-url="{% url 'api_gddb_update' item.registration_id %}" data-contract-code="{{ item.contract_code }}" data-shop-name="{{ item.shop_name|default:'' }}" data-suggested-identity-id="{{ item.suggested_identity.identity_id|default:'' }}" data-current-identity-id="{{ item.registered_identity_id|default:'' }}" data-current-status="{{ item.gddb_status }}" data-current-reason="{{ item.reason|default:'' }}" class="rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white hover:bg-emerald-700">{% if item.gddb_status == 'pending' %}Cập nhật đăng ký{% else %}Chỉnh sửa đăng ký{% endif %}</button>
+                  {% elif item.can_claim_case %}
+                  <button type="button" data-claim-case data-registration-id="{{ item.registration_id }}" data-claim-url="{% url 'api_gddb_case_claim' item.registration_id %}" class="rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white hover:bg-emerald-700">{% if item.claim_is_mine %}Nhận lại case{% elif item.gddb_status == 'pending' %}Nhận xử lý{% else %}Nhận chỉnh sửa{% endif %}</button>
+                  {% elif item.gddb_status == 'pending' and item.claim_is_active %}
+                  <button type="button" disabled class="cursor-not-allowed rounded-lg bg-gray-200 px-3 py-2 font-bold text-gray-500">Đang được xử lý</button>
+                  {% endif %}
+                {% endif %}
+                {% if item.can_mutate_case %}<button type="button" data-postmini-open data-registration-id="{{ item.registration_id }}" data-update-url="{% url 'api_gddb_postmini_update' item.registration_id %}" data-current-postmini="{{ item.postmini_updated|default:'Chưa cập nhật' }}" data-current-note="{{ item.note|default:''|escape }}" data-contract-code="{{ item.contract_code }}" class="rounded-lg px-3 py-2 font-bold {% if item.gddb_status != 'registered' %}cursor-not-allowed bg-gray-300 text-white{% elif not item.postmini_updated or item.postmini_updated == 'Chưa cập nhật' %}bg-amber-500 text-white ring-2 ring-amber-200 hover:bg-amber-600{% else %}border border-gray-200 bg-white text-gray-700 hover:bg-gray-50{% endif %}" {% if item.gddb_status != 'registered' %}disabled{% endif %}>{% if item.postmini_updated == 'Đã cập nhật' or item.postmini_updated == 'Đã cập nhật 1 dòng' %}Cập nhật lại PosMini{% else %}Cập nhật PosMini{% endif %}</button>{% endif %}
+                {% if item.gddb_status == 'pending' and item.claim_is_active and item.can_edit_case %}<button type="button" data-release-case data-claim-url="{% url 'api_gddb_case_claim' item.registration_id %}" class="rounded-lg border border-gray-200 px-3 py-2 font-bold text-gray-600 hover:bg-gray-50">{% if is_admin or is_super_admin %}Thu hồi{% else %}Trả case{% endif %}</button>{% endif %}
                 <button type="button" data-drawer-open="{{ item.registration_id }}" class="rounded-lg border border-gray-200 px-3 py-2 font-bold text-gray-700 hover:bg-gray-50">Chi tiết</button>
               </div>
             </td>
           </tr>
           {% empty %}
           <tr>
-            <td colspan="7" class="px-3 py-8 text-center text-gray-500">Chưa có dữ liệu giao dịch bảo đảm phù hợp.</td>
+            <td colspan="8" class="px-3 py-8 text-center text-gray-500">Chưa có dữ liệu giao dịch bảo đảm phù hợp.</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -556,9 +600,9 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
             <div class="grid gap-3 sm:grid-cols-2">
               <div><div class="text-[9px] text-gray-500">Mã hợp đồng</div><div class="font-semibold text-gray-900">{{ item.contract_code }}</div></div>
               <div><div class="text-[9px] text-gray-500">Trạng thái hợp đồng</div><div class="font-semibold text-gray-900">{{ item.contract_status|default:"-" }}</div></div>
-              <div><div class="text-[9px] text-gray-500">Biển số xe</div><div class="font-semibold text-gray-900">{{ item.license_plate|default:"-" }}</div></div>
-              <div><div class="text-[9px] text-gray-500">Số khung</div><div class="break-all font-semibold text-gray-900">{{ item.chassis_number|default:"-" }}</div></div>
-              <div><div class="text-[9px] text-gray-500">Số máy</div><div class="break-all font-semibold text-gray-900">{{ item.engine_number|default:"-" }}</div></div>
+              <div><div class="text-[9px] text-gray-500">Biển số xe</div><div class="flex items-center gap-1"><span class="font-semibold text-gray-900">{{ item.license_plate|default:"-" }}</span>{% if item.license_plate %}<button type="button" data-copy-value="{{ item.license_plate }}" data-copy-label="biển số xe" class="rounded p-1 text-gray-400 hover:bg-white hover:text-emerald-600" title="Sao chép biển số xe" aria-label="Sao chép biển số xe"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg></button>{% endif %}</div></div>
+              <div><div class="text-[9px] text-gray-500">Số khung</div><div class="flex items-start gap-1"><span class="break-all font-semibold text-gray-900">{{ item.chassis_number|default:"-" }}</span>{% if item.chassis_number %}<button type="button" data-copy-value="{{ item.chassis_number }}" data-copy-label="số khung" class="shrink-0 rounded p-1 text-gray-400 hover:bg-white hover:text-emerald-600" title="Sao chép số khung" aria-label="Sao chép số khung"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg></button>{% endif %}</div></div>
+              <div><div class="text-[9px] text-gray-500">Số máy</div><div class="flex items-start gap-1"><span class="break-all font-semibold text-gray-900">{{ item.engine_number|default:"-" }}</span>{% if item.engine_number %}<button type="button" data-copy-value="{{ item.engine_number }}" data-copy-label="số máy" class="shrink-0 rounded p-1 text-gray-400 hover:bg-white hover:text-emerald-600" title="Sao chép số máy" aria-label="Sao chép số máy"><svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg></button>{% endif %}</div></div>
               <div><div class="text-[9px] text-gray-500">Nguồn giải ngân</div><div class="font-semibold text-gray-900">{{ item.disbursement_source|default:"-" }}</div></div>
               <div><div class="text-[9px] text-gray-500">Cửa hàng</div><div class="font-semibold text-gray-900">{{ item.shop_name|default:"-" }}</div></div>
               <div><div class="text-[9px] text-gray-500">Ngày tạo dữ liệu nguồn</div><div class="font-semibold text-gray-900">{{ item.source_created_date|date:"d/m/Y"|default:"-" }}</div></div>
@@ -578,7 +622,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
             <div class="mt-3"><span class="mb-1 block text-[9px] text-gray-500">Lý do</span><div data-drawer-reason class="rounded-lg bg-gray-50 p-3 text-gray-800">{{ item.reason|default:"-" }}</div></div>
             <div class="mt-3">
               <span class="mb-1 block text-[9px] text-gray-500">Ghi chú</span>
-              {% if can_process_gddb %}
+              {% if item.can_mutate_case %}
               <textarea data-gddb-live-note data-save-url="{% url 'api_gddb_note_update' item.registration_id %}" rows="3" maxlength="5000" class="w-full resize-y rounded-lg border border-gray-200 bg-white p-3 text-gray-800 outline-none focus:border-emerald-500" placeholder="Nhập ghi chú, nhấn Enter để lưu">{{ item.note|default:"" }}</textarea>
               <span data-gddb-note-status class="mt-1 block min-h-[14px] text-[9px] text-gray-500">Nhấn Enter để lưu · Shift+Enter để xuống dòng</span>
               {% else %}
@@ -638,6 +682,10 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           {% for value,label in postmini_status_choices %}
           <label class="flex cursor-pointer items-center gap-3 rounded-xl border border-gray-200 p-3 hover:border-emerald-400 hover:bg-emerald-50/50"><input type="radio" name="gddb_postmini_status" value="{{ value }}" class="h-4 w-4 accent-emerald-600"><span class="font-bold text-gray-800">{{ label }}</span></label>
           {% endfor %}
+          <label class="block pt-2">
+            <span class="mb-1 block text-[9px] font-semibold text-gray-600">Ghi chú</span>
+            <textarea data-postmini-note rows="3" maxlength="5000" class="w-full resize-y rounded-xl border border-gray-200 p-3 text-[10px] text-gray-800 outline-none focus:border-emerald-500" placeholder="Nhập ghi chú nếu có"></textarea>
+          </label>
         </div>
         <div class="flex flex-col-reverse gap-2 border-t border-gray-100 p-4 sm:flex-row sm:justify-end">
           <button type="button" data-postmini-close class="rounded-lg border border-gray-200 px-4 py-2 font-bold text-gray-700">Hủy</button>
@@ -665,6 +713,13 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           <div data-export-period="month" class="hidden"><label><span class="mb-1 block text-[9px] font-semibold text-gray-600">Tháng đăng ký</span><input type="month" name="export_month" value="{% now 'Y-m' %}" class="field w-full"></label></div>
           <div data-export-period="year" class="hidden"><label><span class="mb-1 block text-[9px] font-semibold text-gray-600">Năm đăng ký</span><input type="number" min="2000" max="2100" name="export_year" value="{% now 'Y' %}" class="field w-full"></label></div>
           <div data-export-period="range" class="hidden grid-cols-2 gap-2"><label><span class="mb-1 block text-[9px] font-semibold text-gray-600">Từ ngày</span><input type="date" name="export_from" value="{% now 'Y-m-d' %}" class="field w-full"></label><label><span class="mb-1 block text-[9px] font-semibold text-gray-600">Đến ngày</span><input type="date" name="export_to" value="{% now 'Y-m-d' %}" class="field w-full"></label></div>
+          <label class="block">
+            <span class="mb-1 block text-[9px] font-semibold text-gray-600">User đăng ký</span>
+            <select name="external_identity" class="field w-full">
+              <option value="">Tất cả User đăng ký</option>
+              {% for identity in report_identity_choices %}<option value="{{ identity.identity_id }}">{{ identity.external_code }}{% if not identity.is_active %} (Ngừng sử dụng){% endif %}</option>{% endfor %}
+            </select>
+          </label>
         </div>
         <div class="flex flex-col-reverse gap-2 border-t border-gray-100 p-4 sm:flex-row sm:justify-end">
           <button type="button" data-export-close class="rounded-lg border border-gray-200 px-4 py-2 font-bold text-gray-700">Hủy</button>
@@ -678,6 +733,18 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
 </div>
 
 <script>
+  const gddbListScroll = document.querySelector('[data-gddb-list-scroll]');
+  if (gddbListScroll) {
+    const resizeGddbListScroll = () => {
+      const listTop = gddbListScroll.getBoundingClientRect().top;
+      // Chừa khoảng cho padding dưới của panel và main để trang không tạo thêm vùng cuộn ngoài bảng.
+      const bottomSpacing = 60;
+      gddbListScroll.style.height = `${Math.max(240, window.innerHeight - listTop - bottomSpacing)}px`;
+    };
+    requestAnimationFrame(resizeGddbListScroll);
+    window.addEventListener('resize', resizeGddbListScroll);
+  }
+
   const manualPayload = document.querySelector('[data-manual-payload]');
   const manualDetection = document.querySelector('[data-manual-detection]');
   if (manualPayload && manualDetection) {
@@ -801,6 +868,54 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
     });
   }
 
+  const dateRangeFilter = document.querySelector('[data-date-range-filter]');
+  if (filterForm && dateRangeFilter) {
+    const toggle = dateRangeFilter.querySelector('[data-date-range-toggle]');
+    const menu = dateRangeFilter.querySelector('[data-date-range-menu]');
+    const label = dateRangeFilter.querySelector('[data-date-range-label]');
+    const dateFrom = dateRangeFilter.querySelector('[data-date-range-from]');
+    const dateTo = dateRangeFilter.querySelector('[data-date-range-to]');
+    const formatDate = (value) => {
+      const [year, month, day] = (value || '').split('-');
+      return year && month && day ? `${day}/${month}/${year}` : '';
+    };
+    const syncDateRange = () => {
+      const fromLabel = formatDate(dateFrom.value);
+      const toLabel = formatDate(dateTo.value);
+      if (fromLabel && toLabel) label.textContent = `${fromLabel} – ${toLabel}`;
+      else if (fromLabel) label.textContent = `Từ ${fromLabel}`;
+      else if (toLabel) label.textContent = `Đến ${toLabel}`;
+      else label.textContent = 'Ngày tạo case';
+      label.classList.toggle('text-gray-900', Boolean(fromLabel || toLabel));
+      dateTo.min = dateFrom.value || '';
+      dateFrom.max = dateTo.value || '';
+    };
+    const setDateRangeOpen = (open) => {
+      menu.classList.toggle('hidden', !open);
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+    toggle.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setDateRangeOpen(menu.classList.contains('hidden'));
+    });
+    dateFrom.addEventListener('change', syncDateRange);
+    dateTo.addEventListener('change', syncDateRange);
+    dateRangeFilter.querySelector('[data-date-range-clear]').addEventListener('click', () => {
+      dateFrom.value = '';
+      dateTo.value = '';
+      syncDateRange();
+      filterForm.requestSubmit();
+    });
+    dateRangeFilter.querySelector('[data-date-range-apply]').addEventListener('click', () => {
+      setDateRangeOpen(false);
+      filterForm.requestSubmit();
+    });
+    document.addEventListener('click', (event) => {
+      if (!dateRangeFilter.contains(event.target)) setDateRangeOpen(false);
+    });
+    syncDateRange();
+  }
+
   function showGddbToast(message, ok) {
     const toast = document.getElementById('gddb-toast');
     toast.textContent = message;
@@ -889,6 +1004,22 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
     });
   });
 
+  document.querySelectorAll('[data-copy-value]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(button.dataset.copyValue);
+      } catch (error) {
+        const input = document.createElement('textarea');
+        input.value = button.dataset.copyValue;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        input.remove();
+      }
+      showGddbToast(`Đã sao chép ${button.dataset.copyLabel}.`, true);
+    });
+  });
+
   const setGddbModalOpen = (modal, open) => {
     modal.classList.toggle('hidden', !open);
     modal.classList.toggle('flex', open);
@@ -910,6 +1041,159 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
     };
     exportModal.querySelectorAll('input[name="period_type"]').forEach((radio) => radio.addEventListener('change', syncExportPeriod));
     syncExportPeriod();
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.get('open_export') === '1') {
+      setGddbModalOpen(exportModal, true);
+      currentUrl.searchParams.delete('open_export');
+      window.history.replaceState({}, '', `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`);
+    }
+  }
+
+  const bulkClaimToolbar = document.querySelector('[data-bulk-claim-toolbar]');
+  const bulkCaseCheckboxes = Array.from(document.querySelectorAll('[data-bulk-case]'));
+  const bulkSelectAll = document.querySelector('[data-bulk-select-all]');
+  if (bulkClaimToolbar && bulkSelectAll) {
+    const bulkSubmit = bulkClaimToolbar.querySelector('[data-bulk-claim-submit]');
+    const bulkLabel = bulkClaimToolbar.querySelector('[data-bulk-selection-label]');
+    const selectedBulkCases = () => bulkCaseCheckboxes.filter((checkbox) => checkbox.checked);
+    const syncBulkSelection = () => {
+      const selected = selectedBulkCases();
+      const selectedGroup = selected[0]?.dataset.bulkGroup || '';
+      bulkCaseCheckboxes.forEach((checkbox) => {
+        checkbox.disabled = Boolean(selectedGroup && checkbox.dataset.bulkGroup !== selectedGroup);
+      });
+      bulkSelectAll.disabled = bulkCaseCheckboxes.length === 0;
+      const groupCases = selectedGroup
+        ? bulkCaseCheckboxes.filter((checkbox) => checkbox.dataset.bulkGroup === selectedGroup)
+        : [];
+      bulkSelectAll.checked = Boolean(groupCases.length && groupCases.every((checkbox) => checkbox.checked));
+      bulkSelectAll.indeterminate = Boolean(selected.length && !bulkSelectAll.checked);
+      bulkSubmit.disabled = selected.length === 0;
+      bulkSubmit.className = selected.length
+        ? 'rounded-lg bg-emerald-600 px-4 py-2 text-[10px] font-bold text-white hover:bg-emerald-700'
+        : 'cursor-not-allowed rounded-lg bg-gray-300 px-4 py-2 text-[10px] font-bold text-white';
+      bulkSubmit.textContent = selected.length
+        ? `Nhận ${selected.length} case đã chọn`
+        : 'Nhận các case đã chọn';
+      bulkLabel.textContent = selected.length
+        ? `${selected.length} case · ${selected[0].dataset.bulkGroupLabel}`
+        : 'Chọn một case để khóa nhóm batch và nguồn vay.';
+    };
+    bulkCaseCheckboxes.forEach((checkbox) => checkbox.addEventListener('change', syncBulkSelection));
+    bulkSelectAll.addEventListener('change', () => {
+      const selected = selectedBulkCases();
+      const targetGroup = selected[0]?.dataset.bulkGroup || bulkCaseCheckboxes.find((checkbox) => !checkbox.disabled)?.dataset.bulkGroup;
+      if (!targetGroup) return;
+      bulkCaseCheckboxes.forEach((checkbox) => {
+        if (checkbox.dataset.bulkGroup === targetGroup) checkbox.checked = bulkSelectAll.checked;
+      });
+      syncBulkSelection();
+    });
+    bulkSubmit.addEventListener('click', async () => {
+      const selected = selectedBulkCases();
+      if (!selected.length) return;
+      bulkSubmit.disabled = true;
+      bulkSubmit.textContent = 'Đang nhận case';
+      try {
+        const response = await fetch(bulkClaimToolbar.dataset.bulkClaimUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN || '' },
+          body: JSON.stringify({
+            action: 'claim',
+            registration_ids: selected.map((checkbox) => Number(checkbox.value)),
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || 'Không nhận được các case đã chọn.');
+        showGddbToast(`Đã nhận ${data.claimed_count} case · ${data.group_label}.`, true);
+        setTimeout(() => window.location.reload(), 500);
+      } catch (error) {
+        showGddbToast(error.message, false);
+        bulkSubmit.textContent = 'Nhận các case đã chọn';
+        syncBulkSelection();
+      }
+    });
+    syncBulkSelection();
+  }
+
+  const postCaseClaimAction = async (url, action) => {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN || '' },
+      body: JSON.stringify({ action }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.success) throw new Error(data.error || 'Không cập nhật được quyền giữ case.');
+    return data;
+  };
+
+  document.querySelectorAll('[data-claim-case]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      const originalText = button.textContent;
+      button.textContent = 'Đang nhận case';
+      try {
+        await postCaseClaimAction(button.dataset.claimUrl, 'claim');
+        window.location.reload();
+      } catch (error) {
+        showGddbToast(error.message, false);
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-release-case]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      if (!window.confirm('Xác nhận trả/thu hồi quyền xử lý case này?')) return;
+      button.disabled = true;
+      try {
+        await postCaseClaimAction(button.dataset.claimUrl, 'release');
+        window.location.reload();
+      } catch (error) {
+        showGddbToast(error.message, false);
+        button.disabled = false;
+      }
+    });
+  });
+
+  const activeClaimRows = Array.from(document.querySelectorAll('[data-case-status="pending"][data-claim-active="1"][data-claim-mine="1"]'));
+  if (activeClaimRows.length) {
+    let claimHeartbeatTimer = null;
+    const renewCaseClaim = async () => {
+      const remainingRows = activeClaimRows.filter((row) => row.dataset.caseStatus === 'pending');
+      if (!remainingRows.length) {
+        clearInterval(claimHeartbeatTimer);
+        return;
+      }
+      try {
+        const response = await fetch('{% url "api_gddb_bulk_claim" %}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN || '' },
+          body: JSON.stringify({
+            action: 'heartbeat',
+            registration_ids: remainingRows.map((row) => Number(row.dataset.gddbRow)),
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || 'Không gia hạn được nhóm case.');
+        const renewedIds = new Set((data.renewed_ids || []).map(String));
+        const lostRows = remainingRows.filter((row) => !renewedIds.has(row.dataset.gddbRow));
+        if (lostRows.length) {
+          showGddbToast(`${lostRows.length} case đã bị thu hồi hoặc hết quyền giữ.`, false);
+          setTimeout(() => window.location.reload(), 800);
+        }
+      } catch (error) {
+        clearInterval(claimHeartbeatTimer);
+        activeClaimRows.forEach((row) => {
+          row.dataset.claimActive = '0';
+          row.classList.remove('bg-red-50', 'hover:bg-red-100');
+          row.classList.add('hover:bg-gray-50');
+        });
+        showGddbToast(error.message, false);
+      }
+    };
+    claimHeartbeatTimer = setInterval(renewCaseClaim, 60000);
   }
 
   const registerModal = document.getElementById('gddb-register-modal');
@@ -926,7 +1210,9 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         registerModal.dataset.updateUrl = button.dataset.updateUrl;
         registerModal.querySelector('[data-register-contract]').textContent = button.dataset.contractCode || '';
         registerModal.querySelector('[data-register-shop]').textContent = button.dataset.shopName || '';
-        registerModal.querySelectorAll('input[name="gddb_register_identity"]').forEach((radio) => { radio.checked = false; });
+        registerModal.querySelectorAll('input[name="gddb_register_identity"]').forEach((radio) => {
+          radio.checked = radio.value === (button.dataset.currentIdentityId || '');
+        });
         const currentAction = button.dataset.currentStatus === 'not_registered' ? 'not_registered' : 'registered';
         registerModal.querySelector(`input[name="gddb_registration_action"][value="${currentAction}"]`).checked = true;
         registerModal.querySelector('[data-register-reason]').value = currentAction === 'registered' ? (button.dataset.currentReason || '') : '';
@@ -970,12 +1256,21 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         const data = await response.json();
         if (!response.ok || !data.success) throw new Error(data.error || 'Không xác nhận được đăng ký.');
         const row = document.querySelector(`[data-gddb-row="${registerModal.dataset.registrationId}"]`);
+        row.dataset.caseStatus = data.gddb_status;
+        row.dataset.claimActive = '0';
+        row.classList.remove('bg-red-50', 'hover:bg-red-100');
+        row.classList.add('hover:bg-gray-50');
         const statusLabel = row.querySelector('[data-status-label]');
         statusLabel.textContent = data.gddb_status_label;
         statusLabel.classList.remove('status-pending', 'status-registered', 'status-not-registered');
         statusLabel.classList.add(action === 'registered' ? 'status-registered' : 'status-not-registered');
         const registeredByLabel = row.querySelector('[data-registered-by-label]');
         registeredByLabel.textContent = action === 'registered' ? 'Đã dùng: ' + data.registered_identity_code : data.reason;
+        const claimLabel = row.querySelector('[data-claim-label]');
+        if (claimLabel) {
+          claimLabel.textContent = data.processing_by_username ? `Checker: ${data.processing_by_username}` : '';
+          claimLabel.className = 'mt-1 text-[9px] text-gray-500';
+        }
         const drawer = document.querySelector(`[data-gddb-drawer="${registerModal.dataset.registrationId}"]`);
         const drawerStatus = drawer?.querySelector('[data-drawer-status]');
         if (drawerStatus) {
@@ -1001,19 +1296,24 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           drawerRegisteredAt.classList.add('status-pending');
         }
         const postminiButton = row.querySelector('[data-postmini-open]');
+        const registerButton = row.querySelector('[data-register-open]');
+        if (registerButton) {
+          registerButton.dataset.currentStatus = data.gddb_status;
+          registerButton.dataset.currentReason = data.reason || '';
+          registerButton.dataset.currentIdentityId = data.registered_identity_id || '';
+          registerButton.textContent = 'Chỉnh sửa đăng ký';
+        }
         if (action === 'registered') {
-          row.querySelector('[data-register-open]')?.remove();
-          postminiButton.disabled = false;
-          postminiButton.classList.remove('cursor-not-allowed', 'bg-gray-300');
-          postminiButton.classList.add('bg-amber-500', 'text-white', 'ring-2', 'ring-amber-200', 'hover:bg-amber-600');
-        } else {
-          const registerButton = row.querySelector('[data-register-open]');
-          if (registerButton) {
-            registerButton.dataset.currentStatus = 'not_registered';
-            registerButton.dataset.currentReason = data.reason || '';
+          if (postminiButton) {
+            postminiButton.disabled = false;
+            postminiButton.classList.remove('cursor-not-allowed', 'bg-gray-300');
+            postminiButton.classList.add('bg-amber-500', 'text-white', 'ring-2', 'ring-amber-200', 'hover:bg-amber-600');
           }
-          postminiButton.disabled = true;
-          postminiButton.className = 'cursor-not-allowed rounded-lg bg-gray-300 px-3 py-2 font-bold text-white';
+        } else {
+          if (postminiButton) {
+            postminiButton.disabled = true;
+            postminiButton.className = 'cursor-not-allowed rounded-lg bg-gray-300 px-3 py-2 font-bold text-white';
+          }
         }
         setGddbModalOpen(registerModal, false);
         if (action === 'registered') {
@@ -1039,6 +1339,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         postminiModal.dataset.registrationId = button.dataset.registrationId;
         postminiModal.dataset.updateUrl = button.dataset.updateUrl;
         postminiModal.querySelector('[data-postmini-contract]').textContent = button.dataset.contractCode || '';
+        postminiModal.querySelector('[data-postmini-note]').value = button.dataset.currentNote || '';
         postminiModal.querySelectorAll('input[name="gddb_postmini_status"]').forEach((radio) => {
           radio.checked = radio.value === button.dataset.currentPostmini;
         });
@@ -1059,7 +1360,10 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         const response = await fetch(postminiModal.dataset.updateUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN || '' },
-          body: JSON.stringify({ postmini_updated: selectedStatus.value }),
+          body: JSON.stringify({
+            postmini_updated: selectedStatus.value,
+            note: postminiModal.querySelector('[data-postmini-note]').value,
+          }),
         });
         const data = await response.json();
         if (!response.ok || !data.success) throw new Error(data.error || 'Không cập nhật được PosMini.');
@@ -1070,6 +1374,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         statusLabel.classList.toggle('status-pending', !data.process_done);
         const actionButton = row.querySelector('[data-postmini-open]');
         actionButton.dataset.currentPostmini = data.postmini_updated;
+        actionButton.dataset.currentNote = data.note || '';
         actionButton.classList.remove('bg-amber-500', 'ring-2', 'ring-amber-200', 'hover:bg-amber-600', 'border', 'border-gray-200', 'bg-white', 'text-gray-700', 'hover:bg-gray-50');
         if (data.process_done) {
           actionButton.classList.remove('text-white');
@@ -1085,6 +1390,8 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           drawerPostmini.classList.toggle('status-registered', data.process_done);
           drawerPostmini.classList.toggle('status-pending', !data.process_done);
         }
+        const drawerNote = document.querySelector(`[data-gddb-drawer="${postminiModal.dataset.registrationId}"] [data-gddb-live-note]`);
+        if (drawerNote) drawerNote.value = data.note || '';
         updateGddbDrawerOperator(postminiModal.dataset.registrationId, data.updated_by_username);
         setGddbModalOpen(postminiModal, false);
         showGddbToast(data.process_done ? 'Quy trình GDĐB đã hoàn tất.' : 'Đã cập nhật trạng thái PosMini.', true);
