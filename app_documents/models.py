@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.db.models import F
+from datetime import timedelta
 import hashlib
 import pytz
 # Create your models here.
@@ -1101,6 +1102,13 @@ class CollateralRegistrationStatus(models.TextChoices):
 
 
 class CollateralRegistrationImportBatch(models.Model):
+    SLOT_CHOICES = [
+        (1, "09:00"),
+        (2, "13:00"),
+        (3, "16:00"),
+        (4, "19:00"),
+    ]
+
     batch_id = models.AutoField(primary_key=True)
     source_type = models.CharField(max_length=30, default="api")
     source_url = models.TextField(null=True, blank=True)
@@ -1112,11 +1120,37 @@ class CollateralRegistrationImportBatch(models.Model):
     error_rows = models.PositiveIntegerField(default=0)
     summary = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    business_date = models.DateField(null=True, blank=True)
+    slot_number = models.PositiveSmallIntegerField(choices=SLOT_CHOICES, null=True, blank=True)
     created_by = models.ForeignKey(User, db_column="created_by", on_delete=models.SET_NULL, null=True, blank=True)
 
     class Meta:
         db_table = "f_CollateralRegistrationImportBatch"
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["business_date", "slot_number"], name="gddb_batch_slot_idx"),
+        ]
+
+    @classmethod
+    def classify_run_time(cls, run_time):
+        if timezone.is_aware(run_time):
+            run_time = timezone.localtime(run_time)
+        run_date = run_time.date()
+        run_hour = run_time.hour
+        if run_hour < 9:
+            return run_date - timedelta(days=1), 4
+        if run_hour < 13:
+            return run_date, 1
+        if run_hour < 16:
+            return run_date, 2
+        if run_hour < 19:
+            return run_date, 3
+        return run_date, 4
+
+    def save(self, *args, **kwargs):
+        if self.business_date is None or self.slot_number is None:
+            self.business_date, self.slot_number = self.classify_run_time(self.created_at or timezone.now())
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"GDDB import #{self.batch_id}"
@@ -1198,6 +1232,7 @@ class CollateralRegistration(models.Model):
     license_plate = models.CharField(max_length=50, null=True, blank=True)
     chassis_number = models.CharField(max_length=100, null=True, blank=True)
     engine_number = models.CharField(max_length=100, null=True, blank=True)
+    asset_type = models.CharField(max_length=100, null=True, blank=True)
     gddb_status = models.CharField(
         max_length=30,
         choices=CollateralRegistrationStatus.choices,
@@ -1263,6 +1298,7 @@ class CollateralRegistration(models.Model):
     )
     processing_started_at = models.DateTimeField(null=True, blank=True)
     processing_expires_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "f_CollateralRegistration"
@@ -1274,6 +1310,7 @@ class CollateralRegistration(models.Model):
             models.Index(fields=["chassis_number"]),
             models.Index(fields=["engine_number"]),
             models.Index(fields=["processing_by", "processing_expires_at"], name="gddb_processing_lease_idx"),
+            models.Index(fields=["archived_at", "is_duplicate"], name="gddb_archive_queue_idx"),
         ]
 
     def __str__(self):
@@ -1520,6 +1557,98 @@ class DocumentsDetail(models.Model):
     def __str__(self):
 
         return self.documents_code
+
+
+# Intake API: dữ liệu từ hệ thống làm sạch (ví dụ Prefect) được giữ ở staging
+# trước khi ghi vào các bảng nghiệp vụ.  Không lưu token thô trong cơ sở dữ liệu.
+class ExternalDocumentIntakeToken(models.Model):
+    token_id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=100, unique=True)
+    token_prefix = models.CharField(max_length=16)
+    token_hash = models.CharField(max_length=64, unique=True)
+    scopes = models.JSONField(default=list)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name="document_intake_tokens_created")
+    revoked_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name="document_intake_tokens_revoked")
+
+    class Meta:
+        db_table = "d_ExternalDocumentIntakeToken"
+
+    def __str__(self):
+        return f"{self.name} ({self.token_prefix}… )"
+
+
+class ExternalDocumentIntakeBatch(models.Model):
+    class Kind(models.TextChoices):
+        DOCUMENTS = "documents", "Documents"
+        MASTER_DATA = "master_data", "Master data"
+
+    class Status(models.TextChoices):
+        CREATED = "created", "Created"
+        UPLOADING = "uploading", "Uploading"
+        PROCESSING = "processing", "Processing"
+        COMPLETED = "completed", "Completed"
+        COMPLETED_WITH_REJECTIONS = "completed_with_rejections", "Completed with rejections"
+        FAILED = "failed", "Failed"
+
+    batch_id = models.AutoField(primary_key=True)
+    batch_key = models.CharField(max_length=100, unique=True)
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    business_date = models.DateField()
+    source = models.CharField(max_length=100, default="prefect")
+    schema_version = models.CharField(max_length=20, default="v1")
+    expected_records = models.PositiveIntegerField(null=True, blank=True)
+    expected_chunks = models.PositiveIntegerField(null=True, blank=True)
+    received_records = models.PositiveIntegerField(default=0)
+    received_chunks = models.PositiveIntegerField(default=0)
+    status = models.CharField(max_length=40, choices=Status.choices, default=Status.CREATED)
+    summary = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True, default="")
+    finalized_at = models.DateTimeField(null=True, blank=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    token = models.ForeignKey(ExternalDocumentIntakeToken, null=True, blank=True,
+                              on_delete=models.SET_NULL, related_name="batches")
+
+    class Meta:
+        db_table = "f_ExternalDocumentIntakeBatch"
+        indexes = [models.Index(fields=["status", "business_date"], name="doc_intake_status_date_idx")]
+
+
+class ExternalDocumentIntakeChunk(models.Model):
+    chunk_id = models.AutoField(primary_key=True)
+    batch = models.ForeignKey(ExternalDocumentIntakeBatch, on_delete=models.CASCADE, related_name="chunks")
+    chunk_no = models.PositiveIntegerField()
+    payload_hash = models.CharField(max_length=64)
+    record_count = models.PositiveIntegerField()
+    records = models.JSONField(default=list)
+    received_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "f_ExternalDocumentIntakeChunk"
+        constraints = [models.UniqueConstraint(fields=["batch", "chunk_no"], name="doc_intake_batch_chunk_uniq")]
+
+
+class ExternalDocumentIntakeRejection(models.Model):
+    rejection_id = models.AutoField(primary_key=True)
+    batch = models.ForeignKey(ExternalDocumentIntakeBatch, on_delete=models.CASCADE, related_name="rejections")
+    chunk = models.ForeignKey(ExternalDocumentIntakeChunk, null=True, blank=True, on_delete=models.SET_NULL)
+    row_no = models.PositiveIntegerField()
+    source_record_id = models.CharField(max_length=100, blank=True, default="")
+    error_code = models.CharField(max_length=80)
+    message = models.TextField()
+    raw_record = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "f_ExternalDocumentIntakeRejection"
+        indexes = [models.Index(fields=["batch", "row_no"], name="doc_intake_rejection_idx")]
 
 
 

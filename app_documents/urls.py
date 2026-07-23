@@ -2,6 +2,7 @@
 from django.urls import path
 from .views import CustomPasswordResetView
 from . import views
+from . import intake_api
 
 urlpatterns = [
     path("", views.home_view, name="home"), 
@@ -83,6 +84,12 @@ urlpatterns = [
     path('gapo/webhook/poc/', views.gapo_webhook_poc_view, name='gapo_webhook_poc'),
     path('gapo/webhook/poc/events/', views.gapo_webhook_poc_events_view, name='gapo_webhook_poc_events'),
     path('giao-dich-dam-bao/', views.gddb_registration_view, name='gddb_registration_v2'),
+    path('giao-dich-dam-bao/dashboard/', views.gddb_dashboard_view, name='gddb_dashboard'),
+    path('api/gddb/dashboard/', views.api_gddb_dashboard, name='api_gddb_dashboard'),
+    path('quan-ly-tich-hop-du-lieu/', views.document_intake_management_view, name='document_intake_management'),
+    path('quan-ly-tich-hop-du-lieu/tokens/create/', views.document_intake_token_create_view, name='document_intake_token_create'),
+    path('quan-ly-tich-hop-du-lieu/tokens/<int:token_id>/revoke/', views.document_intake_token_revoke_view, name='document_intake_token_revoke'),
+    path('quan-ly-tich-hop-du-lieu/tai-lieu/', views.document_intake_documentation_view, name='document_intake_documentation'),
     path('giao-dich-dam-bao/manual-intake/', views.gddb_manual_intake_view, name='gddb_manual_intake'),
     path('giao-dich-dam-bao/manual-intake/preview/', views.gddb_manual_preview_view, name='gddb_manual_preview'),
     path('giao-dich-dam-bao/export/', views.gddb_export_view, name='gddb_export'),
@@ -98,4 +105,11 @@ urlpatterns = [
     path('api/gddb/<int:registration_id>/update/', views.api_gddb_update, name='api_gddb_update'),
     path('api/gddb/<int:registration_id>/note/', views.api_gddb_note_update, name='api_gddb_note_update'),
     path('api/gddb/<int:registration_id>/postmini/', views.api_gddb_postmini_update, name='api_gddb_postmini_update'),
+    # External, token-authenticated intake from the data-cleaning/Prefect platform.
+    path('api/integrations/v1/batches/', intake_api.create_batch, name='document_intake_create_batch'),
+    path('api/integrations/v1/catalog/', intake_api.catalog, name='document_intake_catalog'),
+    path('api/integrations/v1/batches/<str:batch_key>/chunks/', intake_api.upload_chunk, name='document_intake_upload_chunk'),
+    path('api/integrations/v1/batches/<str:batch_key>/finalize/', intake_api.finalize_batch, name='document_intake_finalize'),
+    path('api/integrations/v1/batches/<str:batch_key>/', intake_api.batch_status, name='document_intake_status'),
+    path('api/integrations/v1/batches/<str:batch_key>/rejections/', intake_api.batch_rejections, name='document_intake_rejections'),
 ]   

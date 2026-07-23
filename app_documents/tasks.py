@@ -3,6 +3,7 @@ from django.utils import timezone
 
 from .gapo import GapoMessageError, build_gapo_body, build_gapo_payload, post_gapo_message
 from .models import GapoScheduledMessage
+from .document_intake import fail_batch, process_batch
 
 
 @shared_task
@@ -47,3 +48,17 @@ def send_gapo_scheduled_message(self, schedule_id):
         schedule.sent_at = now
         schedule.save(update_fields=["status", "sent_at", "updated_at"])
         return f"Sent to {schedule.target_value} at {now}"
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=120)
+def process_document_intake_batch(self, batch_key):
+    """Finalize a staged external document batch outside the HTTP request."""
+    try:
+        return process_batch(batch_key)
+    except Exception as exc:
+        # Retry transient DB failures.  The final retry records a visible failure
+        # instead of leaving a batch permanently in "processing".
+        if self.request.retries >= self.max_retries:
+            fail_batch(batch_key, exc)
+            raise
+        raise self.retry(exc=exc)

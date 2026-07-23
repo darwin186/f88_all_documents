@@ -6,13 +6,27 @@
 {% block top_nav %}
   {% include 'app_documents/components/top_nav_v2.html' %}
 {% endblock %}
-{% block main_extra_class %}pt-14{% endblock %}
+{% block main_extra_class %}pt-14 overflow-hidden{% endblock %}
 
 {% block content %}
 <style>
+  html, body { height: 100%; overflow: hidden; }
   body { font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size:10px; }
+  body > main { min-height: 0; overflow: hidden !important; }
+  .checking-shell { height: 100%; min-height: 0; }
   .filter-bar, .filter-bar * { font-size: 10px !important; }
   .table-wrap table { font-size: 10px; }
+  .table-scroll {
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  .table-scroll thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #f9fafb;
+    box-shadow: inset 0 -1px 0 #e5e7eb;
+  }
   .filter-input { height: 34px; }
   .flatpickr-calendar { font-size: 10px; }
   .flatpickr-calendar .flatpickr-day { height: 26px; line-height: 26px; width: 32px; }
@@ -21,6 +35,10 @@
   .flatpickr-weekdays { font-size: 10px; }
   .flatpickr-input { border: 0 !important; box-shadow: none !important; outline: none !important; }
   .flatpickr-input:focus { border: 0 !important; box-shadow: none !important; outline: none !important; }
+  .checking-status-search,
+  .checking-status-search::placeholder {
+    font-size: 9px !important;
+  }
   .row-active { box-shadow: inset 0 -1px 0 #f59e0b, inset 0 1px 0 #f59e0b; }
   .toast-container { position: fixed; top: 76px; right: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
   .toast { min-width: 220px; max-width: 320px; padding: 10px 12px; border-radius: 12px; border: 1px solid #e5e7eb; background: #ffffff; box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08); font-size: 10px; color: #111827; display: flex; align-items: flex-start; gap: 8px; }
@@ -31,8 +49,8 @@
   .toast-info .toast-dot { background: #3b82f6; }
 </style>
 
-<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
-  <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
+<div class="checking-shell max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 pt-5 lg:px-3 flex flex-col gap-4">
+  <div class="filter-bar flex-shrink-0 rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
     <form id="filter-form-checking" method="get" action="{% url 'checking_transaction_v2' %}" x-data="{ showMore: false }" class="grid lg:grid-cols-[2fr,1fr,1fr,1fr,auto] gap-3 items-center">
       <input type="hidden" name="sort" value="{{ sort_param }}">
       <div class="relative">
@@ -43,7 +61,7 @@
             <span class="text-gray-700 text-[10px]" x-text="selected || 'Phòng giao dịch'"></span>
             <span class="text-gray-400 text-xs">▾</span>
           </button>
-          <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
+          <div x-cloak x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
             <div class="flex items-center gap-2">
               <input type="text" x-model="searchText" class="w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Tìm phòng giao dịch">
               <button type="button" @click="searchText=''; selected=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
@@ -70,14 +88,36 @@
       <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
         <input id="filter-check-date" name="filtercheckdate" value="{{ request.GET.filtercheckdate|default:'' }}" placeholder="Ngày duyệt" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" readonly />
       </div>
-        <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
-          <select name="choicedocumentstatus" class="block w-full bg-transparent text-[10px] text-gray-700 focus:outline-none focus:ring-0 appearance-none border-0 pr-6">
-            <option value="">Trạng thái chứng từ</option>
+      {% with request.GET.choicedocumentstatus|default_if_none:'' as document_status_value %}
+      <div class="relative" x-data="{
+        open: false,
+        searchText: '',
+        selected: '{{ document_status_value|escapejs }}',
+        selectedLabel: '{% for st in drop_list_document_status %}{% if st.status_id|stringformat:"s" == document_status_value %}{{ st.documents_status_name|escapejs }}{% endif %}{% endfor %}'
+      }">
+        <input type="hidden" name="choicedocumentstatus" x-model="selected">
+        <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
+          <span class="text-gray-700 text-[10px]" x-text="selectedLabel || 'Trạng thái chứng từ'"></span>
+          <span class="text-gray-400 text-xs">▾</span>
+        </button>
+        <div x-cloak x-show="open" @click.outside="open=false" class="absolute z-30 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg p-2 space-y-2 text-[10px]">
+          <div class="flex items-center gap-2">
+            <input type="text" x-model="searchText" class="w-full rounded-lg border border-gray-200 px-2 py-1 text-[10px] placeholder:text-[10px] focus:border-emerald-500 focus:outline-none" placeholder="Tìm trạng thái">
+            <button type="button" @click="searchText=''; selected=''; selectedLabel=''" class="flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 text-gray-400 hover:border-emerald-500 hover:text-emerald-600">×</button>
+          </div>
+          <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
             {% for st in drop_list_document_status %}
-            <option value="{{ st.status_id }}" {% if request.GET.choicedocumentstatus|stringformat:"s" == st.status_id|stringformat:"s" %}selected{% endif %}>{{ st.documents_status_name }}</option>
-          {% endfor %}
-          </select>
-        </label>
+            <button type="button"
+                    x-show="!searchText || '{{ st.documents_status_name|escapejs }}'.toLowerCase().includes(searchText.toLowerCase())"
+                    @click="selected='{{ st.status_id }}'; selectedLabel='{{ st.documents_status_name|escapejs }}'; searchText=''; open=false"
+                    class="w-full px-2 py-2 text-left hover:bg-emerald-50">
+              {{ st.documents_status_name }}
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endwith %}
       <div class="flex items-center gap-2">
         <button type="button" @click="showMore = !showMore" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50" x-text="showMore ? 'Thu gọn' : 'Mở rộng'"></button>
         <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Lọc</button>
@@ -87,7 +127,7 @@
           <span id="bulk-check-count" class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-white/20 text-[9px] font-semibold">0</span>
         </button>
       </div>
-      <div class="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" x-show="showMore">
+      <div x-cloak class="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" x-show="showMore">
         <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
           <input name="choice_loan_code" value="{{ request.GET.choice_loan_code|default:'' }}" placeholder="Mã GNN" class="w-full bg-transparent focus:outline-none text-[10px]" />
         </label>
@@ -106,7 +146,7 @@
             <span class="text-gray-700 text-[10px]" x-text="search || 'Người duyệt'"></span>
             <span class="text-gray-400 text-xs">▾</span>
           </button>
-          <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
+          <div x-cloak x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
             <div class="flex items-center gap-2">
               <input type="text" x-model="search" class="w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Nhập username">
               <button type="button" @click="search=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
@@ -141,7 +181,7 @@
             <span class="text-gray-700 text-[10px]" x-text="selectedLabel || 'Trạng thái duyệt'"></span>
             <span class="text-gray-400 text-xs">▾</span>
           </button>
-          <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
+          <div x-cloak x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
             <div class="flex items-center gap-2">
               <input type="text" x-model="searchText" class="w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Tìm trạng thái">
               <button type="button" @click="searchText=''; selected=''; selectedLabel=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
@@ -170,7 +210,7 @@
             <span class="text-gray-700 text-[10px]" x-text="selectedLabel || 'Nghiệp vụ'"></span>
             <span class="text-gray-400 text-xs">▾</span>
           </button>
-          <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
+          <div x-cloak x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
             <div class="flex items-center gap-2">
               <input type="text" x-model="searchText" class="w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Tìm nghiệp vụ">
               <button type="button" @click="searchText=''; selected=''; selectedLabel=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
@@ -196,8 +236,9 @@
     </form>
   </div>
 
-  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden table-wrap">
-    <div class="flex justify-between items-center px-3 py-2 text-[10px] text-gray-600">
+  <div class="relative flex-1 min-h-0">
+  <div class="h-full min-h-0 rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden table-wrap flex flex-col">
+    <div class="flex-shrink-0 flex justify-between items-center px-3 py-2 text-[10px] text-gray-600">
       <span>Tổng chứng từ: {{ documents_detail.paginator.count }}</span>
       <div class="flex items-center gap-1">
         {% if documents_detail.has_previous %}
@@ -217,6 +258,7 @@
         {% endif %}
       </div>
     </div>
+    <div class="table-scroll flex-1 min-h-0 overflow-auto">
     <table class="min-w-full text-left">
       <thead class="bg-gray-50 text-gray-600 uppercase">
         <tr>
@@ -330,6 +372,8 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
+  </div>
   </div>
 </div>
 
@@ -370,12 +414,42 @@
         <ul id="bulk-selected-list" class="max-h-40 overflow-y-auto space-y-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px] text-gray-700"></ul>
         <div>
           <label class="block text-[9px] text-gray-500 mb-1">Trạng thái duyệt</label>
-          <select id="bulk-check-status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-white focus:border-emerald-500 focus:outline-none">
-            <option value="">Chọn trạng thái</option>
-            {% for st in drop_list_checking_status %}
-            <option value="{{ st.status_id }}" data-code="{{ st.checking_status_code }}" data-request-additional="{{ st.is_request_additional|yesno:'true,false' }}">{{ st.checking_status_name }}</option>
-            {% endfor %}
-          </select>
+          <div class="relative" x-data="{
+            open: false,
+            searchText: '',
+            selectedLabel: 'Chọn trạng thái',
+            syncLabel() {
+              const option = this.$refs.select?.selectedOptions?.[0];
+              this.selectedLabel = option?.value ? option.textContent.trim() : 'Chọn trạng thái';
+            }
+          }" @click.outside="open=false">
+            <select x-ref="select" id="bulk-check-status" class="hidden" @change="syncLabel()">
+              <option value="">Chọn trạng thái</option>
+              {% for st in drop_list_checking_status %}
+              <option value="{{ st.status_id }}" data-code="{{ st.checking_status_code }}" data-request-additional="{{ st.is_request_additional|yesno:'true,false' }}">{{ st.checking_status_name }}</option>
+              {% endfor %}
+            </select>
+            <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
+              <span class="text-gray-700 text-[9px]" x-text="selectedLabel"></span>
+              <span class="text-gray-400 text-xs">▾</span>
+            </button>
+            <div x-cloak x-show="open" class="absolute z-30 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg p-2 space-y-2 text-[9px]">
+              <div class="flex items-center gap-2">
+                <input type="text" x-model="searchText" class="checking-status-search w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Tìm trạng thái">
+                <button type="button" @click="searchText=''" class="flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 text-gray-400 hover:border-emerald-500 hover:text-emerald-600">×</button>
+              </div>
+              <div class="max-h-40 overflow-y-auto divide-y divide-gray-100">
+                {% for st in drop_list_checking_status %}
+                <button type="button"
+                        x-show="!searchText || '{{ st.checking_status_name|escapejs }}'.toLowerCase().includes(searchText.toLowerCase())"
+                        @click="$refs.select.value='{{ st.status_id }}'; $refs.select.dispatchEvent(new Event('change', { bubbles: true })); searchText=''; open=false"
+                        class="w-full px-2 py-2 text-left hover:bg-emerald-50">
+                  {{ st.checking_status_name }}
+                </button>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
         </div>
         <div id="bulk-supplement-fields" class="hidden space-y-2">
           <div>
@@ -468,12 +542,42 @@
           <input type="hidden" name="filter_sort" value="{{ sort_param }}">
           <div>
             <label class="block text-[9px] text-gray-500 mb-1">Trạng thái duyệt</label>
-            <select id="drawer-checking-status" name="checking_status_submit" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-white focus:border-emerald-500 focus:outline-none">
-              <option value="">Chọn trạng thái</option>
-              {% for st in drop_list_checking_status %}
-              <option value="{{ st.status_id }}" data-code="{{ st.checking_status_code }}" data-request-additional="{{ st.is_request_additional|yesno:'true,false' }}">{{ st.checking_status_name }}</option>
-              {% endfor %}
-            </select>
+            <div class="relative" x-data="{
+              open: false,
+              searchText: '',
+              selectedLabel: 'Chọn trạng thái',
+              syncLabel() {
+                const option = this.$refs.select?.selectedOptions?.[0];
+                this.selectedLabel = option?.value ? option.textContent.trim() : 'Chọn trạng thái';
+              }
+            }" @click.outside="open=false">
+              <select x-ref="select" id="drawer-checking-status" name="checking_status_submit" class="hidden" @change="syncLabel()">
+                <option value="">Chọn trạng thái</option>
+                {% for st in drop_list_checking_status %}
+                <option value="{{ st.status_id }}" data-code="{{ st.checking_status_code }}" data-request-additional="{{ st.is_request_additional|yesno:'true,false' }}">{{ st.checking_status_name }}</option>
+                {% endfor %}
+              </select>
+              <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
+                <span class="text-gray-700 text-[9px]" x-text="selectedLabel"></span>
+                <span class="text-gray-400 text-xs">▾</span>
+              </button>
+              <div x-cloak x-show="open" class="absolute z-30 mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg p-2 space-y-2 text-[9px]">
+                <div class="flex items-center gap-2">
+                  <input type="text" x-model="searchText" class="checking-status-search w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Tìm trạng thái">
+                  <button type="button" @click="searchText=''" class="flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 text-gray-400 hover:border-emerald-500 hover:text-emerald-600">×</button>
+                </div>
+                <div class="max-h-40 overflow-y-auto divide-y divide-gray-100">
+                  {% for st in drop_list_checking_status %}
+                  <button type="button"
+                          x-show="!searchText || '{{ st.checking_status_name|escapejs }}'.toLowerCase().includes(searchText.toLowerCase())"
+                          @click="$refs.select.value='{{ st.status_id }}'; $refs.select.dispatchEvent(new Event('change', { bubbles: true })); searchText=''; open=false"
+                          class="w-full px-2 py-2 text-left hover:bg-emerald-50">
+                    {{ st.checking_status_name }}
+                  </button>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
           </div>
           <div id="drawer-supplement-fields" class="hidden space-y-2">
             <div>
@@ -702,7 +806,12 @@
       };
       const setValue = (id, value) => {
         const el = document.getElementById(id);
-        if (el) el.value = value;
+        if (el) {
+          el.value = value;
+          if (id === 'drawer-checking-status') {
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
       };
       const fullCode = row.dataset.documentCode || 'Chứng từ';
       setText('drawer-doc-code', truncateCode(fullCode));
@@ -877,7 +986,12 @@
       };
       const setValue = (id, value) => {
         const el = document.getElementById(id);
-        if (el) el.value = value;
+        if (el) {
+          el.value = value;
+          if (id === 'drawer-checking-status') {
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
       };
       setText('drawer-checking-date', payload.checking_date || '—');
       setText('drawer-checking-user', checkingUserText || '—');
@@ -1041,7 +1155,10 @@
         bulkMsg.textContent = '';
         bulkMsg.classList.add('hidden');
       }
-      if (bulkStatus) bulkStatus.value = '';
+      if (bulkStatus) {
+        bulkStatus.value = '';
+        bulkStatus.dispatchEvent(new Event('change', { bubbles: true }));
+      }
       if (bulkNote) bulkNote.value = '';
       if (bulkAdditionalNote) bulkAdditionalNote.value = '';
       if (bulkCheckDate) bulkCheckDate.value = '';

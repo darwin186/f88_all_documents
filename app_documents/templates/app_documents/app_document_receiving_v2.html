@@ -8,9 +8,16 @@
 {% block content %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <style>
+  html, body { height: 100%; overflow: hidden; }
   body { font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size:10px; }
+  body > main { min-height: 0; overflow: hidden !important; }
+  .receiving-shell { height: 100%; min-height: 0; }
   .filter-bar, .filter-bar * { font-size: 10px !important; }
   .table-wrap table { font-size: 10px; }
+  .table-scroll {
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
   .table-scroll thead th {
     position: sticky;
     top: 0;
@@ -39,9 +46,33 @@
   .toast-error .toast-dot { background: #ef4444; }
   .toast-warning .toast-dot { background: #f59e0b; }
   .toast-info .toast-dot { background: #3b82f6; }
+  @keyframes received-row-highlight {
+    0% {
+      background-color: #ffffff;
+    }
+    28% {
+      background-color: #d1fae5;
+    }
+    68% {
+      background-color: #ecfdf5;
+    }
+    100% {
+      background-color: #ffffff;
+    }
+  }
+  .row-received-success > td {
+    animation: received-row-highlight 1.05s ease-out var(--receive-delay, 0ms) both;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .row-received-success > td {
+      animation-duration: 1ms;
+      animation-delay: 0ms;
+      background-color: #ecfdf5;
+    }
+  }
 </style>
 
-<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 mt-5 h-full min-h-0 flex flex-col gap-4">
+<div class="receiving-shell max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 pt-5 lg:px-3 flex flex-col gap-4">
   {% if messages %}
   <script>
     window.SERVER_TOASTS = [
@@ -62,7 +93,7 @@
             <span class="text-gray-700 text-[10px]" x-text="selected || 'Phòng giao dịch'"></span>
             <span class="text-gray-400 text-xs">▾</span>
           </button>
-          <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
+          <div x-cloak x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
             <div class="flex items-center gap-2">
               <input type="text" x-model="searchText" class="w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Tìm phòng giao dịch">
               <button type="button" @click="searchText=''; selected=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
@@ -110,7 +141,7 @@
             <span class="text-gray-700 text-[10px]" x-text="label(selected)"></span>
             <span class="text-gray-400 text-xs">▾</span>
           </button>
-          <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-1 text-[10px]">
+          <div x-cloak x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-1 text-[10px]">
             <button type="button" @click="selected=''; open=false" class="w-full text-left px-2 py-2 rounded hover:bg-emerald-50 text-gray-700">Tất cả</button>
             <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
               {% for folderstatus in drop_list_folder_status %}
@@ -145,7 +176,7 @@
           <span id="bulk-receive-count" class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-white/20 text-[9px] font-semibold">0</span>
         </button>
       </div>
-      <div class="lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" x-show="showMore">
+      <div x-cloak class="lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" x-show="showMore">
         <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
           <input name="choice_folder_code" value="{% if request.GET.choice_folder_code %}{{ request.GET.choice_folder_code }}{% endif %}" placeholder="Tìm theo mã quyển" class="w-full bg-transparent focus:outline-none text-[10px]" />
         </label>
@@ -155,7 +186,7 @@
             <span class="text-gray-700 text-[10px]" x-text="search || 'Tìm người nhận'"></span>
             <span class="text-gray-400 text-xs">▾</span>
           </button>
-          <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
+          <div x-cloak x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
             <div class="flex items-center gap-2">
               <input type="text" x-model="search" class="w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Nhập username">
               <button type="button" @click="search=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
@@ -554,6 +585,19 @@
   let drawerReceivePicker = null;
   let drawerAdditionalPicker = null;
   let lastHistoryFolderId = null;
+
+  window.animateReceivedRows = (folderIds) => {
+    const idSet = new Set((folderIds || []).map(id => String(id)));
+    const rows = Array.from(tbody?.querySelectorAll('tr[data-folder-id]') || [])
+      .filter(row => idSet.has(String(row.dataset.folderId)));
+
+    rows.forEach((row, index) => {
+      row.style.setProperty('--receive-delay', `${Math.min(index * 35, 245)}ms`);
+      row.classList.remove('row-active', 'row-received-success');
+      void row.offsetWidth;
+      row.classList.add('row-received-success');
+    });
+  };
 
   const initIssuePicker = ({ button, dropdown, chips, error, optionSelector }) => {
     const options = Array.from(dropdown?.querySelectorAll(optionSelector) || []);
@@ -1381,9 +1425,12 @@
       }
       const msg = [data.message, data.check_message].filter(Boolean).join(' ');
       setUpdateMsg(msg || 'Cập nhật thành công.', false);
+      const receivedFolderId = activeFolderId;
+      drawer?.classList.add('translate-x-full');
+      window.animateReceivedRows?.([receivedFolderId]);
       setTimeout(() => {
         window.location.href = data.redirect_url || window.location.href;
-      }, 700);
+      }, 1150);
     } catch (err) {
       setUpdateMsg(err.message || 'Cập nhật thất bại.');
     } finally {
@@ -1772,7 +1819,9 @@
           throw new Error(data.error || 'Nhận nhiều thất bại.');
         }
         setBulkMsg('Nhận chứng từ thành công.', false);
-        setTimeout(() => window.location.reload(), 600);
+        hideBulk();
+        window.animateReceivedRows?.(selectedItems);
+        setTimeout(() => window.location.reload(), 1250);
       } catch (err) {
         setBulkMsg(err.message || 'Nhận nhiều thất bại.');
       } finally {

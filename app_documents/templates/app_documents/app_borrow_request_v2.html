@@ -109,7 +109,7 @@
         <span class="text-xs" x-text="showCreate ? '⌃' : '+'"></span>
       </button>
     </div>
-    <form method="post" action="{% url 'borrow_request_management_v2' %}" class="grid gap-4 px-4 py-4 lg:grid-cols-[1.15fr,1fr] items-start" x-show="showCreate">
+    <form x-cloak method="post" action="{% url 'borrow_request_management_v2' %}" class="grid gap-4 px-4 py-4 lg:grid-cols-[1.15fr,1fr] items-start" x-show="showCreate">
       {% csrf_token %}
       <input type="hidden" name="action" value="create">
       <div class="space-y-3">
@@ -121,7 +121,7 @@
               <span class="text-gray-700 text-[10px]" data-borrower-label x-text="selected ? (searchText || 'Đã chọn phòng ban') : 'Chọn phòng ban mượn'"></span>
               <span class="text-gray-400 text-xs">▾</span>
             </button>
-            <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
+            <div x-cloak x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
               <div class="flex items-center gap-2">
                 <input type="text" x-model="searchText" class="w-full rounded-lg border border-gray-200 px-2 py-1 text-[10px] focus:border-emerald-500 focus:outline-none" placeholder="Tìm phòng ban">
                 <button type="button" @click="searchText=''; selected=''" class="text-gray-400 hover:text-emerald-600 text-xs flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 hover:border-emerald-500">×</button>
@@ -232,7 +232,7 @@
           <span class="text-gray-700 text-[10px]" x-text="label(selected)"></span>
           <span class="text-gray-400 text-xs">▾</span>
         </button>
-        <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
+        <div x-cloak x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
           <div class="flex items-center gap-2">
             <input type="text" x-model="searchText" class="w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Tìm phòng ban">
             <button type="button" @click="searchText=''; selected=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
@@ -272,7 +272,7 @@
           <span class="text-gray-700 text-[10px]" x-text="label(selected)"></span>
           <span class="text-gray-400 text-xs">▾</span>
         </button>
-        <div x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-1 text-[10px]">
+        <div x-cloak x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-1 text-[10px]">
           <button type="button" @click="selected=''; open=false" class="w-full text-left px-2 py-2 rounded hover:bg-emerald-50 text-gray-700">Tất cả</button>
           <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
             {% for st in drop_list_request_status %}

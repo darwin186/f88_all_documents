@@ -25,6 +25,10 @@ from .models import (
     CollateralRegistrationExternalIdentity,
     CollateralRegistrationImportBatch,
     CollateralRegistrationLog,
+    ExternalDocumentIntakeToken,
+    ExternalDocumentIntakeBatch,
+    ExternalDocumentIntakeChunk,
+    ExternalDocumentIntakeRejection,
 )
 # Register your models here.
 admin.site.site_header = "Chứng từ F88"  
@@ -188,9 +192,9 @@ admin.site.register(GapoWebhookEvent, GapoWebhookEventAdmin)
 
 
 class CollateralRegistrationImportBatchAdmin(admin.ModelAdmin):
-    list_display = ('batch_id', 'source_type', 'total_rows', 'created_rows', 'updated_rows', 'skipped_rows', 'duplicate_rows', 'error_rows', 'created_at')
-    list_filter = ('source_type', 'created_at')
-    readonly_fields = ('created_at', 'summary')
+    list_display = ('batch_id', 'source_type', 'business_date', 'slot_number', 'total_rows', 'created_rows', 'updated_rows', 'skipped_rows', 'duplicate_rows', 'error_rows', 'created_at')
+    list_filter = ('source_type', 'business_date', 'slot_number', 'created_at')
+    readonly_fields = ('created_at', 'business_date', 'slot_number', 'summary')
     search_fields = ('source_url',)
     list_per_page = 25
 admin.site.register(CollateralRegistrationImportBatch, CollateralRegistrationImportBatchAdmin)
@@ -216,10 +220,10 @@ admin.site.register(CollateralRegistrationExternalIdentity, CollateralRegistrati
 
 
 class CollateralRegistrationAdmin(admin.ModelAdmin):
-    list_display = ('registration_id', 'contract_code', 'license_plate', 'chassis_number', 'engine_number', 'gddb_status', 'shop_name', 'registered_at', 'registered_by')
-    list_filter = ('gddb_status', 'is_duplicate', 'source_system', 'shop_name')
+    list_display = ('registration_id', 'contract_code', 'license_plate', 'chassis_number', 'engine_number', 'gddb_status', 'shop_name', 'registered_at', 'archived_at', 'registered_by')
+    list_filter = ('gddb_status', 'is_duplicate', 'source_system', 'shop_name', 'archived_at')
     search_fields = ('contract_code', 'license_plate', 'chassis_number', 'engine_number', 'previous_application_no', 'it_ticket_code')
-    readonly_fields = ('dedupe_key', 'raw_payload', 'created_at', 'updated_at', 'registered_at')
+    readonly_fields = ('dedupe_key', 'raw_payload', 'created_at', 'updated_at', 'registered_at', 'archived_at')
     list_select_related = ('registered_by', 'updated_by', 'import_batch')
     list_per_page = 50
 admin.site.register(CollateralRegistration, CollateralRegistrationAdmin)
@@ -557,3 +561,35 @@ class ChangeRequestAdmin(admin.ModelAdmin):
         
     approve_change_request.short_description = "Reset Default Choices requests"
 admin.site.register(ChangeRequest, ChangeRequestAdmin)
+
+
+@admin.register(ExternalDocumentIntakeToken)
+class ExternalDocumentIntakeTokenAdmin(admin.ModelAdmin):
+    list_display = ("name", "token_prefix", "scopes", "is_active", "last_used_at", "created_at", "revoked_at")
+    search_fields = ("name", "token_prefix")
+    list_filter = ("is_active",)
+    readonly_fields = ("token_hash", "token_prefix", "created_at", "last_used_at", "revoked_at")
+
+
+@admin.register(ExternalDocumentIntakeBatch)
+class ExternalDocumentIntakeBatchAdmin(admin.ModelAdmin):
+    list_display = ("batch_key", "kind", "business_date", "status", "received_records", "received_chunks", "created_at", "processed_at")
+    list_filter = ("kind", "status", "business_date")
+    search_fields = ("batch_key", "source")
+    readonly_fields = ("created_at", "updated_at", "finalized_at", "processed_at", "summary", "error_message")
+    list_select_related = ("token",)
+
+
+@admin.register(ExternalDocumentIntakeChunk)
+class ExternalDocumentIntakeChunkAdmin(admin.ModelAdmin):
+    list_display = ("batch", "chunk_no", "record_count", "received_at")
+    search_fields = ("batch__batch_key",)
+    readonly_fields = ("batch", "chunk_no", "payload_hash", "record_count", "records", "received_at")
+
+
+@admin.register(ExternalDocumentIntakeRejection)
+class ExternalDocumentIntakeRejectionAdmin(admin.ModelAdmin):
+    list_display = ("batch", "row_no", "source_record_id", "error_code", "created_at")
+    list_filter = ("error_code", "created_at")
+    search_fields = ("batch__batch_key", "source_record_id", "message")
+    readonly_fields = ("batch", "chunk", "row_no", "source_record_id", "error_code", "message", "raw_record", "created_at")

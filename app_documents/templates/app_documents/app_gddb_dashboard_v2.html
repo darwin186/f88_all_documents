@@ -1,0 +1,253 @@
+{% extends 'app_documents/base_app_documents_v2.html' %}
+{% block title %}Dashboard giao dịch bảo đảm{% endblock %}
+{% block top_nav %}
+  {% include 'app_documents/components/top_nav_v2.html' %}
+{% endblock %}
+{% block main_extra_class %}pt-14{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<style>
+  body { font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size: 10px; }
+  .dash-panel { border: 1px solid #e5e7eb; background: #fff; box-shadow: 0 10px 24px rgba(15, 23, 42, .04); }
+  .dash-field { height: 34px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f9fafb; padding: 0 10px; font-size: 10px; color: #374151; outline: none; }
+  .dash-field:focus { border-color: #10b981; background: #fff; }
+  .dash-card { min-height: 92px; border: 1px solid #e5e7eb; border-radius: 16px; background: #fff; padding: 14px; transition: border-color .25s ease, box-shadow .25s ease, transform .25s ease; }
+  .dash-card-refresh { border-color: #6ee7b7; box-shadow: 0 0 0 3px rgba(16,185,129,.10); transform: translateY(-1px); }
+  .chart-box { position: relative; min-height: 265px; }
+  .chart-box-sm { position: relative; min-height: 230px; }
+  .legend-row { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f3f4f6; }
+  .legend-row:last-child { border-bottom: 0; }
+  .flatpickr-calendar { font-size: 10px; }
+  .flatpickr-calendar .flatpickr-day { height: 26px; width: 32px; line-height: 26px; }
+</style>
+
+<div class="mx-auto mt-5 max-w-7xl space-y-4 px-2 lg:px-3 xl:max-w-[1500px]">
+  <section class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+      <div class="text-[9px] font-bold uppercase tracking-[.14em] text-emerald-700">Vận hành · Giao dịch bảo đảm</div>
+      <h1 class="mt-1 text-2xl font-extrabold tracking-tight text-gray-950">Dashboard đăng ký GDĐB</h1>
+      <div class="mt-1 text-[10px] text-gray-500">Sản lượng, trạng thái xử lý, nguồn vay, tài sản và hiệu suất Checker.</div>
+    </div>
+    <div class="flex items-center gap-2 text-[9px] text-gray-500">
+      <span class="h-2 w-2 animate-pulse rounded-full bg-emerald-500"></span>
+      <span data-dashboard-updated>Đang tải dữ liệu realtime…</span>
+    </div>
+  </section>
+
+  <section class="dash-panel rounded-2xl p-3">
+    <form id="gddb-dashboard-filter" class="flex flex-wrap items-center gap-3">
+      <select name="period" class="dash-field min-w-[150px]" data-period>
+        <option value="today">Theo ngày</option>
+        <option value="month" selected>Theo tháng</option>
+        <option value="range">Khoảng ngày</option>
+      </select>
+      <input type="month" name="month" class="dash-field" data-period-month>
+      <div class="hidden items-center gap-2" data-period-range>
+        <input type="text" name="date_from" class="dash-field w-[135px]" placeholder="Từ ngày" data-dashboard-date readonly>
+        <span class="text-gray-300">→</span>
+        <input type="text" name="date_to" class="dash-field w-[135px]" placeholder="Đến ngày" data-dashboard-date readonly>
+      </div>
+      <button type="submit" class="rounded-lg bg-emerald-600 px-4 py-2 text-[10px] font-bold text-white hover:bg-emerald-700">Áp dụng</button>
+      <a href="{% url 'gddb_registration_v2' %}" class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-[10px] font-bold text-gray-600 hover:bg-gray-50">Về hàng đợi</a>
+      <span id="dashboard-error" class="hidden text-[9px] font-semibold text-red-600"></span>
+    </form>
+  </section>
+
+  <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-8">
+    <article class="dash-card"><div class="text-[8px] font-bold uppercase text-gray-400">Theo kỳ lọc</div><div class="mt-2 text-2xl font-extrabold text-gray-950" data-card="selected_total">—</div><div class="mt-1 text-[9px] text-gray-500" data-period-caption>Case trong kỳ</div></article>
+    <article class="dash-card"><div class="text-[8px] font-bold uppercase text-gray-400">Hôm nay</div><div class="mt-2 text-2xl font-extrabold text-emerald-700" data-card="today_total">—</div><div class="mt-1 text-[9px] text-gray-500">Case mới nhận</div></article>
+    <article class="dash-card"><div class="text-[8px] font-bold uppercase text-gray-400">Tháng này</div><div class="mt-2 text-2xl font-extrabold text-gray-950" data-card="month_total">—</div><div class="mt-1 text-[9px] text-gray-500">Case được tạo</div></article>
+    <article class="dash-card"><div class="text-[8px] font-bold uppercase text-amber-600">Chưa đăng ký</div><div class="mt-2 text-2xl font-extrabold text-amber-700" data-card="pending">—</div><div class="mt-1 text-[9px] text-gray-500">Đang trong hàng đợi</div></article>
+    <article class="dash-card"><div class="text-[8px] font-bold uppercase text-gray-400">Chưa ai nhận</div><div class="mt-2 text-2xl font-extrabold text-gray-950" data-card="unassigned">—</div><div class="mt-1 text-[9px] text-gray-500">Có thể nhận xử lý</div></article>
+    <article class="dash-card"><div class="text-[8px] font-bold uppercase text-violet-600">Đang giữ</div><div class="mt-2 text-2xl font-extrabold text-violet-700" data-card="held">—</div><div class="mt-1 text-[9px] text-gray-500">Checker đang xử lý</div></article>
+    <article class="dash-card"><div class="text-[8px] font-bold uppercase text-blue-600">Chờ PosMini</div><div class="mt-2 text-2xl font-extrabold text-blue-700" data-card="waiting_posmini">—</div><div class="mt-1 text-[9px] text-gray-500">Đã đăng ký GDĐB</div></article>
+    <article class="dash-card"><div class="text-[8px] font-bold uppercase text-emerald-600">Hoàn tất hôm nay</div><div class="mt-2 text-2xl font-extrabold text-emerald-700" data-card="completed_today">—</div><div class="mt-1 text-[9px] text-gray-500">Case đã archive</div></article>
+  </section>
+
+  <section class="grid gap-4 xl:grid-cols-[1.45fr,.55fr]">
+    <article class="dash-panel rounded-2xl p-4">
+      <div class="mb-3"><div class="text-[12px] font-bold text-gray-900">Sản lượng case theo ngày</div><div class="text-[9px] text-gray-500">Theo ngày dữ liệu được tạo trong kỳ lọc.</div></div>
+      <div class="chart-box"><canvas id="gddb-daily-chart"></canvas></div>
+    </article>
+    <article class="dash-panel rounded-2xl p-4">
+      <div class="mb-3"><div class="text-[12px] font-bold text-gray-900">Theo trạng thái</div><div class="text-[9px] text-gray-500">Cơ cấu case trong kỳ lọc.</div></div>
+      <div class="chart-box-sm"><canvas id="gddb-status-chart"></canvas></div>
+      <div class="mt-2" data-legend="status"></div>
+    </article>
+  </section>
+
+  <section class="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+    <article class="dash-panel rounded-2xl p-4">
+      <div class="mb-3"><div class="text-[12px] font-bold text-gray-900">Theo nguồn vay</div><div class="text-[9px] text-gray-500">Số lượng và tỷ lệ F88, CIMB, MB.</div></div>
+      <div class="chart-box-sm"><canvas id="gddb-source-chart"></canvas></div>
+      <div class="mt-2" data-legend="source"></div>
+    </article>
+    <article class="dash-panel rounded-2xl p-4">
+      <div class="mb-3"><div class="text-[12px] font-bold text-gray-900">Theo loại tài sản</div><div class="text-[9px] text-gray-500">Dữ liệu cũ chưa có loại tài sản được ghi nhận là Chưa xác định.</div></div>
+      <div class="chart-box-sm"><canvas id="gddb-asset-chart"></canvas></div>
+      <div class="mt-2 max-h-44 overflow-auto pr-1" data-legend="asset"></div>
+    </article>
+    <article class="dash-panel rounded-2xl p-4 lg:col-span-2 xl:col-span-1">
+      <div class="mb-3"><div class="text-[12px] font-bold text-gray-900">Đăng ký theo Checker</div><div class="text-[9px] text-gray-500">Số case xác nhận đăng ký trong kỳ lọc.</div></div>
+      <div class="chart-box"><canvas id="gddb-checker-chart"></canvas></div>
+    </article>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(() => {
+  const endpoint = "{% url 'api_gddb_dashboard' %}";
+  const refreshMs = {{ dashboard_refresh_seconds|default:30 }} * 1000;
+  const form = document.getElementById('gddb-dashboard-filter');
+  const periodSelect = form.querySelector('[data-period]');
+  const monthInput = form.querySelector('[data-period-month]');
+  const rangeWrap = form.querySelector('[data-period-range]');
+  const updatedLabel = document.querySelector('[data-dashboard-updated]');
+  const errorLabel = document.getElementById('dashboard-error');
+  const charts = {};
+  const numberFormatter = new Intl.NumberFormat('vi-VN');
+  const palette = ['#059669', '#ef4444', '#0284c7', '#f59e0b', '#8b5cf6', '#14b8a6', '#64748b', '#ec4899', '#84cc16'];
+
+  const localNow = new Date();
+  monthInput.value = `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, '0')}`;
+  document.querySelectorAll('[data-dashboard-date]').forEach((input) => {
+    if (window.flatpickr) flatpickr(input, { dateFormat: 'Y-m-d', allowInput: false, disableMobile: true });
+  });
+
+  const syncPeriodFields = () => {
+    const isMonth = periodSelect.value === 'month';
+    const isRange = periodSelect.value === 'range';
+    monthInput.classList.toggle('hidden', !isMonth);
+    monthInput.disabled = !isMonth;
+    rangeWrap.classList.toggle('hidden', !isRange);
+    rangeWrap.classList.toggle('flex', isRange);
+    rangeWrap.querySelectorAll('input').forEach((input) => { input.disabled = !isRange; });
+  };
+
+  const chartOptions = (legend = false) => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: legend, position: 'bottom', labels: { boxWidth: 9, boxHeight: 9, font: { size: 9 } } },
+      tooltip: { titleFont: { size: 10 }, bodyFont: { size: 10 } },
+    },
+    scales: legend ? undefined : {
+      x: { grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: true } },
+      y: { beginAtZero: true, ticks: { precision: 0, font: { size: 9 } }, grid: { color: '#f3f4f6' } },
+    },
+  });
+
+  const upsertChart = (key, canvasId, config) => {
+    if (charts[key]) charts[key].destroy();
+    charts[key] = new Chart(document.getElementById(canvasId), config);
+  };
+
+  const renderLegend = (key, rows, colors) => {
+    const container = document.querySelector(`[data-legend="${key}"]`);
+    if (!container) return;
+    const total = rows.reduce((sum, row) => sum + row.value, 0);
+    container.replaceChildren();
+    rows.forEach((row, index) => {
+      const item = document.createElement('div');
+      item.className = 'legend-row';
+      const label = document.createElement('span');
+      label.className = 'flex min-w-0 items-center gap-2 truncate text-[9px] font-semibold text-gray-700';
+      const dot = document.createElement('span');
+      dot.className = 'h-2 w-2 shrink-0 rounded-full';
+      dot.style.backgroundColor = colors[index % colors.length];
+      const text = document.createElement('span');
+      text.className = 'truncate';
+      text.textContent = row.label;
+      label.append(dot, text);
+      const value = document.createElement('span');
+      value.className = 'text-[9px] font-bold text-gray-900';
+      value.textContent = numberFormatter.format(row.value);
+      const ratio = document.createElement('span');
+      ratio.className = 'w-12 text-right text-[9px] text-gray-500';
+      ratio.textContent = total ? `${(row.value * 100 / total).toFixed(1)}%` : '0%';
+      item.append(label, value, ratio);
+      container.appendChild(item);
+    });
+  };
+
+  const buildParams = () => {
+    const params = new URLSearchParams(new FormData(form));
+    Array.from(params.entries()).forEach(([key, value]) => { if (!value) params.delete(key); });
+    return params;
+  };
+
+  const refresh = async () => {
+    errorLabel.classList.add('hidden');
+    try {
+      const response = await fetch(`${endpoint}?${buildParams().toString()}`, { headers: { 'Accept': 'application/json' } });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Không tải được dashboard.');
+
+      Object.entries(data.cards).forEach(([key, value]) => {
+        const target = document.querySelector(`[data-card="${key}"]`);
+        if (!target) return;
+        if (target.textContent !== numberFormatter.format(value)) {
+          target.textContent = numberFormatter.format(value);
+          target.closest('.dash-card').classList.add('dash-card-refresh');
+          setTimeout(() => target.closest('.dash-card')?.classList.remove('dash-card-refresh'), 500);
+        }
+      });
+      document.querySelector('[data-period-caption]').textContent = `${data.period.date_from} → ${data.period.date_to}`;
+
+      upsertChart('daily', 'gddb-daily-chart', {
+        type: 'bar',
+        data: {
+          labels: data.daily.map((row) => row.label.slice(8, 10) + '/' + row.label.slice(5, 7)),
+          datasets: [{ label: 'Case', data: data.daily.map((row) => row.value), backgroundColor: '#10b981', borderRadius: 5, maxBarThickness: 28 }],
+        },
+        options: chartOptions(false),
+      });
+
+      const statusColors = ['#f59e0b', '#3b82f6', '#ef4444', '#10b981'];
+      const sourceColors = ['#10b981', '#ef4444', '#0284c7', '#94a3b8'];
+      [['status', data.status, statusColors], ['source', data.source, sourceColors], ['asset', data.asset, palette]].forEach(([key, rows, colors]) => {
+        upsertChart(key, `gddb-${key}-chart`, {
+          type: 'doughnut',
+          data: { labels: rows.map((row) => row.label), datasets: [{ data: rows.map((row) => row.value), backgroundColor: colors, borderColor: '#fff', borderWidth: 2 }] },
+          options: { ...chartOptions(false), cutout: '66%', plugins: { ...chartOptions(false).plugins, legend: { display: false } } },
+        });
+        renderLegend(key, rows, colors);
+      });
+
+      upsertChart('checker', 'gddb-checker-chart', {
+        type: 'bar',
+        data: {
+          labels: data.checker.map((row) => row.label),
+          datasets: [{ label: 'Case đăng ký', data: data.checker.map((row) => row.value), backgroundColor: '#047857', borderRadius: 5, maxBarThickness: 24 }],
+        },
+        options: {
+          ...chartOptions(false),
+          indexAxis: 'y',
+          scales: {
+            x: { beginAtZero: true, ticks: { precision: 0, font: { size: 9 } }, grid: { color: '#f3f4f6' } },
+            y: { grid: { display: false }, ticks: { font: { size: 9 } } },
+          },
+        },
+      });
+
+      const generatedAt = new Date(data.generated_at);
+      updatedLabel.textContent = `Cập nhật realtime lúc ${generatedAt.toLocaleTimeString('vi-VN', { hour12: false })}`;
+    } catch (error) {
+      errorLabel.textContent = error.message;
+      errorLabel.classList.remove('hidden');
+      updatedLabel.textContent = 'Không cập nhật được dữ liệu realtime';
+    }
+  };
+
+  periodSelect.addEventListener('change', syncPeriodFields);
+  form.addEventListener('submit', (event) => { event.preventDefault(); refresh(); });
+  syncPeriodFields();
+  refresh();
+  setInterval(() => { if (!document.hidden) refresh(); }, refreshMs);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+})();
+</script>
+{% endblock %}

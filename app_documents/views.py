@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import HttpResponse, JsonResponse, HttpResponseRedirect
+from django.http import FileResponse, HttpResponse, JsonResponse, HttpResponseRedirect
 from django.urls import reverse, path
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
@@ -97,6 +97,9 @@ from .models import (
     CollateralRegistrationImportBatch,
     CollateralRegistrationLog,
     CollateralRegistrationStatus,
+    ExternalDocumentIntakeToken,
+    ExternalDocumentIntakeBatch,
+    ExternalDocumentIntakeRejection,
 )
 # Import các form
 from .forms import PackageForm, GapoPasswordResetForm, GapoScheduleForm
@@ -112,6 +115,7 @@ from .gddb import (
     parse_pasted_tabular_records,
     resolve_intake_field_name,
 )
+from .gddb_dashboard import build_gddb_dashboard_data
 from app_admindocuments.models import AdmParcelRecipientCatalog, AdmParcelRecipientImportBatch
 
 AI_STYLE_HINTS = {
@@ -200,7 +204,63 @@ def _can_process_gddb(user):
 
 
 def _gddb_claim_duration():
-    return timedelta(minutes=max(1, int(getattr(settings, "GDDB_CASE_CLAIM_MINUTES", 5))))
+    return timedelta(minutes=max(1, int(getattr(settings, "GDDB_CASE_CLAIM_MINUTES", 240))))
+
+
+def _release_expired_gddb_claims(now=None):
+    """Release stale pending claims once and retain their ownership history."""
+    now = now or timezone.now()
+    with transaction.atomic():
+        expired_claims = list(
+            CollateralRegistration.objects.select_for_update()
+            .filter(
+                gddb_status=CollateralRegistrationStatus.PENDING,
+                processing_by__isnull=False,
+                processing_expires_at__lte=now,
+                is_duplicate=False,
+                archived_at__isnull=True,
+            )
+            .select_related("processing_by")
+        )
+        if not expired_claims:
+            return 0
+
+        CollateralRegistrationLog.objects.bulk_create(
+            [
+                CollateralRegistrationLog(
+                    registration=registration,
+                    action="case_expire",
+                    from_status=registration.gddb_status,
+                    to_status=registration.gddb_status,
+                    note=f"Hết hạn giữ case của {registration.processing_by.username}",
+                    metadata={
+                        "previous_owner_id": registration.processing_by_id,
+                        "previous_owner_username": registration.processing_by.username,
+                        "processing_started_at": (
+                            registration.processing_started_at.isoformat()
+                            if registration.processing_started_at
+                            else None
+                        ),
+                        "processing_expires_at": (
+                            registration.processing_expires_at.isoformat()
+                            if registration.processing_expires_at
+                            else None
+                        ),
+                    },
+                )
+                for registration in expired_claims
+            ]
+        )
+        CollateralRegistration.objects.filter(
+            registration_id__in=[
+                registration.registration_id for registration in expired_claims
+            ]
+        ).update(
+            processing_by=None,
+            processing_started_at=None,
+            processing_expires_at=None,
+        )
+        return len(expired_claims)
 
 
 def _gddb_loan_source_group(value):
@@ -233,12 +293,37 @@ def _gddb_loan_source_query(group):
 def _gddb_batch_group(registration):
     source_label, source_group = _gddb_loan_source_group(registration.disbursement_source)
     if registration.import_batch_id:
-        batch_key = f"batch:{registration.import_batch_id}"
         batch_time = registration.import_batch.created_at if registration.import_batch else None
+        if (
+            registration.import_batch
+            and registration.import_batch.business_date
+            and registration.import_batch.slot_number
+        ):
+            batch_key = (
+                f"business:{registration.import_batch.business_date.isoformat()}"
+                f":slot:{registration.import_batch.slot_number}"
+            )
+        else:
+            batch_key = f"batch:{registration.import_batch_id}"
     else:
         batch_time = registration.created_at
         batch_key = f"time:{batch_time:%Y%m%d%H}" if batch_time else f"case:{registration.pk}"
-    batch_label = f"Batch {batch_time:%d/%m %H:%M}" if batch_time else "Batch không xác định"
+    display_time = (
+        timezone.localtime(batch_time)
+        if batch_time and timezone.is_aware(batch_time)
+        else batch_time
+    )
+    if registration.import_batch_id and registration.import_batch and registration.import_batch.slot_number:
+        batch_label = (
+            f"Batch #{registration.import_batch.slot_number} · "
+            f"{display_time:%d/%m/%Y} · {display_time:%H}h"
+        )
+    else:
+        batch_label = (
+            f"Batch · {display_time:%d/%m/%Y} · {display_time:%H}h"
+            if display_time
+            else "Batch không xác định"
+        )
     return batch_key, batch_label, source_group, source_label
 
 
@@ -313,7 +398,13 @@ def _gddb_intake_identity(request):
     return False, None
 
 
-def _gddb_filtered_registrations(request, *, default_pending=True, rollup_days=None):
+def _gddb_filtered_registrations(
+    request,
+    *,
+    default_pending=True,
+    rollup_days=None,
+    include_archived=False,
+):
     use_default_work_queue = default_pending and "status_present" not in request.GET
     if "status_present" in request.GET:
         selected_statuses = [
@@ -325,13 +416,33 @@ def _gddb_filtered_registrations(request, *, default_pending=True, rollup_days=N
         selected_statuses = []
 
     query = (request.GET.get("q") or "").strip()
-    loan_source = (request.GET.get("loan_source") or "").strip()
+    loan_sources = list(
+        dict.fromkeys(
+            value
+            for value in request.GET.getlist("loan_source")
+            if value in {"f88", "cimb", "mb"}
+        )
+    )
     external_identity_id = (request.GET.get("external_identity") or "").strip()
+    filter_type = (request.GET.get("filter_type") or "date").strip()
+    if filter_type not in {"date", "batch"}:
+        filter_type = "date"
     date_from = dateparse.parse_date(request.GET.get("date_from") or "")
     date_to = dateparse.parse_date(request.GET.get("date_to") or "")
+    batch_date = dateparse.parse_date(request.GET.get("batch_date") or "")
+    batch_filter_mode = (request.GET.get("batch_filter_mode") or "time").strip()
+    if batch_filter_mode not in {"time", "number"}:
+        batch_filter_mode = "time"
+    batch_slot = (request.GET.get("batch_slot") or "").strip()
+    if batch_slot not in {"1", "2", "3", "4", "unknown"}:
+        batch_slot = ""
     registrations = CollateralRegistration.objects.filter(is_duplicate=False)
+    if not include_archived:
+        registrations = registrations.filter(archived_at__isnull=True)
     if rollup_days:
-        registrations = registrations.filter(created_at__gte=timezone.now() - timedelta(days=rollup_days))
+        registrations = registrations.filter(
+            created_at__date__gte=_gddb_current_date() - timedelta(days=rollup_days)
+        )
     if use_default_work_queue:
         registrations = registrations.filter(
             Q(gddb_status=CollateralRegistrationStatus.PENDING)
@@ -350,8 +461,11 @@ def _gddb_filtered_registrations(request, *, default_pending=True, rollup_days=N
             | Q(engine_number__icontains=query)
             | Q(shop_name__icontains=query)
         )
-    if loan_source:
-        registrations = registrations.filter(_gddb_loan_source_query(loan_source))
+    if loan_sources:
+        loan_source_query = Q()
+        for loan_source in loan_sources:
+            loan_source_query |= _gddb_loan_source_query(loan_source)
+        registrations = registrations.filter(loan_source_query)
     if external_identity_id.isdigit():
         identity_id = int(external_identity_id)
         mapped_shop_names = Shop.objects.filter(
@@ -362,63 +476,182 @@ def _gddb_filtered_registrations(request, *, default_pending=True, rollup_days=N
         mapped_shop_query = Q()
         for shop_name in mapped_shop_names:
             mapped_shop_query |= Q(shop_name__iexact=(shop_name or "").strip())
-        identity_query = Q(registered_identity_id=identity_id)
-        if mapped_shop_query:
-            identity_query |= Q(registered_identity__isnull=True) & mapped_shop_query
-        registrations = registrations.filter(identity_query)
-    if date_from:
-        registrations = registrations.filter(created_at__date__gte=date_from)
-    if date_to:
-        registrations = registrations.filter(created_at__date__lte=date_to)
+        registrations = (
+            registrations.filter(mapped_shop_query)
+            if mapped_shop_query
+            else registrations.none()
+        )
+    if filter_type == "date":
+        batch_date = None
+        batch_slot = ""
+        if date_from:
+            registrations = registrations.filter(created_at__date__gte=date_from)
+        if date_to:
+            registrations = registrations.filter(created_at__date__lte=date_to)
+    else:
+        date_from = None
+        date_to = None
+        if not batch_date:
+            batch_slot = ""
+        else:
+            registrations = registrations.filter(
+                Q(import_batch__business_date=batch_date)
+                | Q(
+                    import_batch__business_date__isnull=True,
+                    import_batch__created_at__date=batch_date,
+                )
+                | Q(import_batch__isnull=True, created_at__date=batch_date)
+            )
+        if batch_slot in {"1", "2", "3", "4"}:
+            registrations = registrations.filter(import_batch__slot_number=int(batch_slot))
+        elif batch_slot == "unknown":
+            registrations = registrations.filter(
+                Q(import_batch__isnull=True) | Q(import_batch__slot_number__isnull=True)
+            )
     return (
         registrations,
         selected_statuses,
         query,
-        loan_source,
+        loan_sources,
         external_identity_id,
+        filter_type,
         date_from,
         date_to,
+        batch_date,
+        batch_filter_mode,
+        batch_slot,
     )
 
 
 @login_required
 @require_ui_permission("gddb_registration")
 def gddb_registration_view(request):
+    _release_expired_gddb_claims()
+    default_queue_scope = "all" if _is_gddb_admin(request.user) else "mine"
+    requested_queue_scope = (request.GET.get("queue") or default_queue_scope).strip()
+    legacy_postmini_scope = requested_queue_scope == "postmini"
+    queue_scope = "mine" if legacy_postmini_scope else requested_queue_scope
+    if queue_scope not in {"all", "mine", "unassigned"}:
+        queue_scope = default_queue_scope
+    mine_step = (request.GET.get("mine_step") or "all").strip()
+    if legacy_postmini_scope:
+        mine_step = "postmini"
+    if queue_scope != "mine" or mine_step not in {
+        "all",
+        "registration",
+        "postmini",
+        "registered_history",
+    }:
+        mine_step = "all"
+    is_registered_history = queue_scope == "mine" and mine_step == "registered_history"
     (
         registrations,
         selected_statuses,
         query,
-        loan_source,
+        loan_sources,
         external_identity_id,
+        filter_type,
         date_from,
         date_to,
-    ) = _gddb_filtered_registrations(request, rollup_days=7)
+        batch_date,
+        batch_filter_mode,
+        batch_slot,
+    ) = _gddb_filtered_registrations(
+        request,
+        default_pending=not is_registered_history,
+        include_archived=is_registered_history,
+    )
     sort_param = request.GET.get("sort", "priority")
     if sort_param not in {"priority", "created_at", "-created_at"}:
         sort_param = "priority"
+    now = timezone.now()
+    claim_expiry_threshold = now + timedelta(minutes=30)
+    if queue_scope == "mine":
+        if is_registered_history:
+            registrations = registrations.filter(archived_at__isnull=False).filter(
+                Q(gddb_status=CollateralRegistrationStatus.NOT_REGISTERED)
+                | Q(
+                    gddb_status=CollateralRegistrationStatus.REGISTERED,
+                    postmini_updated__in=["Đã cập nhật", "Đã cập nhật 1 dòng"],
+                )
+            ).filter(
+                Q(processing_by=request.user)
+                | Q(registered_by=request.user)
+                | Q(
+                    logs__action="status_update",
+                    logs__created_by=request.user,
+                    logs__to_status__in=[
+                        CollateralRegistrationStatus.REGISTERED,
+                        CollateralRegistrationStatus.NOT_REGISTERED,
+                    ],
+                )
+            ).distinct()
+        else:
+            my_pending_query = Q(
+                processing_by=request.user,
+                gddb_status=CollateralRegistrationStatus.PENDING
+            )
+            my_pending_query &= Q(processing_expires_at__gt=now)
+            my_postmini_query = Q(gddb_status=CollateralRegistrationStatus.REGISTERED) & (
+                Q(processing_by=request.user)
+                | Q(processing_by__isnull=True, registered_by=request.user)
+            )
+            registrations = registrations.filter(my_pending_query | my_postmini_query)
+            if mine_step == "registration":
+                registrations = registrations.filter(
+                    gddb_status=CollateralRegistrationStatus.PENDING
+                )
+            elif mine_step == "postmini":
+                registrations = registrations.filter(
+                    gddb_status=CollateralRegistrationStatus.REGISTERED
+                )
+    elif queue_scope == "unassigned":
+        registrations = registrations.filter(
+            gddb_status=CollateralRegistrationStatus.PENDING
+        ).filter(
+            Q(processing_by__isnull=True)
+            | Q(processing_expires_at__isnull=True)
+            | Q(processing_expires_at__lte=now)
+        )
     registrations = registrations.select_related(
         "registered_by", "updated_by", "registered_identity", "processing_by", "import_batch"
+    ).annotate(
+        claim_priority=Case(
+            When(
+                processing_by_id=request.user.id,
+                processing_expires_at__gt=now,
+                then=Value(0),
+            ),
+            When(
+                processing_by__isnull=False,
+                processing_expires_at__gt=now,
+                then=Value(2),
+            ),
+            default=Value(1),
+            output_field=IntegerField(),
+        ),
+        batch_sort_time=Coalesce(
+            "import_batch__created_at",
+            "created_at",
+            output_field=DateTimeField(),
+        ),
+    ).prefetch_related(
+        Prefetch(
+            "logs",
+            queryset=CollateralRegistrationLog.objects.filter(
+                action__in=["case_claim", "case_release", "case_expire"]
+            )
+            .select_related("created_by")
+            .order_by("-created_at"),
+            to_attr="claim_history",
+        )
     )
     if sort_param == "priority":
-        now = timezone.now()
-        registrations = registrations.annotate(
-            claim_priority=Case(
-                When(
-                    processing_by__isnull=False,
-                    processing_expires_at__gt=now,
-                    then=Value(0),
-                ),
-                default=Value(1),
-                output_field=IntegerField(),
-            ),
-            batch_sort_time=Coalesce(
-                "import_batch__created_at",
-                "created_at",
-                output_field=DateTimeField(),
-            ),
-        ).order_by("claim_priority", "batch_sort_time", "created_at", "registration_id")
+        registrations = registrations.order_by(
+            "claim_priority", "batch_sort_time", "created_at", "registration_id"
+        )
     else:
-        registrations = registrations.order_by(sort_param, "-registration_id")
+        registrations = registrations.order_by("claim_priority", sort_param, "-registration_id")
     paginator = Paginator(registrations, 50)
     page_obj = paginator.get_page(request.GET.get("page"))
     page_query = request.GET.copy()
@@ -428,26 +661,60 @@ def gddb_registration_view(request):
     sort_query.pop("page", None)
     sort_query.pop("sort", None)
     sort_query_prefix = f"{sort_query.urlencode()}&" if sort_query else ""
+    queue_query = request.GET.copy()
+    queue_query.pop("page", None)
+    queue_query.pop("queue", None)
+    queue_query.pop("mine_step", None)
+    queue_query_prefix = f"{queue_query.urlencode()}&" if queue_query else ""
     pagination_range = paginator.get_elided_page_range(page_obj.number, on_each_side=2, on_ends=1)
     base_qs = CollateralRegistration.objects.filter(
         is_duplicate=False,
-        created_at__gte=timezone.now() - timedelta(days=7),
+        archived_at__isnull=True,
     )
-    pending_count = base_qs.filter(gddb_status=CollateralRegistrationStatus.PENDING).count()
-    registered_count = base_qs.filter(gddb_status=CollateralRegistrationStatus.REGISTERED).count()
+    unfinished_qs = base_qs.filter(
+        Q(gddb_status=CollateralRegistrationStatus.PENDING)
+        | (
+            Q(gddb_status=CollateralRegistrationStatus.REGISTERED)
+            & ~Q(postmini_updated__in=["Đã cập nhật", "Đã cập nhật 1 dòng"])
+        )
+    )
+    pending_count = unfinished_qs.filter(gddb_status=CollateralRegistrationStatus.PENDING).count()
+    processing_posmini_count = unfinished_qs.filter(
+        gddb_status=CollateralRegistrationStatus.REGISTERED
+    ).count()
+    registered_count = processing_posmini_count
     not_registered_count = base_qs.filter(gddb_status=CollateralRegistrationStatus.NOT_REGISTERED).count()
     done_count = base_qs.filter(
         gddb_status=CollateralRegistrationStatus.REGISTERED,
         postmini_updated__in=["Đã cập nhật", "Đã cập nhật 1 dòng"],
     ).count()
-    total_count = base_qs.count()
-    f88_count = base_qs.filter(_gddb_loan_source_query("f88")).count()
-    cimb_count = base_qs.filter(_gddb_loan_source_query("cimb")).count()
-    mb_count = base_qs.filter(_gddb_loan_source_query("mb")).count()
-    held_count = base_qs.filter(
+    total_count = unfinished_qs.count()
+    f88_count = unfinished_qs.filter(_gddb_loan_source_query("f88")).count()
+    cimb_count = unfinished_qs.filter(_gddb_loan_source_query("cimb")).count()
+    mb_count = unfinished_qs.filter(_gddb_loan_source_query("mb")).count()
+    held_count = unfinished_qs.filter(
         gddb_status=CollateralRegistrationStatus.PENDING,
         processing_by__isnull=False,
         processing_expires_at__gt=timezone.now(),
+    ).count()
+    my_pending_count = unfinished_qs.filter(
+        processing_by=request.user,
+        gddb_status=CollateralRegistrationStatus.PENDING,
+        processing_expires_at__gt=now,
+    ).count()
+    my_postmini_count = unfinished_qs.filter(
+        gddb_status=CollateralRegistrationStatus.REGISTERED
+    ).filter(
+        Q(processing_by=request.user)
+        | Q(processing_by__isnull=True, registered_by=request.user)
+    ).count()
+    my_work_count = my_pending_count + my_postmini_count
+    unassigned_count = unfinished_qs.filter(
+        gddb_status=CollateralRegistrationStatus.PENDING
+    ).filter(
+        Q(processing_by__isnull=True)
+        | Q(processing_expires_at__isnull=True)
+        | Q(processing_expires_at__lte=now)
     ).count()
     active_tab = request.GET.get("tab", "list")
     allowed_tabs = {"list"}
@@ -516,6 +783,12 @@ def gddb_registration_view(request):
         ("cimb", "CIMB"),
         ("mb", "MB"),
     ]
+    batch_slot_choices = [
+        ("1", "09:00", "Batch #1"),
+        ("2", "13:00", "Batch #2"),
+        ("3", "16:00", "Batch #3"),
+        ("4", "19:00", "Batch #4"),
+    ]
     shop_names = {item.shop_name.strip().casefold() for item in page_obj if item.shop_name and item.shop_name.strip()}
     suggested_by_shop = {}
     if shop_names:
@@ -536,18 +809,34 @@ def gddb_registration_view(request):
         item.bulk_group_label = f"{item.bulk_batch_label} · {item.bulk_source_label}"
         item.claim_is_active = _gddb_claim_is_active(item)
         item.claim_is_mine = _gddb_is_case_owner(item, request.user)
-        item.can_edit_case = _gddb_can_edit_case(item, request.user)
+        item.claim_is_expiring = bool(
+            item.claim_is_mine
+            and item.claim_is_active
+            and item.processing_expires_at
+            and item.processing_expires_at <= claim_expiry_threshold
+        )
+        has_case_edit_permission = _gddb_can_edit_case(item, request.user)
+        item.can_edit_case = not is_registered_history and has_case_edit_permission
         item.can_mutate_case = bool(
-            _is_gddb_admin(request.user)
-            or (
-                item.claim_is_mine
-                and (
-                    item.gddb_status != CollateralRegistrationStatus.PENDING
-                    or item.claim_is_active
+            not is_registered_history
+            and (
+                _is_gddb_admin(request.user)
+                or (
+                    item.claim_is_mine
+                    and (
+                        item.gddb_status != CollateralRegistrationStatus.PENDING
+                        or item.claim_is_active
+                    )
                 )
             )
         )
+        item.can_edit_registration = bool(
+            item.can_mutate_case
+            or (is_registered_history and has_case_edit_permission)
+        )
         item.can_claim_case = bool(
+            not is_registered_history
+            and
             not _is_gddb_admin(request.user)
             and (
                 (
@@ -562,11 +851,15 @@ def gddb_registration_view(request):
             )
         )
         item.bulk_claim_eligible = bool(
+            not is_registered_history
+            and
             _can_process_gddb(request.user)
             and item.gddb_status == CollateralRegistrationStatus.PENDING
             and not item.claim_is_active
         )
         item.needs_case_claim = bool(
+            not is_registered_history
+            and
             not _is_gddb_admin(request.user)
             and (
                 not item.claim_is_mine
@@ -604,13 +897,26 @@ def gddb_registration_view(request):
             "status": selected_statuses[0] if len(selected_statuses) == 1 else "",
             "statuses": selected_statuses,
             "q": query,
-            "loan_source": loan_source,
+            "loan_source": loan_sources[0] if len(loan_sources) == 1 else "",
+            "loan_sources": loan_sources,
             "external_identity": external_identity_id,
+            "filter_type": filter_type,
             "date_from": date_from.isoformat() if date_from else "",
             "date_to": date_to.isoformat() if date_to else "",
+            "batch_date": batch_date.isoformat() if batch_date else "",
+            "batch_filter_mode": batch_filter_mode,
+            "batch_slot": batch_slot,
         },
         "loan_source_choices": loan_source_choices,
-        "is_default_work_queue": "status_present" not in request.GET,
+        "selected_loan_source_options": [
+            (value, label)
+            for value, label in loan_source_choices
+            if value in loan_sources
+        ],
+        "batch_slot_choices": batch_slot_choices,
+        "is_default_work_queue": (
+            "status_present" not in request.GET and not is_registered_history
+        ),
         "selected_status_options": [
             (value, label) for value, label in CollateralRegistrationStatus.choices if value in selected_statuses
         ],
@@ -622,7 +928,11 @@ def gddb_registration_view(request):
         "cimb_count": cimb_count,
         "mb_count": mb_count,
         "held_count": held_count,
-        "processing_posmini_count": registered_count - done_count,
+        "my_work_count": my_work_count,
+        "my_pending_count": my_pending_count,
+        "my_postmini_count": my_postmini_count,
+        "unassigned_count": unassigned_count,
+        "processing_posmini_count": processing_posmini_count,
         "total_count": total_count,
         "active_tab": active_tab,
         "manual_batch": manual_batch,
@@ -645,11 +955,43 @@ def gddb_registration_view(request):
         "pagination_range": pagination_range,
         "pagination_query_prefix": pagination_query_prefix,
         "sort_query_prefix": sort_query_prefix,
+        "queue_query_prefix": queue_query_prefix,
+        "queue_scope": queue_scope,
+        "mine_step": mine_step,
+        "is_registered_history": is_registered_history,
         "sort_param": sort_param,
         "can_process_gddb": _can_process_gddb(request.user),
         "can_export_gddb": _is_gddb_admin(request.user),
     })
     return render(request, "app_documents/app_gddb_registration_v2.html", context)
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+@require_http_methods(["GET"])
+def gddb_dashboard_view(request):
+    if not _is_gddb_admin(request.user):
+        return HttpResponse("Bạn không có quyền truy cập dashboard GDĐB.", status=403)
+    context = get_user_context(request.user)
+    context.update({"dashboard_refresh_seconds": 30})
+    return render(request, "app_documents/app_gddb_dashboard_v2.html", context)
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+@require_http_methods(["GET"])
+def api_gddb_dashboard(request):
+    if not _is_gddb_admin(request.user):
+        return JsonResponse(
+            {"success": False, "error": "Bạn không có quyền xem dashboard GDĐB."},
+            status=403,
+        )
+    _release_expired_gddb_claims()
+    try:
+        data = build_gddb_dashboard_data(request.GET)
+    except ValueError as exc:
+        return JsonResponse({"success": False, "error": str(exc)}, status=400)
+    return JsonResponse({"success": True, **data}, encoder=DjangoJSONEncoder)
 
 
 GDDB_INTAKE_FIELD_LABELS = {
@@ -658,6 +1000,7 @@ GDDB_INTAKE_FIELD_LABELS = {
     "license_plate": "Biển số xe",
     "chassis_number": "Số khung",
     "engine_number": "Số máy",
+    "asset_type": "Loại tài sản",
     "gddb_status": "Trạng thái GDĐB",
     "contract_status": "Trạng thái hợp đồng",
     "source_created_date": "Ngày tạo",
@@ -861,6 +1204,7 @@ def api_gddb_case_claim(request, registration_id):
         return JsonResponse({"success": False, "error": "Thao tác giữ case không hợp lệ."}, status=400)
 
     now = timezone.now()
+    _release_expired_gddb_claims(now)
     with transaction.atomic():
         try:
             registration = CollateralRegistration.objects.select_for_update().get(
@@ -890,6 +1234,8 @@ def api_gddb_case_claim(request, registration_id):
             if not is_admin and (not is_owner or registration.gddb_status != CollateralRegistrationStatus.PENDING):
                 return JsonResponse({"success": False, "error": "Bạn không có quyền trả case này."}, status=403)
             old_owner = registration.processing_by
+            old_started_at = registration.processing_started_at
+            old_expires_at = registration.processing_expires_at
             registration.processing_by = None
             registration.processing_started_at = None
             registration.processing_expires_at = None
@@ -902,7 +1248,16 @@ def api_gddb_case_claim(request, registration_id):
                 from_status=registration.gddb_status,
                 to_status=registration.gddb_status,
                 note=f"Trả case của {old_owner.username if old_owner else '-'}",
-                metadata={"previous_owner_id": old_owner.id if old_owner else None},
+                metadata={
+                    "previous_owner_id": old_owner.id if old_owner else None,
+                    "previous_owner_username": old_owner.username if old_owner else "",
+                    "processing_started_at": (
+                        old_started_at.isoformat() if old_started_at else None
+                    ),
+                    "processing_expires_at": (
+                        old_expires_at.isoformat() if old_expires_at else None
+                    ),
+                },
                 created_by=request.user,
             )
             return JsonResponse({"success": True, "action": action})
@@ -968,6 +1323,7 @@ def api_gddb_bulk_claim(request):
 
     action = (payload.get("action") or "claim").strip()
     now = timezone.now()
+    _release_expired_gddb_claims(now)
     if action == "heartbeat":
         heartbeat_ids = payload.get("registration_ids") or []
         try:
@@ -1163,6 +1519,14 @@ def _update_gddb_registration_locked(request, registration, payload):
         registration.postmini_updated = "Chưa cập nhật"
     if status != CollateralRegistrationStatus.PENDING:
         registration.processing_expires_at = None
+    process_done = bool(
+        status == CollateralRegistrationStatus.NOT_REGISTERED
+        or (
+            status == CollateralRegistrationStatus.REGISTERED
+            and registration.postmini_updated in {"Đã cập nhật", "Đã cập nhật 1 dòng"}
+        )
+    )
+    registration.archived_at = timezone.now() if process_done else None
     registration.save()
     CollateralRegistrationLog.objects.create(
         registration=registration,
@@ -1196,6 +1560,8 @@ def _update_gddb_registration_locked(request, registration, payload):
         "postmini_updated": registration.postmini_updated,
         "post_update_status": registration.post_update_status,
         "reason": registration.reason,
+        "archived": bool(registration.archived_at),
+        "archived_at": registration.archived_at,
         "updated_by_username": request.user.username,
         "processing_by_username": registration.processing_by.username if registration.processing_by else "",
     }, encoder=DjangoJSONEncoder)
@@ -1303,7 +1669,13 @@ def api_gddb_postmini_update(request, registration_id):
             registration.note = note_value or None
             registration.updated_by = request.user
             registration.source_user = request.user.username
-            registration.save(update_fields=["postmini_updated", "note", "updated_by", "source_user", "updated_at"])
+            process_done = postmini_status in {"Đã cập nhật", "Đã cập nhật 1 dòng"}
+            registration.archived_at = timezone.now() if process_done else None
+            registration.processing_expires_at = None if process_done else registration.processing_expires_at
+            registration.save(update_fields=[
+                "postmini_updated", "note", "updated_by", "source_user", "archived_at",
+                "processing_expires_at", "updated_at",
+            ])
             CollateralRegistrationLog.objects.create(
                 registration=registration,
                 action="postmini_update",
@@ -1313,6 +1685,7 @@ def api_gddb_postmini_update(request, registration_id):
                     "to_postmini_status": postmini_status,
                     "old_note": old_note,
                     "new_note": note_value,
+                    "archived_at": registration.archived_at.isoformat() if registration.archived_at else None,
                 },
                 created_by=request.user,
             )
@@ -1321,7 +1694,9 @@ def api_gddb_postmini_update(request, registration_id):
     return JsonResponse({
         "success": True,
         "postmini_updated": postmini_status,
-        "process_done": postmini_status != "Chưa cập nhật",
+        "process_done": process_done,
+        "archived": process_done,
+        "archived_at": registration.archived_at,
         "source_user": registration.source_user,
         "updated_by_username": request.user.username,
         "note": note_value,
@@ -1455,6 +1830,71 @@ def gddb_export_view(request):
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
 
+
+@login_required
+def document_intake_management_view(request):
+    """Admin-facing operational screen for the external/Pefect intake API."""
+    if not _is_gddb_admin(request.user):
+        messages.error(request, "Bạn không có quyền quản lý tích hợp dữ liệu.")
+        return redirect("home")
+    batches = ExternalDocumentIntakeBatch.objects.select_related("token").annotate(
+        rejection_count=Count("rejections")
+    ).order_by("-created_at")[:100]
+    tokens = ExternalDocumentIntakeToken.objects.select_related("created_by", "revoked_by").order_by("-created_at")
+    context = get_user_context(request.user)
+    context.update({
+        "batches": batches, "tokens": tokens,
+        "new_token": request.session.pop("document_intake_new_token", None),
+    })
+    return render(request, "app_documents/document_intake_management.html", context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def document_intake_token_create_view(request):
+    if not _is_gddb_admin(request.user):
+        return HttpResponse(status=403)
+    name = (request.POST.get("name") or "").strip()
+    scopes = [scope for scope in request.POST.getlist("scopes") if scope in {"documents:write", "master_data:write"}]
+    if not name or not scopes:
+        messages.error(request, "Nhập tên token và chọn ít nhất một quyền.")
+    elif ExternalDocumentIntakeToken.objects.filter(name=name).exists():
+        messages.error(request, "Tên token đã tồn tại.")
+    else:
+        raw = "doc_" + secrets.token_urlsafe(40)
+        ExternalDocumentIntakeToken.objects.create(
+            name=name, token_prefix=raw[:12], token_hash=hashlib.sha256(raw.encode()).hexdigest(),
+            scopes=sorted(set(scopes)), created_by=request.user,
+        )
+        request.session["document_intake_new_token"] = raw
+        messages.success(request, "Đã tạo token. Sao chép ngay vì token chỉ hiện một lần.")
+    return redirect("document_intake_management")
+
+
+@login_required
+@require_http_methods(["POST"])
+def document_intake_token_revoke_view(request, token_id):
+    if not _is_gddb_admin(request.user):
+        return HttpResponse(status=403)
+    token = get_object_or_404(ExternalDocumentIntakeToken, pk=token_id)
+    token.is_active = False
+    token.revoked_at = timezone.now()
+    token.revoked_by = request.user
+    token.save(update_fields=["is_active", "revoked_at", "revoked_by"])
+    messages.success(request, f"Đã thu hồi token {token.name}.")
+    return redirect("document_intake_management")
+
+
+@login_required
+def document_intake_documentation_view(request):
+    if not _is_gddb_admin(request.user):
+        return HttpResponse(status=403)
+    return FileResponse(
+        open(settings.BASE_DIR / "docs" / "document-intake-api.md", "rb"),
+        content_type="text/markdown; charset=utf-8",
+        as_attachment=True,
+        filename="document-intake-api.md",
+    )
 
 @login_required
 @require_ui_permission("gddb_registration")
