@@ -40,3 +40,7 @@ docker-compose.db.yml
 docker-compose.yml
 docker-compose.yml
 chatbot_docs.pdf
+
+# Local temporary outputs
+tmp/
+.tmp/
