@@ -1,33 +1,37 @@
 {% extends 'app_documents/base_app_documents_v2.html' %}
-{% block title %}Dashboard giao dịch bảo đảm{% endblock %}
-{% block top_nav %}
-  {% include 'app_documents/components/top_nav_v2.html' %}
-{% endblock %}
+{% block title %}{% if dashboard_is_admin %}Dashboard giao dịch bảo đảm{% else %}Dashboard của tôi{% endif %}{% endblock %}
+{% block top_nav %}{% include 'app_documents/components/top_nav_v2.html' %}{% endblock %}
 {% block main_extra_class %}pt-14{% endblock %}
 
 {% block content %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <style>
-  body { font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size: 10px; }
-  .dash-panel { border: 1px solid #e5e7eb; background: #fff; box-shadow: 0 10px 24px rgba(15, 23, 42, .04); }
-  .dash-field { height: 34px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f9fafb; padding: 0 10px; font-size: 10px; color: #374151; outline: none; }
+  body { font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size: 11px; }
+  .dash-panel { border: 1px solid #e5e7eb; background: #fff; box-shadow: 0 8px 22px rgba(15, 23, 42, .04); }
+  .dash-field { height: 36px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f9fafb; padding: 0 11px; font-size: 11px; color: #374151; outline: none; }
   .dash-field:focus { border-color: #10b981; background: #fff; }
-  .dash-card { min-height: 92px; border: 1px solid #e5e7eb; border-radius: 16px; background: #fff; padding: 14px; transition: border-color .25s ease, box-shadow .25s ease, transform .25s ease; }
+  .dash-card { min-height: 94px; border: 1px solid #e5e7eb; border-radius: 15px; background: #fff; padding: 14px; transition: border-color .25s, box-shadow .25s, transform .25s; }
   .dash-card-refresh { border-color: #6ee7b7; box-shadow: 0 0 0 3px rgba(16,185,129,.10); transform: translateY(-1px); }
-  .chart-box { position: relative; min-height: 265px; }
-  .chart-box-sm { position: relative; min-height: 230px; }
+  .chart-box { position: relative; min-height: 255px; }
+  .chart-box-sm { position: relative; min-height: 215px; }
   .legend-row { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f3f4f6; }
-  .legend-row:last-child { border-bottom: 0; }
+  .dash-table { width: 100%; border-collapse: collapse; }
+  .dash-table th { background: #f8fafc; color: #64748b; font-size: 9px; text-transform: uppercase; letter-spacing: .04em; text-align: left; padding: 9px 10px; white-space: nowrap; }
+  .dash-table td { border-top: 1px solid #f1f5f9; padding: 9px 10px; vertical-align: top; color: #334155; font-size: 12px; }
+  .sla-danger { color: #dc2626; font-weight: 700; }
+  .sla-warning { color: #d97706; font-weight: 700; }
+  .sla-safe { color: #047857; font-weight: 700; }
   .flatpickr-calendar { font-size: 10px; }
   .flatpickr-calendar .flatpickr-day { height: 26px; width: 32px; line-height: 26px; }
 </style>
 
-<div class="mx-auto mt-5 max-w-7xl space-y-4 px-2 lg:px-3 xl:max-w-[1500px]">
+<div class="mx-auto mt-5 max-w-[1500px] space-y-4 px-3">
   <section class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
     <div>
       <div class="text-[9px] font-bold uppercase tracking-[.14em] text-emerald-700">Vận hành · Giao dịch bảo đảm</div>
-      <h1 class="mt-1 text-2xl font-extrabold tracking-tight text-gray-950">Dashboard đăng ký GDĐB</h1>
-      <div class="mt-1 text-[10px] text-gray-500">Sản lượng, trạng thái xử lý, nguồn vay, tài sản và hiệu suất Checker.</div>
+      <h1 class="mt-1 text-2xl font-extrabold tracking-tight text-gray-950">
+        {% if dashboard_is_admin %}Dashboard đăng ký GDĐB{% else %}Dashboard của tôi{% endif %}
+      </h1>
     </div>
     <div class="flex items-center gap-2 text-[9px] text-gray-500">
       <span class="h-2 w-2 animate-pulse rounded-full bg-emerald-500"></span>
@@ -35,6 +39,7 @@
     </div>
   </section>
 
+  {% if dashboard_is_admin %}
   <section class="dash-panel rounded-2xl p-3">
     <form id="gddb-dashboard-filter" class="flex flex-wrap items-center gap-3">
       <select name="period" class="dash-field min-w-[150px]" data-period>
@@ -50,28 +55,31 @@
       </div>
       <button type="submit" class="rounded-lg bg-emerald-600 px-4 py-2 text-[10px] font-bold text-white hover:bg-emerald-700">Áp dụng</button>
       <a href="{% url 'gddb_registration_v2' %}" class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-[10px] font-bold text-gray-600 hover:bg-gray-50">Về hàng đợi</a>
+      <a href="{% url 'admin:app_documents_collateralregistrationholiday_changelist' %}" class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-[10px] font-bold text-gray-600 hover:bg-gray-50">Lịch nghỉ SLA</a>
       <span id="dashboard-error" class="hidden text-[9px] font-semibold text-red-600"></span>
     </form>
   </section>
 
-  <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-8">
-    <article class="dash-card"><div class="text-[8px] font-bold uppercase text-gray-400">Theo kỳ lọc</div><div class="mt-2 text-2xl font-extrabold text-gray-950" data-card="selected_total">—</div><div class="mt-1 text-[9px] text-gray-500" data-period-caption>Case trong kỳ</div></article>
-    <article class="dash-card"><div class="text-[8px] font-bold uppercase text-gray-400">Hôm nay</div><div class="mt-2 text-2xl font-extrabold text-emerald-700" data-card="today_total">—</div><div class="mt-1 text-[9px] text-gray-500">Case mới nhận</div></article>
-    <article class="dash-card"><div class="text-[8px] font-bold uppercase text-gray-400">Tháng này</div><div class="mt-2 text-2xl font-extrabold text-gray-950" data-card="month_total">—</div><div class="mt-1 text-[9px] text-gray-500">Case được tạo</div></article>
-    <article class="dash-card"><div class="text-[8px] font-bold uppercase text-amber-600">Chưa đăng ký</div><div class="mt-2 text-2xl font-extrabold text-amber-700" data-card="pending">—</div><div class="mt-1 text-[9px] text-gray-500">Đang trong hàng đợi</div></article>
-    <article class="dash-card"><div class="text-[8px] font-bold uppercase text-gray-400">Chưa ai nhận</div><div class="mt-2 text-2xl font-extrabold text-gray-950" data-card="unassigned">—</div><div class="mt-1 text-[9px] text-gray-500">Có thể nhận xử lý</div></article>
-    <article class="dash-card"><div class="text-[8px] font-bold uppercase text-violet-600">Đang giữ</div><div class="mt-2 text-2xl font-extrabold text-violet-700" data-card="held">—</div><div class="mt-1 text-[9px] text-gray-500">Checker đang xử lý</div></article>
-    <article class="dash-card"><div class="text-[8px] font-bold uppercase text-blue-600">Chờ PosMini</div><div class="mt-2 text-2xl font-extrabold text-blue-700" data-card="waiting_posmini">—</div><div class="mt-1 text-[9px] text-gray-500">Đã đăng ký GDĐB</div></article>
-    <article class="dash-card"><div class="text-[8px] font-bold uppercase text-emerald-600">Hoàn tất hôm nay</div><div class="mt-2 text-2xl font-extrabold text-emerald-700" data-card="completed_today">—</div><div class="mt-1 text-[9px] text-gray-500">Case đã archive</div></article>
+  <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <article class="dash-card"><div class="text-[9px] font-bold uppercase text-gray-400">Tổng case</div><div class="mt-2 text-2xl font-extrabold text-gray-950" data-admin-card="selected_total">—</div><div class="mt-1 text-[9px] text-gray-500" data-period-caption>Case trong kỳ</div></article>
+    <article class="dash-card"><div class="text-[9px] font-bold uppercase text-emerald-600">% đạt SLA</div><div class="mt-2 text-2xl font-extrabold text-emerald-700" data-admin-card="sla_rate" data-percent>—</div><div class="mt-1 text-[9px] text-gray-500"><span data-admin-card="sla_achieved">—</span>/<span data-admin-card="sla_assessed">—</span> case đã đến hạn hoặc hoàn thành</div></article>
+    <article class="dash-card"><div class="text-[9px] font-bold uppercase text-red-600">Quá SLA</div><div class="mt-2 text-2xl font-extrabold text-red-600" data-admin-card="sla_overdue">—</div><div class="mt-1 text-[9px] text-gray-500"><span data-admin-card="sla_overdue_rate" data-percent>—</span> case đo được</div></article>
+    <article class="dash-card"><div class="text-[9px] font-bold uppercase text-amber-600">Sắp quá SLA</div><div class="mt-2 text-2xl font-extrabold text-amber-600" data-admin-card="near_sla">—</div><div class="mt-1 text-[9px] text-gray-500">Còn tối đa 1 ngày làm việc</div></article>
   </section>
 
-  <section class="grid gap-4 xl:grid-cols-[1.45fr,.55fr]">
+  <section class="grid gap-4 xl:grid-cols-[1.4fr,.6fr]">
     <article class="dash-panel rounded-2xl p-4">
-      <div class="mb-3"><div class="text-[12px] font-bold text-gray-900">Sản lượng case theo ngày</div><div class="text-[9px] text-gray-500">Theo ngày dữ liệu được tạo trong kỳ lọc.</div></div>
-      <div class="chart-box"><canvas id="gddb-daily-chart"></canvas></div>
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div><div class="text-[12px] font-bold text-gray-900">Xu hướng sản lượng</div><div class="text-[9px] text-gray-500">Theo ngày dữ liệu được tạo.</div></div>
+        <div class="flex gap-2">
+          <select class="dash-field" data-trend-mode><option value="weekly">Theo tuần</option><option value="monthly">Theo tháng</option></select>
+          <select class="dash-field" data-trend-dimension><option value="source">Nguồn vay</option><option value="asset">Loại tài sản</option></select>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="gddb-trend-chart"></canvas></div>
     </article>
     <article class="dash-panel rounded-2xl p-4">
-      <div class="mb-3"><div class="text-[12px] font-bold text-gray-900">Theo trạng thái</div><div class="text-[9px] text-gray-500">Cơ cấu case trong kỳ lọc.</div></div>
+      <div class="mb-3"><div class="text-[12px] font-bold text-gray-900">Case theo trạng thái</div><div class="text-[9px] text-gray-500">Cơ cấu trạng thái trong kỳ lọc.</div></div>
       <div class="chart-box-sm"><canvas id="gddb-status-chart"></canvas></div>
       <div class="mt-2" data-legend="status"></div>
     </article>
@@ -79,18 +87,64 @@
 
   <section class="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
     <article class="dash-panel rounded-2xl p-4">
-      <div class="mb-3"><div class="text-[12px] font-bold text-gray-900">Theo nguồn vay</div><div class="text-[9px] text-gray-500">Số lượng và tỷ lệ F88, CIMB, MB.</div></div>
+      <div class="mb-3"><div class="text-[12px] font-bold text-gray-900">Theo nguồn vay</div></div>
       <div class="chart-box-sm"><canvas id="gddb-source-chart"></canvas></div>
       <div class="mt-2" data-legend="source"></div>
     </article>
     <article class="dash-panel rounded-2xl p-4">
-      <div class="mb-3"><div class="text-[12px] font-bold text-gray-900">Theo loại tài sản</div><div class="text-[9px] text-gray-500">Dữ liệu cũ chưa có loại tài sản được ghi nhận là Chưa xác định.</div></div>
+      <div class="mb-3"><div class="text-[12px] font-bold text-gray-900">Theo loại tài sản</div></div>
       <div class="chart-box-sm"><canvas id="gddb-asset-chart"></canvas></div>
       <div class="mt-2 max-h-44 overflow-auto pr-1" data-legend="asset"></div>
     </article>
-    <article class="dash-panel rounded-2xl p-4 lg:col-span-2 xl:col-span-1">
-      <div class="mb-3"><div class="text-[12px] font-bold text-gray-900">Đăng ký theo Checker</div><div class="text-[9px] text-gray-500">Số case xác nhận đăng ký trong kỳ lọc.</div></div>
+    <article class="dash-panel rounded-2xl p-4">
+      <div class="mb-3"><div class="text-[12px] font-bold text-gray-900">Đăng ký theo Checker</div></div>
       <div class="chart-box"><canvas id="gddb-checker-chart"></canvas></div>
+    </article>
+  </section>
+
+  <section class="grid gap-4 xl:grid-cols-2">
+    <article class="dash-panel overflow-hidden rounded-2xl">
+      <div class="p-4"><div class="text-[12px] font-bold text-gray-900">Case sắp quá SLA</div><div class="text-[9px] text-gray-500">Case chưa hoàn thành và còn tối đa 1 ngày làm việc.</div></div>
+      <div class="max-h-[430px] overflow-auto">
+        <table class="dash-table"><thead><tr><th>Case / PGD</th><th>Trạng thái</th><th>Đã tồn tại</th><th>Hạn SLA</th><th>Checker</th></tr></thead><tbody data-near-sla-body></tbody></table>
+        <div class="hidden p-6 text-center text-gray-400" data-near-sla-empty>Không có case sắp quá SLA.</div>
+      </div>
+    </article>
+    <article class="dash-panel overflow-hidden rounded-2xl">
+      <div class="p-4"><div class="text-[12px] font-bold text-gray-900">Workload theo Checker</div><div class="text-[9px] text-gray-500">Số case chưa archive đang được phân công.</div></div>
+      <div class="max-h-[430px] overflow-auto">
+        <table class="dash-table"><thead><tr><th>Checker</th><th>Được giao</th><th>Chưa đăng ký</th><th>Cập nhật PosMini</th><th>Quá SLA</th></tr></thead><tbody data-workload-body></tbody></table>
+      </div>
+    </article>
+  </section>
+  {% else %}
+  <section class="flex justify-end"><a href="{% url 'gddb_registration_v2' %}" class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-[10px] font-bold text-gray-600 hover:bg-gray-50">Về hàng đợi</a></section>
+  <span id="dashboard-error" class="hidden text-[9px] font-semibold text-red-600"></span>
+  {% endif %}
+
+  <section>
+    <div class="mb-2 text-[12px] font-bold text-gray-900">{% if dashboard_is_admin %}Góc nhìn cá nhân{% else %}Hiệu suất cá nhân{% endif %}</div>
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <article class="dash-card"><div class="text-[9px] font-bold uppercase text-blue-600">Case được giao</div><div class="mt-2 text-2xl font-extrabold" data-personal-card="assigned">—</div></article>
+      <article class="dash-card"><div class="text-[9px] font-bold uppercase text-red-600">Case quá SLA</div><div class="mt-2 text-2xl font-extrabold text-red-600" data-personal-card="overdue">—</div></article>
+      <article class="dash-card"><div class="text-[9px] font-bold uppercase text-emerald-600">Hoàn tất hôm nay</div><div class="mt-2 text-2xl font-extrabold text-emerald-700" data-personal-card="completed_today">—</div></article>
+      <article class="dash-card"><div class="text-[9px] font-bold uppercase text-gray-500">Hoàn tất tháng này</div><div class="mt-2 text-2xl font-extrabold" data-personal-card="completed_month">—</div></article>
+      <article class="dash-card"><div class="text-[9px] font-bold uppercase text-emerald-600">SLA cá nhân tháng</div><div class="mt-2 text-2xl font-extrabold text-emerald-700" data-personal-card="sla_month_rate" data-percent>—</div></article>
+    </div>
+  </section>
+
+  <section class="grid gap-4 xl:grid-cols-[1.25fr,.75fr]">
+    <article class="dash-panel overflow-hidden rounded-2xl">
+      <div class="p-4"><div class="text-[12px] font-bold text-gray-900">Case được giao</div><div class="text-[9px] text-gray-500">SLA lấy ngày giải ngân và giờ batch, tự cập nhật mỗi 30 giây.</div></div>
+      <div class="max-h-[520px] overflow-auto">
+        <table class="dash-table"><thead><tr><th>Case / PGD</th><th>Nguồn / tài sản</th><th>Bước hiện tại</th><th>Hạn SLA</th><th>SLA còn lại</th></tr></thead><tbody data-assigned-body></tbody></table>
+        <div class="hidden p-6 text-center text-gray-400" data-assigned-empty>Bạn chưa có case đang xử lý.</div>
+      </div>
+    </article>
+    <article class="dash-panel overflow-hidden rounded-2xl">
+      <div class="p-4"><div class="text-[12px] font-bold text-gray-900">Lịch sử thao tác</div><div class="text-[9px] text-gray-500">30 thao tác gần nhất của bạn.</div></div>
+      <div class="max-h-[520px] overflow-auto divide-y divide-gray-100" data-history-list></div>
+      <div class="hidden p-6 text-center text-gray-400" data-history-empty>Chưa có lịch sử thao tác.</div>
     </article>
   </section>
 </div>
@@ -99,155 +153,187 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 (() => {
+  const isAdmin = {{ dashboard_is_admin|yesno:"true,false" }};
   const endpoint = "{% url 'api_gddb_dashboard' %}";
   const refreshMs = {{ dashboard_refresh_seconds|default:30 }} * 1000;
   const form = document.getElementById('gddb-dashboard-filter');
-  const periodSelect = form.querySelector('[data-period]');
-  const monthInput = form.querySelector('[data-period-month]');
-  const rangeWrap = form.querySelector('[data-period-range]');
   const updatedLabel = document.querySelector('[data-dashboard-updated]');
   const errorLabel = document.getElementById('dashboard-error');
   const charts = {};
   const numberFormatter = new Intl.NumberFormat('vi-VN');
-  const palette = ['#059669', '#ef4444', '#0284c7', '#f59e0b', '#8b5cf6', '#14b8a6', '#64748b', '#ec4899', '#84cc16'];
+  const palette = ['#059669', '#ef4444', '#0284c7', '#f59e0b', '#8b5cf6', '#14b8a6', '#64748b', '#ec4899'];
+  let latestData = null;
 
-  const localNow = new Date();
-  monthInput.value = `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, '0')}`;
-  document.querySelectorAll('[data-dashboard-date]').forEach((input) => {
-    if (window.flatpickr) flatpickr(input, { dateFormat: 'Y-m-d', allowInput: false, disableMobile: true });
-  });
-
-  const syncPeriodFields = () => {
-    const isMonth = periodSelect.value === 'month';
-    const isRange = periodSelect.value === 'range';
-    monthInput.classList.toggle('hidden', !isMonth);
-    monthInput.disabled = !isMonth;
-    rangeWrap.classList.toggle('hidden', !isRange);
-    rangeWrap.classList.toggle('flex', isRange);
-    rangeWrap.querySelectorAll('input').forEach((input) => { input.disabled = !isRange; });
+  const appendCell = (row, value, className = '') => {
+    const cell = document.createElement('td');
+    cell.className = className;
+    cell.textContent = value ?? '—';
+    row.appendChild(cell);
+    return cell;
+  };
+  const formatDate = (value) => value ? new Date(`${value}T00:00:00`).toLocaleDateString('vi-VN') : '—';
+  const formatDateTime = (value) => value ? new Date(value).toLocaleString('vi-VN', {hour12: false}) : '—';
+  const displayNumber = (value, percent) => value === null || value === undefined ? '—' : `${numberFormatter.format(value)}${percent ? '%' : ''}`;
+  const updateCardGroup = (selector, values) => {
+    Object.entries(values || {}).forEach(([key, value]) => {
+      document.querySelectorAll(`${selector}="${key}"]`).forEach((target) => {
+        const text = displayNumber(value, target.hasAttribute('data-percent'));
+        if (target.textContent !== text) {
+          target.textContent = text;
+          target.closest('.dash-card')?.classList.add('dash-card-refresh');
+          setTimeout(() => target.closest('.dash-card')?.classList.remove('dash-card-refresh'), 500);
+        }
+      });
+    });
   };
 
-  const chartOptions = (legend = false) => ({
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: legend, position: 'bottom', labels: { boxWidth: 9, boxHeight: 9, font: { size: 9 } } },
-      tooltip: { titleFont: { size: 10 }, bodyFont: { size: 10 } },
-    },
-    scales: legend ? undefined : {
-      x: { grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 0, autoSkip: true } },
-      y: { beginAtZero: true, ticks: { precision: 0, font: { size: 9 } }, grid: { color: '#f3f4f6' } },
+  const chartOptions = (indexAxis = 'x') => ({
+    responsive: true, maintainAspectRatio: false, indexAxis,
+    plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 9, boxHeight: 9, font: { size: 9 } } }, tooltip: { titleFont: { size: 10 }, bodyFont: { size: 10 } } },
+    scales: {
+      x: { beginAtZero: indexAxis === 'y', grid: { display: indexAxis === 'y' }, ticks: { precision: 0, font: { size: 9 }, maxRotation: 0, autoSkip: true } },
+      y: { beginAtZero: indexAxis === 'x', grid: { color: '#f3f4f6' }, ticks: { precision: 0, font: { size: 9 } } },
     },
   });
-
   const upsertChart = (key, canvasId, config) => {
-    if (charts[key]) charts[key].destroy();
-    charts[key] = new Chart(document.getElementById(canvasId), config);
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !window.Chart) return;
+    charts[key]?.destroy();
+    charts[key] = new Chart(canvas, config);
   };
-
   const renderLegend = (key, rows, colors) => {
     const container = document.querySelector(`[data-legend="${key}"]`);
     if (!container) return;
     const total = rows.reduce((sum, row) => sum + row.value, 0);
     container.replaceChildren();
-    rows.forEach((row, index) => {
-      const item = document.createElement('div');
-      item.className = 'legend-row';
-      const label = document.createElement('span');
-      label.className = 'flex min-w-0 items-center gap-2 truncate text-[9px] font-semibold text-gray-700';
-      const dot = document.createElement('span');
-      dot.className = 'h-2 w-2 shrink-0 rounded-full';
-      dot.style.backgroundColor = colors[index % colors.length];
-      const text = document.createElement('span');
-      text.className = 'truncate';
-      text.textContent = row.label;
-      label.append(dot, text);
-      const value = document.createElement('span');
-      value.className = 'text-[9px] font-bold text-gray-900';
-      value.textContent = numberFormatter.format(row.value);
-      const ratio = document.createElement('span');
-      ratio.className = 'w-12 text-right text-[9px] text-gray-500';
-      ratio.textContent = total ? `${(row.value * 100 / total).toFixed(1)}%` : '0%';
-      item.append(label, value, ratio);
-      container.appendChild(item);
+    rows.forEach((item, index) => {
+      const row = document.createElement('div'); row.className = 'legend-row';
+      const label = document.createElement('span'); label.className = 'flex min-w-0 items-center gap-2 truncate font-semibold';
+      const dot = document.createElement('span'); dot.className = 'h-2 w-2 shrink-0 rounded-full'; dot.style.backgroundColor = colors[index % colors.length];
+      const text = document.createElement('span'); text.className = 'truncate'; text.textContent = item.label;
+      const value = document.createElement('span'); value.className = 'font-bold'; value.textContent = numberFormatter.format(item.value);
+      const ratio = document.createElement('span'); ratio.className = 'w-12 text-right text-gray-500'; ratio.textContent = total ? `${(item.value * 100 / total).toFixed(1)}%` : '0%';
+      label.append(dot, text); row.append(label, value, ratio); container.appendChild(row);
     });
   };
 
-  const buildParams = () => {
-    const params = new URLSearchParams(new FormData(form));
-    Array.from(params.entries()).forEach(([key, value]) => { if (!value) params.delete(key); });
-    return params;
+  const renderCaseTable = (bodySelector, emptySelector, rows, nearSla = false) => {
+    const body = document.querySelector(bodySelector);
+    if (!body) return;
+    body.replaceChildren();
+    document.querySelector(emptySelector)?.classList.toggle('hidden', rows.length > 0);
+    rows.forEach((item) => {
+      const row = document.createElement('tr');
+      const caseCell = appendCell(row, '');
+      const code = document.createElement('div'); code.className = 'font-bold text-gray-950'; code.textContent = item.contract_code;
+      const shop = document.createElement('div'); shop.className = 'mt-1 text-[9px] text-gray-500'; shop.textContent = item.shop_name || 'Chưa có PGD';
+      caseCell.append(code, shop);
+      if (nearSla) {
+        appendCell(row, item.status_label);
+        appendCell(row, item.age_label || '—');
+        appendCell(row, formatDateTime(item.due_at));
+        appendCell(row, item.owner || 'Chưa phân công');
+      } else {
+        appendCell(row, `${item.source} · ${item.asset_type}`);
+        appendCell(row, item.status === 'registered' ? 'Cập nhật PosMini' : item.status_label);
+        appendCell(row, formatDateTime(item.due_at));
+        const slaCell = appendCell(row, item.countdown_label);
+        slaCell.className = item.overdue ? 'sla-danger' : (item.remaining_business_days <= 1 ? 'sla-warning' : 'sla-safe');
+      }
+      body.appendChild(row);
+    });
+  };
+  const renderWorkload = (rows) => {
+    const body = document.querySelector('[data-workload-body]');
+    if (!body) return;
+    body.replaceChildren();
+    rows.forEach((item) => {
+      const row = document.createElement('tr');
+      appendCell(row, item.checker, 'font-bold');
+      appendCell(row, item.assigned); appendCell(row, item.pending); appendCell(row, item.waiting_posmini);
+      appendCell(row, item.overdue, item.overdue ? 'sla-danger' : '');
+      body.appendChild(row);
+    });
+  };
+  const renderHistory = (rows) => {
+    const list = document.querySelector('[data-history-list]');
+    if (!list) return;
+    list.replaceChildren();
+    document.querySelector('[data-history-empty]')?.classList.toggle('hidden', rows.length > 0);
+    rows.forEach((item) => {
+      const wrap = document.createElement('div'); wrap.className = 'p-3';
+      const top = document.createElement('div'); top.className = 'flex items-start justify-between gap-3';
+      const action = document.createElement('div'); action.className = 'font-bold text-gray-900'; action.textContent = item.action_label;
+      const time = document.createElement('time'); time.className = 'shrink-0 text-[9px] text-gray-400'; time.textContent = formatDateTime(item.created_at);
+      const detail = document.createElement('div'); detail.className = 'mt-1 text-[9px] text-gray-500';
+      detail.textContent = `${item.contract_code}${item.from_status || item.to_status ? ` · ${item.from_status || '—'} → ${item.to_status || '—'}` : ''}${item.note ? ` · ${item.note}` : ''}`;
+      top.append(action, time); wrap.append(top, detail); list.appendChild(wrap);
+    });
+  };
+  const renderTrend = () => {
+    if (!isAdmin || !latestData) return;
+    const mode = document.querySelector('[data-trend-mode]').value;
+    const dimension = document.querySelector('[data-trend-dimension]').value;
+    const trend = latestData.trend[mode];
+    const values = trend[dimension];
+    upsertChart('trend', 'gddb-trend-chart', {
+      type: 'line',
+      data: { labels: trend.labels.map(formatDate), datasets: Object.entries(values).map(([label, data], index) => ({label, data, borderColor: palette[index % palette.length], backgroundColor: palette[index % palette.length], tension: .25, pointRadius: 2})) },
+      options: chartOptions('x'),
+    });
+  };
+  const renderAdmin = (data) => {
+    updateCardGroup('[data-admin-card', data.cards);
+    document.querySelector('[data-period-caption]').textContent = `${formatDate(data.period.date_from)} → ${formatDate(data.period.date_to)}`;
+    const statusColors = ['#f59e0b', '#3b82f6', '#ef4444', '#10b981'];
+    const sourceColors = ['#10b981', '#ef4444', '#0284c7', '#94a3b8'];
+    [['status', data.status, statusColors], ['source', data.source, sourceColors], ['asset', data.asset, palette]].forEach(([key, rows, colors]) => {
+      upsertChart(key, `gddb-${key}-chart`, {type: 'doughnut', data: {labels: rows.map(row => row.label), datasets: [{data: rows.map(row => row.value), backgroundColor: colors, borderColor: '#fff', borderWidth: 2}]}, options: {responsive: true, maintainAspectRatio: false, cutout: '66%', plugins: {legend: {display: false}}}});
+      renderLegend(key, rows, colors);
+    });
+    upsertChart('checker', 'gddb-checker-chart', {type: 'bar', data: {labels: data.checker.map(row => row.label), datasets: [{label: 'Case đăng ký', data: data.checker.map(row => row.value), backgroundColor: '#047857', borderRadius: 5}]}, options: chartOptions('y')});
+    renderCaseTable('[data-near-sla-body]', '[data-near-sla-empty]', data.near_sla_cases, true);
+    renderWorkload(data.workload);
+    renderTrend();
   };
 
+  if (form) {
+    const period = form.querySelector('[data-period]');
+    const month = form.querySelector('[data-period-month]');
+    const range = form.querySelector('[data-period-range]');
+    const now = new Date(); month.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    document.querySelectorAll('[data-dashboard-date]').forEach(input => window.flatpickr?.(input, {dateFormat: 'Y-m-d', allowInput: false, disableMobile: true}));
+    const sync = () => {
+      month.disabled = period.value !== 'month'; month.classList.toggle('hidden', month.disabled);
+      const showRange = period.value === 'range'; range.classList.toggle('hidden', !showRange); range.classList.toggle('flex', showRange);
+      range.querySelectorAll('input').forEach(input => input.disabled = !showRange);
+    };
+    period.addEventListener('change', sync); sync();
+    form.addEventListener('submit', event => {event.preventDefault(); refresh();});
+    document.querySelector('[data-trend-mode]')?.addEventListener('change', renderTrend);
+    document.querySelector('[data-trend-dimension]')?.addEventListener('change', renderTrend);
+  }
+  const buildParams = () => form ? new URLSearchParams(new FormData(form)) : new URLSearchParams();
   const refresh = async () => {
-    errorLabel.classList.add('hidden');
+    errorLabel?.classList.add('hidden');
     try {
-      const response = await fetch(`${endpoint}?${buildParams().toString()}`, { headers: { 'Accept': 'application/json' } });
+      const response = await fetch(`${endpoint}?${buildParams()}`, {headers: {'Accept': 'application/json'}});
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(data.error || 'Không tải được dashboard.');
-
-      Object.entries(data.cards).forEach(([key, value]) => {
-        const target = document.querySelector(`[data-card="${key}"]`);
-        if (!target) return;
-        if (target.textContent !== numberFormatter.format(value)) {
-          target.textContent = numberFormatter.format(value);
-          target.closest('.dash-card').classList.add('dash-card-refresh');
-          setTimeout(() => target.closest('.dash-card')?.classList.remove('dash-card-refresh'), 500);
-        }
-      });
-      document.querySelector('[data-period-caption]').textContent = `${data.period.date_from} → ${data.period.date_to}`;
-
-      upsertChart('daily', 'gddb-daily-chart', {
-        type: 'bar',
-        data: {
-          labels: data.daily.map((row) => row.label.slice(8, 10) + '/' + row.label.slice(5, 7)),
-          datasets: [{ label: 'Case', data: data.daily.map((row) => row.value), backgroundColor: '#10b981', borderRadius: 5, maxBarThickness: 28 }],
-        },
-        options: chartOptions(false),
-      });
-
-      const statusColors = ['#f59e0b', '#3b82f6', '#ef4444', '#10b981'];
-      const sourceColors = ['#10b981', '#ef4444', '#0284c7', '#94a3b8'];
-      [['status', data.status, statusColors], ['source', data.source, sourceColors], ['asset', data.asset, palette]].forEach(([key, rows, colors]) => {
-        upsertChart(key, `gddb-${key}-chart`, {
-          type: 'doughnut',
-          data: { labels: rows.map((row) => row.label), datasets: [{ data: rows.map((row) => row.value), backgroundColor: colors, borderColor: '#fff', borderWidth: 2 }] },
-          options: { ...chartOptions(false), cutout: '66%', plugins: { ...chartOptions(false).plugins, legend: { display: false } } },
-        });
-        renderLegend(key, rows, colors);
-      });
-
-      upsertChart('checker', 'gddb-checker-chart', {
-        type: 'bar',
-        data: {
-          labels: data.checker.map((row) => row.label),
-          datasets: [{ label: 'Case đăng ký', data: data.checker.map((row) => row.value), backgroundColor: '#047857', borderRadius: 5, maxBarThickness: 24 }],
-        },
-        options: {
-          ...chartOptions(false),
-          indexAxis: 'y',
-          scales: {
-            x: { beginAtZero: true, ticks: { precision: 0, font: { size: 9 } }, grid: { color: '#f3f4f6' } },
-            y: { grid: { display: false }, ticks: { font: { size: 9 } } },
-          },
-        },
-      });
-
-      const generatedAt = new Date(data.generated_at);
-      updatedLabel.textContent = `Cập nhật realtime lúc ${generatedAt.toLocaleTimeString('vi-VN', { hour12: false })}`;
+      latestData = data;
+      if (isAdmin) renderAdmin(data);
+      updateCardGroup('[data-personal-card', data.personal?.cards || {});
+      renderCaseTable('[data-assigned-body]', '[data-assigned-empty]', data.personal?.assigned_cases || [], false);
+      renderHistory(data.personal?.action_history || []);
+      updatedLabel.textContent = `Cập nhật lúc ${new Date(data.generated_at).toLocaleTimeString('vi-VN', {hour12: false})}`;
     } catch (error) {
-      errorLabel.textContent = error.message;
-      errorLabel.classList.remove('hidden');
+      if (errorLabel) { errorLabel.textContent = error.message; errorLabel.classList.remove('hidden'); }
       updatedLabel.textContent = 'Không cập nhật được dữ liệu realtime';
     }
   };
-
-  periodSelect.addEventListener('change', syncPeriodFields);
-  form.addEventListener('submit', (event) => { event.preventDefault(); refresh(); });
-  syncPeriodFields();
   refresh();
-  setInterval(() => { if (!document.hidden) refresh(); }, refreshMs);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+  setInterval(() => {if (!document.hidden) refresh();}, refreshMs);
+  document.addEventListener('visibilitychange', () => {if (!document.hidden) refresh();});
 })();
 </script>
 {% endblock %}

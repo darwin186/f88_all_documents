@@ -97,6 +97,9 @@ from .models import (
     CollateralRegistrationImportBatch,
     CollateralRegistrationLog,
     CollateralRegistrationStatus,
+    CollateralRegistrationReason,
+    CollateralRegistrationReasonType,
+    CollateralRegistrationHoliday,
     ExternalDocumentIntakeToken,
     ExternalDocumentIntakeBatch,
     ExternalDocumentIntakeRejection,
@@ -115,7 +118,7 @@ from .gddb import (
     parse_pasted_tabular_records,
     resolve_intake_field_name,
 )
-from .gddb_dashboard import build_gddb_dashboard_data
+from .gddb_dashboard import build_gddb_dashboard_data, calculate_case_sla
 from app_admindocuments.models import AdmParcelRecipientCatalog, AdmParcelRecipientImportBatch
 
 AI_STYLE_HINTS = {
@@ -130,21 +133,34 @@ GDDB_POSTMINI_STATUS_CHOICES = [
     ("Đã cập nhật 1 dòng", "Đã cập nhật 1 dòng"),
 ]
 
-GDDB_NON_REGISTRATION_REASON_CHOICES = [
-    "Hợp đồng hết hiệu lực",
-    "Hợp đồng đã tất toán",
-    "Hợp đồng không đủ điều kiện đăng ký",
-    "Thông tin hợp đồng/tài sản không hợp lệ",
-    "Trùng giao dịch bảo đảm",
-    "Khác",
-]
+def _gddb_reason_choice_map():
+    choices = {
+        reason_type: []
+        for reason_type, _ in CollateralRegistrationReasonType.choices
+    }
+    rows = CollateralRegistrationReason.objects.filter(is_active=True).order_by(
+        "reason_type",
+        "sort_order",
+        "reason_text",
+    )
+    for row in rows:
+        choices[row.reason_type].append(row.reason_text)
+    return choices
 
-GDDB_REGISTRATION_REASON_CHOICES = [
-    "Đăng ký mới",
-    "Đăng ký lại",
-    "Bổ sung/thay đổi thông tin",
-    "Khác",
-]
+
+def _is_valid_gddb_reason(reason_type, reason_text, *, existing_value=""):
+    if not reason_text:
+        return False
+    if reason_text == (existing_value or "").strip():
+        return CollateralRegistrationReason.objects.filter(
+            reason_type=reason_type,
+            reason_text=reason_text,
+        ).exists()
+    return CollateralRegistrationReason.objects.filter(
+        reason_type=reason_type,
+        reason_text=reason_text,
+        is_active=True,
+    ).exists()
 
 def _normalize_issue_type_ids(issue_type_ids_raw):
     if not isinstance(issue_type_ids_raw, list):
@@ -644,7 +660,25 @@ def gddb_registration_view(request):
             .select_related("created_by")
             .order_by("-created_at"),
             to_attr="claim_history",
-        )
+        ),
+        Prefetch(
+            "logs",
+            queryset=CollateralRegistrationLog.objects.filter(
+                action="status_update",
+                from_status__in=[
+                    CollateralRegistrationStatus.REGISTERED,
+                    CollateralRegistrationStatus.NOT_REGISTERED,
+                ],
+                to_status__in=[
+                    CollateralRegistrationStatus.REGISTERED,
+                    CollateralRegistrationStatus.NOT_REGISTERED,
+                ],
+            )
+            .exclude(from_status=F("to_status"))
+            .select_related("created_by")
+            .order_by("-created_at"),
+            to_attr="case_status_history",
+        ),
     )
     if sort_param == "priority":
         registrations = registrations.order_by(
@@ -872,9 +906,15 @@ def gddb_registration_view(request):
 
     configuration_identities = []
     configuration_shops = []
+    configuration_reasons = []
     pgd_query = (request.GET.get("pgd_q") or "").strip()
     if active_tab == "configuration":
         configuration_identities = CollateralRegistrationExternalIdentity.objects.order_by("external_code")
+        configuration_reasons = CollateralRegistrationReason.objects.order_by(
+            "reason_type",
+            "sort_order",
+            "reason_text",
+        )
         configuration_shops = Shop.objects.filter(is_shop_active=True, for_borrow_only=False).select_related(
             "default_gddb_identity"
         )
@@ -884,13 +924,21 @@ def gddb_registration_view(request):
             )
         configuration_shops = configuration_shops.order_by("shop_name")
     token_owners = User.objects.filter(is_active=True).order_by("username") if request.user.is_superuser else []
+    gddb_reason_choices = _gddb_reason_choice_map()
     context = get_user_context(request.user)
     context.update({
         "page_obj": page_obj,
         "status_choices": CollateralRegistrationStatus.choices,
         "postmini_status_choices": GDDB_POSTMINI_STATUS_CHOICES,
-        "non_registration_reason_choices": GDDB_NON_REGISTRATION_REASON_CHOICES,
-        "registration_reason_choices": GDDB_REGISTRATION_REASON_CHOICES,
+        "non_registration_reason_choices": gddb_reason_choices[
+            CollateralRegistrationReasonType.NON_REGISTRATION
+        ],
+        "registration_reason_choices": gddb_reason_choices[
+            CollateralRegistrationReasonType.REGISTRATION
+        ],
+        "status_change_reason_choices": gddb_reason_choices[
+            CollateralRegistrationReasonType.STATUS_CHANGE
+        ],
         "registration_identity_choices": registration_identities,
         "report_identity_choices": report_identity_choices,
         "filters": {
@@ -951,6 +999,8 @@ def gddb_registration_view(request):
         "token_owners": token_owners,
         "configuration_identities": configuration_identities,
         "configuration_shops": configuration_shops,
+        "configuration_reasons": configuration_reasons,
+        "gddb_reason_type_choices": CollateralRegistrationReasonType.choices,
         "pgd_query": pgd_query,
         "pagination_range": pagination_range,
         "pagination_query_prefix": pagination_query_prefix,
@@ -970,10 +1020,14 @@ def gddb_registration_view(request):
 @require_ui_permission("gddb_registration")
 @require_http_methods(["GET"])
 def gddb_dashboard_view(request):
-    if not _is_gddb_admin(request.user):
+    if not _can_process_gddb(request.user):
         return HttpResponse("Bạn không có quyền truy cập dashboard GDĐB.", status=403)
+    is_admin = _is_gddb_admin(request.user)
     context = get_user_context(request.user)
-    context.update({"dashboard_refresh_seconds": 30})
+    context.update({
+        "dashboard_refresh_seconds": 30,
+        "dashboard_is_admin": is_admin,
+    })
     return render(request, "app_documents/app_gddb_dashboard_v2.html", context)
 
 
@@ -981,14 +1035,18 @@ def gddb_dashboard_view(request):
 @require_ui_permission("gddb_registration")
 @require_http_methods(["GET"])
 def api_gddb_dashboard(request):
-    if not _is_gddb_admin(request.user):
+    if not _can_process_gddb(request.user):
         return JsonResponse(
             {"success": False, "error": "Bạn không có quyền xem dashboard GDĐB."},
             status=403,
         )
     _release_expired_gddb_claims()
     try:
-        data = build_gddb_dashboard_data(request.GET)
+        data = build_gddb_dashboard_data(
+            request.GET,
+            user=request.user,
+            is_admin=_is_gddb_admin(request.user),
+        )
     except ValueError as exc:
         return JsonResponse({"success": False, "error": str(exc)}, status=400)
     return JsonResponse({"success": True, **data}, encoder=DjangoJSONEncoder)
@@ -1468,6 +1526,34 @@ def _update_gddb_registration_locked(request, registration, payload):
     postmini_updated = payload.get("postmini_updated", registration.postmini_updated) or "Chưa cập nhật"
     if postmini_updated not in dict(GDDB_POSTMINI_STATUS_CHOICES):
         return JsonResponse({"success": False, "error": "Trạng thái PosMini không hợp lệ."}, status=400)
+    old_status = registration.gddb_status
+    final_statuses = {
+        CollateralRegistrationStatus.REGISTERED,
+        CollateralRegistrationStatus.NOT_REGISTERED,
+    }
+    is_status_correction = bool(
+        old_status in final_statuses
+        and status in final_statuses
+        and old_status != status
+    )
+    status_change_reason_value = payload.get("status_change_reason") or ""
+    if not isinstance(status_change_reason_value, str):
+        return JsonResponse({
+            "success": False,
+            "error": "Lý do điều chỉnh trạng thái không hợp lệ.",
+        }, status=400)
+    status_change_reason = status_change_reason_value.strip()
+    if (
+        is_status_correction
+        and not _is_valid_gddb_reason(
+            CollateralRegistrationReasonType.STATUS_CHANGE,
+            status_change_reason,
+        )
+    ):
+        return JsonResponse({
+            "success": False,
+            "error": "Vui lòng chọn lý do điều chỉnh trạng thái hợp lệ.",
+        }, status=400)
     identity_id = payload.get("registered_identity_id")
     registered_identity = None
     if identity_id:
@@ -1485,16 +1571,45 @@ def _update_gddb_registration_locked(request, registration, payload):
         return JsonResponse({"success": False, "error": "Vui lòng xác nhận định danh đã dùng để đăng ký."}, status=400)
     reason = (payload.get("reason") or "").strip()
     if status == CollateralRegistrationStatus.NOT_REGISTERED:
-        if reason not in GDDB_NON_REGISTRATION_REASON_CHOICES:
+        if not _is_valid_gddb_reason(
+            CollateralRegistrationReasonType.NON_REGISTRATION,
+            reason,
+            existing_value=(
+                registration.reason
+                if old_status == CollateralRegistrationStatus.NOT_REGISTERED
+                else ""
+            ),
+        ):
             return JsonResponse({"success": False, "error": "Vui lòng chọn lý do không đăng ký hợp lệ."}, status=400)
-    elif status == CollateralRegistrationStatus.REGISTERED and reason and reason not in GDDB_REGISTRATION_REASON_CHOICES:
+    elif (
+        status == CollateralRegistrationStatus.REGISTERED
+        and reason
+        and not _is_valid_gddb_reason(
+            CollateralRegistrationReasonType.REGISTRATION,
+            reason,
+            existing_value=(
+                registration.reason
+                if old_status == CollateralRegistrationStatus.REGISTERED
+                else ""
+            ),
+        )
+    ):
         return JsonResponse({"success": False, "error": "Lý do/loại đăng ký không hợp lệ."}, status=400)
 
-    old_status = registration.gddb_status
+    note_value = payload.get("note", registration.note)
+    if note_value is not None and not isinstance(note_value, str):
+        return JsonResponse({"success": False, "error": "Ghi chú không hợp lệ."}, status=400)
+    note_value = (note_value or "").strip()
+    if len(note_value) > 5000:
+        return JsonResponse({
+            "success": False,
+            "error": "Ghi chú không được vượt quá 5.000 ký tự.",
+        }, status=400)
+
     old_postmini_status = registration.postmini_updated or "Chưa cập nhật"
     registration.gddb_status = status
     registration.post_update_status = dict(CollateralRegistrationStatus.choices)[status]
-    registration.note = payload.get("note", registration.note)
+    registration.note = note_value or None
     registration.reason = reason
     registration.postmini_updated = postmini_updated
     registration.source_user = request.user.username
@@ -1528,12 +1643,19 @@ def _update_gddb_registration_locked(request, registration, payload):
     )
     registration.archived_at = timezone.now() if process_done else None
     registration.save()
+    status_labels = dict(CollateralRegistrationStatus.choices)
+    log_note = registration.note
+    if is_status_correction:
+        log_note = (
+            f"Điều chỉnh {status_labels.get(old_status, old_status)} → "
+            f"{status_labels.get(status, status)} · {status_change_reason}"
+        )
     CollateralRegistrationLog.objects.create(
         registration=registration,
         action="status_update",
         from_status=old_status,
         to_status=status,
-        note=registration.note,
+        note=log_note,
         metadata={
             "reason": registration.reason,
             "previous_application_no": registration.previous_application_no,
@@ -1545,6 +1667,8 @@ def _update_gddb_registration_locked(request, registration, payload):
             "registered_identity_id": registration.registered_identity_id,
             "from_postmini_status": old_postmini_status,
             "to_postmini_status": registration.postmini_updated,
+            "status_change_reason": status_change_reason if is_status_correction else "",
+            "is_status_correction": is_status_correction,
         },
         created_by=request.user,
     )
@@ -1560,6 +1684,9 @@ def _update_gddb_registration_locked(request, registration, payload):
         "postmini_updated": registration.postmini_updated,
         "post_update_status": registration.post_update_status,
         "reason": registration.reason,
+        "note": registration.note or "",
+        "status_change_reason": status_change_reason if is_status_correction else "",
+        "status_history_changed": is_status_correction,
         "archived": bool(registration.archived_at),
         "archived_at": registration.archived_at,
         "updated_by_username": request.user.username,
@@ -1760,7 +1887,7 @@ def gddb_export_view(request):
         is_duplicate=False,
         registered_at__date__range=(export_from, export_to),
     ).select_related(
-        "registered_by", "registered_identity"
+        "registered_by", "registered_identity", "import_batch"
     ).order_by("registered_at", "contract_code")
     if selected_identity:
         registrations = registrations.filter(registered_identity=selected_identity)
@@ -1780,6 +1907,11 @@ def gddb_export_view(request):
         "Cập nhật PosMini",
         "User đăng ký",
         "User thực hiện đăng ký",
+        "Thời điểm hiệu lực SLA",
+        "Hạn SLA",
+        "Thời điểm hoàn tất",
+        "Kết quả SLA",
+        "Thời gian SLA",
     ]
     workbook = Workbook()
     worksheet = workbook.active
@@ -1791,7 +1923,45 @@ def gddb_export_view(request):
         cell.alignment = Alignment(horizontal="center", vertical="center")
 
     status_labels = dict(CollateralRegistrationStatus.choices)
+    holidays = set(
+        CollateralRegistrationHoliday.objects.filter(is_active=True).values_list(
+            "holiday_date",
+            flat=True,
+        )
+    )
+    export_now = timezone.now()
+    sla_stats = {
+        "measurable": 0,
+        "assessed": 0,
+        "achieved": 0,
+        "overdue": 0,
+        "unmeasured": 0,
+    }
+
+    def excel_datetime(value):
+        if not value:
+            return None
+        if timezone.is_aware(value):
+            value = timezone.localtime(value)
+        return value.replace(tzinfo=None)
+
     for item in registrations.iterator():
+        sla = calculate_case_sla(item, now=export_now, holidays=holidays)
+        if not sla["measurable"]:
+            sla_result = "Không xác định"
+            sla_stats["unmeasured"] += 1
+        else:
+            sla_stats["measurable"] += 1
+            if sla["completed"] or sla["overdue"]:
+                sla_stats["assessed"] += 1
+            if sla["achieved"]:
+                sla_result = "Đạt SLA"
+                sla_stats["achieved"] += 1
+            elif sla["overdue"]:
+                sla_result = "Quá SLA"
+                sla_stats["overdue"] += 1
+            else:
+                sla_result = "Trong SLA"
         worksheet.append([
             item.contract_code,
             item.license_plate or "",
@@ -1808,14 +1978,55 @@ def gddb_export_view(request):
             item.postmini_updated or "Chưa cập nhật",
             item.source_user or "",
             item.registered_identity.external_code if item.registered_identity else (item.registered_by_name or ""),
+            excel_datetime(sla["effective_at"]),
+            excel_datetime(sla["due_at"]),
+            excel_datetime(sla["completed_at"]),
+            sla_result,
+            sla["countdown_label"],
         ])
     for row in worksheet.iter_rows(min_row=2, min_col=7, max_col=8):
         for cell in row:
             cell.number_format = "dd/mm/yyyy"
+    for row in worksheet.iter_rows(min_row=2, min_col=16, max_col=18):
+        for cell in row:
+            cell.number_format = "dd/mm/yyyy hh:mm"
     for index, header in enumerate(headers, start=1):
         worksheet.column_dimensions[get_column_letter(index)].width = min(max(len(header) + 4, 14), 32)
     worksheet.freeze_panes = "A2"
     worksheet.auto_filter.ref = worksheet.dimensions
+
+    summary = workbook.create_sheet("Tong quan SLA", 0)
+    sla_rate = (
+        sla_stats["achieved"] / sla_stats["assessed"]
+        if sla_stats["assessed"]
+        else None
+    )
+    overdue_rate = (
+        sla_stats["overdue"] / sla_stats["measurable"]
+        if sla_stats["measurable"]
+        else None
+    )
+    summary_rows = [
+        ("Chỉ số", "Giá trị"),
+        ("Tổng case xuất", worksheet.max_row - 1),
+        ("Case tính được SLA", sla_stats["measurable"]),
+        ("Case thiếu ngày giải ngân", sla_stats["unmeasured"]),
+        ("Case đạt SLA", sla_stats["achieved"]),
+        ("% đạt SLA", sla_rate),
+        ("Case quá SLA", sla_stats["overdue"]),
+        ("% case quá SLA", overdue_rate),
+        ("Công thức", "Ngày giải ngân + giờ batch + 3 ngày lịch; dời tới ngày làm việc kế tiếp nếu hạn rơi vào ngày nghỉ"),
+    ]
+    for row in summary_rows:
+        summary.append(row)
+    for cell in summary[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="047857")
+    summary["B6"].number_format = "0.00%"
+    summary["B8"].number_format = "0.00%"
+    summary.column_dimensions["A"].width = 28
+    summary.column_dimensions["B"].width = 95
+    summary.freeze_panes = "A2"
 
     output = BytesIO()
     workbook.save(output)
@@ -1960,6 +2171,55 @@ def gddb_identity_create_view(request):
         )
         messages.success(request, f"Đã tạo định danh {external_code}.")
     return redirect(f"{reverse('gddb_registration_v2')}?tab=configuration")
+
+
+@login_required
+@require_ui_permission("gddb_registration")
+@require_http_methods(["POST"])
+def gddb_reason_save_view(request):
+    if not _is_gddb_admin(request.user):
+        return HttpResponse("Chỉ Admin được cấu hình lý do GDĐB.", status=403)
+
+    reason_id = (request.POST.get("reason_id") or "").strip()
+    try:
+        sort_order = max(0, int(request.POST.get("sort_order") or 0))
+    except (TypeError, ValueError):
+        messages.error(request, "Thứ tự hiển thị phải là số nguyên không âm.")
+        return redirect(f"{reverse('gddb_registration_v2')}?tab=configuration#reason-catalog")
+
+    if reason_id:
+        reason = get_object_or_404(CollateralRegistrationReason, pk=reason_id)
+        reason.sort_order = sort_order
+        reason.is_active = request.POST.get("is_active") == "1"
+        reason.updated_by = request.user
+        reason.save(update_fields=["sort_order", "is_active", "updated_by", "updated_at"])
+        messages.success(request, f"Đã cập nhật lý do “{reason.reason_text}”.")
+    else:
+        reason_type = (request.POST.get("reason_type") or "").strip()
+        reason_text = (request.POST.get("reason_text") or "").strip()
+        valid_types = dict(CollateralRegistrationReasonType.choices)
+        if reason_type not in valid_types:
+            messages.error(request, "Nhóm lý do không hợp lệ.")
+        elif not reason_text:
+            messages.error(request, "Vui lòng nhập nội dung lý do.")
+        elif len(reason_text) > 255:
+            messages.error(request, "Nội dung lý do không được vượt quá 255 ký tự.")
+        elif CollateralRegistrationReason.objects.filter(
+            reason_type=reason_type,
+            reason_text__iexact=reason_text,
+        ).exists():
+            messages.error(request, "Lý do này đã tồn tại trong cùng nhóm.")
+        else:
+            CollateralRegistrationReason.objects.create(
+                reason_type=reason_type,
+                reason_text=reason_text,
+                sort_order=sort_order,
+                is_active=True,
+                created_by=request.user,
+                updated_by=request.user,
+            )
+            messages.success(request, f"Đã thêm lý do “{reason_text}”.")
+    return redirect(f"{reverse('gddb_registration_v2')}?tab=configuration#reason-catalog")
 
 
 @login_required
@@ -4664,15 +4924,52 @@ def package_list_management_view(request):
     if end_date:
         filters &= Q(created_date__date__lte=end_date)
 
-    base_queryset = Package.objects.select_related('partnerpackage', 'package_type', 'region_id').annotate(
-        folder_count=Count('folder', distinct=True),
-        shop_count=Count('folder__shop_id', distinct=True)
-    ).order_by('-created_date')
+    # Paginate package IDs first.  Annotating the unsliced Package queryset used
+    # to aggregate the whole f_FolderDetail table and then serialize every
+    # package, even though the browser initially displayed only ten rows.
+    package_ids_queryset = (
+        Package.objects.filter(filters)
+        .order_by('-created_date', '-package_id')
+        .values_list('package_id', flat=True)
+    )
+    paginator = Paginator(package_ids_queryset, 50)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    page_package_ids = list(page_obj.object_list)
 
-    has_filters = bool(filters.children)
-    filtered_queryset = base_queryset.filter(filters) if has_filters else base_queryset
+    package_order = Case(
+        *[
+            When(package_id=package_id, then=position)
+            for position, package_id in enumerate(page_package_ids)
+        ],
+        output_field=IntegerField(),
+    )
+    packages_queryset = (
+        Package.objects.filter(package_id__in=page_package_ids)
+        .select_related(
+            'partnerpackage',
+            'partnerpackage__status_id',
+            'partnerpackage__partner',
+            'package_type',
+            'region_id',
+            'created_by',
+        )
+        .order_by(package_order)
+    )
 
-    packages_queryset = filtered_queryset
+    package_counts = {
+        row['package_id_id']: {
+            'folder_count': row['folder_count'],
+            'shop_count': row['shop_count'],
+        }
+        for row in (
+            Folder.objects.filter(package_id_id__in=page_package_ids)
+            .values('package_id_id')
+            .annotate(
+                folder_count=Count('folder_id'),
+                shop_count=Count('shop_id', distinct=True),
+            )
+        )
+    }
 
     default_in_status = PartnerPackageStatus.objects.filter(is_in_warehouse=True).first()
 
@@ -4729,6 +5026,10 @@ def package_list_management_view(request):
             partner_color = partner_package.partner.badge_color
         package_type_color = package.package_type.badge_color if package.package_type and package.package_type.badge_color else ''
 
+        counts = package_counts.get(
+            package.package_id,
+            {'folder_count': 0, 'shop_count': 0},
+        )
         packages_data.append({
             'id': package.package_id,
             'packageCode': package.package_code,
@@ -4742,8 +5043,8 @@ def package_list_management_view(request):
             'packageType': package_type,
             'packageTypeColor': package_type_color,
             'regionName': region_name,
-            'folderCount': getattr(package, 'folder_count', 0),
-            'shopCount': getattr(package, 'shop_count', 0),
+            'folderCount': counts['folder_count'],
+            'shopCount': counts['shop_count'],
             'note': package.note or '',
             'createdBy': package.created_by.get_full_name() or package.created_by.username if package.created_by else '',
         })
@@ -4771,6 +5072,19 @@ def package_list_management_view(request):
         cls=DjangoJSONEncoder,
         ensure_ascii=False,
     )
+    pagination_query = request.GET.copy()
+    pagination_query.pop('page', None)
+    pagination_query_prefix = (
+        f"{pagination_query.urlencode()}&" if pagination_query else ""
+    )
+    pagination_items = [
+        item if isinstance(item, int) else None
+        for item in paginator.get_elided_page_range(
+            page_obj.number,
+            on_each_side=2,
+            on_ends=1,
+        )
+    ]
 
     context = {
         **user_context,
@@ -4787,6 +5101,16 @@ def package_list_management_view(request):
         'partners_options_json': partners_options_json,
         'region_options_json': region_options_json,
         'folder_type_options_json': folder_type_options_json,
+        'pagination_json': json.dumps({
+            'total': paginator.count,
+            'page': page_obj.number,
+            'numPages': paginator.num_pages,
+            'startIndex': page_obj.start_index() if paginator.count else 0,
+            'endIndex': page_obj.end_index() if paginator.count else 0,
+        }),
+        'page_obj': page_obj,
+        'pagination_query_prefix': pagination_query_prefix,
+        'pagination_items': pagination_items,
     }
     return render(request, 'app_documents/app_package_list_v2.html', context)
 

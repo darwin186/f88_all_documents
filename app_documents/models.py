@@ -1362,6 +1362,88 @@ class CollateralRegistrationLog(models.Model):
         return f"GDDB log {self.log_id}"
 
 
+class CollateralRegistrationHoliday(models.Model):
+    holiday_id = models.AutoField(primary_key=True)
+    holiday_date = models.DateField(unique=True, db_index=True)
+    holiday_name = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True, db_index=True)
+    note = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        User,
+        db_column="created_by",
+        related_name="gddb_holidays_created",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    updated_by = models.ForeignKey(
+        User,
+        db_column="updated_by",
+        related_name="gddb_holidays_updated",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "d_CollateralRegistrationHoliday"
+        ordering = ["holiday_date"]
+
+    def __str__(self):
+        return f"{self.holiday_date:%d/%m/%Y} - {self.holiday_name}"
+
+
+class CollateralRegistrationReasonType(models.TextChoices):
+    REGISTRATION = "registration", "Lý do/loại đăng ký"
+    NON_REGISTRATION = "non_registration", "Lý do không đăng ký"
+    STATUS_CHANGE = "status_change", "Lý do điều chỉnh trạng thái"
+
+
+class CollateralRegistrationReason(models.Model):
+    reason_id = models.AutoField(primary_key=True)
+    reason_type = models.CharField(
+        max_length=30,
+        choices=CollateralRegistrationReasonType.choices,
+        db_index=True,
+    )
+    reason_text = models.CharField(max_length=255)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        User,
+        db_column="created_by",
+        related_name="gddb_reasons_created",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    updated_by = models.ForeignKey(
+        User,
+        db_column="updated_by",
+        related_name="gddb_reasons_updated",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+
+    class Meta:
+        db_table = "d_CollateralRegistrationReason"
+        ordering = ["reason_type", "sort_order", "reason_text"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["reason_type", "reason_text"],
+                name="gddb_reason_type_text_uniq",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.get_reason_type_display()}: {self.reason_text}"
+
+
 
 
 class DataImportAttribute(models.Model):

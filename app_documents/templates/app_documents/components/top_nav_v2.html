@@ -14,25 +14,23 @@
         <span class="text-gray-300">•</span>
         {% endif %}
         {% if 'gddb_registration' in allowed_screens %}
-        {% if is_admin or is_super_admin %}
         <div class="group relative inline-flex items-center">
           <a href="{% url 'gddb_registration_v2' %}" class="inline-flex items-center gap-1 {% if request.resolver_match.url_name == 'gddb_registration_v2' or request.resolver_match.url_name == 'gddb_dashboard' or request.resolver_match.url_name == 'gddb_export' or request.resolver_match.url_name == 'gddb_shop_mapping_export' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Giao dịch bảo đảm <span class="text-[8px]">⌄</span></a>
           <div class="absolute left-0 top-full z-50 hidden min-w-[210px] pt-2 group-hover:block group-focus-within:block">
             <div class="overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
               <a href="{% url 'gddb_registration_v2' %}" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Danh sách giao dịch</a>
-              <a href="{% url 'gddb_dashboard' %}" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Dashboard GDĐB</a>
+              <a href="{% url 'gddb_dashboard' %}" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">{% if is_admin or is_super_admin %}Dashboard tổng quan{% else %}Dashboard của tôi{% endif %}</a>
+              {% if is_admin or is_super_admin %}
               <a href="{% url 'gddb_registration_v2' %}?tab=api_docs" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Tài liệu API</a>
               <a href="{% url 'gddb_registration_v2' %}?tab=manual" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Submit manual</a>
               <a href="{% url 'gddb_registration_v2' %}?tab=batches" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Quản lý batch</a>
               <a href="{% url 'gddb_registration_v2' %}?tab=configuration" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Cấu hình định danh</a>
               <a href="{% url 'gddb_registration_v2' %}?open_export=1" class="block border-t border-gray-100 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Xuất đối soát</a>
               {% if is_super_admin %}<a href="{% url 'gddb_registration_v2' %}?tab=tokens" class="block border-t border-gray-100 px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Quản lý token</a>{% endif %}
+              {% endif %}
             </div>
           </div>
         </div>
-        {% else %}
-        <a href="{% url 'gddb_registration_v2' %}" class="{% if request.resolver_match.url_name == 'gddb_registration_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Giao dịch bảo đảm</a>
-        {% endif %}
         <span class="text-gray-300">•</span>
         {% endif %}
         {% if 'kpi_v2' in allowed_screens %}

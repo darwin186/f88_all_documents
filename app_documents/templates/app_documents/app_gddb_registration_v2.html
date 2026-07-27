@@ -267,6 +267,45 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
     </div>
   </div>
   {% elif active_tab == 'configuration' %}
+  <div id="reason-catalog" class="panel mb-4 overflow-hidden rounded-xl">
+    <div class="border-b border-gray-100 p-4">
+      <div class="text-[13px] font-bold text-gray-900">Danh mục lý do GDĐB</div>
+      <div class="mt-1 text-[9px] text-gray-500">Một danh mục chung cho ba dropdown. Lý do đã dùng không bị xóa; hãy tắt hoạt động khi không muốn Checker chọn mới.</div>
+      <form method="post" action="{% url 'gddb_reason_save' %}" class="mt-3 grid gap-2 md:grid-cols-[220px_minmax(260px,1fr)_110px_auto]">
+        {% csrf_token %}
+        <select name="reason_type" required class="field w-full">
+          {% for value,label in gddb_reason_type_choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select>
+        <input name="reason_text" required maxlength="255" class="field w-full" placeholder="Nhập nội dung lý do">
+        <input name="sort_order" type="number" min="0" value="0" class="field w-full" placeholder="Thứ tự">
+        <button class="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700">Thêm lý do</button>
+      </form>
+    </div>
+    <div class="max-h-[360px] overflow-auto">
+      <table class="min-w-full text-[10px]">
+        <thead class="sticky top-0 z-10 bg-gray-50 text-left text-[9px] uppercase text-gray-500"><tr><th class="px-4 py-2">Nhóm dropdown</th><th class="px-4 py-2">Nội dung</th><th class="px-4 py-2">Thứ tự</th><th class="px-4 py-2">Hoạt động</th><th class="px-4 py-2"></th></tr></thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for reason in configuration_reasons %}
+          <tr>
+            <td class="px-4 py-2 font-semibold text-gray-700">{{ reason.get_reason_type_display }}</td>
+            <td class="px-4 py-2">{{ reason.reason_text }}</td>
+            <td colspan="3" class="p-0">
+              <form method="post" action="{% url 'gddb_reason_save' %}" class="grid grid-cols-[110px_110px_auto] items-center gap-2 px-4 py-2">
+                {% csrf_token %}
+                <input type="hidden" name="reason_id" value="{{ reason.reason_id }}">
+                <input name="sort_order" type="number" min="0" value="{{ reason.sort_order }}" class="field w-full">
+                <label class="flex items-center gap-2 font-semibold text-gray-600"><input type="checkbox" name="is_active" value="1" {% if reason.is_active %}checked{% endif %} class="h-4 w-4 accent-emerald-600"> Bật</label>
+                <button class="justify-self-end rounded-lg border border-gray-200 bg-white px-3 py-2 font-bold text-gray-700 hover:border-emerald-300 hover:text-emerald-700">Lưu</button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">Chưa có lý do nào.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
   <div class="grid gap-4 lg:grid-cols-[320px_1fr]">
     <div class="space-y-4">
       <div class="panel rounded-xl p-4">
@@ -299,6 +338,11 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           <input type="file" name="mapping_file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required class="block w-full rounded-lg border border-gray-200 bg-gray-50 p-2 text-[9px] file:mr-2 file:rounded-md file:border-0 file:bg-gray-200 file:px-2 file:py-1 file:font-semibold">
           <button class="w-full rounded-lg bg-gray-900 px-3 py-2 font-bold text-white">Upload và cập nhật</button>
         </form>
+      </div>
+      <div class="panel rounded-xl p-4">
+        <div class="text-[11px] font-bold text-gray-900">Danh mục lý do GDĐB</div>
+        <div class="mt-1 text-[9px] text-gray-500">Cấu hình lý do đăng ký, không đăng ký và điều chỉnh trạng thái trên một màn hình.</div>
+        <a href="#reason-catalog" class="mt-3 flex w-full items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 font-bold text-emerald-700 hover:bg-emerald-100">Đi tới danh mục lý do</a>
       </div>
     </div>
     <div class="space-y-3">
@@ -478,11 +522,20 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
   </div>
   {% else %}
   <div class="gddb-filter-bar rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
-    <div class="mb-3 flex justify-end">
+    <div class="mb-3 flex items-start justify-end gap-3">
       <form id="gddb-filter-form" method="get" action="{% url 'gddb_registration_v2' %}" class="flex w-full flex-wrap items-center justify-end gap-3">
         <input type="hidden" name="sort" value="{{ sort_param }}">
         <input type="hidden" name="queue" value="{{ queue_scope }}">
         {% if queue_scope == 'mine' %}<input type="hidden" name="mine_step" value="{{ mine_step }}">{% endif %}
+        {% if can_process_gddb and queue_scope != 'mine' %}
+        <div data-bulk-claim-toolbar data-bulk-claim-url="{% url 'api_gddb_bulk_claim' %}" class="flex shrink-0 items-center">
+          <span data-bulk-selection-label class="hidden">Chọn một case để khóa nhóm batch và nguồn vay.</span>
+          <button type="button" data-bulk-claim-submit disabled class="inline-flex h-9 cursor-not-allowed items-center gap-1.5 rounded-lg bg-gray-300 px-3 text-[10px] font-bold text-white" title="Chỉ nhận các case Checker đã tick chọn">
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v11"></path><path d="m8 10 4 4 4-4"></path><path d="M5 14v5h14v-5"></path></svg>
+            <span data-bulk-claim-submit-label>Nhận đã chọn</span>
+          </button>
+        </div>
+        {% endif %}
         <input name="q" value="{{ filters.q }}" class="field w-60 text-[10px]" placeholder="Tìm HĐ, biển số, số khung, số máy">
         <div class="relative min-w-[210px]" data-loan-source-filter>
           <button type="button" data-loan-source-toggle class="field flex w-full items-center justify-between gap-2 text-left text-[10px] text-gray-700" aria-label="Lọc theo nguồn vay" aria-expanded="false">
@@ -574,15 +627,6 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         </div>
         <button class="rounded-lg bg-emerald-600 px-4 py-2 text-[10px] font-bold text-white hover:bg-emerald-700" type="submit">Lọc</button>
         <a href="{% url 'gddb_registration_v2' %}?queue={{ queue_scope }}{% if queue_scope == 'mine' %}&mine_step={{ mine_step }}{% endif %}" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-[10px] font-bold text-gray-600 hover:bg-gray-50">Xóa lọc</a>
-        {% if can_process_gddb and queue_scope != 'mine' %}
-        <div data-bulk-claim-toolbar data-bulk-claim-url="{% url 'api_gddb_bulk_claim' %}" class="flex items-center">
-          <span data-bulk-selection-label class="hidden">Chọn một case để khóa nhóm batch và nguồn vay.</span>
-          <button type="button" data-bulk-claim-submit disabled class="inline-flex cursor-not-allowed items-center gap-2 rounded-lg bg-gray-300 px-4 py-2 text-[10px] font-bold text-white" title="Chỉ nhận các case Checker đã tick chọn">
-            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v11"></path><path d="m8 10 4 4 4-4"></path><path d="M5 14v5h14v-5"></path></svg>
-            <span data-bulk-claim-submit-label>Nhận case đã chọn</span>
-          </button>
-        </div>
-        {% endif %}
       </form>
     </div>
     <div class="gddb-data-scroll" data-gddb-list-scroll>
@@ -661,7 +705,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
               <div class="flex flex-wrap justify-end gap-2">
                 {% if can_process_gddb %}
                   {% if item.can_edit_registration %}
-                  <button type="button" data-register-open data-registration-id="{{ item.registration_id }}" data-update-url="{% url 'api_gddb_update' item.registration_id %}" data-contract-code="{{ item.contract_code }}" data-shop-name="{{ item.shop_name|default:'' }}" data-suggested-identity-id="{{ item.suggested_identity.identity_id|default:'' }}" data-current-identity-id="{{ item.registered_identity_id|default:'' }}" data-current-status="{{ item.gddb_status }}" data-current-reason="{{ item.reason|default:'' }}" class="rounded-lg px-3 py-2 font-bold {% if item.gddb_status == 'pending' %}bg-emerald-600 text-white hover:bg-emerald-700{% else %}border border-gray-200 bg-white text-gray-600 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700{% endif %}" title="{% if item.gddb_status == 'pending' %}Cập nhật đăng ký{% else %}Chỉnh sửa đăng ký{% endif %}" aria-label="{% if item.gddb_status == 'pending' %}Cập nhật đăng ký{% else %}Chỉnh sửa đăng ký{% endif %}">
+                  <button type="button" data-register-open data-registration-id="{{ item.registration_id }}" data-update-url="{% url 'api_gddb_update' item.registration_id %}" data-contract-code="{{ item.contract_code }}" data-shop-name="{{ item.shop_name|default:'' }}" data-suggested-identity-id="{{ item.suggested_identity.identity_id|default:'' }}" data-current-identity-id="{{ item.registered_identity_id|default:'' }}" data-current-status="{{ item.gddb_status }}" data-current-reason="{{ item.reason|default:'' }}" data-current-postmini="{{ item.postmini_updated|default:'Chưa cập nhật' }}" data-current-note="{{ item.note|default:''|escape }}" class="rounded-lg px-3 py-2 font-bold {% if item.gddb_status == 'pending' %}bg-emerald-600 text-white hover:bg-emerald-700{% else %}border border-gray-200 bg-white text-gray-600 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700{% endif %}" title="{% if item.gddb_status == 'pending' %}Cập nhật đăng ký{% else %}Chỉnh sửa đăng ký{% endif %}" aria-label="{% if item.gddb_status == 'pending' %}Cập nhật đăng ký{% else %}Chỉnh sửa đăng ký{% endif %}">
                     {% if item.gddb_status == 'pending' %}
                     Cập nhật đăng ký
                     {% else %}
@@ -711,6 +755,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         <div class="sticky top-[65px] z-10 flex gap-5 border-b border-gray-100 bg-white px-5">
           <button type="button" data-gddb-drawer-tab="details" class="border-b-2 border-emerald-500 py-3 font-bold text-emerald-700">Chi tiết</button>
           <button type="button" data-gddb-drawer-tab="claim-history" class="border-b-2 border-transparent py-3 font-bold text-gray-500 hover:text-emerald-700">Lịch sử nhận case</button>
+          {% if item.case_status_history %}<button type="button" data-gddb-drawer-tab="status-history" class="border-b-2 border-transparent py-3 font-bold text-gray-500 hover:text-emerald-700">Lịch sử trạng thái case</button>{% endif %}
         </div>
         <div data-gddb-drawer-panel="details" class="space-y-5 p-5">
           <section class="rounded-xl border border-gray-100 bg-gray-50 p-4">
@@ -783,6 +828,34 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
             {% endfor %}
           </ol>
         </div>
+        {% if item.case_status_history %}
+        <div data-gddb-drawer-panel="status-history" class="hidden p-5">
+          <div class="mb-3">
+            <div class="font-bold uppercase text-gray-500">Lịch sử điều chỉnh trạng thái case</div>
+            <div class="mt-1 text-[9px] text-gray-400">Theo dõi các lần chuyển giữa Đã đăng ký và Không đăng ký.</div>
+          </div>
+          <ol class="space-y-3">
+            {% for log in item.case_status_history %}
+            <li class="rounded-xl border border-amber-100 bg-amber-50/50 p-3">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="status-pill {% if log.from_status == 'registered' %}status-registered{% else %}status-not-registered{% endif %}">{% if log.from_status == 'registered' %}Đã đăng ký{% else %}Không đăng ký{% endif %}</span>
+                    <span class="font-bold text-gray-400">→</span>
+                    <span class="status-pill {% if log.to_status == 'registered' %}status-registered{% else %}status-not-registered{% endif %}">{% if log.to_status == 'registered' %}Đã đăng ký{% else %}Không đăng ký{% endif %}</span>
+                  </div>
+                  <div class="mt-2 font-semibold text-gray-800">Lý do điều chỉnh: {{ log.metadata.status_change_reason|default:"-" }}</div>
+                  {% if log.metadata.reason %}<div class="mt-1 text-[9px] text-gray-600">Lý do trạng thái: {{ log.metadata.reason }}</div>{% endif %}
+                  <div class="mt-1 text-[9px] text-gray-500">PosMini: {{ log.metadata.from_postmini_status|default:"Chưa cập nhật" }} → {{ log.metadata.to_postmini_status|default:"Chưa cập nhật" }}</div>
+                  <div class="mt-1 text-[9px] text-gray-500">Thao tác bởi {% if log.created_by %}{{ log.created_by.username }}{% else %}Hệ thống{% endif %}</div>
+                </div>
+                <time class="shrink-0 text-right text-[9px] text-gray-400">{{ log.created_at|date:"d/m/Y H:i:s" }}</time>
+              </div>
+            </li>
+            {% endfor %}
+          </ol>
+        </div>
+        {% endif %}
       </aside>
     </div>
     {% endfor %}
@@ -814,6 +887,22 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           <div data-not-register-panel class="hidden">
             <label class="block"><span class="mb-1 block text-[9px] font-semibold text-red-700">Lý do không đăng ký <strong>*</strong></span><select data-not-register-reason class="field w-full"><option value="">Chọn lý do</option>{% for reason in non_registration_reason_choices %}<option value="{{ reason }}">{{ reason }}</option>{% endfor %}</select></label>
             <div class="mt-2 rounded-lg bg-red-50 p-3 text-[9px] text-red-700">Giao dịch sẽ được đóng khỏi danh sách cần xử lý và không cần cập nhật PosMini.</div>
+          </div>
+          <div data-status-change-reason-wrap class="hidden rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <label class="block"><span class="mb-1 block text-[9px] font-bold text-amber-800">Lý do điều chỉnh trạng thái <strong>*</strong></span><select data-status-change-reason class="field w-full bg-white"><option value="">Chọn lý do điều chỉnh</option>{% for reason in status_change_reason_choices %}<option value="{{ reason }}">{{ reason }}</option>{% endfor %}</select></label>
+            <div class="mt-2 text-[9px] text-amber-700">Lý do, trạng thái trước/sau và người thao tác sẽ được lưu vào lịch sử case.</div>
+          </div>
+          <div data-register-adjustment-fields class="hidden space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <div class="text-[9px] font-bold uppercase tracking-wide text-gray-500">Thông tin điều chỉnh bổ sung</div>
+            <div data-register-postmini-wrap>
+              <div class="mb-2 text-[9px] font-semibold text-gray-700">Trạng thái PosMini</div>
+              <div class="grid gap-2 sm:grid-cols-3">
+                {% for value,label in postmini_status_choices %}
+                <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 bg-white p-2 hover:border-emerald-400"><input type="radio" name="gddb_register_postmini_status" value="{{ value }}" class="h-3.5 w-3.5 accent-emerald-600"><span class="text-[9px] font-semibold text-gray-700">{{ label }}</span></label>
+                {% endfor %}
+              </div>
+            </div>
+            <label class="block"><span class="mb-1 block text-[9px] font-semibold text-gray-600">Ghi chú</span><textarea data-register-note rows="3" maxlength="5000" class="w-full resize-y rounded-xl border border-gray-200 bg-white p-3 text-[10px] text-gray-800 outline-none focus:border-emerald-500" placeholder="Nhập ghi chú nếu có"></textarea></label>
           </div>
         </div>
         <div class="flex flex-col-reverse gap-2 border-t border-gray-100 p-4 sm:flex-row sm:justify-end">
@@ -851,7 +940,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
       <button type="button" class="absolute inset-0 bg-gray-900/40" data-export-close aria-label="Đóng"></button>
       <form method="get" action="{% url 'gddb_export' %}" class="relative z-10 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
         <div class="flex items-start justify-between border-b border-gray-100 p-4">
-          <div><div class="text-[13px] font-bold text-gray-900">Xuất đối soát GDĐB</div><div class="mt-1 text-[9px] text-gray-500">Timeline được tính theo thời gian Checker xác nhận đăng ký.</div></div>
+          <div><div class="text-[13px] font-bold text-gray-900">Xuất đối soát GDĐB</div><div class="mt-1 text-[9px] text-gray-500">Timeline được tính theo thời gian Checker xác nhận đăng ký. File gồm sheet tổng quan SLA và SLA chi tiết từng case.</div></div>
           <button type="button" data-export-close class="rounded-lg p-2 text-lg leading-none text-gray-400 hover:bg-gray-100">×</button>
         </div>
         <div class="space-y-4 p-4">
@@ -1359,11 +1448,11 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
       bulkSelectAll.indeterminate = Boolean(selected.length && !bulkSelectAll.checked);
       bulkSubmit.disabled = selected.length === 0;
       bulkSubmit.className = selected.length
-        ? 'inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-[10px] font-bold text-white hover:bg-emerald-700'
-        : 'inline-flex cursor-not-allowed items-center gap-2 rounded-lg bg-gray-300 px-4 py-2 text-[10px] font-bold text-white';
+        ? 'inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-[10px] font-bold text-white hover:bg-emerald-700'
+        : 'inline-flex h-9 cursor-not-allowed items-center gap-1.5 rounded-lg bg-gray-300 px-3 text-[10px] font-bold text-white';
       bulkSubmitLabel.textContent = selected.length
         ? `Nhận ${selected.length} case`
-        : 'Nhận case đã chọn';
+        : 'Nhận đã chọn';
       bulkLabel.textContent = selected.length
         ? `${selected.length} case · ${selected[0].dataset.bulkGroupLabel}`
         : 'Chọn một case để khóa nhóm batch và nguồn vay.';
@@ -1488,16 +1577,34 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
 
   const registerModal = document.getElementById('gddb-register-modal');
   if (registerModal) {
+    const setConfiguredReason = (select, value) => {
+      select.querySelectorAll('[data-inactive-current-reason]').forEach((option) => option.remove());
+      if (value && !Array.from(select.options).some((option) => option.value === value)) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = `${value} (đã ngừng sử dụng)`;
+        option.dataset.inactiveCurrentReason = '1';
+        select.appendChild(option);
+      }
+      select.value = value || '';
+    };
     const syncRegistrationAction = () => {
       const action = registerModal.querySelector('input[name="gddb_registration_action"]:checked')?.value || 'registered';
+      const originalStatus = registerModal.dataset.originalStatus || 'pending';
+      const isExistingDecision = originalStatus === 'registered' || originalStatus === 'not_registered';
+      const isStatusCorrection = isExistingDecision && action !== originalStatus;
       registerModal.querySelector('[data-register-panel]').classList.toggle('hidden', action !== 'registered');
       registerModal.querySelector('[data-not-register-panel]').classList.toggle('hidden', action !== 'not_registered');
+      registerModal.querySelector('[data-status-change-reason-wrap]').classList.toggle('hidden', !isStatusCorrection);
+      registerModal.querySelector('[data-register-adjustment-fields]').classList.toggle('hidden', !isExistingDecision);
+      registerModal.querySelector('[data-register-postmini-wrap]').classList.toggle('hidden', !isExistingDecision || action !== 'registered');
     };
     registerModal.querySelectorAll('input[name="gddb_registration_action"]').forEach((radio) => radio.addEventListener('change', syncRegistrationAction));
     document.querySelectorAll('[data-register-open]').forEach((button) => {
       button.addEventListener('click', () => {
         registerModal.dataset.registrationId = button.dataset.registrationId;
         registerModal.dataset.updateUrl = button.dataset.updateUrl;
+        registerModal.dataset.originalStatus = button.dataset.currentStatus || 'pending';
         registerModal.querySelector('[data-register-contract]').textContent = button.dataset.contractCode || '';
         registerModal.querySelector('[data-register-shop]').textContent = button.dataset.shopName || '';
         registerModal.querySelectorAll('input[name="gddb_register_identity"]').forEach((radio) => {
@@ -1505,8 +1612,19 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         });
         const currentAction = button.dataset.currentStatus === 'not_registered' ? 'not_registered' : 'registered';
         registerModal.querySelector(`input[name="gddb_registration_action"][value="${currentAction}"]`).checked = true;
-        registerModal.querySelector('[data-register-reason]').value = currentAction === 'registered' ? (button.dataset.currentReason || '') : '';
-        registerModal.querySelector('[data-not-register-reason]').value = currentAction === 'not_registered' ? (button.dataset.currentReason || '') : '';
+        setConfiguredReason(
+          registerModal.querySelector('[data-register-reason]'),
+          currentAction === 'registered' ? (button.dataset.currentReason || '') : '',
+        );
+        setConfiguredReason(
+          registerModal.querySelector('[data-not-register-reason]'),
+          currentAction === 'not_registered' ? (button.dataset.currentReason || '') : '',
+        );
+        registerModal.querySelector('[data-status-change-reason]').value = '';
+        registerModal.querySelector('[data-register-note]').value = button.dataset.currentNote || '';
+        registerModal.querySelectorAll('input[name="gddb_register_postmini_status"]').forEach((radio) => {
+          radio.checked = radio.value === (button.dataset.currentPostmini || 'Chưa cập nhật');
+        });
         syncRegistrationAction();
         registerModal.querySelectorAll('[data-register-identity-option]').forEach((option) => {
           const isSuggested = option.dataset.registerIdentityOption === button.dataset.suggestedIdentityId;
@@ -1520,6 +1638,11 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
       const button = event.currentTarget;
       const action = registerModal.querySelector('input[name="gddb_registration_action"]:checked')?.value || 'registered';
       const selectedIdentity = registerModal.querySelector('input[name="gddb_register_identity"]:checked');
+      const originalStatus = registerModal.dataset.originalStatus || 'pending';
+      const isExistingDecision = originalStatus === 'registered' || originalStatus === 'not_registered';
+      const isStatusCorrection = isExistingDecision && action !== originalStatus;
+      const statusChangeReason = registerModal.querySelector('[data-status-change-reason]').value;
+      const selectedPostmini = registerModal.querySelector('input[name="gddb_register_postmini_status"]:checked');
       const reason = action === 'registered'
         ? registerModal.querySelector('[data-register-reason]').value
         : registerModal.querySelector('[data-not-register-reason]').value;
@@ -1529,6 +1652,14 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
       }
       if (action === 'not_registered' && !reason) {
         showGddbToast('Vui lòng chọn lý do không đăng ký.', false);
+        return;
+      }
+      if (isStatusCorrection && !statusChangeReason) {
+        showGddbToast('Vui lòng chọn lý do điều chỉnh trạng thái.', false);
+        return;
+      }
+      if (isExistingDecision && action === 'registered' && !selectedPostmini) {
+        showGddbToast('Vui lòng chọn trạng thái PosMini.', false);
         return;
       }
       button.disabled = true;
@@ -1541,6 +1672,11 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
             gddb_status: action,
             registered_identity_id: action === 'registered' ? selectedIdentity.value : null,
             reason,
+            status_change_reason: isStatusCorrection ? statusChangeReason : '',
+            postmini_updated: isExistingDecision && action === 'registered'
+              ? selectedPostmini.value
+              : (action === 'not_registered' ? 'Chưa cập nhật' : undefined),
+            note: isExistingDecision ? registerModal.querySelector('[data-register-note]').value : undefined,
           }),
         });
         const data = await response.json();
@@ -1590,6 +1726,21 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         if (drawerReason) drawerReason.textContent = data.reason || '-';
         const drawerPostUpdate = drawer?.querySelector('[data-drawer-post-update]');
         if (drawerPostUpdate) drawerPostUpdate.textContent = data.post_update_status || '-';
+        const postminiIsDone = data.postmini_updated === 'Đã cập nhật' || data.postmini_updated === 'Đã cập nhật 1 dòng';
+        const rowPostminiStatus = row.querySelector('[data-postmini-label]');
+        if (rowPostminiStatus) {
+          rowPostminiStatus.textContent = data.postmini_updated;
+          rowPostminiStatus.classList.toggle('status-registered', postminiIsDone);
+          rowPostminiStatus.classList.toggle('status-pending', !postminiIsDone);
+        }
+        const drawerPostminiStatus = drawer?.querySelector('[data-drawer-postmini]');
+        if (drawerPostminiStatus) {
+          drawerPostminiStatus.textContent = data.postmini_updated;
+          drawerPostminiStatus.classList.toggle('status-registered', postminiIsDone);
+          drawerPostminiStatus.classList.toggle('status-pending', !postminiIsDone);
+        }
+        const drawerNote = drawer?.querySelector('[data-gddb-live-note]');
+        if (drawerNote && typeof data.note === 'string') drawerNote.value = data.note;
         updateGddbDrawerOperator(registerModal.dataset.registrationId, data.updated_by_username);
         const drawerRegisteredAt = drawer?.querySelector('[data-drawer-registered-at]');
         if (drawerRegisteredAt && data.registered_at && action === 'registered') {
@@ -1607,13 +1758,19 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           registerButton.dataset.currentStatus = data.gddb_status;
           registerButton.dataset.currentReason = data.reason || '';
           registerButton.dataset.currentIdentityId = data.registered_identity_id || '';
+          registerButton.dataset.currentPostmini = data.postmini_updated || 'Chưa cập nhật';
+          registerButton.dataset.currentNote = data.note || '';
           setRegisterButtonAsEdit(registerButton);
         }
         if (action === 'registered') {
           if (postminiButton) {
             postminiButton.disabled = false;
-            postminiButton.classList.remove('cursor-not-allowed', 'bg-gray-300');
-            postminiButton.classList.add('bg-amber-500', 'text-white', 'ring-2', 'ring-amber-200', 'hover:bg-amber-600');
+            postminiButton.dataset.currentPostmini = data.postmini_updated || 'Chưa cập nhật';
+            postminiButton.dataset.currentNote = data.note || '';
+            postminiButton.className = postminiIsDone
+              ? 'rounded-lg border border-gray-200 bg-white px-3 py-2 font-bold text-gray-700 hover:bg-gray-50'
+              : 'rounded-lg bg-amber-500 px-3 py-2 font-bold text-white ring-2 ring-amber-200 hover:bg-amber-600';
+            postminiButton.textContent = postminiIsDone ? 'Cập nhật lại PosMini' : 'Cập nhật PosMini';
           }
         } else {
           if (postminiButton) {
@@ -1622,6 +1779,11 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           }
         }
         setGddbModalOpen(registerModal, false);
+        if (data.status_history_changed) {
+          showGddbToast('Đã điều chỉnh trạng thái và lưu lịch sử case.', true);
+          window.setTimeout(() => window.location.reload(), 700);
+          return;
+        }
         if (action === 'registered') {
           if (previousCaseStatus === 'pending') {
             adjustGddbCounter('pending', -1);
@@ -1632,7 +1794,12 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
             if (claimWasActive) adjustGddbCounter('held', -1);
             if (!claimWasActive) adjustGddbCounter('unassigned', -1);
           }
-          showGddbToast('Đã xác nhận đăng ký GDĐB. Tiếp tục cập nhật PosMini.', true);
+          showGddbToast(
+            data.archived
+              ? 'Đã cập nhật đăng ký và PosMini. Case đã hoàn tất.'
+              : 'Đã xác nhận đăng ký GDĐB. Tiếp tục cập nhật PosMini.',
+            true
+          );
           if (currentMineStep === 'registration') {
             requestAnimationFrame(() => {
               row.classList.add('gddb-row-archive-out');

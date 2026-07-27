@@ -96,6 +96,7 @@ urlpatterns = [
     path('giao-dich-dam-bao/tokens/create/', views.gddb_token_create_view, name='gddb_token_create'),
     path('giao-dich-dam-bao/tokens/<int:token_id>/revoke/', views.gddb_token_revoke_view, name='gddb_token_revoke'),
     path('giao-dich-dam-bao/identities/create/', views.gddb_identity_create_view, name='gddb_identity_create'),
+    path('giao-dich-dam-bao/reasons/save/', views.gddb_reason_save_view, name='gddb_reason_save'),
     path('giao-dich-dam-bao/configuration/save/', views.gddb_configuration_save_view, name='gddb_configuration_save'),
     path('giao-dich-dam-bao/configuration/export/', views.gddb_shop_mapping_export_view, name='gddb_shop_mapping_export'),
     path('giao-dich-dam-bao/configuration/import/', views.gddb_shop_mapping_import_view, name='gddb_shop_mapping_import'),

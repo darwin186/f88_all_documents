@@ -25,6 +25,8 @@ from .models import (
     CollateralRegistrationExternalIdentity,
     CollateralRegistrationImportBatch,
     CollateralRegistrationLog,
+    CollateralRegistrationHoliday,
+    CollateralRegistrationReason,
     ExternalDocumentIntakeToken,
     ExternalDocumentIntakeBatch,
     ExternalDocumentIntakeChunk,
@@ -237,6 +239,34 @@ class CollateralRegistrationLogAdmin(admin.ModelAdmin):
     list_select_related = ('registration', 'created_by')
     list_per_page = 50
 admin.site.register(CollateralRegistrationLog, CollateralRegistrationLogAdmin)
+
+
+@admin.register(CollateralRegistrationReason)
+class CollateralRegistrationReasonAdmin(admin.ModelAdmin):
+    list_display = (
+        "reason_text",
+        "reason_type",
+        "sort_order",
+        "is_active",
+        "updated_at",
+        "updated_by",
+    )
+    list_display_links = ("reason_text",)
+    list_editable = ("sort_order", "is_active")
+    list_filter = ("reason_type", "is_active")
+    search_fields = ("reason_text",)
+    ordering = ("reason_type", "sort_order", "reason_text")
+    readonly_fields = ("created_at", "updated_at", "created_by", "updated_by")
+    list_per_page = 50
+
+    def save_model(self, request, obj, form, change):
+        if not obj.created_by_id:
+            obj.created_by = request.user
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 class FolderIssueTypeAdmin(admin.ModelAdmin):
@@ -561,6 +591,28 @@ class ChangeRequestAdmin(admin.ModelAdmin):
         
     approve_change_request.short_description = "Reset Default Choices requests"
 admin.site.register(ChangeRequest, ChangeRequestAdmin)
+
+
+@admin.register(CollateralRegistrationHoliday)
+class CollateralRegistrationHolidayAdmin(admin.ModelAdmin):
+    list_display = (
+        "holiday_date",
+        "holiday_name",
+        "is_active",
+        "updated_at",
+        "updated_by",
+    )
+    list_filter = ("is_active", "holiday_date")
+    search_fields = ("holiday_name", "note")
+    date_hierarchy = "holiday_date"
+    ordering = ("holiday_date",)
+    list_per_page = 50
+
+    def save_model(self, request, obj, form, change):
+        if not obj.created_by_id:
+            obj.created_by = request.user
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(ExternalDocumentIntakeToken)

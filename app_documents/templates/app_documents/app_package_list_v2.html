@@ -114,10 +114,39 @@
 
 <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl-max-w-[1600px] mx-auto space-y-6 px-2 lg:px-3 pt-8">
   <div id="package-list-app" class="space-y-6"></div>
+  {% if page_obj.paginator.num_pages > 1 %}
+  <nav class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm" aria-label="Phân trang danh sách thùng">
+    <span class="text-[10px] text-gray-500">
+      Hiển thị {{ page_obj.start_index }}–{{ page_obj.end_index }} / {{ page_obj.paginator.count }} thùng
+    </span>
+    <div class="flex items-center gap-1">
+      {% if page_obj.has_previous %}
+      <a href="?{{ pagination_query_prefix }}page=1" class="inline-flex h-8 items-center rounded-lg border border-gray-200 px-2.5 text-[10px] font-semibold text-gray-600 hover:border-emerald-300 hover:text-emerald-700">« Đầu</a>
+      <a href="?{{ pagination_query_prefix }}page={{ page_obj.previous_page_number }}" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-[10px] font-semibold text-gray-600 hover:border-emerald-300 hover:text-emerald-700">‹</a>
+      {% endif %}
+      {% for page_number in pagination_items %}
+        {% if page_number %}
+          {% if page_number == page_obj.number %}
+          <span class="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-emerald-600 px-2 text-[10px] font-bold text-white">{{ page_number }}</span>
+          {% else %}
+          <a href="?{{ pagination_query_prefix }}page={{ page_number }}" class="inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-gray-200 px-2 text-[10px] font-semibold text-gray-600 hover:border-emerald-300 hover:text-emerald-700">{{ page_number }}</a>
+          {% endif %}
+        {% else %}
+        <span class="px-1 text-[10px] text-gray-400">…</span>
+        {% endif %}
+      {% endfor %}
+      {% if page_obj.has_next %}
+      <a href="?{{ pagination_query_prefix }}page={{ page_obj.next_page_number }}" class="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-[10px] font-semibold text-gray-600 hover:border-emerald-300 hover:text-emerald-700">›</a>
+      <a href="?{{ pagination_query_prefix }}page={{ page_obj.paginator.num_pages }}" class="inline-flex h-8 items-center rounded-lg border border-gray-200 px-2.5 text-[10px] font-semibold text-gray-600 hover:border-emerald-300 hover:text-emerald-700">Cuối »</a>
+      {% endif %}
+    </div>
+  </nav>
+  {% endif %}
 </div>
 
 <script type="application/json" id="packages-data">{{ packages_json|safe }}</script>
 <script type="application/json" id="package-filters">{{ filters_json|safe }}</script>
+<script type="application/json" id="package-pagination">{{ pagination_json|safe }}</script>
 <script type="application/json" id="status-options">{{ status_options_json|safe }}</script>
 <script type="application/json" id="partners-options">{{ partners_options_json|safe }}</script>
 <script type="application/json" id="regions-options">{{ region_options_json|safe }}</script>
@@ -154,6 +183,7 @@
 
   const packagesData = JSON.parse(document.getElementById('packages-data')?.textContent || '[]');
   const filterDefaults = JSON.parse(document.getElementById('package-filters')?.textContent || '{}');
+  const paginationData = JSON.parse(document.getElementById('package-pagination')?.textContent || '{}');
   const statusOptions = JSON.parse(document.getElementById('status-options')?.textContent || '[]');
   const partnersOptions = JSON.parse(document.getElementById('partners-options')?.textContent || '[]');
   const regionsOptions = JSON.parse(document.getElementById('regions-options')?.textContent || '[]');
@@ -888,7 +918,7 @@
           ) : (
             <div className="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-x-auto">
               <div className="flex justify-between items-center px-3 py-2 text-[10px] text-gray-600">
-                <span>Tổng thùng: {filtered.length}</span>
+                <span>Tổng thùng: {paginationData.total ?? filtered.length}</span>
               </div>
               <table className="min-w-full text-[10px]">
                 <thead className="bg-gray-50 text-left text-[10px] font-semibold text-gray-600">
@@ -908,7 +938,7 @@
                 <tbody className="divide-y divide-gray-100">
                   {visiblePackages.length ? visiblePackages.map((pkg, idx) => (
                     <tr key={pkg.id} className={`cursor-pointer hover:bg-gray-50 ${selectedId === pkg.id ? 'bg-emerald-50' : ''}`} onClick={() => handleSelectCard(pkg.id)}>
-                      <td className="px-3 py-2 text-[10px] text-gray-700">{idx + 1}</td>
+                      <td className="px-3 py-2 text-[10px] text-gray-700">{(paginationData.startIndex || 1) + idx}</td>
                       <td className="px-3 py-2 font-semibold text-gray-900 text-[10px]">{pkg.packageCode}</td>
                       <td className="px-3 py-2 text-[10px] text-gray-700">{pkg.partnerPackageCode || '---'}</td>
                       <td className="px-3 py-2 text-[10px] text-gray-700">{pkg.partnerName || 'Chưa có đối tác'}</td>

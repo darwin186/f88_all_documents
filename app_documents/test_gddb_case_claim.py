@@ -11,6 +11,8 @@ from .models import (
     CollateralRegistrationExternalIdentity,
     CollateralRegistrationImportBatch,
     CollateralRegistrationLog,
+    CollateralRegistrationReason,
+    CollateralRegistrationReasonType,
     CollateralRegistrationStatus,
     UserProfile,
 )
@@ -105,8 +107,244 @@ class CollateralRegistrationCaseClaimTests(TestCase):
         owner_edit_response = self._post(self.checker_one, update_url, {
             "gddb_status": CollateralRegistrationStatus.NOT_REGISTERED,
             "reason": "Hợp đồng hết hiệu lực",
+            "status_change_reason": "Thao tác nhầm",
         })
         self.assertEqual(owner_edit_response.status_code, 200)
+
+    def test_admin_configured_reason_is_used_by_popup_and_api(self):
+        custom_reason = CollateralRegistrationReason.objects.create(
+            reason_type=CollateralRegistrationReasonType.REGISTRATION,
+            reason_text="Đăng ký theo yêu cầu kiểm soát",
+            sort_order=5,
+            created_by=self.admin,
+            updated_by=self.admin,
+        )
+        client = Client()
+        client.force_login(self.checker_one)
+        page_response = client.get(reverse("gddb_registration_v2"))
+        self.assertContains(page_response, custom_reason.reason_text)
+
+        self._post(
+            self.checker_one,
+            reverse("api_gddb_case_claim", args=[self.registration.pk]),
+            {"action": "claim"},
+        )
+        update_response = self._post(
+            self.checker_one,
+            reverse("api_gddb_update", args=[self.registration.pk]),
+            {
+                "gddb_status": CollateralRegistrationStatus.REGISTERED,
+                "registered_identity_id": self.identity.pk,
+                "reason": custom_reason.reason_text,
+            },
+        )
+        self.assertEqual(update_response.status_code, 200)
+        self.registration.refresh_from_db()
+        self.assertEqual(self.registration.reason, custom_reason.reason_text)
+
+    def test_application_admin_can_create_and_disable_reason_catalog_item(self):
+        client = Client()
+        client.force_login(self.admin)
+        create_response = client.post(
+            reverse("gddb_reason_save"),
+            {
+                "reason_type": CollateralRegistrationReasonType.STATUS_CHANGE,
+                "reason_text": "Điều chỉnh theo kiểm soát nội bộ",
+                "sort_order": "15",
+            },
+        )
+        self.assertEqual(create_response.status_code, 302)
+        reason = CollateralRegistrationReason.objects.get(
+            reason_type=CollateralRegistrationReasonType.STATUS_CHANGE,
+            reason_text="Điều chỉnh theo kiểm soát nội bộ",
+        )
+        self.assertTrue(reason.is_active)
+        self.assertEqual(reason.sort_order, 15)
+        self.assertEqual(reason.created_by, self.admin)
+
+        update_response = client.post(
+            reverse("gddb_reason_save"),
+            {
+                "reason_id": reason.pk,
+                "sort_order": "25",
+            },
+        )
+        self.assertEqual(update_response.status_code, 302)
+        reason.refresh_from_db()
+        self.assertFalse(reason.is_active)
+        self.assertEqual(reason.sort_order, 25)
+        self.assertEqual(reason.updated_by, self.admin)
+
+        config_response = client.get(
+            reverse("gddb_registration_v2"),
+            {"tab": "configuration"},
+        )
+        self.assertContains(config_response, "Danh mục lý do GDĐB")
+        self.assertContains(config_response, reason.reason_text)
+
+        checker_client = Client()
+        checker_client.force_login(self.checker_one)
+        denied_response = checker_client.post(
+            reverse("gddb_reason_save"),
+            {
+                "reason_type": CollateralRegistrationReasonType.REGISTRATION,
+                "reason_text": "Không được tạo",
+            },
+        )
+        self.assertEqual(denied_response.status_code, 403)
+
+    def test_inactive_reason_is_hidden_and_rejected_for_new_decision(self):
+        reason = CollateralRegistrationReason.objects.get(
+            reason_type=CollateralRegistrationReasonType.NON_REGISTRATION,
+            reason_text="Hợp đồng hết hiệu lực",
+        )
+        reason.is_active = False
+        reason.save(update_fields=["is_active"])
+
+        client = Client()
+        client.force_login(self.checker_one)
+        page_response = client.get(reverse("gddb_registration_v2"))
+        self.assertNotContains(page_response, ">Hợp đồng hết hiệu lực</option>")
+
+        self._post(
+            self.checker_one,
+            reverse("api_gddb_case_claim", args=[self.registration.pk]),
+            {"action": "claim"},
+        )
+        update_response = self._post(
+            self.checker_one,
+            reverse("api_gddb_update", args=[self.registration.pk]),
+            {
+                "gddb_status": CollateralRegistrationStatus.NOT_REGISTERED,
+                "reason": reason.reason_text,
+            },
+        )
+        self.assertEqual(update_response.status_code, 400)
+        self.assertIn("lý do không đăng ký", update_response.json()["error"])
+
+    def test_status_correction_requires_a_tracked_reason(self):
+        claim_url = reverse("api_gddb_case_claim", args=[self.registration.pk])
+        update_url = reverse("api_gddb_update", args=[self.registration.pk])
+        self._post(self.checker_one, claim_url, {"action": "claim"})
+        self._post(self.checker_one, update_url, {
+            "gddb_status": CollateralRegistrationStatus.REGISTERED,
+            "registered_identity_id": self.identity.pk,
+            "reason": "Đăng ký mới",
+        })
+
+        response = self._post(self.checker_one, update_url, {
+            "gddb_status": CollateralRegistrationStatus.NOT_REGISTERED,
+            "reason": "Hợp đồng hết hiệu lực",
+        })
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("lý do điều chỉnh", response.json()["error"])
+        self.registration.refresh_from_db()
+        self.assertEqual(
+            self.registration.gddb_status,
+            CollateralRegistrationStatus.REGISTERED,
+        )
+
+    def test_status_correction_is_logged_and_visible_in_case_history(self):
+        claim_url = reverse("api_gddb_case_claim", args=[self.registration.pk])
+        update_url = reverse("api_gddb_update", args=[self.registration.pk])
+        self._post(self.checker_one, claim_url, {"action": "claim"})
+        self._post(self.checker_one, update_url, {
+            "gddb_status": CollateralRegistrationStatus.REGISTERED,
+            "registered_identity_id": self.identity.pk,
+            "reason": "Đăng ký mới",
+        })
+
+        response = self._post(self.checker_one, update_url, {
+            "gddb_status": CollateralRegistrationStatus.NOT_REGISTERED,
+            "reason": "Hợp đồng hết hiệu lực",
+            "status_change_reason": "TDTD/VH yêu cầu đăng ký bổ sung",
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["status_history_changed"])
+        correction_log = CollateralRegistrationLog.objects.get(
+            registration=self.registration,
+            action="status_update",
+            from_status=CollateralRegistrationStatus.REGISTERED,
+            to_status=CollateralRegistrationStatus.NOT_REGISTERED,
+        )
+        self.assertEqual(
+            correction_log.metadata["status_change_reason"],
+            "TDTD/VH yêu cầu đăng ký bổ sung",
+        )
+        self.assertEqual(correction_log.created_by, self.checker_one)
+
+        client = Client()
+        client.force_login(self.checker_one)
+        history_response = client.get(
+            reverse("gddb_registration_v2"),
+            {"queue": "mine", "mine_step": "registered_history"},
+        )
+        history_item = next(
+            item
+            for item in history_response.context["page_obj"].object_list
+            if item.pk == self.registration.pk
+        )
+        self.assertEqual(len(history_item.case_status_history), 1)
+        self.assertContains(history_response, "Lịch sử trạng thái case")
+        self.assertContains(
+            history_response,
+            "TDTD/VH yêu cầu đăng ký bổ sung",
+        )
+        self.assertContains(history_response, "data-status-change-reason")
+        self.assertContains(
+            history_response,
+            'name="gddb_register_postmini_status"',
+        )
+
+    def test_gear_update_can_restore_registration_and_update_postmini(self):
+        CollateralRegistration.objects.filter(pk=self.registration.pk).update(
+            gddb_status=CollateralRegistrationStatus.NOT_REGISTERED,
+            reason="Hợp đồng hết hiệu lực",
+            processing_by=self.checker_one,
+            archived_at=timezone.now(),
+        )
+
+        response = self._post(
+            self.checker_one,
+            reverse("api_gddb_update", args=[self.registration.pk]),
+            {
+                "gddb_status": CollateralRegistrationStatus.REGISTERED,
+                "registered_identity_id": self.identity.pk,
+                "reason": "Đăng ký lại",
+                "status_change_reason": "Điều chỉnh GDBD",
+                "postmini_updated": "Đã cập nhật",
+                "note": "Điều chỉnh đầy đủ trong răng cưa",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["archived"])
+        self.registration.refresh_from_db()
+        self.assertEqual(
+            self.registration.gddb_status,
+            CollateralRegistrationStatus.REGISTERED,
+        )
+        self.assertEqual(self.registration.postmini_updated, "Đã cập nhật")
+        self.assertEqual(
+            self.registration.note,
+            "Điều chỉnh đầy đủ trong răng cưa",
+        )
+        correction_log = CollateralRegistrationLog.objects.get(
+            registration=self.registration,
+            action="status_update",
+            from_status=CollateralRegistrationStatus.NOT_REGISTERED,
+            to_status=CollateralRegistrationStatus.REGISTERED,
+        )
+        self.assertEqual(
+            correction_log.metadata["from_postmini_status"],
+            "Chưa cập nhật",
+        )
+        self.assertEqual(
+            correction_log.metadata["to_postmini_status"],
+            "Đã cập nhật",
+        )
 
     def test_expired_pending_claim_can_be_taken_over(self):
         claim_url = reverse("api_gddb_case_claim", args=[self.registration.pk])
