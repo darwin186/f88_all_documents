@@ -1856,9 +1856,14 @@ class FoldersTransactionReceiving(models.Model):
 
  
 
- # Lịch sử luân chuyển Thùng - chứng từ
+class PackageHistoryAction(models.TextChoices):
+    ASSIGNED = "assigned", "Gán thùng"
+    UNASSIGNED = "unassigned", "Gỡ thùng"
 
-class PackageDocumentHistory(models.Model): 
+
+# Lịch sử luân chuyển Thùng - chứng từ
+
+class PackageDocumentHistory(models.Model):
 
     trans_id = models.AutoField(primary_key=True)
 
@@ -1869,6 +1874,13 @@ class PackageDocumentHistory(models.Model):
     trans_created_date = models.DateTimeField(auto_now_add=True, null= True) 
 
     trans_created_by = models.ForeignKey(User, db_column='trans_created_by',related_name='documentpackage_created_transactions', on_delete=models.CASCADE, null= True)
+
+    action = models.CharField(
+        max_length=20,
+        choices=PackageHistoryAction.choices,
+        default=PackageHistoryAction.ASSIGNED,
+        db_index=True,
+    )
 
     
 
@@ -1891,6 +1903,13 @@ class PackageFolderHistory(models.Model):
     trans_created_date = models.DateTimeField(auto_now_add=True, null= True) 
 
     trans_created_by = models.ForeignKey(User, db_column='trans_created_by', related_name='folderpackage_created_transactions', on_delete=models.CASCADE, null= True)
+
+    action = models.CharField(
+        max_length=20,
+        choices=PackageHistoryAction.choices,
+        default=PackageHistoryAction.ASSIGNED,
+        db_index=True,
+    )
 
 
 

@@ -31,6 +31,7 @@ import re
 import logging
 import os
 import secrets
+import unicodedata
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
@@ -62,6 +63,7 @@ from .models import (
     CheckingAdditional, 
     DocumentStatus,
     PackageDocumentHistory,
+    PackageHistoryAction,
     FolderStatus,
     Folder,
     PackageFolderHistory,
@@ -4578,8 +4580,9 @@ def fetch_history_receiving_v2(request, folder_id):
         package_history = PackageFolderHistory.objects.filter(folder_id=folder_id).values(
             'trans_created_date',
             'trans_created_by__username',
-            'package_id__package_code'
-        )
+            'package_id__package_code',
+            'action',
+        ).order_by('-trans_created_date')
         return JsonResponse({
             'folder_history': list(folder_history),
             'package_history': list(package_history),
@@ -5881,29 +5884,154 @@ def clear_package_view(request, folder_id):
     Ngày gán quyển chứng từ trong bảng TransactionReceiving 
     ''' 
     if request.method == 'POST':
-        data = json.loads(request.body)
-        package_id = data.get('package_id_submit')
-        if package_id:
-            today = timezone.now().date() 
-            # Kiểm tra trong quyển chứng từ đã được duyệt chưa? 
-            if DocumentsDetail.objects.filter(folder_id=folder_id,document_status_id__documents_status_code = '102').exists(): 
-                return JsonResponse({'success': False, 'message': 'Quyển chứng từ đã có chứng từ được duyệt, Không được gỡ thùng khỏi quyển chứng từ.'})
-            # Kiểm tra ngày gán thùng lớn nhất vào quyển chứng từ 
-            if FoldersTransactionReceiving.objects.filter(folder_id=folder_id, trans_created_date__date = today).exists(): 
-                Folder.objects.filter(folder_id=folder_id).update(package_id=None)
-                DocumentsDetail.objects.filter(folder_id=folder_id).update(package_id=None)
-                Folder.objects.filter(folder_id=folder_id).update(
-                        lastest_received_date=None
-                    ,   lastest_received_by=None
-                    ,   folder_status_id= FolderStatus.objects.get( is_not_received_yet = True )
-                    ,   is_on_time = None 
-                    ,   is_late = None 
-                    ,   note = None)
-                return JsonResponse({'success': True, 'message': 'Xóa thùng thành công.'})
-            else:
-                return JsonResponse({'success': False, 'message': 'Đã quá thời hạn xóa thùng. Liên hệ admin'})
-        else:
-            return JsonResponse({'success': False, 'message': 'Không tìm thấy thùng cần xóa.'})
+        try:
+            data = json.loads(request.body.decode() or "{}")
+        except json.JSONDecodeError:
+            return JsonResponse(
+                {'success': False, 'message': 'Dữ liệu gỡ thùng không hợp lệ.'},
+                status=400,
+            )
+        submitted_package_id = str(data.get('package_id_submit') or '').strip()
+        if not submitted_package_id.isdigit():
+            return JsonResponse(
+                {'success': False, 'message': 'Không tìm thấy thùng cần gỡ.'},
+                status=400,
+            )
+
+        action_time = timezone.now()
+        try:
+            with transaction.atomic():
+                folder = Folder.objects.select_for_update().get(folder_id=folder_id)
+                old_package_id = folder.package_id_id
+                if not old_package_id:
+                    return JsonResponse(
+                        {'success': False, 'message': 'Quyển hiện không được gán thùng.'},
+                        status=409,
+                    )
+                if old_package_id != int(submitted_package_id):
+                    return JsonResponse(
+                        {
+                            'success': False,
+                            'message': 'Thùng của quyển đã thay đổi. Vui lòng tải lại dữ liệu.',
+                        },
+                        status=409,
+                    )
+                old_package = Package.objects.get(package_id=old_package_id)
+
+                documents = list(
+                    DocumentsDetail.objects.select_for_update()
+                    .filter(folder_id=folder_id)
+                )
+                document_ids = [document.documents_id for document in documents]
+                if DocumentsDetail.objects.filter(
+                    documents_id__in=document_ids,
+                    document_status_id__documents_status_code='102',
+                ).exists():
+                    return JsonResponse(
+                        {
+                            'success': False,
+                            'message': 'Quyển chứng từ đã có chứng từ được duyệt, không được gỡ thùng khỏi quyển.',
+                        },
+                        status=409,
+                    )
+
+                if not FoldersTransactionReceiving.objects.filter(
+                    folder_id=folder_id,
+                    trans_created_date__date=action_time.date(),
+                ).exists():
+                    return JsonResponse(
+                        {
+                            'success': False,
+                            'message': 'Đã quá thời hạn gỡ thùng. Liên hệ Admin.',
+                        },
+                        status=409,
+                    )
+
+                not_received_status = FolderStatus.objects.filter(
+                    is_not_received_yet=True,
+                    is_valid=True,
+                ).order_by('folder_status_id').first()
+                if not not_received_status:
+                    return JsonResponse(
+                        {
+                            'success': False,
+                            'message': 'Chưa cấu hình trạng thái chưa nhận hợp lệ.',
+                        },
+                        status=409,
+                    )
+
+                PackageFolderHistory.objects.create(
+                    folder_id=folder,
+                    package_id=old_package,
+                    action=PackageHistoryAction.UNASSIGNED,
+                    trans_created_date=action_time,
+                    trans_created_by=request.user,
+                )
+
+                changed_documents = []
+                document_history_entries = []
+                document_packages = Package.objects.in_bulk(
+                    {
+                        document.package_id_id
+                        for document in documents
+                        if document.package_id_id
+                    }
+                )
+                for document in documents:
+                    document_package = document_packages.get(document.package_id_id)
+                    if document_package:
+                        document_history_entries.append(PackageDocumentHistory(
+                            document_id=document,
+                            package_id=document_package,
+                            action=PackageHistoryAction.UNASSIGNED,
+                            trans_created_date=action_time,
+                            trans_created_by=request.user,
+                        ))
+                        document.package_id = None
+                        changed_documents.append(document)
+                if document_history_entries:
+                    PackageDocumentHistory.objects.bulk_create(document_history_entries)
+                if changed_documents:
+                    DocumentsDetail.objects.bulk_update(
+                        changed_documents,
+                        ['package_id'],
+                    )
+
+                folder.package_id = None
+                folder.lastest_received_date = None
+                folder.lastest_received_by = None
+                folder.folder_status_id = not_received_status
+                folder.is_on_time = None
+                folder.is_late = None
+                folder.note = None
+                folder.save(update_fields=[
+                    'package_id',
+                    'lastest_received_date',
+                    'lastest_received_by',
+                    'folder_status_id',
+                    'is_on_time',
+                    'is_late',
+                    'note',
+                ])
+                FoldersTransactionReceiving.objects.create(
+                    folder_id=folder,
+                    trans_updated_date=action_time,
+                    trans_created_by=request.user,
+                    folder_status_id=not_received_status,
+                )
+        except Folder.DoesNotExist:
+            return JsonResponse(
+                {'success': False, 'message': 'Không tìm thấy quyển chứng từ.'},
+                status=404,
+            )
+        return JsonResponse({
+            'success': True,
+            'message': f'Đã gỡ thùng {old_package.package_code} khỏi quyển.',
+            'action': PackageHistoryAction.UNASSIGNED,
+            'package_code': old_package.package_code,
+            'action_by': request.user.username,
+            'action_at': action_time,
+        }, encoder=DjangoJSONEncoder)
     return JsonResponse({'success': False, 'message': 'Invalid request.'})
 
 # View kiểm tra thùng F88
@@ -5984,6 +6112,12 @@ def _normalize_col_name(value):
     if value is None:
         return ""
     text = str(value).strip().lower()
+    text = "".join(
+        char
+        for char in unicodedata.normalize("NFKD", text)
+        if not unicodedata.combining(char)
+    )
+    text = text.replace("đ", "d")
     text = re.sub(r"\s+", "_", text)
     return text
 
@@ -5994,9 +6128,13 @@ def _base_col_name(value):
 
 
 def _pick_date_columns(columns):
-    day_cols = [c for c in columns if _base_col_name(c) in ("ngay", "ngày", "day")]
-    month_cols = [c for c in columns if _base_col_name(c) in ("thang", "tháng", "month")]
-    year_cols = [c for c in columns if _base_col_name(c) in ("nam", "năm", "year")]
+    def _is_date_part(column, names):
+        base = _base_col_name(column)
+        return base in names or base.split("_")[-1] in names
+
+    day_cols = [c for c in columns if _is_date_part(c, ("ngay", "day"))]
+    month_cols = [c for c in columns if _is_date_part(c, ("thang", "month"))]
+    year_cols = [c for c in columns if _is_date_part(c, ("nam", "year"))]
 
     def _pick_by_hint(cols, hint):
         for col in cols:
@@ -6525,13 +6663,56 @@ def package_bulk_save(request):
 
 
 def _load_receiving_import_df(file):
-    try:
-        df = pd.read_excel(file, header=1)
-    except Exception:
-        df = pd.read_excel(file)
+    file.seek(0)
+    payload = file.read()
+    candidates = []
+    errors = []
+
+    for header_row in (1, 0):
+        try:
+            candidate = pd.read_excel(BytesIO(payload), header=header_row)
+        except Exception as exc:
+            errors.append(exc)
+            continue
+
+        columns = list(candidate.columns)
+        date_columns = _pick_date_columns(columns)
+        recognized_bases = {
+            _base_col_name(column)
+            for column in columns
+        }
+        identifying_columns = (
+            "pgd",
+            "phong_giao_dich",
+            "phong_giaodich",
+            "folder_type",
+            "foldertype",
+            "folder_type_code",
+            "foldertype_code",
+            "ma_thung_f88",
+            "ma_thung",
+            "package_code",
+            "nhan_su",
+            "username",
+            "nhan_vien",
+        )
+        score = sum(bool(value) for value in date_columns.values())
+        score += sum(name in recognized_bases for name in identifying_columns)
+        candidates.append((score, len(candidate.index), -header_row, candidate))
+
+    if not candidates:
+        raise ValidationError(f"Không đọc được file Excel: {errors[-1]}")
+
+    _, _, _, df = max(candidates, key=lambda item: item[:3])
     if df is None or df.empty:
         raise ValidationError("File không có dữ liệu.")
     return df
+
+
+def _receiving_import_error_message(exc):
+    if isinstance(exc, ValidationError) and exc.messages:
+        return exc.messages[0]
+    return str(exc)
 
 
 @login_required
@@ -6554,7 +6735,14 @@ def receiving_import_validate(request):
         df = _load_receiving_import_df(file)
         result_rows, _, _ = _validate_offline_receiving(df, request.user, upload_filename=file.name)
     except Exception as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
+        error_message = _receiving_import_error_message(exc)
+        logger.warning(
+            "receiving_import_validate rejected file=%s size=%s error=%s",
+            file.name,
+            file.size,
+            error_message,
+        )
+        return JsonResponse({"error": error_message}, status=400)
 
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -6581,7 +6769,14 @@ def receiving_import_save(request):
         df = _load_receiving_import_df(file)
         result_rows, valid_rows, status_received = _validate_offline_receiving(df, request.user, upload_filename=file.name)
     except Exception as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
+        error_message = _receiving_import_error_message(exc)
+        logger.warning(
+            "receiving_import_save rejected file=%s size=%s error=%s",
+            file.name,
+            file.size,
+            error_message,
+        )
+        return JsonResponse({"error": error_message}, status=400)
 
     invalid_count = len([r for r in result_rows if r["status"] == "invalid"])
     if invalid_count > 0:

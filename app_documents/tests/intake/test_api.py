@@ -3,8 +3,8 @@ import hashlib
 from django.contrib.auth.models import User
 from django.test import TestCase
 
-from .document_intake import process_batch
-from .models import (
+from app_documents.document_intake import process_batch
+from app_documents.models import (
     AreaManager, BusinessType, DocumentType, ExternalDocumentIntakeBatch,
     ExternalDocumentIntakeToken, Folder, FolderGroup, FolderStatus, FolderType,
     Manager, Region, RegionManager, Shop,

@@ -1,0 +1,1 @@
+"""Collateral-registration (GDDB) tests."""

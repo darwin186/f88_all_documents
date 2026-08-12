@@ -6,7 +6,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import (
+from app_documents.models import (
     CollateralRegistration,
     CollateralRegistrationExternalIdentity,
     CollateralRegistrationImportBatch,

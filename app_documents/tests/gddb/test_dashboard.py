@@ -7,9 +7,9 @@ from django.urls import reverse
 from django.utils import timezone
 from openpyxl import load_workbook
 
-from .gddb import import_collateral_registrations
-from .gddb_dashboard import calculate_sla_due_at
-from .models import (
+from app_documents.gddb import import_collateral_registrations
+from app_documents.gddb_dashboard import calculate_sla_due_at
+from app_documents.models import (
     CollateralRegistration,
     CollateralRegistrationHoliday,
     CollateralRegistrationImportBatch,

@@ -1,7 +1,7 @@
 from django.test import TestCase
 
-from .gddb import import_collateral_registrations
-from .models import CollateralRegistration
+from app_documents.gddb import import_collateral_registrations
+from app_documents.models import CollateralRegistration
 
 
 class CollateralRegistrationContractDedupeTests(TestCase):

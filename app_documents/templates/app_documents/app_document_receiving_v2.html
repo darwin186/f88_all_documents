@@ -464,7 +464,7 @@
         <ul id="drawer-history-folder-list" class="space-y-2"></ul>
       </div>
       <div>
-        <p class="text-[9px] font-semibold text-gray-600 mb-2">Lịch sử gán thùng</p>
+        <p class="text-[9px] font-semibold text-gray-600 mb-2">Lịch sử thùng</p>
         <div id="drawer-history-package-empty" class="text-[9px] text-gray-500">Chưa có lịch sử.</div>
         <ul id="drawer-history-package-list" class="space-y-2"></ul>
       </div>
@@ -911,7 +911,7 @@
 
       historyPackageList.innerHTML = '';
       if (!packageHistory.length) {
-        historyPackageEmpty.textContent = 'Chưa có lịch sử gán thùng.';
+        historyPackageEmpty.textContent = 'Chưa có lịch sử thùng.';
         historyPackageEmpty.classList.remove('hidden');
       } else {
         historyPackageEmpty.classList.add('hidden');
@@ -921,7 +921,14 @@
           const pkgCode = item.package_id__package_code || '';
           const userName = item.trans_created_by__username || '';
           const dateStr = formatDateTime(item.trans_created_date);
-          li.innerHTML = `<div class="font-semibold text-gray-900">${pkgCode}</div><div class="text-gray-500">${userName} • ${dateStr}</div>`;
+          const isUnassigned = item.action === 'unassigned';
+          const actionLine = document.createElement('div');
+          actionLine.className = `font-semibold ${isUnassigned ? 'text-red-700' : 'text-emerald-700'}`;
+          actionLine.textContent = `${isUnassigned ? 'Gỡ thùng' : 'Gán thùng'} · ${pkgCode}`;
+          const metaLine = document.createElement('div');
+          metaLine.className = 'text-gray-500';
+          metaLine.textContent = `${userName} • ${dateStr}`;
+          li.append(actionLine, metaLine);
           historyPackageList.appendChild(li);
         });
       }
@@ -1348,7 +1355,9 @@
       setUpdateMsg('Không tìm thấy thùng cần gỡ.');
       return;
     }
-    const confirmDelete = confirm(`Bạn có chắc chắn muốn gỡ chứng từ ra khỏi thùng này?: ${packageCode || packageId}`);
+    const confirmDelete = confirm(
+      `Gỡ thùng ${packageCode || packageId} khỏi quyển ${activeRow.dataset.code || activeFolderId} và toàn bộ chứng từ trong quyển?`
+    );
     if (!confirmDelete) return;
     setUpdateMsg('');
     clearBtn.disabled = true;
@@ -1369,7 +1378,7 @@
       if (!resp.ok || data.success === false) {
         throw new Error(data.message || 'Xóa thùng không thành công.');
       }
-      setUpdateMsg('Xóa thùng thành công.', false);
+      setUpdateMsg(data.message || 'Gỡ thùng thành công.', false);
       setTimeout(() => window.location.reload(), 500);
     } catch (err) {
       setUpdateMsg(err.message || 'Xóa thùng không thành công.');

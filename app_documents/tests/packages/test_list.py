@@ -4,7 +4,7 @@ from django.contrib.auth.models import Group, User
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from .models import Package, UserProfile
+from app_documents.models import Package, UserProfile
 
 
 class PackageListV2Tests(TestCase):
