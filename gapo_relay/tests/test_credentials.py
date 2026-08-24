@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from django.contrib.admin.models import LogEntry
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -150,3 +150,27 @@ class CredentialAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Mật khẩu hiện tại không đúng")
         self.assertFalse(GapoRelayCredential.objects.exists())
+
+    def test_same_origin_post_passes_real_csrf_middleware(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.user)
+        page = csrf_client.get(self.url)
+        csrf_token = page.cookies["csrftoken"].value
+
+        response = csrf_client.post(
+            self.url,
+            {
+                "kind": GapoRelayCredential.Kind.DELIVERY,
+                "confirmation": "ROTATE",
+                "current_password": "correct-password",
+                "csrfmiddlewaretoken": csrf_token,
+            },
+            HTTP_ORIGIN="http://testserver",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            GapoRelayCredential.objects.filter(
+                kind=GapoRelayCredential.Kind.DELIVERY
+            ).exists()
+        )

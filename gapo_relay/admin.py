@@ -226,5 +226,4 @@ class GapoRelayCredentialAdmin(admin.ModelAdmin):
         response = TemplateResponse(request, self.change_list_template, context)
         response["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
         response["Pragma"] = "no-cache"
-        response["Referrer-Policy"] = "no-referrer"
         return response
