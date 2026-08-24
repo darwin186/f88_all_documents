@@ -27,6 +27,7 @@ path('admin/', admin.site.urls),
 path("", include("app_documents.urls")),
 path("admindocuments/", include("app_admindocuments.urls")),
 path("lich-lam-viec/", include("app_workshift.urls")),
+path("integrations/gapo/", include("gapo_relay.urls")),
     path("accounts/password_reset/", CustomPasswordResetView.as_view(), name="password_reset"),
     path("accounts/", include("django.contrib.auth.urls")),
 

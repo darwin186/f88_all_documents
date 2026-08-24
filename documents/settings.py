@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "app_documents.apps.AppDocumentsConfig",
     "app_admindocuments.apps.AdmindocumentsConfig",
     "app_workshift.apps.AppWorkshiftConfig",
+    "gapo_relay.apps.GapoRelayConfig",
 ]
 
 MIDDLEWARE = [
@@ -201,6 +202,27 @@ GAPO_WEBHOOK_SECRET = (os.getenv('GAPO_WEBHOOK_SECRET') or '').strip()
 PUBLIC_APP_BASE_URL = (os.getenv('PUBLIC_APP_BASE_URL') or '').strip().rstrip('/')
 GAPO_CONNECT_TIMEOUT = float(os.getenv('GAPO_CONNECT_TIMEOUT', '3.05'))
 GAPO_READ_TIMEOUT = float(os.getenv('GAPO_READ_TIMEOUT', '5'))
+
+# GAPO public webhook store-and-pull relay. Both secrets fail closed when unset.
+GAPO_RELAY_INGRESS_SECRET = (os.getenv('GAPO_RELAY_INGRESS_SECRET') or '').strip()
+GAPO_RELAY_DELIVERY_TOKEN = (os.getenv('GAPO_RELAY_DELIVERY_TOKEN') or '').strip()
+GAPO_RELAY_MAX_BODY_BYTES = int(os.getenv('GAPO_RELAY_MAX_BODY_BYTES', str(10 * 1024 * 1024)))
+GAPO_RELAY_DELIVERY_MAX_BODY_BYTES = int(os.getenv('GAPO_RELAY_DELIVERY_MAX_BODY_BYTES', '65536'))
+GAPO_RELAY_DEFAULT_LEASE_SECONDS = int(os.getenv('GAPO_RELAY_DEFAULT_LEASE_SECONDS', '120'))
+GAPO_RELAY_MAX_LEASE_SECONDS = int(os.getenv('GAPO_RELAY_MAX_LEASE_SECONDS', '3600'))
+GAPO_RELAY_MAX_BATCH_SIZE = int(os.getenv('GAPO_RELAY_MAX_BATCH_SIZE', '100'))
+GAPO_RELAY_MAX_ATTEMPTS = int(os.getenv('GAPO_RELAY_MAX_ATTEMPTS', '20'))
+GAPO_RELAY_MAX_BACKOFF_SECONDS = int(os.getenv('GAPO_RELAY_MAX_BACKOFF_SECONDS', '900'))
+GAPO_RELAY_SECRET_GRACE_SECONDS = int(os.getenv('GAPO_RELAY_SECRET_GRACE_SECONDS', '86400'))
+GAPO_RELAY_RETENTION_DAYS = int(os.getenv('RELAY_RETENTION_DAYS', '30'))
+GAPO_RELAY_DEAD_LETTER_RETENTION_DAYS = int(os.getenv('RELAY_DEAD_LETTER_DAYS', '90'))
+
+# Django otherwise rejects request.body at its lower global default before the
+# relay can enforce GAPO_RELAY_MAX_BODY_BYTES and return a JSON 413 response.
+DATA_UPLOAD_MAX_MEMORY_SIZE = max(
+    int(os.getenv('DATA_UPLOAD_MAX_MEMORY_SIZE', str(2_621_440))),
+    GAPO_RELAY_MAX_BODY_BYTES,
+)
 
 # Borrow request API key
 BORROW_REQUEST_API_KEY = (os.getenv('BORROW_REQUEST_API_KEY') or '').strip()
