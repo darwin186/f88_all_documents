@@ -6,9 +6,9 @@ from django.conf import settings
 class GapoRelayEvent(models.Model):
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
-        LEASED = "leased", "Leased"
+        LEASED = "leased", "Processing"
         DELIVERED = "delivered", "Delivered"
-        DEAD_LETTER = "dead_letter", "Dead letter"
+        DEAD_LETTER = "dead_letter", "Failed"
 
     event_id = models.TextField(primary_key=True)
     event_type = models.CharField(max_length=100, default="unknown")

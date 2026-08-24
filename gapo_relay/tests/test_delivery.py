@@ -87,7 +87,25 @@ class DeliveryTests(TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual([item["event_id"] for item in body["events"]], ["first", "expired"])
-        self.assertEqual(body["events"][0]["payload"], first.raw_payload)
+        first_envelope = body["events"][0]
+        self.assertEqual(
+            set(first_envelope),
+            {
+                "event_id",
+                "event_type",
+                "received_at",
+                "thread_id",
+                "message_id",
+                "attempt_count",
+                "payload_sha256",
+                "payload",
+            },
+        )
+        self.assertEqual(first_envelope["event_type"], first.event_type)
+        self.assertEqual(first_envelope["attempt_count"], 1)
+        self.assertEqual(first_envelope["payload_sha256"], first.payload_sha256)
+        self.assertEqual(first_envelope["payload"], first.raw_payload)
+        self.assertTrue(first_envelope["received_at"].endswith("+07:00"))
         lease_token = uuid.UUID(body["lease_token"])
         first.refresh_from_db()
         expired.refresh_from_db()
@@ -171,6 +189,44 @@ class DeliveryTests(TestCase):
         self.assertIsNone(response.json()["retry_after_seconds"])
         event.refresh_from_db()
         self.assertEqual(event.delivery_status, GapoRelayEvent.Status.DEAD_LETTER)
+
+    def test_expired_lease_at_attempt_limit_moves_to_dead_letter_without_nack(self):
+        now = timezone.now()
+        exhausted = self._event(
+            "expired-at-limit",
+            delivery_status=GapoRelayEvent.Status.LEASED,
+            lease_token=uuid.uuid4(),
+            lease_until=now - timedelta(seconds=1),
+            attempt_count=20,
+        )
+        eligible = self._event("still-eligible", received_at=now + timedelta(seconds=1))
+
+        response = self._claim()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [item["event_id"] for item in response.json()["events"]],
+            [eligible.event_id],
+        )
+        exhausted.refresh_from_db()
+        self.assertEqual(
+            exhausted.delivery_status,
+            GapoRelayEvent.Status.DEAD_LETTER,
+        )
+        self.assertIsNone(exhausted.lease_token)
+        self.assertIn("Maximum delivery attempts", exhausted.last_error)
+
+    def test_admin_status_labels_match_operational_contract(self):
+        event = self._event("status-labels")
+        expected = {
+            GapoRelayEvent.Status.PENDING: "Pending",
+            GapoRelayEvent.Status.LEASED: "Processing",
+            GapoRelayEvent.Status.DELIVERED: "Delivered",
+            GapoRelayEvent.Status.DEAD_LETTER: "Failed",
+        }
+        for status, label in expected.items():
+            event.delivery_status = status
+            self.assertEqual(event.get_delivery_status_display(), label)
 
     def test_nack_rejects_stale_or_foreign_lease(self):
         event = self._event("foreign-lease")

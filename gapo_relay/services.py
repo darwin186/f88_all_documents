@@ -52,9 +52,12 @@ def payload_metadata(payload: dict[str, Any]) -> tuple[str, str | None, str | No
 
 
 def store_event(
-    payload: dict[str, Any], raw_body: bytes
+    payload: dict[str, Any],
+    raw_body: bytes,
+    *,
+    received_at=None,
 ) -> tuple[GapoRelayEvent, bool]:
-    now = timezone.now()
+    now = received_at if received_at is not None else timezone.now()
     event_type, thread_id, message_id = payload_metadata(payload)
     defaults = {
         "event_type": event_type,
@@ -78,19 +81,43 @@ def store_event(
 def claim_events(limit: int, lease_seconds: int) -> tuple[uuid.UUID, list[GapoRelayEvent]]:
     now = timezone.now()
     lease_token = uuid.uuid4()
+    max_attempts = int(getattr(settings, "GAPO_RELAY_MAX_ATTEMPTS", 20))
+    claimable_window = Q(
+        delivery_status=GapoRelayEvent.Status.PENDING,
+        next_attempt_at__lte=now,
+    ) | Q(
+        delivery_status=GapoRelayEvent.Status.LEASED,
+        lease_until__lt=now,
+    )
     with transaction.atomic():
+        exhausted_events = list(
+            GapoRelayEvent.objects.select_for_update(skip_locked=True)
+            .filter(claimable_window, attempt_count__gte=max_attempts)
+            .order_by("received_at", "event_id")[:limit]
+        )
+        for event in exhausted_events:
+            event.delivery_status = GapoRelayEvent.Status.DEAD_LETTER
+            event.lease_token = None
+            event.lease_until = None
+            event.next_attempt_at = now
+            event.last_error = "Maximum delivery attempts reached after lease expiry."
+            event.updated_at = now
+        if exhausted_events:
+            GapoRelayEvent.objects.bulk_update(
+                exhausted_events,
+                [
+                    "delivery_status",
+                    "lease_token",
+                    "lease_until",
+                    "next_attempt_at",
+                    "last_error",
+                    "updated_at",
+                ],
+            )
+
         events = list(
             GapoRelayEvent.objects.select_for_update(skip_locked=True)
-            .filter(
-                Q(
-                    delivery_status=GapoRelayEvent.Status.PENDING,
-                    next_attempt_at__lte=now,
-                )
-                | Q(
-                    delivery_status=GapoRelayEvent.Status.LEASED,
-                    lease_until__lt=now,
-                )
-            )
+            .filter(claimable_window, attempt_count__lt=max_attempts)
             .order_by("received_at", "event_id")[:limit]
         )
         lease_until = now + timedelta(seconds=lease_seconds)

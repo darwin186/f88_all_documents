@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import timezone as datetime_timezone
 from typing import Any
 
 from django.conf import settings
@@ -99,9 +98,10 @@ def _api_payload(request: HttpRequest) -> tuple[dict[str, Any] | None, JsonRespo
 
 
 def _rfc3339(value) -> str:
+    local_timezone = timezone.get_default_timezone()
     if timezone.is_naive(value):
-        value = timezone.make_aware(value, timezone.get_default_timezone())
-    return value.astimezone(datetime_timezone.utc).isoformat().replace("+00:00", "Z")
+        value = timezone.make_aware(value, local_timezone)
+    return value.astimezone(local_timezone).isoformat()
 
 
 def _integer_field(
@@ -148,6 +148,7 @@ def health(request: HttpRequest) -> JsonResponse:
 @csrf_exempt
 @require_POST
 def ingress(request: HttpRequest, secret: str) -> JsonResponse:
+    received_at = timezone.now()
     try:
         authorized = verify_relay_secret(GapoRelayCredential.Kind.INGRESS, secret)
     except DatabaseError:
@@ -163,7 +164,7 @@ def ingress(request: HttpRequest, secret: str) -> JsonResponse:
     assert payload is not None and raw_body is not None
 
     try:
-        event, created = store_event(payload, raw_body)
+        event, created = store_event(payload, raw_body, received_at=received_at)
     except DatabaseError:
         logger.exception("GAPO relay failed to persist an ingress event")
         return JsonResponse({"ok": False, "error": "database_error"}, status=500)
@@ -218,7 +219,12 @@ def claim(request: HttpRequest) -> JsonResponse:
             "events": [
                 {
                     "event_id": event.event_id,
+                    "event_type": event.event_type,
                     "received_at": _rfc3339(event.received_at),
+                    "thread_id": event.thread_id,
+                    "message_id": event.message_id,
+                    "attempt_count": event.attempt_count,
+                    "payload_sha256": event.payload_sha256,
                     "payload": event.raw_payload,
                 }
                 for event in events

@@ -1,11 +1,12 @@
 import hashlib
 import json
+from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from gapo_relay.models import GapoRelayEvent
-from gapo_relay.services import make_event_id
+from gapo_relay.services import make_event_id, store_event
 
 
 @override_settings(
@@ -37,7 +38,8 @@ class IngressTests(TestCase):
             },
         }
 
-        response, raw = self._post(payload)
+        with patch("gapo_relay.views.store_event", wraps=store_event) as mocked_store:
+            response, raw = self._post(payload)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
@@ -49,7 +51,8 @@ class IngressTests(TestCase):
                 "received_at": response.json()["received_at"],
             },
         )
-        self.assertTrue(response.json()["received_at"].endswith("Z"))
+        self.assertTrue(response.json()["received_at"].endswith("+07:00"))
+        self.assertIn("received_at", mocked_store.call_args.kwargs)
         event = GapoRelayEvent.objects.get()
         self.assertEqual(event.raw_payload, payload)
         self.assertEqual(event.payload_sha256, hashlib.sha256(raw).hexdigest())

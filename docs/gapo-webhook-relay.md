@@ -65,6 +65,26 @@ Routes:
 - `POST /integrations/gapo/deliveries/ack/`
 - `POST /integrations/gapo/deliveries/nack/`
 
+Each claimed event uses this complete envelope:
+
+```json
+{
+  "event_id": "evt-123",
+  "event_type": "message_created",
+  "received_at": "2026-08-24T20:15:00+07:00",
+  "thread_id": "1634226883854",
+  "message_id": "65183",
+  "attempt_count": 1,
+  "payload_sha256": "<sha256-of-original-request-body>",
+  "payload": {}
+}
+```
+
+`received_at` is captured when the ingress view starts, before parsing the body,
+and is returned in the application timezone. A pending event or an expired lease
+that has reached the configured maximum attempt count is moved to `dead_letter`
+instead of being claimed again.
+
 ACK only after Project Ops returns HTTP 200 with `queued=true`. If forwarding
 fails, NACK with the lease token, event ID and error. A NACK can additionally
 include an integer `http_status` field. Events retry with exponential backoff
