@@ -33,7 +33,7 @@ case "$ROLE" in
       --log-level ${GUNICORN_LOG_LEVEL:-info} \
       --error-logfile - \
       --access-logfile - \
-      --access-logformat '%(h)s %(t)s %(m)s %(s)s %(L)s' \
+      --access-logformat '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(L)s' \
       --capture-output
     ;;
   worker)
