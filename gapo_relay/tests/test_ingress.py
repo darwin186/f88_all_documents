@@ -38,8 +38,9 @@ class IngressTests(TestCase):
             },
         }
 
-        with patch("gapo_relay.views.store_event", wraps=store_event) as mocked_store:
-            response, raw = self._post(payload)
+        with self.assertLogs("gapo_relay.views", level="INFO") as captured_logs:
+            with patch("gapo_relay.views.store_event", wraps=store_event) as mocked_store:
+                response, raw = self._post(payload)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
@@ -60,6 +61,11 @@ class IngressTests(TestCase):
         self.assertEqual(event.thread_id, "thread-789")
         self.assertEqual(event.message_id, "msg-456")
         self.assertEqual(event.delivery_status, GapoRelayEvent.Status.PENDING)
+        rendered_logs = "\n".join(captured_logs.output)
+        self.assertIn('"action": "ingress_accepted"', rendered_logs)
+        self.assertIn('"event_id": "evt-123"', rendered_logs)
+        self.assertNotIn("ingress-secret", rendered_logs)
+        self.assertNotIn("Xin chào", rendered_logs)
 
     def test_duplicate_is_idempotent_and_does_not_reset_existing_event(self):
         payload = {"id": "evt-duplicate", "event": "message_created"}

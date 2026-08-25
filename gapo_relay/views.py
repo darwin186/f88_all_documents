@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -20,6 +21,13 @@ from .services import acknowledge_events, claim_events, reject_event, store_even
 logger = logging.getLogger(__name__)
 
 
+def _relay_log(action: str, *, level: int = logging.INFO, **fields) -> None:
+    # JSON encoding prevents newline/log injection from external identifiers.
+    # Never add request paths, authorization headers, secrets or raw payloads.
+    record = {"action": action, **fields}
+    logger.log(level, json.dumps(record, ensure_ascii=True, sort_keys=True))
+
+
 def _reject_json_constant(value: str):
     raise ValueError(f"Invalid JSON constant: {value}")
 
@@ -30,7 +38,9 @@ def _unauthorized() -> JsonResponse:
     return response
 
 
-def _delivery_auth_error(request: HttpRequest) -> JsonResponse | None:
+def _delivery_auth_error(
+    request: HttpRequest, operation: str
+) -> JsonResponse | None:
     authorization = request.headers.get("Authorization", "")
     supplied = authorization[7:] if authorization.startswith("Bearer ") else ""
     try:
@@ -41,7 +51,16 @@ def _delivery_auth_error(request: HttpRequest) -> JsonResponse | None:
     except DatabaseError:
         logger.exception("GAPO relay credential lookup failed")
         return JsonResponse({"ok": False, "error": "database_error"}, status=500)
-    return None if authorized else _unauthorized()
+    if authorized:
+        return None
+    _relay_log(
+        "delivery_rejected",
+        level=logging.WARNING,
+        operation=operation,
+        reason="unauthorized",
+        status=401,
+    )
+    return _unauthorized()
 
 
 def _content_length(request: HttpRequest) -> int | None:
@@ -148,6 +167,7 @@ def health(request: HttpRequest) -> JsonResponse:
 @csrf_exempt
 @require_POST
 def ingress(request: HttpRequest, secret: str) -> JsonResponse:
+    started_at = time.monotonic()
     received_at = timezone.now()
     try:
         authorized = verify_relay_secret(GapoRelayCredential.Kind.INGRESS, secret)
@@ -155,11 +175,23 @@ def ingress(request: HttpRequest, secret: str) -> JsonResponse:
         logger.exception("GAPO relay credential lookup failed")
         return JsonResponse({"ok": False, "error": "database_error"}, status=500)
     if not authorized:
+        _relay_log(
+            "ingress_rejected",
+            level=logging.WARNING,
+            reason="unauthorized",
+            status=401,
+        )
         return _unauthorized()
 
     max_bytes = int(getattr(settings, "GAPO_RELAY_MAX_BODY_BYTES", 10 * 1024 * 1024))
     payload, error, raw_body = _read_json_object(request, max_bytes)
     if error is not None:
+        _relay_log(
+            "ingress_rejected",
+            level=logging.WARNING,
+            reason="invalid_request",
+            status=error.status_code,
+        )
         return error
     assert payload is not None and raw_body is not None
 
@@ -168,6 +200,15 @@ def ingress(request: HttpRequest, secret: str) -> JsonResponse:
     except DatabaseError:
         logger.exception("GAPO relay failed to persist an ingress event")
         return JsonResponse({"ok": False, "error": "database_error"}, status=500)
+
+    _relay_log(
+        "ingress_accepted",
+        status=200,
+        event_id=event.event_id,
+        event_type=event.event_type,
+        duplicate=not created,
+        latency_ms=round((time.monotonic() - started_at) * 1000, 2),
+    )
 
     return JsonResponse(
         {
@@ -182,7 +223,7 @@ def ingress(request: HttpRequest, secret: str) -> JsonResponse:
 @csrf_exempt
 @require_POST
 def claim(request: HttpRequest) -> JsonResponse:
-    auth_error = _delivery_auth_error(request)
+    auth_error = _delivery_auth_error(request, "claim")
     if auth_error is not None:
         return auth_error
     payload, error = _api_payload(request)
@@ -213,6 +254,12 @@ def claim(request: HttpRequest) -> JsonResponse:
     assert limit is not None and lease_seconds is not None
 
     lease_token, events = claim_events(limit, lease_seconds)
+    _relay_log(
+        "delivery_claimed",
+        consumer_id=consumer_id,
+        event_count=len(events),
+        lease_seconds=lease_seconds,
+    )
     return JsonResponse(
         {
             "lease_token": str(lease_token),
@@ -236,7 +283,7 @@ def claim(request: HttpRequest) -> JsonResponse:
 @csrf_exempt
 @require_POST
 def ack(request: HttpRequest) -> JsonResponse:
-    auth_error = _delivery_auth_error(request)
+    auth_error = _delivery_auth_error(request, "ack")
     if auth_error is not None:
         return auth_error
     payload, error = _api_payload(request)
@@ -259,6 +306,12 @@ def ack(request: HttpRequest) -> JsonResponse:
     unique_event_ids = list(dict.fromkeys(event_ids))
     assert lease_token is not None
     acknowledged = acknowledge_events(lease_token, unique_event_ids)
+    _relay_log(
+        "delivery_acknowledged",
+        requested=len(unique_event_ids),
+        acknowledged=acknowledged,
+        ignored=len(unique_event_ids) - acknowledged,
+    )
     return JsonResponse(
         {
             "ok": True,
@@ -271,7 +324,7 @@ def ack(request: HttpRequest) -> JsonResponse:
 @csrf_exempt
 @require_POST
 def nack(request: HttpRequest) -> JsonResponse:
-    auth_error = _delivery_auth_error(request)
+    auth_error = _delivery_auth_error(request, "nack")
     if auth_error is not None:
         return auth_error
     payload, error_response = _api_payload(request)
@@ -304,7 +357,21 @@ def nack(request: HttpRequest) -> JsonResponse:
         http_status=http_status,
     )
     if result.event is None:
+        _relay_log(
+            "delivery_nack_rejected",
+            level=logging.WARNING,
+            event_id=event_id,
+            reason="lease_not_found",
+            status=409,
+        )
         return JsonResponse({"ok": False, "error": "lease_not_found"}, status=409)
+    _relay_log(
+        "delivery_nacked",
+        event_id=result.event.event_id,
+        delivery_status=result.event.delivery_status,
+        attempt_count=result.event.attempt_count,
+        retry_after_seconds=result.retry_after_seconds,
+    )
     return JsonResponse(
         {
             "ok": True,

@@ -82,7 +82,8 @@ class DeliveryTests(TestCase):
             "delivered", delivery_status=GapoRelayEvent.Status.DELIVERED
         )
 
-        response = self._claim(limit=2)
+        with self.assertLogs("gapo_relay.views", level="INFO") as captured_logs:
+            response = self._claim(limit=2)
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
@@ -115,6 +116,11 @@ class DeliveryTests(TestCase):
         self.assertEqual(expired.attempt_count, 1)
         self.assertEqual(future.delivery_status, GapoRelayEvent.Status.PENDING)
         self.assertEqual(delivered.delivery_status, GapoRelayEvent.Status.DELIVERED)
+        rendered_logs = "\n".join(captured_logs.output)
+        self.assertIn('"action": "delivery_claimed"', rendered_logs)
+        self.assertIn('"event_count": 2', rendered_logs)
+        self.assertNotIn(body["lease_token"], rendered_logs)
+        self.assertNotIn("delivery-token", rendered_logs)
 
     def test_ack_only_updates_events_in_the_matching_active_lease(self):
         event = self._event("ack-me")

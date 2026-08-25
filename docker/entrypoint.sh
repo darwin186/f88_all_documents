@@ -27,7 +27,14 @@ case "$ROLE" in
     wait_for_db
     python manage.py migrate --noinput
     python manage.py collectstatic --noinput || true
-    exec gunicorn documents.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-3}
+    exec gunicorn documents.wsgi:application \
+      --bind 0.0.0.0:8000 \
+      --workers ${GUNICORN_WORKERS:-3} \
+      --log-level ${GUNICORN_LOG_LEVEL:-info} \
+      --error-logfile - \
+      --access-logfile - \
+      --access-logformat '%(h)s %(t)s %(m)s %(s)s %(L)s' \
+      --capture-output
     ;;
   worker)
     wait_for_db
@@ -41,4 +48,3 @@ case "$ROLE" in
     echo "Unknown APP_ROLE=$ROLE"; exit 1
     ;;
 esac
-

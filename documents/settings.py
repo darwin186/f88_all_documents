@@ -224,6 +224,31 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = max(
     GAPO_RELAY_MAX_BODY_BYTES,
 )
 
+# Relay operational logs go to stdout for Docker/Gunicorn collection. Log
+# records intentionally exclude webhook paths, secrets and raw payloads.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'relay': {
+            'format': '%(asctime)s %(levelname)s %(name)s %(message)s',
+        },
+    },
+    'handlers': {
+        'relay_console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'relay',
+        },
+    },
+    'loggers': {
+        'gapo_relay': {
+            'handlers': ['relay_console'],
+            'level': os.getenv('GAPO_RELAY_LOG_LEVEL', 'INFO').upper(),
+            'propagate': False,
+        },
+    },
+}
+
 # Borrow request API key
 BORROW_REQUEST_API_KEY = (os.getenv('BORROW_REQUEST_API_KEY') or '').strip()
 
