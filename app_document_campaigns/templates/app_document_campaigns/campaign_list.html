@@ -1,0 +1,32 @@
+{% extends "app_documents/base_app_documents_v2.html" %}
+
+{% block title %}Khởi tạo kỳ book lỗi chứng từ{% endblock %}
+{% block top_nav %}{% include "app_documents/components/top_nav_v2.html" %}{% endblock %}
+{% block main_extra_class %}pt-20{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-[1500px] space-y-4 px-3">
+  <section class="flex items-end justify-between gap-4">
+    <div>
+    <div class="text-[10px] font-bold uppercase tracking-[.14em] text-emerald-700">Vận hành · Chứng từ</div>
+    <h1 class="mt-1 text-2xl font-extrabold tracking-tight text-gray-950">Khởi tạo kỳ book lỗi chứng từ.</h1>
+    <p class="mt-1 text-[11px] text-gray-500">Tạo kỳ gửi lỗi để chuẩn bị dữ liệu lỗi theo từng tháng.</p>
+    </div>
+    {% if can_manage_campaigns %}<a href="{% url 'document_campaigns:campaign_create' %}" class="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-800">Tạo chiến dịch</a>{% endif %}
+  </section>
+  <section class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+    <table class="w-full text-left text-[11px]">
+      <thead class="bg-gray-50 text-[9px] uppercase tracking-wide text-gray-500">
+        <tr><th class="px-4 py-3">Mã</th><th class="px-4 py-3">Loại book lỗi</th><th class="px-4 py-3">Chiến dịch</th><th class="px-4 py-3">Tháng</th><th class="px-4 py-3">Trạng thái</th><th class="px-4 py-3"></th></tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for campaign in campaigns %}
+        <tr><td class="px-4 py-3 font-bold text-emerald-700"><a class="hover:underline" href="{% url 'document_campaigns:campaign_detail' campaign.id %}{% if can_manage_campaigns %}?settings=1{% endif %}" title="{% if can_manage_campaigns %}Mở cài đặt chiến dịch{% else %}Mở chiến dịch{% endif %}">{{ campaign.code }}</a></td><td class="px-4 py-3">{{ campaign.campaign_type.name }}</td><td class="px-4 py-3">{{ campaign.name }}</td><td class="px-4 py-3">{{ campaign.report_month|date:"m/Y" }}</td><td class="px-4 py-3">{{ campaign.get_status_display }}</td><td class="px-4 py-3 text-right"><div class="flex justify-end gap-3"><a class="font-bold text-blue-700 hover:underline" href="{% url 'document_campaigns:campaign_response_monitor' campaign.id %}">Phản hồi PGD</a><a class="font-bold text-emerald-700 hover:underline" href="{% url 'document_campaigns:campaign_detail' campaign.id %}">Chuẩn bị dữ liệu →</a></div></td></tr>
+        {% empty %}
+        <tr><td colspan="6" class="px-4 py-10 text-center text-gray-400">Chưa có chiến dịch.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+{% endblock %}

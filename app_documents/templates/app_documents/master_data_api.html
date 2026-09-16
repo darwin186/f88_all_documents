@@ -1,0 +1,35 @@
+{% extends "app_documents/base_app_documents_v2.html" %}
+{% block title %}Master Data · Tài liệu API{% endblock %}
+{% block top_nav %}{% include "app_documents/components/top_nav_v2.html" with master_data_nav=True %}{% endblock %}
+{% block main_extra_class %}pt-20{% endblock %}
+{% block extra_head %}
+<style>
+.master-page{max-width:1000px;margin:35px auto;padding:0 24px;font:15px/1.65 "Segoe UI",Arial;color:#17251e;background:#f7faf8}.master-page a{color:#00854a}.master-page pre{background:#15271e;color:#fff;padding:20px;border-radius:12px;overflow:auto}.master-page td,.master-page th{padding:12px;border:1px solid #dce5df;text-align:left}.master-page table{border-collapse:collapse;width:100%}.master-page code{overflow-wrap:anywhere}
+.master-page{font-family:"Segoe UI",Arial,sans-serif;line-height:1.5;width:100%;margin:24px auto}.master-page h1{font-size:28px;font-weight:700}.master-page h2{font-size:20px;font-weight:700}.master-page p{margin:12px 0}.master-page dialog{font-family:"Segoe UI",Arial,sans-serif}
+</style>
+{% endblock %}
+{% block content %}
+<div class="master-page">
+
+<a href="{% url 'master_data' %}">← Master Data</a> · <a href="{% url 'master_data_tokens' %}">Quản lý token</a><h1>API danh mục PGD · v1</h1><p>Hai cách xác thực: session admin đã đăng nhập (PATCH cần X-CSRFToken), hoặc <code>Authorization: Bearer &lt;token&gt;</code> cho tích hợp máy–máy (không cần cookie/CSRF). Token được tạo tại Master Data → API Token. Không có truy cập anonymous.</p><p>GET cần scope <code>master_data:shops:read</code>; PATCH cần <code>master_data:shops:write</code>. Hai quyền độc lập, chọn cả hai nếu cần đọc và ghi. Token gắn với admin tạo token; tài khoản phải đang hoạt động và còn quyền admin/Super Admin. Token GDĐB và scope intake cũ <code>master_data:write</code> không được tự cấp quyền cho API này. Token không thể truy cập UI quản trị hoặc tạo/thu hồi token.</p>
+<table><tr><th>Method</th><th>Endpoint</th><th>Chức năng</th></tr><tr><td>GET</td><td>/api/master-data/v1/shops/?q=4303&amp;active=true&amp;page=1</td><td>Danh sách; 100 PGD/trang. q: mã/tên/email; active: true/false hoặc bỏ qua.</td></tr><tr><td>GET</td><td>/api/master-data/v1/shops/{shop_id}/</td><td>Chi tiết và orgchart.</td></tr><tr><td>PATCH</td><td>/api/master-data/v1/shops/{shop_id}/</td><td>Cập nhật một hoặc nhiều trường được phép.</td></tr></table>
+<h2>Ví dụ cập nhật</h2><p><code>shop_id</code> là khóa chính, không phải shop_code. Các trường bỏ qua được giữ nguyên.</p><pre>PATCH /api/master-data/v1/shops/123/
+Content-Type: application/json
+X-CSRFToken: &lt;csrf-token&gt;
+Cookie: sessionid=&lt;session&gt;
+
+{
+  "shop_email": "pgd@example.com",
+  "is_shop_active": false,
+  "manager_id": 456
+}</pre>
+<p>Email tối đa 100 ký tự; chuỗi trống để xóa email. Trạng thái phải là boolean. Tắt PGD ghi ngày đóng cửa; bật lại xóa ngày đóng cửa. manager_id phải là bộ quản lý đang hiệu lực trong danh mục Manager. Không sửa trực tiếp thông tin cá nhân quản lý trên endpoint PGD và không hỗ trợ xóa PGD.</p>
+<h2>Ví dụ dùng token</h2><pre>curl -X PATCH "https://&lt;host&gt;/api/master-data/v1/shops/123/" \
+  -H "Authorization: Bearer &lt;token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{"shop_email":"pgd@example.com"}'</pre><p>Token chỉ hiện một lần khi tạo. Thu hồi tại UI sẽ ngừng truy cập API ngay. Khi có Authorization sai, API trả lỗi, không fallback sang session. Nhật ký thay đổi ghi token_id và người tạo token.</p>
+<h2>Kết quả</h2><p>GET danh sách trả <code>count, page, pages, results</code>. GET chi tiết/PATCH trả <code>shop_id, shop_code, shop_name, shop_email, is_shop_active, shop_closed_date, manager_id, orgchart</code>.</p><p>Orgchart có <code>manager_code, is_current, area_manager, region_manager</code>. Mỗi quản lý có <code>name, email, is_active</code>. Ưu tiên AreaManager/RegionManager; nếu chưa có quan hệ, hiển thị snapshot QLKV/QLV và is_active=null. Không dùng UserProfile.region. is_current chỉ cho biết hiệu lực của bộ Manager; kiểm tra thêm is_active của từng quản lý.</p>
+<h2>Mã phản hồi</h2><p>200: thành công · 400: dữ liệu sai/trường không hỗ trợ · 401: chưa đăng nhập · 403: không phải admin hoặc CSRF sai · 404: PGD không tồn tại · 405: method không hỗ trợ. Lỗi CSRF/404 có thể trả HTML mặc định Django. Thay đổi được lưu nhật ký trong Django Admin LogEntry với người thực hiện và giá trị trước/sau.</p>
+
+</div>
+{% endblock %}

@@ -3,8 +3,18 @@ from django.urls import path
 from .views import CustomPasswordResetView
 from . import views
 from . import intake_api
+from . import master_data
 
 urlpatterns = [
+    path('master-data/', master_data.catalog_page, name='master_data'),
+    path('master-data/tokens/', master_data.tokens_page, name='master_data_tokens'),
+    path('master-data/jobs/', master_data.queue_catalog_job, name='master_data_job_create'),
+    path('master-data/jobs/<int:job_id>/', master_data.catalog_job_status, name='master_data_job_status'),
+    path('master-data/jobs/<int:job_id>/download/', master_data.catalog_job_download, name='master_data_job_download'),
+    path('master-data/tokens/create/', master_data.create_shop_token, name='master_data_token_create'),
+    path('master-data/api-docs/', master_data.api_docs, name='master_data_api_docs'),
+    path('api/master-data/v1/shops/', master_data.shops_api, name='master_data_shops_api'),
+    path('api/master-data/v1/shops/<int:shop_id>/', master_data.shop_api, name='master_data_shop_api'),
     path("", views.home_view, name="home"), 
     path('reset_password/', CustomPasswordResetView.as_view(), name='password_reset'),
     # Đường dẫn để chuyển vùng với tham số region_id

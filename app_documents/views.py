@@ -753,11 +753,11 @@ def gddb_registration_view(request):
         | Q(processing_expires_at__lte=now)
     ).count()
     active_tab = request.GET.get("tab", "list")
+    if active_tab == "tokens":
+        return redirect("master_data_tokens")
     allowed_tabs = {"list"}
     if _is_gddb_admin(request.user):
         allowed_tabs.update({"api_docs", "manual", "batches", "configuration"})
-    if request.user.is_superuser:
-        allowed_tabs.add("tokens")
     if active_tab not in allowed_tabs:
         if active_tab != "list":
             messages.error(request, "Bạn không có quyền truy cập chức năng này.")
@@ -810,8 +810,6 @@ def gddb_registration_view(request):
             is_manual = (batch_item.source_type or "").startswith("manual")
             batch_item.source_channel = "manual" if is_manual else "api"
             batch_item.source_channel_label = "Manual submit" if is_manual else "API"
-    api_tokens = CollateralRegistrationApiToken.objects.select_related("owner", "created_by", "revoked_by") if request.user.is_superuser else []
-    new_api_token = request.session.pop("gddb_new_api_token", None) if request.user.is_superuser else None
     registration_identities = CollateralRegistrationExternalIdentity.objects.filter(is_active=True).order_by("external_code")
     report_identity_choices = CollateralRegistrationExternalIdentity.objects.order_by("external_code")
     loan_source_choices = [
@@ -925,7 +923,6 @@ def gddb_registration_view(request):
                 Q(shop_name__icontains=pgd_query) | Q(shop_code__icontains=pgd_query)
             )
         configuration_shops = configuration_shops.order_by("shop_name")
-    token_owners = User.objects.filter(is_active=True).order_by("username") if request.user.is_superuser else []
     gddb_reason_choices = _gddb_reason_choice_map()
     context = get_user_context(request.user)
     context.update({
@@ -996,9 +993,6 @@ def gddb_registration_view(request):
             "date_from": batch_date_from.isoformat() if batch_date_from else "",
             "date_to": batch_date_to.isoformat() if batch_date_to else "",
         },
-        "api_tokens": api_tokens,
-        "new_api_token": new_api_token,
-        "token_owners": token_owners,
         "configuration_identities": configuration_identities,
         "configuration_shops": configuration_shops,
         "configuration_reasons": configuration_reasons,
@@ -2053,11 +2047,9 @@ def document_intake_management_view(request):
     batches = ExternalDocumentIntakeBatch.objects.select_related("token").annotate(
         rejection_count=Count("rejections")
     ).order_by("-created_at")[:100]
-    tokens = ExternalDocumentIntakeToken.objects.select_related("created_by", "revoked_by").order_by("-created_at")
     context = get_user_context(request.user)
     context.update({
-        "batches": batches, "tokens": tokens,
-        "new_token": request.session.pop("document_intake_new_token", None),
+        "batches": batches,
     })
     return render(request, "app_documents/document_intake_management.html", context)
 
@@ -2081,7 +2073,7 @@ def document_intake_token_create_view(request):
         )
         request.session["document_intake_new_token"] = raw
         messages.success(request, "Đã tạo token. Sao chép ngay vì token chỉ hiện một lần.")
-    return redirect("document_intake_management")
+    return redirect("master_data_tokens")
 
 
 @login_required
@@ -2095,7 +2087,7 @@ def document_intake_token_revoke_view(request, token_id):
     token.revoked_by = request.user
     token.save(update_fields=["is_active", "revoked_at", "revoked_by"])
     messages.success(request, f"Đã thu hồi token {token.name}.")
-    return redirect("document_intake_management")
+    return redirect("master_data_tokens")
 
 
 @login_required
@@ -2110,7 +2102,6 @@ def document_intake_documentation_view(request):
     )
 
 @login_required
-@require_ui_permission("gddb_registration")
 @require_http_methods(["POST"])
 def gddb_token_create_view(request):
     if not request.user.is_superuser:
@@ -2119,7 +2110,7 @@ def gddb_token_create_view(request):
     owner = User.objects.filter(pk=request.POST.get("owner_id"), is_active=True).first()
     if not name or not owner:
         messages.error(request, "Vui lòng nhập tên token và gán người sở hữu đang hoạt động.")
-        return redirect(f"{reverse('gddb_registration_v2')}?tab=tokens")
+        return redirect("master_data_tokens")
 
     raw_token = f"gddb_{secrets.token_urlsafe(32)}"
     CollateralRegistrationApiToken.objects.create(
@@ -2131,11 +2122,10 @@ def gddb_token_create_view(request):
     )
     request.session["gddb_new_api_token"] = raw_token
     messages.success(request, "Đã tạo token. Hãy sao chép ngay vì token chỉ hiển thị một lần.")
-    return redirect(f"{reverse('gddb_registration_v2')}?tab=tokens")
+    return redirect("master_data_tokens")
 
 
 @login_required
-@require_ui_permission("gddb_registration")
 @require_http_methods(["POST"])
 def gddb_token_revoke_view(request, token_id):
     if not request.user.is_superuser:
@@ -2147,7 +2137,7 @@ def gddb_token_revoke_view(request, token_id):
         api_token.revoked_by = request.user
         api_token.save(update_fields=["is_active", "revoked_at", "revoked_by"])
         messages.success(request, f"Đã thu hồi token {api_token.name}.")
-    return redirect(f"{reverse('gddb_registration_v2')}?tab=tokens")
+    return redirect("master_data_tokens")
 
 
 @login_required

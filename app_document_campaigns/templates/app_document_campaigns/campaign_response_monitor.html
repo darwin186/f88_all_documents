@@ -1,0 +1,84 @@
+{% extends "app_documents/base_app_documents_v2.html" %}
+{% load static %}
+{% block title %}Theo dõi phản hồi · {{ campaign.code }}{% endblock %}
+{% block top_nav %}{% include "app_documents/components/top_nav_v2.html" %}{% endblock %}
+{% block main_extra_class %}pt-20{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_monitor.css' %}"><script src="{% static 'app_document_campaigns/js/campaign_shop_links.js' %}" defer></script>{% endblock %}
+{% block content %}
+<div class="crm-page">
+  <header class="crm-top">
+    <div>
+      <a class="crm-back" href="{% url 'document_campaigns:campaign_detail' campaign.id %}">← Quay lại chiến dịch</a>
+      <div class="crm-eyebrow">{{ campaign.code }} · Kỳ {{ campaign.report_month|date:"m/Y" }}</div>
+      <h1 class="crm-title">Theo dõi phản hồi Phòng giao dịch</h1>
+      <p class="crm-copy">Bấm vào một PGD để xem chi tiết từng hợp đồng và nội dung đã phản hồi.</p>
+    </div>
+    <div class="crm-scope">Phạm vi: {{ access_scope.label }}</div>
+  </header>
+
+  {% if can_manage_shop_links %}
+    <section class="crm-release" id="pgd-release">
+      <div class="crm-release-main">
+        <div>
+          <span class="crm-release-label">Phát hành tới PGD</span>
+          <h2>{% if issued_shop_link_count %}Đã có link cho {{ issued_shop_link_count }}/{{ rows|length }} PGD{% else %}Tạo unique link cho {{ rows|length }} PGD{% endif %}</h2>
+          <p>Chỉ tạo link để Admin copy, chưa gửi email. Sau khi phát hành, link xuất hiện ngay tại từng dòng trong bảng.</p>
+        </div>
+        <div class="crm-release-actions">
+          <form method="post" action="{% url 'document_campaigns:publish_campaign_to_shops' campaign.id %}" data-publish-shop-links data-has-links="{% if issued_shop_link_count %}true{% else %}false{% endif %}">
+            {% csrf_token %}
+            <button class="crm-btn" type="submit" {% if not can_publish_shop_links %}disabled{% endif %}>{% if issued_shop_link_count %}Tạo lại toàn bộ link{% else %}Phát hành & tạo link{% endif %}</button>
+          </form>
+          <button class="crm-btn crm-btn-blue" type="button" data-copy-all-links hidden>Copy toàn bộ link</button>
+        </div>
+      </div>
+      <form class="crm-deadline" method="post" action="{% url 'document_campaigns:update_campaign_deadline' campaign.id %}">
+        {% csrf_token %}<input type="hidden" name="return_to" value="response_monitor">
+        <label for="{{ deadline_form.response_deadline.id_for_label }}">Hạn PGD phản hồi</label>
+        {{ deadline_form.response_deadline }}
+        <button class="crm-btn crm-btn-outline" type="submit">Lưu deadline</button>
+        <span>Link hết hạn: {% if campaign.link_expires_at %}<strong>{{ campaign.link_expires_at|date:"H:i d/m/Y" }}</strong>{% else %}chưa cấu hình{% endif %}</span>
+      </form>
+      {% if not can_publish_shop_links %}<p class="crm-release-warning">Cần version dữ liệu chính thức và deadline còn hiệu lực trước khi phát hành.</p>{% endif %}
+      <p class="crm-release-feedback" data-publish-feedback aria-live="polite"></p>
+    </section>
+  {% endif %}
+
+  <section class="crm-stats">
+    <article class="crm-stat"><span>PGD trong kết quả</span><strong>{{ summary.shops }}</strong></article>
+    <article class="crm-stat"><span>Đã gửi</span><strong>{{ summary.submitted }}</strong></article>
+    <article class="crm-stat"><span>Đang phản hồi</span><strong>{{ summary.in_progress }}</strong></article>
+    <article class="crm-stat"><span>Chưa phản hồi</span><strong>{{ summary.not_started }}</strong></article>
+  </section>
+
+  <form class="crm-filter" method="get">
+    <select name="region"><option value="">Tất cả Vùng</option>{% for id, name in regions %}<option value="{{ id }}" {% if selected_region == id|stringformat:"s" %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+    <select name="area"><option value="">Tất cả Khu vực</option>{% for id, name in areas %}<option value="{{ id }}" {% if selected_area == id|stringformat:"s" %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+    <select name="shop"><option value="">Tất cả PGD</option>{% for id, code, name in shops %}<option value="{{ id }}" {% if selected_shop == id|stringformat:"s" %}selected{% endif %}>{{ code }} · {{ name }}</option>{% endfor %}</select>
+    <select name="status"><option value="">Tất cả trạng thái</option><option value="not_started" {% if selected_status == 'not_started' %}selected{% endif %}>Chưa phản hồi</option><option value="in_progress" {% if selected_status == 'in_progress' %}selected{% endif %}>Đang phản hồi</option><option value="submitted" {% if selected_status == 'submitted' %}selected{% endif %}>Đã gửi</option></select>
+    <button class="crm-btn" type="submit">Lọc dữ liệu</button>
+  </form>
+
+  <section class="crm-card crm-table-wrap">
+    <table class="crm-table">
+      <thead><tr><th>PGD</th><th>Vùng</th><th>Khu vực</th><th>Tiến độ</th><th>Phản hồi</th>{% if can_manage_shop_links %}<th>Link PGD</th><th>Tạo/copy link</th>{% endif %}<th>Cập nhật cuối</th><th></th></tr></thead>
+      <tbody>{% for row in rows %}<tr data-shop-link-row data-shop-id="{{ row.shop_id }}" data-shop-code="{{ row.shop__shop_code }}" data-shop-name="{{ row.shop__shop_name }}">
+        <td><strong>{{ row.shop__shop_code }} · {{ row.shop__shop_name }}</strong></td>
+        <td>{{ row.region__region_name|default:"—" }}</td><td>{{ row.area_manager__areaManager_name|default:"—" }}</td>
+        <td><strong>{{ row.answered_errors }}/{{ row.total_errors }}</strong><div class="crm-progress"><span style="width:{{ row.progress }}%"></span></div></td>
+        <td><span class="crm-status {{ row.status }}">{{ row.status_label }}</span></td>
+        {% if can_manage_shop_links %}
+          <td data-link-status>{% if row.access_link %}<span class="dec-link-status {% if row.access_link.is_expired %}is-expired{% else %}is-issued{% endif %}">{% if row.access_link.is_expired %}Hết hạn{% else %}Đã phát hành{% endif %}</span><small>{{ row.access_link.created_at|date:"H:i d/m/Y" }}</small>{% else %}<span class="dec-link-status">Chưa tạo</span>{% endif %}</td>
+          <td class="crm-link-actions">
+            <form method="post" action="{% url 'document_campaigns:issue_campaign_shop_link' campaign.id row.shop_id %}" data-issue-link data-has-link="{% if row.access_link %}true{% else %}false{% endif %}">{% csrf_token %}<button class="crm-mini-btn" type="submit" {% if not campaign.response_deadline %}disabled{% endif %}>{% if row.access_link %}Đổi link{% else %}Tạo link{% endif %}</button></form>
+            <div class="dec-link-result" data-link-result hidden><input type="text" readonly data-link-url aria-label="Link phản hồi PGD"><button type="button" class="crm-mini-btn is-copy" data-copy-link>Copy</button></div>
+            <p class="dec-link-feedback" data-link-feedback aria-live="polite"></p>
+          </td>
+        {% endif %}
+        <td class="crm-muted">{{ row.last_response_at|date:"H:i d/m/Y"|default:"Chưa cập nhật" }}</td>
+        <td><a class="crm-link" href="{% url 'document_campaigns:shop_response_monitor_detail' campaign.id row.shop_id %}">Xem phản hồi →</a></td>
+      </tr>{% empty %}<tr><td colspan="9" class="crm-empty">Không có PGD trong phạm vi hoặc bộ lọc đã chọn.</td></tr>{% endfor %}</tbody>
+    </table>
+  </section>
+</div>
+{% endblock %}

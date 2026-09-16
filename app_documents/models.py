@@ -296,6 +296,22 @@ class Shop(models.Model):
 
 # Model - User Profile
 
+class ShopCatalogJob(models.Model):
+    kind = models.CharField(max_length=10, choices=[("export", "Export"), ("import", "Import")])
+    status = models.CharField(max_length=12, default="queued")
+    progress = models.PositiveSmallIntegerField(default=0)
+    message = models.TextField(blank=True)
+    summary = models.JSONField(default=dict)
+    input_file = models.FileField(upload_to="master_data/imports/%Y/%m/", blank=True)
+    output_file = models.FileField(upload_to="master_data/exports/%Y/%m/", blank=True)
+    requested_by = models.ForeignKey(User, on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["kind"], condition=models.Q(status__in=["queued", "running"]), name="one_active_shop_catalog_job_per_kind")]
+
+
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     department = models.CharField(max_length= 100, null= False, blank= False, unique= False, default= None) 

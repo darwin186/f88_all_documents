@@ -1,6 +1,6 @@
 {% extends 'app_documents/base_app_documents_v2.html' %}
 {% block title %}{% if dashboard_is_admin %}Dashboard giao dịch bảo đảm{% else %}Dashboard của tôi{% endif %}{% endblock %}
-{% block top_nav %}{% include 'app_documents/components/top_nav_v2.html' %}{% endblock %}
+{% block top_nav %}{% include 'app_documents/components/top_nav_v2.html' with gddb_nav=True %}{% endblock %}
 {% block main_extra_class %}pt-14{% endblock %}
 
 {% block content %}

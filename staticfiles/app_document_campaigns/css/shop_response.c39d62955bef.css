@@ -1,0 +1,13 @@
+body {
+  font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+}
+
+@keyframes dec-row-saved {
+  from { background-color: rgba(16, 185, 129, 0.14); }
+  to { background-color: transparent; }
+}
+
+.dec-row-saved {
+  animation: dec-row-saved 0.8s ease-out;
+}
+

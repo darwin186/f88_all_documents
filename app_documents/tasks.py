@@ -11,6 +11,12 @@ def ping():
     return f"ping at {timezone.now()}"
 
 
+@shared_task(soft_time_limit=540, time_limit=600)
+def process_shop_catalog_job(job_id):
+    from .shop_catalog_excel import process_job
+    return process_job(job_id)
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=300)
 def send_gapo_scheduled_message(self, schedule_id):
     try:

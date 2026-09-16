@@ -1,0 +1,52 @@
+{% extends "app_documents/base_app_documents_v2.html" %}
+{% load static %}
+
+{% block title %}Tạo chiến dịch lỗi chứng từ{% endblock %}
+{% block top_nav %}{% include "app_documents/components/top_nav_v2.html" %}{% endblock %}
+{% block main_extra_class %}pt-20{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/monthSelect/style.css">
+<link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_form.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="dcf-page">
+  <a href="{% url 'document_campaigns:campaign_list' %}" class="dcf-back">← Danh sách chiến dịch</a>
+  <header class="dcf-header">
+    <div class="dcf-eyebrow">Vận hành · Book lỗi chứng từ</div>
+    <h1 class="dcf-title">Tạo chiến dịch</h1>
+    <p class="dcf-subtitle">Khai báo kỳ dữ liệu và hạn cuối để PGD hoàn tất phản hồi.</p>
+  </header>
+  <div class="dcf-layout">
+    <form method="post" class="dcf-form">
+      {% csrf_token %}
+      <div class="dcf-fields">
+        {% for field in form %}
+          <div class="dcf-field {% if field.name == 'campaign_type' or field.name == 'name' or field.name == 'response_deadline' %}is-wide{% endif %}">
+            <label for="{{ field.id_for_label }}" class="dcf-label">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="dcf-help">{{ field.help_text }}</p>{% endif %}
+            {% for error in field.errors %}<p class="dcf-error">{{ error }}</p>{% endfor %}
+          </div>
+          {% if field.name == 'campaign_type' %}<div class="dcf-code-preview"><span>Mã chiến dịch tự sinh</span><strong data-campaign-code-preview>Chọn loại và tháng chứng từ</strong></div>{% endif %}
+        {% endfor %}
+      </div>
+      {% for error in form.non_field_errors %}<p class="dcf-error">{{ error }}</p>{% endfor %}
+      <div class="dcf-actions">
+        <a href="{% url 'document_campaigns:campaign_list' %}" class="dcf-btn dcf-btn-secondary">Hủy</a>
+        <button class="dcf-btn dcf-btn-primary">Tạo chiến dịch</button>
+      </div>
+    </form>
+    <aside class="dcf-note">
+      <h2>Sau khi tạo chiến dịch</h2>
+      <ol><li>Truy xuất dữ liệu lỗi từ hệ thống.</li><li>Làm sạch và xác nhận file.</li><li>Phát hành link phản hồi tới PGD.</li><li>Tổng hợp để QLKV và QLV xác nhận.</li></ol>
+      <div class="dcf-expiry">Mã chiến dịch được tự sinh theo loại và kỳ, ví dụ <strong>DEC-HC-202609</strong>. Link PGD chuyển sang chỉ đọc khi hết deadline và tự hết hạn sau thêm 31 ngày.</div>
+    </aside>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/vn.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/monthSelect/index.js"></script>
+<script src="{% static 'app_document_campaigns/js/campaign_form.js' %}"></script>
+{% endblock %}

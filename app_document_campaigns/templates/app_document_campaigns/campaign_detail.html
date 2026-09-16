@@ -1,0 +1,142 @@
+{% extends "app_documents/base_app_documents_v2.html" %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}{{ campaign.code }}{% endblock %}
+{% block top_nav %}{% include "app_documents/components/top_nav_v2.html" %}{% endblock %}
+{% block main_extra_class %}pt-20{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_workflow.css' %}"><script src="{% static 'app_document_campaigns/js/campaign_workflow.js' %}" defer></script><script src="{% static 'app_document_campaigns/js/campaign_settings.js' %}" defer></script>{% endblock %}
+
+{% block content %}
+<div class="dec-page">
+  <a href="{% url 'document_campaigns:campaign_list' %}" class="dec-back">← Danh sách chiến dịch</a>
+  <header class="dec-header">
+    <div>
+      <div class="dec-eyebrow">{{ campaign.campaign_type.name }} · {{ campaign.code }} · Kỳ {{ campaign.report_month|date:"m/Y" }}</div>
+      <h1 class="dec-title">{{ campaign.name }}</h1>
+      <p class="dec-subtitle">Trạng thái: <strong data-campaign-status>{{ campaign.get_status_display }}</strong>{% if campaign.response_deadline %} · Hạn PGD: <strong>{{ campaign.response_deadline|date:"H:i d/m/Y" }}</strong> · Link hết hạn: <strong>{{ campaign.link_expires_at|date:"H:i d/m/Y" }}</strong>{% endif %}</p>
+    </div>
+    <div class="dec-header-actions">
+      {% if can_manage_shop_links %}<button type="button" class="dec-settings-trigger" data-open-campaign-settings aria-label="Mở cài đặt chiến dịch" title="Cài đặt chiến dịch">⚙</button>{% endif %}
+      <a class="dec-btn {% if workflow_step == 5 %}dec-btn-primary{% else %}dec-btn-blue{% endif %}" href="{% url 'document_campaigns:campaign_response_monitor' campaign.id %}">{% if workflow_step == 5 %}Phát hành & theo dõi PGD →{% else %}Theo dõi phản hồi PGD{% endif %}</a>
+      {% if can_manage_shop_links %}<form method="post" action="{% url 'document_campaigns:create_campaign_version' campaign.id %}">{% csrf_token %}<button class="dec-btn dec-btn-secondary">＋ Tạo version dữ liệu mới</button></form>{% endif %}
+    </div>
+  </header>
+
+  {% if messages %}{% for message in messages %}
+    <div class="dec-alert {% if message.tags == 'error' %}dec-alert-error{% endif %}">{{ message }}</div>
+  {% endfor %}{% endif %}
+
+  {% if versions %}
+    <nav class="dec-version-tabs" aria-label="Các version dữ liệu">
+      {% for version in versions %}<a href="?version={{ version.id }}" class="dec-version-tab {% if selected_version.id == version.id %}is-active{% endif %}">Version {{ version.version_number }} · {{ version.get_status_display }}</a>{% endfor %}
+    </nav>
+
+    <section class="dec-roadmap">
+      <div class="dec-progress-heading"><span>Tiến độ chuẩn bị dữ liệu</span><span>{{ workflow_progress }}%</span></div>
+      <div class="dec-progress-track" role="progressbar" aria-valuenow="{{ workflow_progress }}" aria-valuemin="0" aria-valuemax="100"><div class="dec-progress-value" style="width: {{ workflow_progress }}%"></div></div>
+      <div class="dec-steps">
+        <div class="dec-step {% if workflow_step == 1 %}is-active{% elif workflow_step > 1 %}is-done{% endif %}"><span class="dec-step-number">1</span><span class="dec-step-title">Truy xuất dữ liệu PGD</span><span class="dec-step-copy">Lấy các hợp đồng liên quan đến book lỗi kỳ {{ campaign.report_month|date:"m/Y" }}.</span></div>
+        <div class="dec-step {% if workflow_step == 2 %}is-active{% elif workflow_step > 2 %}is-done{% endif %}"><span class="dec-step-number">2</span><span class="dec-step-title">Team làm sạch Excel</span><span class="dec-step-copy">Tải danh sách staging và kiểm tra từng hợp đồng.</span></div>
+        <div class="dec-step {% if workflow_step == 3 %}is-active{% elif workflow_step > 3 %}is-done{% endif %}"><span class="dec-step-number">3</span><span class="dec-step-title">Đối chiếu dữ liệu</span><span class="dec-step-copy">Import file đã làm sạch và xem thêm, sửa, loại, lỗi.</span></div>
+        <div class="dec-step {% if workflow_step == 4 %}is-active{% elif workflow_step > 4 %}is-done{% endif %}"><span class="dec-step-number">4</span><span class="dec-step-title">Xác nhận chính thức</span><span class="dec-step-copy">Chốt version Excel trước khi phát hành cho PGD.</span></div>
+      </div>
+    </section>
+
+    <div class="dec-workspace">
+      <section class="dec-card">
+        {% if latest_job %}
+          <div class="dec-job {% if latest_job.status == 'queued' or latest_job.status == 'running' %}is-active{% endif %}" data-import-job data-status="{{ latest_job.status }}" data-status-url="{% url 'document_campaigns:latest_import_job' selected_version.id %}">
+            <div class="dec-job-head"><span>{% if latest_job.job_type == 'sql_stage' %}Đang chuẩn bị dữ liệu từ hệ thống{% elif latest_job.job_type == 'excel_import' %}Đang đối chiếu file Excel{% else %}Đang tạo file Excel{% endif %} · Job #{{ latest_job.id }}</span><span data-job-status>{{ latest_job.get_status_display }}</span></div>
+            <div class="dec-job-track"><div class="dec-job-value" data-job-progress style="width: {% if latest_job.status == 'succeeded' %}100{% elif latest_job.status == 'running' %}50{% elif latest_job.status == 'queued' %}5{% else %}0{% endif %}%"></div></div>
+            <p data-job-message {% if not latest_job.summary.message %}hidden{% endif %}>{{ latest_job.summary.message }}</p>
+            <p class="dec-job-error" data-job-error {% if not latest_job.error_message %}hidden{% endif %}>{{ latest_job.error_message }}</p>
+          </div>
+        {% endif %}
+        {% if workflow_step == 1 %}
+          <h2>Bước 1 — Truy xuất dữ liệu book lỗi của Phòng giao dịch</h2>
+          <p>Hệ thống sẽ lấy dữ liệu lỗi quyển và lỗi chứng từ phát sinh trong kỳ <strong>{{ campaign.report_month|date:"m/Y" }}</strong>. Mỗi dòng thể hiện một mã hợp đồng để PGD xác nhận theo hợp đồng.</p>
+          <div class="dec-action-stack">{% if can_manage_shop_links %}<form method="post" action="{% url 'document_campaigns:stage_sql_version' selected_version.id %}">{% csrf_token %}<button {% if latest_job.status == 'queued' or latest_job.status == 'running' %}disabled{% endif %} class="dec-btn dec-btn-blue dec-btn-block">Gửi job truy xuất dữ liệu PGD kỳ {{ campaign.report_month|date:"m/Y" }}</button></form>{% endif %}</div>
+        {% elif workflow_step == 2 %}
+          <h2>Bước 2 — Tải danh sách để team kiểm tra</h2>
+          <p>Dữ liệu SQL đã vào staging. Hãy tạo file ở chế độ nền; khi hoàn tất, nút tải xuống sẽ xuất hiện để team kiểm tra từng hợp đồng.</p>
+          <div class="dec-action-stack">
+            {% if latest_export_job %}<a href="{% url 'document_campaigns:export_staging_excel' selected_version.id %}" class="dec-btn dec-btn-primary dec-btn-block">↓ Tải file Excel đã tạo</a>{% endif %}
+            {% if can_manage_shop_links %}<form method="post" action="{% url 'document_campaigns:queue_staging_excel_export' selected_version.id %}">{% csrf_token %}<button {% if latest_job.job_type == 'excel_export' and latest_job.status == 'queued' or latest_job.job_type == 'excel_export' and latest_job.status == 'running' %}disabled{% endif %} class="dec-btn {% if latest_export_job %}dec-btn-secondary{% else %}dec-btn-primary{% endif %} dec-btn-block">{% if latest_export_job %}Tạo lại file Excel mới nhất{% else %}Tạo file Excel để team làm sạch{% endif %}</button></form>{% endif %}
+            {% if can_manage_shop_links %}<form method="post" action="{% url 'document_campaigns:stage_sql_version' selected_version.id %}">{% csrf_token %}<button class="dec-btn dec-btn-secondary dec-btn-block">Truy xuất lại dữ liệu SQL</button></form>{% endif %}
+          </div>
+        {% elif workflow_step == 3 %}
+          <h2>Bước 3 — Sửa lỗi trong file và import lại</h2>
+          <p>File hiện còn lỗi validation. Xem bảng phía dưới, sửa file Excel rồi import lại để tạo preview mới.</p>
+        {% elif workflow_step == 4 %}
+          <h2>Bước 4 — Kiểm tra preview và xác nhận</h2>
+          <p>File Excel đã hợp lệ. Kiểm tra số dòng thêm, sửa và loại trước khi dùng làm dữ liệu chính thức.</p>
+        {% else %}
+          <h2>Đã hoàn tất chuẩn bị dữ liệu</h2><p>Version {{ selected_version.version_number }} đã được publish và sẵn sàng cho bước phát hành tới PGD.</p>
+        {% endif %}
+        {% if excel_source.status == 'validated' or excel_source.status == 'confirmed' %}
+          <div class="dec-action-stack">
+            {% if latest_reviewed_export_job %}<a class="dec-btn dec-btn-primary dec-btn-block" href="{% url 'document_campaigns:export_staging_excel' selected_version.id %}?kind=reviewed">↓ Tải kết quả sau team review · Version {{ selected_version.version_number }}</a>{% endif %}
+            {% if can_manage_shop_links %}<form method="post" action="{% url 'document_campaigns:queue_staging_excel_export' selected_version.id %}">{% csrf_token %}<input type="hidden" name="export_kind" value="reviewed"><button class="dec-btn dec-btn-secondary dec-btn-block" {% if latest_job.status == 'queued' or latest_job.status == 'running' %}disabled{% endif %}>{% if latest_reviewed_export_job %}Tạo lại{% else %}Tạo file để tải{% endif %} kết quả sau team review</button></form>{% endif %}
+          </div>
+        {% endif %}
+
+        {% if workflow_step >= 2 and workflow_step < 5 %}
+          <div class="dec-action-stack">
+            {% if can_manage_shop_links %}<form method="post" enctype="multipart/form-data" action="{% url 'document_campaigns:import_staging_excel' selected_version.id %}">{% csrf_token %}<input type="hidden" name="return_to" value="campaign_detail"><input required type="file" name="file" accept=".xlsx" class="dec-file"><button {% if latest_job.job_type == 'excel_import' and latest_job.status == 'queued' or latest_job.job_type == 'excel_import' and latest_job.status == 'running' %}disabled{% endif %} class="dec-btn dec-btn-primary dec-btn-block">Tải lên và đối chiếu trong nền</button></form>{% endif %}
+            {% if workflow_step == 4 %}{% if can_manage_shop_links %}<form method="post" action="{% url 'document_campaigns:confirm_staging_excel' selected_version.id %}" onsubmit="return confirm('Xác nhận Excel là dữ liệu chính thức của version này?')">{% csrf_token %}<input type="hidden" name="return_to" value="campaign_detail"><button class="dec-btn dec-btn-warning dec-btn-block">Xác nhận dùng dữ liệu Excel chính thức</button></form>{% endif %}{% endif %}
+          </div>
+        {% endif %}
+      </section>
+
+      <aside class="dec-card">
+        <h2>Nguồn dữ liệu của version</h2>
+        <p>Theo dõi số dòng và lỗi trước khi đi tiếp.</p>
+        <div class="dec-source-list">{% for source in sources %}<div class="dec-source"><strong>{{ source.display_name }}</strong><div class="dec-source-meta"><span>{{ source.get_source_type_display }}</span><span>{{ source.row_count }} dòng</span><span class="dec-error-count">{{ source.invalid_count }} lỗi</span>{% if source.preview_summary.removed_from_sql != None %}<span>{{ source.preview_summary.removed_from_sql }} dòng loại</span>{% endif %}</div></div>{% empty %}<div class="dec-source">Chưa có dữ liệu.</div>{% endfor %}</div>
+      </aside>
+    </div>
+
+    <section class="dec-preview">
+      <div class="dec-preview-head"><h2>Thống kê bộ dữ liệu {% if excel_source %}sau team review{% else %}SQL ban đầu{% endif %}</h2><p>Thống kê toàn bộ dữ liệu của version {{ selected_version.version_number }}, không giới hạn số dòng. {% if excel_source %}Nguồn: Excel team đã upload · {{ excel_source.get_status_display }}.{% else %}Chưa có Excel team review; số liệu SQL là tạm thời.{% endif %} Các mã trống không tính vào số lượng duy nhất; số quản lý vùng dựa trên QLV, không phải UserProfile.region.</p></div>
+      <div class="dec-dataset-metrics">{% for metric in dataset_metrics %}<article><span>{{ metric.label }}</span><strong>{{ metric.value|intcomma }}</strong></article>{% empty %}<p class="dec-empty">Chưa có bộ dữ liệu để thống kê.</p>{% endfor %}</div>
+    </section>
+  {% else %}
+    <section class="dec-roadmap"><h2>Chưa có version dữ liệu</h2><p class="dec-subtitle">Bấm “Tạo version dữ liệu mới” để bắt đầu roadmap chuẩn bị chiến dịch.</p></section>
+  {% endif %}
+
+  {% if can_manage_shop_links %}
+    <dialog class="dec-settings-dialog" data-campaign-settings {% if open_settings %}data-open-on-load{% endif %}>
+      {% if can_manage_shop_links %}<form method="post" action="{% url 'document_campaigns:update_campaign_settings' campaign.id %}">
+        {% csrf_token %}
+        <div class="dec-settings-head">
+          <div><span>Cài đặt chiến dịch</span><h2>{{ campaign.code }}</h2></div>
+          <button type="button" class="dec-settings-close" data-close-campaign-settings aria-label="Đóng">×</button>
+        </div>
+        <div class="dec-settings-body">
+          <div class="dec-settings-readonly">
+            <div><span>Mã chiến dịch</span><strong>{{ campaign.code }}</strong></div>
+            <div><span>Loại book lỗi</span><strong>{{ campaign.campaign_type.name }}</strong></div>
+            <div><span>Kỳ dữ liệu</span><strong>{{ campaign.report_month|date:"m/Y" }}</strong></div>
+            <div><span>Trạng thái</span><strong>{{ campaign.get_status_display }}</strong></div>
+          </div>
+          <p class="dec-settings-note">Các thông tin định danh được khóa vì chiến dịch đã liên kết với dữ liệu SQL/Excel.</p>
+          <div class="dec-settings-field">
+            <label for="{{ settings_form.name.id_for_label }}">{{ settings_form.name.label }}</label>
+            {{ settings_form.name }}
+          </div>
+          <div class="dec-settings-field">
+            <label for="{{ settings_form.response_deadline.id_for_label }}">{{ settings_form.response_deadline.label }}</label>
+            {{ settings_form.response_deadline }}
+            <small>Link PGD chuyển sang chỉ đọc sau hạn này và hết hiệu lực sau thêm 31 ngày.</small>
+          </div>
+        </div>
+        <div class="dec-settings-actions">
+          <button type="button" class="dec-btn dec-btn-secondary" data-close-campaign-settings>Hủy</button>
+          <button type="submit" class="dec-btn dec-btn-primary">Lưu thay đổi</button>
+        </div>
+      </form>{% endif %}
+    </dialog>
+
+  {% endif %}
+</div>
+{% endblock %}

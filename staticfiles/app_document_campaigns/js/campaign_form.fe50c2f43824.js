@@ -1,0 +1,50 @@
+(function () {
+  const initPickers = () => {
+    if (!window.flatpickr) return;
+    if (window.flatpickr.l10ns?.vn) {
+      window.flatpickr.localize(window.flatpickr.l10ns.vn);
+    }
+
+    const monthInput = document.querySelector("[data-campaign-month]");
+    if (monthInput && window.monthSelectPlugin) {
+      window.flatpickr(monthInput, {
+        allowInput: false,
+        disableMobile: true,
+        dateFormat: "Y-m",
+        altInput: true,
+        altFormat: "m/Y",
+        monthSelectorType: "static",
+        plugins: [
+          new window.monthSelectPlugin({
+            shorthand: true,
+            dateFormat: "Y-m",
+            altFormat: "m/Y",
+            theme: "light",
+          }),
+        ],
+      });
+    }
+
+    const deadlineInput = document.querySelector("[data-campaign-deadline]");
+    if (deadlineInput) {
+      window.flatpickr(deadlineInput, {
+        allowInput: false,
+        disableMobile: true,
+        enableTime: true,
+        time_24hr: true,
+        minuteIncrement: 15,
+        dateFormat: "Y-m-d\\TH:i",
+        altInput: true,
+        altFormat: "d/m/Y H:i",
+        monthSelectorType: "static",
+        locale: { firstDayOfWeek: 1 },
+      });
+    }
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initPickers);
+  } else {
+    initPickers();
+  }
+})();

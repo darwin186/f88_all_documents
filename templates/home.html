@@ -118,7 +118,10 @@
     .intro { max-width: 720px; }
     .intro h1 { margin: 0 0 6px; color: #102219; font-size: clamp(28px, 3.4vw, 38px); line-height: 1.12; letter-spacing: -.04em; }
     .intro p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
-    .hero-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 14px; margin-top: 28px; }
+    .module-section { margin-top: 30px; }
+    .module-section h2 { margin: 0 0 12px; color: var(--green-dark); font-size: 13px; font-weight: 800; letter-spacing: .12em; }
+    .hero-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 14px; }
+    .services-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .module-stack { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
     .module-stack .hero-card { width: 100%; flex: none; }
     .legacy-link {
@@ -173,7 +176,7 @@
     .hero-card.disabled:hover { transform: none; border-color: var(--line); box-shadow: none; }
     .hero-card.disabled .card-icon { border-color: #e2e8e5; color: #809087; background: #f2f5f3; }
     .hero-card.disabled .card-kicker { color: #849189; }
-    .soft-card { grid-column: 2; }
+    .soft-card { grid-column: auto; }
     @media (max-width: 900px) {
       .hero-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .soft-card { grid-column: auto; }
@@ -233,7 +236,9 @@
       <p>Xin chào <strong>{% if user.last_name or user.first_name %}{{ user.last_name }} {{ user.first_name }}{% else %}{{ user.username }}{% endif %}</strong>.</p>
     </section>
 
-    <section class="hero-grid">
+    <section class="module-section" aria-labelledby="documents-heading">
+      <h2 id="documents-heading">CHỨNG TỪ</h2>
+      <div class="hero-grid">
       <div class="module-stack">
         <a class="hero-card" href="{% url 'receiving_transaction_v2' %}">
           <span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></span>
@@ -246,16 +251,10 @@
         </a>
       </div>
 
-      <a class="hero-card" href="{% url 'gddb_registration_v2' %}">
-        <span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 9h16l-2-4H6L4 9Z"/><path d="M5 9v8h14V9M8 17v2h8v-2M8 13h.01M16 13h.01"/></svg></span>
-        <span class="card-kicker">Vận hành</span>
-        <h3>Đăng ký GDĐB</h3>
-      </a>
-
-      <a class="hero-card" href="{% url 'admindocuments:admindocuments_list' %}">
-        <span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v5h4M10 12h6M10 16h6"/></svg></span>
-        <span class="card-kicker">Hành chính</span>
-        <h3>Quản lý văn bản</h3>
+      <a class="hero-card" href="{% url 'document_campaigns:campaign_list' %}">
+        <span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 3h10v3H7z"/><path d="M6 5H5v16h14V5h-1"/><path d="M9 11h6M9 15h4"/><path d="M17 14v4M17 20h.01"/></svg></span>
+        <span class="card-kicker">Vận Hành</span>
+        <h3>Book lỗi chứng từ</h3>
       </a>
 
       <div class="hero-card disabled soft-card">
@@ -264,7 +263,32 @@
         <h3>Chứng từ bản mềm</h3>
       </div>
 
+      </div>
     </section>
+    <section class="module-section" aria-labelledby="services-heading">
+      <h2 id="services-heading">DỊCH VỤ</h2>
+      <div class="hero-grid services-grid">
+        <a class="hero-card" href="{% url 'admindocuments:admindocuments_list' %}">
+          <span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 3h8l4 4v14H7z"/><path d="M15 3v5h4M10 12h6M10 16h6"/></svg></span>
+          <span class="card-kicker">Hành chính</span><h3>Quản lý văn bản</h3>
+        </a>
+        <a class="hero-card" href="{% url 'gddb_registration_v2' %}">
+          <span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 9h16l-2-4H6L4 9Z"/><path d="M5 9v8h14V9M8 17v2h8v-2M8 13h.01M16 13h.01"/></svg></span>
+          <span class="card-kicker">Vận hành</span><h3>Giao dịch đảm bảo</h3>
+        </a>
+      </div>
+    </section>
+    {% if is_admin or is_super_admin %}
+    <section class="module-section" aria-labelledby="master-data-heading">
+      <h2 id="master-data-heading">MASTER DATA</h2>
+      <div class="hero-grid">
+        <a class="hero-card" href="{% url 'master_data' %}">
+          <span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 4h16v5H4zM4 15h6v5H4zM14 15h6v5h-6zM12 9v3M7 15v-3h10v3"/></svg></span>
+          <span class="card-kicker">Danh mục · Admin</span><h3>Master Data</h3>
+        </a>
+      </div>
+    </section>
+    {% endif %}
   </main>
 
   <script>

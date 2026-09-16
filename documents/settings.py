@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'django.contrib.humanize',
     "app_documents.apps.AppDocumentsConfig",
+    "app_document_campaigns.apps.AppDocumentCampaignsConfig",
     "app_admindocuments.apps.AdmindocumentsConfig",
     "app_workshift.apps.AppWorkshiftConfig",
     "gapo_relay.apps.GapoRelayConfig",
@@ -265,9 +266,11 @@ AUTH_PASSWORD_RESET_SUBJECT = 'registration/password_reset_subject.txt'
 PASSWORD_RESET_EMAIL_TEMPLATE = 'registration/password_reset_email.html'
 
 # Celery settings (dùng chung một URL)
-CELERY_URL = os.getenv('CELERY_URL') or os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0')
-CELERY_BROKER_URL = CELERY_URL
-CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', CELERY_URL)
+CELERY_URL = os.getenv('CELERY_URL', 'redis://127.0.0.1:6379/0')
+# docker-compose injects CELERY_BROKER_URL=redis://redis:6379/0; local Windows
+# uses CELERY_URL=redis://127.0.0.1:6379/0 from .env.
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL') or CELERY_URL
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND') or CELERY_BROKER_URL
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'

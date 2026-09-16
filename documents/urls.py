@@ -25,6 +25,7 @@ from app_documents.views import CustomPasswordResetView
 urlpatterns = [
 path('admin/', admin.site.urls),
 path("", include("app_documents.urls")),
+path("error-campaigns/", include("app_document_campaigns.urls")),
 path("admindocuments/", include("app_admindocuments.urls")),
 path("lich-lam-viec/", include("app_workshift.urls")),
 path("integrations/gapo/", include("gapo_relay.urls")),

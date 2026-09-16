@@ -1,0 +1,79 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="same-origin">
+  <title>Phản hồi lỗi chứng từ · {{ link.shop.shop_name }}</title>
+  <link rel="icon" type="image/svg+xml" href="https://f88.vn/images/root/logo-f88-primary.svg">
+  <script src="https://cdn.tailwindcss.com/3.4.10"></script>
+  <script>tailwind.config={theme:{extend:{colors:{f88green:'#00844A',f88dark:'#006837'}}}};</script>
+  <link rel="stylesheet" href="{% static 'app_document_campaigns/css/shop_response.css' %}">
+</head>
+<body class="min-h-screen bg-[#f5f6f8] text-gray-800">
+  <header class="sticky top-0 z-30 border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur">
+    <div class="mx-auto flex max-w-[1500px] items-center justify-between gap-4 px-4 py-3">
+      <div class="flex items-center gap-3">
+        <img src="https://f88.vn/images/root/logo-f88-primary.svg" alt="F88" class="h-8">
+        <div><div class="text-sm font-extrabold text-gray-950">Phản hồi lỗi chứng từ</div><div class="text-xs text-gray-500">{{ link.campaign.name }}</div></div>
+      </div>
+      <div id="save-indicator" class="rounded-full bg-gray-100 px-3 py-2 text-xs font-semibold text-gray-600" aria-live="polite">Sẵn sàng</div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-[1500px] space-y-4 px-4 py-6" data-response-root
+        data-autosave-url="{% url 'document_campaigns:autosave_batch' raw_token=raw_token %}"
+        data-submit-url="{% url 'document_campaigns:submit_responses' raw_token=raw_token %}"
+        data-read-only="{{ read_only|yesno:'true,false' }}"
+        data-submission-key="dec-submit-{{ link.campaign_id }}-{{ link.shop_id }}">
+    <section class="grid gap-3 md:grid-cols-[1fr,auto]">
+      <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div class="text-xs font-bold uppercase tracking-wider text-f88green">{{ link.shop.shop_name }}</div>
+        <h1 class="mt-1 text-xl font-extrabold text-gray-950">Lỗi chứng từ tháng {{ link.campaign.report_month|date:"m/Y" }}</h1>
+        <div class="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-xs text-gray-600">
+          <span>Hoàn thành: <strong><span data-completed>{{ completed }}</span>/{{ total }}</strong></span>
+          <span>Hạn phản hồi: <strong>{{ link.response_deadline|date:"H:i d/m/Y" }}</strong></span>
+        </div>
+      </div>
+      <div class="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:min-w-[260px]">
+        <div class="flex items-center justify-between gap-3 text-xs font-semibold text-gray-500"><span>Tiến độ phản hồi</span><strong data-progress-percent class="text-f88green">{% widthratio completed total 100 %}%</strong></div>
+        <div class="mt-3 h-2 overflow-hidden rounded-full bg-gray-100"><div data-progress class="h-full rounded-full bg-f88green transition-all" style="width:{% widthratio completed total 100 %}%"></div></div>
+        {% if submitted %}<div class="mt-3 text-xs font-bold text-emerald-700">PGD đã gửi chính thức.</div>{% elif read_only %}<div class="mt-3 text-xs font-bold text-amber-700">Đã hết thời gian cập nhật.</div>{% endif %}
+        {% if not read_only and total %}<button id="submit-responses" type="button" class="mt-4 min-h-11 w-full rounded-xl bg-f88green px-5 text-sm font-bold text-white hover:bg-f88dark disabled:cursor-not-allowed disabled:opacity-50">Gửi phản hồi chính thức</button>{% endif %}
+      </div>
+    </section>
+
+    <section class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <div class="overflow-x-auto">
+        <table class="min-w-[1100px] w-full text-left text-xs">
+          <thead class="bg-gray-50 text-[10px] uppercase tracking-wide text-gray-500">
+            <tr><th class="px-3 py-3">STT</th><th class="px-3 py-3">Hợp đồng/Chứng từ</th><th class="px-3 py-3">Nội dung lỗi</th><th class="px-3 py-3 w-[280px]">PGD phản hồi <span class="text-red-600">*</span></th><th class="px-3 py-3 w-[300px]">Ghi chú <span class="font-normal normal-case text-gray-400">(không bắt buộc)</span></th></tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for row in rows %}
+            <tr data-response-row data-error-uid="{{ row.error.error_uid }}" data-version="{{ row.response.version_no|default:0 }}" class="align-top transition-colors">
+              <td class="px-3 py-4 text-gray-400">{{ forloop.counter }}</td>
+              <td class="px-3 py-4"><div class="font-bold text-gray-950">{{ row.error.contract_code|default:row.error.code|default:"—" }}</div><div class="mt-1 text-[11px] text-gray-500">{{ row.error.get_error_type_display }}</div></td>
+              <td class="px-3 py-4"><div class="max-w-[420px] whitespace-pre-line leading-5">{{ row.error.checking_issue }}</div>{% if row.document_types %}<ul class="dec-document-types">{% for document_type in row.document_types %}<li>{{ document_type }}</li>{% endfor %}</ul>{% endif %}</td>
+              <td class="px-3 py-4">
+                <select data-answer class="min-h-10 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 text-[13px] outline-none focus:border-f88green focus:bg-white" {% if read_only %}disabled{% endif %}>
+                  <option value="" {% if not row.response.answer_code %}selected{% endif %}>— Chọn phản hồi —</option>
+                  {% for option in row.options %}
+                  <option value="{{ option.value }}" {% if row.response.answer_code == option.value %}selected{% endif %}>{{ option.label }}</option>
+                  {% endfor %}
+                </select>
+                <p data-answer-error class="dec-answer-error" hidden>Vui lòng chọn phản hồi cho dòng này.</p>
+              </td>
+              <td class="px-3 py-4"><textarea data-note rows="2" class="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[13px] outline-none focus:border-f88green focus:bg-white" placeholder="Nhập ghi chú nếu cần" {% if read_only %}disabled{% endif %}>{{ row.response.note|default:"" }}</textarea></td>
+            </tr>
+            {% empty %}<tr><td colspan="5" class="px-4 py-12 text-center text-gray-400">Không có lỗi cần phản hồi.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+  <script src="{% static 'app_document_campaigns/js/shop_response.js' %}" defer></script>
+</body>
+</html>
