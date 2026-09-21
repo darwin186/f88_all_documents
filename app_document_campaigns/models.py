@@ -32,6 +32,32 @@ class CampaignType(models.Model):
         return self.name
 
 
+class ShopResponseOption(models.Model):
+    code = models.CharField(max_length=40, unique=True)
+    label = models.CharField(max_length=255)
+    description = models.TextField(blank=True, max_length=2000)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+
+    def __str__(self):
+        return self.label
+
+
+class CampaignResponseOption(models.Model):
+    campaign = models.ForeignKey("Campaign", related_name="response_options", on_delete=models.CASCADE)
+    option = models.ForeignKey(ShopResponseOption, on_delete=models.PROTECT)
+    value = models.CharField(max_length=255)
+    label = models.CharField(max_length=255)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+        constraints = [models.UniqueConstraint(fields=["campaign", "option"], name="dec_campaign_response_option_unique"), models.UniqueConstraint(fields=["campaign", "value"], name="dec_campaign_response_value_unique")]
+
+
 class Campaign(models.Model):
     class Status(models.TextChoices):
         DRAFT = "draft", "Nháp"
@@ -49,6 +75,8 @@ class Campaign(models.Model):
         on_delete=models.PROTECT,
     )
     report_month = models.DateField(help_text="Ngày đầu tiên của tháng chiến dịch")
+    shop_instructions = models.TextField(blank=True, default="", verbose_name="Hướng Dẫn", max_length=10000)
+    area_manager_instructions = models.TextField(blank=True, default="", verbose_name="Hướng dẫn Quản lý khu vực", max_length=10000)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT, db_index=True)
     response_opens_at = models.DateTimeField(null=True, blank=True)
     response_deadline = models.DateTimeField(null=True, blank=True)
@@ -414,6 +442,7 @@ class ShopAccessLink(models.Model):
     allowed_email = models.EmailField(max_length=254)
     token_digest = models.CharField(max_length=64, unique=True, editable=False)
     response_deadline = models.DateTimeField()
+    has_deadline_extension = models.BooleanField(default=False)
     expires_at = models.DateTimeField()
     revoked_at = models.DateTimeField(null=True, blank=True)
     last_accessed_at = models.DateTimeField(null=True, blank=True)
@@ -441,6 +470,58 @@ class ShopAccessLink(models.Model):
     def is_editable(self):
         now = timezone.now()
         return not self.revoked_at and now < self.response_deadline and now < self.expires_at
+
+
+class ShopEmailDelivery(models.Model):
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Chờ gửi"
+        SENDING = "sending", "Đang gửi"
+        SENT = "sent", "Đã gửi"
+        FAILED = "failed", "Gửi thất bại"
+        SKIPPED = "skipped", "Không gửi"
+
+    link = models.ForeignKey(ShopAccessLink, related_name="email_deliveries", on_delete=models.CASCADE)
+    area_manager = models.ForeignKey("app_documents.AreaManager", null=True, blank=True, on_delete=models.SET_NULL)
+    area_email = models.EmailField(blank=True)
+    to_email = models.EmailField(blank=True)
+    cc_emails = models.JSONField(default=list, blank=True)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.QUEUED, db_index=True)
+    message = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "dec_shop_email_delivery"
+
+
+class AreaManagerAccessLink(models.Model):
+    class EmailStatus(models.TextChoices):
+        NOT_SENT = "not_sent", "Chưa gửi"
+        QUEUED = "queued", "Chờ gửi"
+        SENT = "sent", "Đã gửi"
+        FAILED = "failed", "Gửi thất bại"
+
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    campaign = models.ForeignKey(Campaign, related_name="area_manager_links", on_delete=models.CASCADE)
+    area_manager = models.ForeignKey("app_documents.AreaManager", related_name="document_campaign_links", on_delete=models.PROTECT)
+    allowed_email = models.EmailField(max_length=254)
+    token_digest = models.CharField(max_length=64, unique=True, editable=False)
+    expires_at = models.DateTimeField()
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    last_accessed_at = models.DateTimeField(null=True, blank=True)
+    email_status = models.CharField(max_length=12, choices=EmailStatus.choices, default=EmailStatus.NOT_SENT)
+    email_message = models.CharField(max_length=500, blank=True)
+    emailed_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="document_campaign_area_links_created", on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "dec_area_manager_access_link"
+        constraints = [models.UniqueConstraint(fields=["campaign", "area_manager"], name="dec_uq_campaign_area_link")]
+
+    @property
+    def is_expired(self):
+        return timezone.now() >= self.expires_at
 
 
 class ShopResponse(models.Model):
@@ -575,6 +656,23 @@ class CampaignSnapshotMetric(models.Model):
         indexes = [
             models.Index(fields=["snapshot", "scope_type", "scope_key"], name="dec_metric_scope_idx")
         ]
+
+
+class TeamReviewExcelJob(models.Model):
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name="review_excel_jobs")
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    kind = models.CharField(max_length=10, choices=[("export", "Xuất Excel"), ("import", "Import Excel")])
+    status = models.CharField(max_length=12, default="queued")
+    progress = models.PositiveSmallIntegerField(default=0)
+    message = models.TextField(blank=True)
+    summary = models.JSONField(default=dict, blank=True)
+    input_file = models.FileField(upload_to="document_campaigns/team_review/imports/%Y/%m/", blank=True)
+    output_file = models.FileField(upload_to="document_campaigns/team_review/exports/%Y/%m/", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["campaign", "kind"], condition=Q(status__in=["queued", "running"]), name="dec_one_active_review_excel")]
 
 
 class CampaignStatusHistory(models.Model):

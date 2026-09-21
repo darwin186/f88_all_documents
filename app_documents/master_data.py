@@ -2,6 +2,8 @@
 import json
 import hashlib
 import secrets
+import uuid
+from django import forms
 from functools import wraps
 
 from django.contrib.admin.models import CHANGE, LogEntry
@@ -12,7 +14,7 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.core.validators import validate_email
 from django.db import transaction, IntegrityError
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.http import HttpResponseForbidden, JsonResponse, FileResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.middleware.csrf import CsrfViewMiddleware
@@ -197,6 +199,33 @@ def tokens_page(request):
     response["Cache-Control"] = "no-store"
     response["Referrer-Policy"] = "no-referrer"
     return response
+
+
+@admin_only
+@require_http_methods(["GET", "POST"])
+def response_options_page(request):
+    from app_document_campaigns.models import ShopResponseOption
+    class OptionForm(forms.ModelForm):
+        class Meta:
+            model = ShopResponseOption
+            fields = ["label", "description", "sort_order", "is_active"]
+            labels = {"label": "Tên phản hồi", "description": "Mô tả", "sort_order": "Thứ tự", "is_active": "Đang sử dụng"}
+            widgets = {"description": forms.Textarea(attrs={"rows": 3})}
+    selected_id = request.POST.get("option_id") if request.method == "POST" else request.GET.get("edit")
+    instance = None
+    if selected_id:
+        if not selected_id.isdigit():
+            return HttpResponseForbidden("Mã lựa chọn không hợp lệ.")
+        instance = get_object_or_404(ShopResponseOption, pk=int(selected_id))
+    form = OptionForm(request.POST if request.method == "POST" else None, instance=instance)
+    if request.method == "POST" and form.is_valid():
+        option = form.save(commit=False)
+        if not option.code:
+            option.code = "RESP-" + uuid.uuid4().hex[:12].upper()
+        option.save()
+        messages.success(request, "Đã lưu danh mục. Các chiến dịch đã có giữ nguyên tên và mã phản hồi đã áp dụng.")
+        return redirect("master_data_response_options")
+    return render(request, "app_documents/master_data_response_options.html", {**get_user_context(request.user), "form": form, "editing": instance, "options": ShopResponseOption.objects.annotate(uses=Count("campaignresponseoption"))}, status=400 if request.method == "POST" else 200)
 
 
 @admin_only

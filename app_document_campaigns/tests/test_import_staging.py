@@ -1,5 +1,5 @@
 from datetime import date
-from io import BytesIO
+from io import BytesIO, StringIO
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
@@ -21,6 +21,7 @@ from app_document_campaigns.models import (
     CampaignImportSource,
     CampaignStagingRow,
     CampaignVersion,
+    ShopResponseOption,
 )
 from app_document_campaigns.services.imports import (
     CampaignImportError,
@@ -39,6 +40,136 @@ from app_document_campaigns.services.sql_sources import (
 
 
 class CampaignImportStagingTests(TestCase):
+    def test_campaign_can_only_initialize_one_working_version(self):
+        self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
+        self.client.force_login(self.user)
+        url = reverse("document_campaigns:create_campaign_version", kwargs={"campaign_id": self.campaign.pk})
+        for status in [CampaignVersion.Status.DRAFT, CampaignVersion.Status.PUBLISHED]:
+            self.version.status = status
+            self.version.save(update_fields=["status"])
+            with self.subTest(status=status):
+                response = self.client.post(url)
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(self.campaign.versions.count(), 1)
+                self.assertIn(f"version={self.version.pk}", response.url)
+
+        campaign = Campaign.objects.create(code="CT-SINGLE-2026-08", name="Kỳ một bộ dữ liệu", campaign_type=self.campaign_type, report_month=date(2026, 8, 1), created_by=self.user)
+        url = reverse("document_campaigns:create_campaign_version", kwargs={"campaign_id": campaign.pk})
+        for _ in range(2):
+            self.assertEqual(self.client.post(url).status_code, 302)
+        self.assertEqual(campaign.versions.count(), 1)
+        self.assertEqual(campaign.versions.get().version_number, 1)
+
+    def test_toast_messages_are_escaped_and_keep_severity(self):
+        from django.contrib.messages import constants
+        from django.contrib.messages.storage.base import Message
+
+        html = render_to_string("app_document_campaigns/components/toasts.html", {
+            "messages": [Message(constants.SUCCESS, "Đã lưu kỳ"), Message(constants.ERROR, '<script>alert("x")</script>')],
+        })
+        self.assertIn('data-toast-level="success"', html)
+        self.assertIn('data-toast-level="error"', html)
+        self.assertIn("Đã lưu kỳ", html)
+        self.assertIn("&lt;script&gt;", html)
+        self.assertNotIn('<script>alert("x")</script>', html)
+
+    def test_workflow_navigation_on_campaign_pages(self):
+        self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
+        self.client.force_login(self.user)
+        CampaignError.objects.create(campaign=self.campaign, version=self.version, source_key="folder:workflow", source_object_id=998, error_type="folder", shop=self.shop, checking_issue="Thiếu chứng từ")
+        pages = [
+            ("campaign_list", {}, 1),
+            ("campaign_create", {}, 1),
+            ("campaign_detail", {"campaign_id": self.campaign.pk}, 2),
+            ("campaign_response_monitor", {"campaign_id": self.campaign.pk}, 3),
+            ("shop_response_monitor_detail", {"campaign_id": self.campaign.pk, "shop_id": self.shop.pk}, 3),
+            ("campaign_review", {"campaign_id": self.campaign.pk}, 4),
+        ]
+        for route, kwargs, current in pages:
+            with self.subTest(route=route):
+                response = self.client.get(reverse(f"document_campaigns:{route}", kwargs=kwargs))
+                self.assertEqual(response.status_code, 200)
+                self.assertTemplateUsed(response, "app_document_campaigns/components/workflow_nav.html")
+                self.assertTemplateUsed(response, "app_document_campaigns/components/toasts.html")
+                self.assertContains(response, 'data-campaign-toasts', count=1)
+                self.assertContains(response, 'data-workflow-step=', count=6)
+                self.assertNotContains(response, '<span class="flow-description">')
+                self.assertNotContains(response, '<span class="flow-state">')
+                self.assertContains(response, 'aria-current="step"', count=1)
+                self.assertContains(response, "QLKV xác nhận")
+                self.assertContains(response, "QLV kết quả cuối")
+                self.assertContains(response, "Chưa triển khai", count=2)
+                self.assertContains(response, 'campaign-heading-1')
+                if route == "campaign_list":
+                    self.assertNotContains(response, "Quy trình book lỗi chứng từ · Chọn kỳ để theo dõi tiến trình")
+                    self.assertNotContains(response, "Vận hành · Chứng từ")
+                    self.assertContains(response, "Tạo kỳ gửi lỗi để chuẩn bị dữ liệu lỗi theo từng tháng.")
+                if route == "campaign_detail":
+                    self.assertContains(response, 'data-preparation-progress', count=2)
+                    self.assertContains(response, 'class="dec-preparation-row"', count=1)
+                    self.assertNotContains(response, 'class="dec-progress-heading"')
+                    self.assertNotContains(response, '<header class="dec-header">')
+                    self.assertContains(response, 'data-open-campaign-settings', count=1)
+                    self.assertNotContains(response, 'Job #')
+                    self.assertContains(response, 'Nguồn dữ liệu của version')
+                if route == "campaign_review":
+                    header = response.content.decode().split('<header class="review-heading-row">', 1)[1].split('</header>', 1)[0]
+                    self.assertNotIn('<h1', header)
+                    self.assertIn('data-review-excel', header)
+                    self.assertNotIn('Phạm vi:', header)
+                if kwargs:
+                    self.assertContains(response, 'data-campaign-identity', count=1)
+                    self.assertContains(response, f'<span class="flow-code">{self.campaign.code}</span>', html=True)
+                    self.assertContains(response, f'<span class="flow-name">{self.campaign.name}</span>', html=True)
+                    self.assertContains(response, '<span class="flow-period">Kỳ 09/2026</span>', html=True)
+                    self.assertNotContains(response, 'class="crm-eyebrow"')
+                    self.assertNotContains(response, 'class="dec-eyebrow"')
+                    self.assertContains(response, reverse("document_campaigns:campaign_review", kwargs={"campaign_id": self.campaign.pk}))
+                    self.assertContains(response, "?settings=1")
+
+    def test_workflow_completion_and_read_only_settings_link(self):
+        from django.test import RequestFactory
+        from app_document_campaigns.templatetags.campaign_workflow import campaign_workflow
+
+        request = RequestFactory().get("/")
+        request.user = self.user
+        navigation = campaign_workflow({"request": request, "campaign": self.campaign}, 3)
+        self.assertTrue(navigation["steps"][0]["done"])
+        self.assertTrue(navigation["steps"][2]["current"])
+        self.assertNotIn("settings=1", navigation["steps"][0]["url"])
+        self.assertFalse(navigation["steps"][2]["done"])
+        self.assertIsNone(navigation["steps"][4]["url"])
+        self.assertIsNone(navigation["steps"][5]["url"])
+
+    def test_workflow_marks_completed_stages_from_data(self):
+        from datetime import timedelta
+        from django.test import RequestFactory
+        from django.utils import timezone
+        from app_document_campaigns.models import ShopSubmission, TeamReview
+        from app_document_campaigns.templatetags.campaign_workflow import campaign_workflow
+
+        self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
+        request = RequestFactory().get("/")
+        request.user = self.user
+        self.version.status = CampaignVersion.Status.PUBLISHED
+        self.version.save(update_fields=["status"])
+        self.campaign.current_version = self.version
+        error = CampaignError.objects.create(campaign=self.campaign, version=self.version, source_key="folder:workflow", source_object_id=998, error_type="folder", shop=self.shop, checking_issue="Thiếu chứng từ")
+        navigation = campaign_workflow({"request": request, "campaign": self.campaign}, 3)
+        self.assertTrue(navigation["steps"][1]["done"])
+        self.assertFalse(navigation["steps"][2]["done"])
+        self.assertFalse(navigation["steps"][3]["done"])
+        self.campaign.response_deadline = timezone.now() - timedelta(minutes=1)
+        self.assertTrue(campaign_workflow({"request": request, "campaign": self.campaign}, 4)["steps"][2]["done"])
+        self.campaign.response_deadline = None
+        ShopSubmission.objects.create(campaign=self.campaign, shop=self.shop, response_count=1)
+        TeamReview.objects.create(error=error, decision="approved", reviewed_by=self.user)
+        navigation = campaign_workflow({"request": request, "campaign": self.campaign}, 4)
+        self.assertTrue(navigation["steps"][2]["done"])
+        self.assertTrue(navigation["steps"][3]["done"])
+        TeamReview.objects.create(error=error, decision="supplement", reviewed_by=self.user)
+        self.assertFalse(campaign_workflow({"request": request, "campaign": self.campaign}, 4)["steps"][3]["done"])
+
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="import-admin")
         UserProfile.objects.create(user=self.user, department="Vận hành")
@@ -328,11 +459,14 @@ class CampaignImportStagingTests(TestCase):
         self.assertContains(listing, "Khởi tạo kỳ book lỗi chứng từ.")
         self.assertContains(listing, "Tạo kỳ gửi lỗi để chuẩn bị dữ liệu lỗi theo từng tháng.")
         self.assertContains(listing, "Chiến dịch lỗi")
-        self.assertContains(listing, "Danh sách và tiến độ chiến dịch")
+        self.assertContains(listing, "Danh sách kỳ")
         self.assertContains(listing, self.campaign.code)
         self.assertEqual(detail.status_code, 200)
-        self.assertContains(detail, "Truy xuất lại dữ liệu SQL")
-        self.assertContains(detail, "Tạo file Excel để team làm sạch")
+        self.assertContains(detail, "Lấy lại dữ liệu")
+        self.assertContains(detail, "Tải file để review")
+        self.assertContains(detail, "Upload lại file đã review")
+        self.assertContains(detail, "Phát hành dữ liệu")
+        self.assertTemplateUsed(detail, "app_document_campaigns/components/dataset_panel.html")
         self.assertContains(detail, "Mã hợp đồng duy nhất")
         self.assertNotContains(detail, "Hiển thị tối đa 200 dòng")
 
@@ -363,6 +497,81 @@ class CampaignImportStagingTests(TestCase):
         self.user.is_superuser = True
         self.user.save()
         self.assertEqual(self.client.get(reverse("document_campaigns:campaign_create")).status_code, 200)
+
+    def test_team_review_ui_save_history_and_conflict(self):
+        import json
+        from app_document_campaigns.models import TeamReview, ShopSubmission
+        self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
+        self.client.force_login(self.user)
+        self.campaign.status = Campaign.Status.ACTIVE
+        self.campaign.save()
+        error = CampaignError.objects.create(campaign=self.campaign, version=self.version, source_key="folder:review", source_object_id=999, error_type="folder", shop=self.shop, checking_issue="Thiếu chứng từ", status="shop_submitted")
+        ShopSubmission.objects.create(campaign=self.campaign, shop=self.shop, response_count=1)
+        url = reverse("document_campaigns:save_team_review", kwargs={"campaign_id": self.campaign.pk, "error_id": error.pk})
+        page = self.client.get(reverse("document_campaigns:campaign_review", kwargs={"campaign_id": self.campaign.pk}))
+        self.assertContains(page, "Team review phản hồi")
+        self.assertContains(page, "Lưu review")
+        response = self.client.post(url, data=json.dumps({"decision": "approved", "note": "Giữ lỗi sau đối chiếu", "expected_review_id": None}), content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["stats"]["reviewed"], 1)
+        self.assertEqual(response.json()["percent"], 100)
+        self.assertEqual(self.client.post(url, data=json.dumps({"decision": "excluded", "expected_review_id": None}), content_type="application/json").status_code, 409)
+        second = self.client.post(url, data=json.dumps({"decision": "excluded", "note": "Đã bổ sung đủ", "expected_review_id": response.json()["review_id"]}), content_type="application/json")
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.json()["stats"]["excluded"], 1)
+        self.assertEqual(TeamReview.objects.filter(error=error).count(), 2)
+        error.refresh_from_db()
+        self.assertEqual(error.status, "shop_submitted")
+        self.assertEqual(self.client.get(reverse("document_campaigns:campaign_review", kwargs={"campaign_id": self.campaign.pk}), {"decision": "pending"}).context["page"].paginator.count, 0)
+
+    def test_team_review_waits_for_submission_or_deadline_and_is_admin_only(self):
+        import json
+        from datetime import timedelta
+        from django.utils import timezone
+        self.client.force_login(self.user)
+        self.campaign.status = Campaign.Status.ACTIVE
+        self.campaign.response_deadline = timezone.now() + timedelta(days=1)
+        self.campaign.save()
+        error = CampaignError.objects.create(campaign=self.campaign, version=self.version, source_key="folder:review", source_object_id=999, error_type="folder", shop=self.shop, checking_issue="Thiếu chứng từ")
+        url = reverse("document_campaigns:save_team_review", kwargs={"campaign_id": self.campaign.pk, "error_id": error.pk})
+        payload = json.dumps({"decision": "approved", "expected_review_id": None})
+        self.assertEqual(self.client.post(url, payload, content_type="application/json").status_code, 403)
+        self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
+        self.assertEqual(self.client.post(url, payload, content_type="application/json").status_code, 409)
+        self.campaign.response_deadline = timezone.now() - timedelta(days=1)
+        self.campaign.save()
+        self.assertEqual(self.client.post(url, payload, content_type="application/json").status_code, 200)
+        self.user.groups.clear()
+        self.user.groups.add(Group.objects.get_or_create(name="shop")[0])
+        profile = UserProfile.objects.get(user=self.user)
+        profile.shop = self.shop
+        profile.save()
+        page = self.client.get(reverse("document_campaigns:campaign_review", kwargs={"campaign_id": self.campaign.pk}))
+        self.assertEqual(page.status_code, 200)
+        self.assertNotContains(page, "Lưu review")
+
+    def test_simulated_submissions_preserve_real_answers_and_lock_links(self):
+        from django.core.management import call_command
+        from app_document_campaigns.models import ChecklistTemplate, ChecklistQuestion, ShopResponse, ShopSubmission
+        template = ChecklistTemplate.objects.create(code="SIM", name="Simulation checklist", created_by=self.user)
+        ChecklistQuestion.objects.create(template=template, code="SHOP_RESPONSE", label="PGD phản hồi", question_type="single", options=["Xác nhận lỗi", "Hẹn bổ sung"])
+        self.campaign.status = Campaign.Status.ACTIVE
+        self.campaign.save()
+        errors = [CampaignError.objects.create(campaign=self.campaign, version=self.version, source_key=f"folder:sim-{n}", source_object_id=900+n, error_type="folder", shop=self.shop, checking_issue="Thiếu chứng từ", checklist_template=template) for n in range(2)]
+        original = ShopResponse.objects.create(error=errors[0], shop=self.shop, answer_code="Phản hồi thật", note="Ghi chú thật")
+        call_command("simulate_shop_submissions", self.campaign.code, confirm_simulation=True, stdout=StringIO())
+        original.refresh_from_db()
+        self.assertEqual(original.answer_code, "Phản hồi thật")
+        self.assertEqual(original.note, "Ghi chú thật")
+        self.assertEqual(original.status, "submitted")
+        simulated = ShopResponse.objects.get(error=errors[1])
+        self.assertTrue(simulated.answer_payload["simulation"])
+        self.assertIn("GIA LAP", simulated.note)
+        self.assertEqual(ShopSubmission.objects.get(campaign=self.campaign, shop=self.shop).response_count, 2)
+        self.assertEqual(self.campaign.errors.filter(status="shop_submitted").count(), 2)
+        call_command("simulate_shop_submissions", self.campaign.code, confirm_simulation=True, stdout=StringIO())
+        self.assertEqual(ShopResponse.objects.count(), 2)
+        self.assertEqual(ShopSubmission.objects.count(), 1)
 
     def test_gddb_navigation_is_separate_from_hardcopy(self):
         context = {
@@ -644,6 +853,8 @@ class CampaignImportStagingTests(TestCase):
             reverse("document_campaigns:campaign_create"),
             {
                 "name": "Chiến dịch tháng 10/2026",
+                "shop_instructions": "PGD chọn phản hồi cho từng hợp đồng.",
+                "response_options": list(ShopResponseOption.objects.filter(is_active=True).values_list("pk", flat=True)),
                 "campaign_type": str(self.campaign_type.pk),
                 "report_month": "2026-10",
                 "response_deadline": "2026-10-20T17:00",
@@ -651,6 +862,7 @@ class CampaignImportStagingTests(TestCase):
         )
 
         campaign = Campaign.objects.get(code="DEC-HC-202610")
+        self.assertEqual(campaign.shop_instructions, "PGD chọn phản hồi cho từng hợp đồng.")
         self.assertRedirects(
             response,
             reverse("document_campaigns:campaign_detail", kwargs={"campaign_id": campaign.pk}),
@@ -678,6 +890,37 @@ class CampaignImportStagingTests(TestCase):
         self.assertEqual(job.status, CampaignImportJob.Status.QUEUED)
         self.assertEqual(job.celery_task_id, "celery-task-id")
         delay.assert_called_once_with(job.pk)
+
+    @patch("app_document_campaigns.views.run_campaign_sql_import.delay")
+    def test_source_popup_validates_and_queues_only_selected_sources(self, delay):
+        self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
+        self.client.force_login(self.user)
+        delay.return_value.id = "selected-source-job"
+        url = reverse("document_campaigns:stage_sql_version", kwargs={"version_id": self.version.pk})
+        for selected in [[], ["unknown-source"], ["team-cleaning-excel"]]:
+            self.assertEqual(self.client.post(url, {"select_sources":"1", "sources":selected}).status_code, 400)
+        self.assertEqual(self.version.import_jobs.count(), 0)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(self.client.post(url, {"select_sources":"1", "sources":[FOLDER_SOURCE_NAME], "prepare_excel":"1"}).status_code, 302)
+        job = self.version.import_jobs.get()
+        self.assertEqual(job.summary["source_names"], [FOLDER_SOURCE_NAME])
+        self.assertEqual(job.total_steps, 2)
+        page = self.client.get(reverse("document_campaigns:campaign_detail", kwargs={"campaign_id":self.campaign.pk}))
+        for name in ["sources", "downloads", "upload"]:
+            self.assertContains(page, f'data-dataset-dialog="{name}"')
+        self.assertNotContains(page, '<select name="job"')
+
+    @patch("app_document_campaigns.services.sql_sources.fetch_document_error_rows")
+    @patch("app_document_campaigns.services.sql_sources.fetch_folder_error_rows")
+    def test_partial_sql_refresh_preserves_unselected_source(self, folders, documents):
+        untouched = CampaignImportSource.objects.create(version=self.version, name=DOCUMENT_SOURCE_NAME, source_type="sql", created_by=self.user, row_count=37, source_checksum="unchanged")
+        folders.return_value = [self._valid_row("folder:6001")]
+        result = stage_monthly_sql_sources(version=self.version, created_by=self.user, source_names=[FOLDER_SOURCE_NAME])
+        self.assertEqual(set(result), {FOLDER_SOURCE_NAME})
+        documents.assert_not_called()
+        untouched.refresh_from_db()
+        self.assertEqual(untouched.row_count, 37)
+        self.assertEqual(untouched.source_checksum, "unchanged")
 
     @patch("app_document_campaigns.views.run_campaign_excel_export.delay")
     def test_export_ui_queues_background_job(self, delay):
@@ -859,6 +1102,52 @@ class CampaignImportStagingTests(TestCase):
         self.assertEqual(job.status, CampaignImportJob.Status.SUCCEEDED)
         self.assertEqual(job.current_step, 2)
         self.assertEqual(job.summary, expected)
+
+    @patch("app_document_campaigns.services.sql_sources.stage_monthly_sql_sources", return_value={})
+    def test_sql_preparation_also_builds_downloadable_excel(self, stage_sources):
+        from app_document_campaigns.tasks import run_campaign_sql_import
+        job = CampaignImportJob.objects.create(version=self.version, created_by=self.user, total_steps=3, summary={"prepare_excel": True})
+        with TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            result = run_campaign_sql_import.run(job.pk)
+            job.refresh_from_db()
+            self.assertEqual(result["status"], "succeeded")
+            self.assertEqual(job.current_step, 3)
+            self.assertTrue(job.output_file.storage.exists(job.output_file.name))
+            self.client.force_login(self.user)
+            response = self.client.get(reverse("document_campaigns:export_staging_excel", kwargs={"version_id": self.version.pk}), {"job": job.pk})
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(b"".join(response.streaming_content).startswith(b"PK"))
+
+    def test_published_data_disables_and_rejects_mutations(self):
+        self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
+        self.client.force_login(self.user)
+        self.version.status = CampaignVersion.Status.PUBLISHED
+        self.version.save(update_fields=["status"])
+        response = self.client.get(reverse("document_campaigns:campaign_detail", kwargs={"campaign_id": self.campaign.pk}))
+        self.assertTrue(response.context["data_locked"])
+        self.assertFalse(response.context["can_publish_data"])
+        self.assertContains(response, "Đã phát hành")
+        for route in ["stage_sql_version", "import_staging_excel"]:
+            self.assertEqual(self.client.post(reverse(f"document_campaigns:{route}", kwargs={"version_id": self.version.pk})).status_code, 409)
+        self.assertEqual(self.version.import_jobs.count(), 0)
+
+    @patch("app_document_campaigns.views.run_campaign_sql_import.delay")
+    def test_first_data_button_initializes_and_queues_sql_plus_excel(self, delay):
+        self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
+        self.client.force_login(self.user)
+        delay.return_value.id = "prepare-data-test"
+        campaign = Campaign.objects.create(code="CT-PREPARE-2026-07", name="Kỳ chuẩn bị dữ liệu", campaign_type=self.campaign_type, report_month=date(2026, 7, 1), created_by=self.user)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(reverse("document_campaigns:create_campaign_version", kwargs={"campaign_id": campaign.pk}), {"start_sql": "1"})
+        self.assertEqual(response.status_code, 302)
+        version = campaign.versions.get()
+        job = version.import_jobs.get()
+        self.assertEqual(job.total_steps, 3)
+        self.assertTrue(job.summary["prepare_excel"])
+        delay.assert_called_once_with(job.pk)
+        page = self.client.get(reverse("document_campaigns:campaign_detail", kwargs={"campaign_id": campaign.pk}))
+        self.assertTrue(page.context["job_busy"])
+        self.assertContains(page, "Lấy lại dữ liệu")
 
     @patch("app_document_campaigns.services.sql_sources.stage_monthly_sql_sources")
     def test_background_sql_job_records_failure_instead_of_hanging(self, stage_sources):

@@ -163,17 +163,26 @@ def _rows_checksum(rows):
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def stage_monthly_sql_sources(*, version, created_by, using="default", progress_callback=None):
+def sql_source_options():
+    return [(name, label) for name, label, _ in sql_source_specs()]
+
+
+def sql_source_specs():
+    return [(FOLDER_SOURCE_NAME, "Lỗi quyển chứng từ", fetch_folder_error_rows), (DOCUMENT_SOURCE_NAME, "Lỗi chứng từ", fetch_document_error_rows)]
+
+
+def stage_monthly_sql_sources(*, version, created_by, using="default", progress_callback=None, source_names=None):
     """Run both legacy report sources and stage their normalized results."""
     version = CampaignVersion.objects.select_related("campaign__campaign_type").get(pk=version.pk)
     if version.campaign.campaign_type.code != "hardcopy-document-error":
         raise CampaignImportError(
             "Loại chiến dịch này chưa có bộ truy xuất dữ liệu SQL tương ứng."
         )
-    source_specs = (
-        (FOLDER_SOURCE_NAME, fetch_folder_error_rows),
-        (DOCUMENT_SOURCE_NAME, fetch_document_error_rows),
-    )
+    source_specs = tuple((name, fetcher) for name, _, fetcher in sql_source_specs())
+    if source_names is not None:
+        if not source_names or set(source_names) - {name for name, _ in source_specs}:
+            raise CampaignImportError("Nguồn dữ liệu được chọn không hợp lệ.")
+        source_specs = tuple(spec for spec in source_specs if spec[0] in source_names)
     result = {}
     for step, (source_name, fetcher) in enumerate(source_specs, start=1):
         rows = fetcher(version.campaign.report_month, using=using)

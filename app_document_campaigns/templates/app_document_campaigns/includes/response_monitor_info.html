@@ -1,0 +1,22 @@
+<section class="crm-info-zone">
+  <div class="crm-info-grid">
+    <article><span>Số lượng phòng giao dịch phát sinh lỗi trong kỳ</span><strong>{{ summary.shops }}</strong></article>
+    <article><span>PGD đã nhận phát hành</span><strong>{{ summary.issued }}</strong></article>
+    <article><span>PGD đã phản hồi</span><strong>{{ summary.submitted }} <small>{{ summary.submitted_rate }}%</small></strong></article>
+    <article><span>PGD đang phản hồi</span><strong>{{ summary.in_progress }}</strong></article>
+    <article><span>PGD chưa phản hồi</span><strong>{{ summary.not_started }}</strong></article>
+    <article><span>Số lượng lỗi phát sinh</span><strong>{{ summary.errors }}</strong></article>
+    <article><span>Số lượng hợp đồng phát sinh lỗi chứng từ</span><strong>{{ summary.contracts }}</strong></article>
+    <article title="Số QLKV khác nhau đã được CC trong email gửi thành công cho PGD thuộc phạm vi xem. Chưa xác nhận đã đọc email."><span>QLKV đã được gửi email</span><strong data-area-emailed>{{ summary.area_emailed }}</strong></article>
+    <article><span>Hạn PGD phản hồi</span><strong class="crm-info-date">{{ campaign.response_deadline|date:"H:i d/m/Y"|default:"Chưa cấu hình" }}</strong></article>
+    <article><span>Link hết hạn</span><strong class="crm-info-date">{{ campaign.link_expires_at|date:"H:i d/m/Y"|default:"Chưa cấu hình" }}</strong></article>
+  </div>
+  <div class="crm-info-actions">
+    {% if can_manage_shop_links %}
+    <form method="post" action="{% url 'document_campaigns:publish_campaign_to_shops' campaign.id %}" data-publish-shop-links data-has-links="{% if issued_shop_link_count %}true{% else %}false{% endif %}">{% csrf_token %}<button class="crm-mini-btn" {% if not can_publish_shop_links %}disabled{% endif %}>{% if issued_shop_link_count %}Tạo lại toàn bộ link{% else %}Phát hành tới PGD{% endif %}</button></form>
+    <button class="crm-mini-btn" data-copy-all-links hidden>Copy toàn bộ link</button>
+    <button type="button" class="crm-mini-btn" data-open-common-deadline>Điều chỉnh deadline chung</button>
+    {% endif %}
+  </div>
+  <p data-publish-feedback class="crm-release-feedback" aria-live="polite"></p>
+</section>

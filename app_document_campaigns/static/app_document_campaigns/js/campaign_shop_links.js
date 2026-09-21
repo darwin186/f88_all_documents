@@ -34,6 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!response.ok || !payload.ok) throw new Error(payload.error || "Không thể phát hành tới PGD.");
 
         latestBulkLinks = payload.links;
+        window.campaignToast?.(`Đã phát hành ${payload.count} link PGD.`, "success");
         payload.links.forEach((item) => {
           const row = document.querySelector(`[data-shop-link-row][data-shop-id="${item.shop_id}"]`);
           if (!row) return;
@@ -45,6 +46,10 @@ document.addEventListener("DOMContentLoaded", () => {
           result.hidden = false;
           status.innerHTML = '<span class="dec-link-status is-issued">Đã phát hành</span><small>Vừa tạo</small>';
           issueForm.dataset.hasLink = "true";
+          if (!row.querySelector(".crm-status")?.classList.contains("submitted")) {
+            row.querySelector("[data-email-link] button")?.removeAttribute("disabled");
+            row.querySelector("[data-extend-deadline]")?.removeAttribute("disabled");
+          }
           const issueButton = issueForm.querySelector("button");
           issueButton.textContent = "Đổi link";
           issueButton.classList.remove("dec-btn-primary");
@@ -64,6 +69,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         document.querySelector("#pgd-links")?.scrollIntoView({ behavior: "smooth", block: "start" });
       } catch (error) {
+        window.campaignToast?.(error.message, "error");
         if (feedback) {
           feedback.textContent = error.message;
           feedback.classList.add("is-error");
@@ -98,6 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
         area.remove();
       }
       copyAllButton.textContent = `Đã copy ${latestBulkLinks.length} link`;
+      window.campaignToast?.(`Đã copy ${latestBulkLinks.length} link PGD.`, "success");
       window.setTimeout(() => { copyAllButton.textContent = "Copy toàn bộ link"; }, 2000);
     });
   }
@@ -128,6 +135,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!response.ok || !payload.ok) throw new Error(payload.error || "Không thể tạo link.");
 
         urlInput.value = payload.url;
+        window.campaignToast?.("Đã tạo link mới cho PGD. Hãy copy để gửi.", "success");
         result.hidden = false;
         feedback.textContent = "Link mới chỉ hiện trong lần này. Hãy copy và gửi đúng PGD.";
         feedback.classList.add("is-success");
@@ -137,6 +145,7 @@ document.addEventListener("DOMContentLoaded", () => {
         button.classList.remove("dec-btn-primary");
         button.classList.add("dec-btn-secondary");
       } catch (error) {
+        window.campaignToast?.(error.message, "error");
         feedback.textContent = error.message;
         feedback.classList.add("is-error");
       } finally {
@@ -158,6 +167,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       button.textContent = "Đã copy";
       feedback.textContent = "Đã copy link vào clipboard.";
+      window.campaignToast?.("Đã copy link vào clipboard.", "success");
       feedback.classList.add("is-success");
       window.setTimeout(() => { button.textContent = "Copy link"; }, 1800);
     });

@@ -1,0 +1,11 @@
+<form class="crm-filter" method="get" data-linked-filters>
+  <select name="region" aria-label="Quản lý vùng"><option value="">Tất cả Quản lý vùng</option>{% for id,name in regions %}<option value="{{ id }}" {% if selected_region == id|stringformat:"s" %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+  <select name="area" aria-label="Quản lý khu vực"><option value="">Tất cả Quản lý khu vực</option>{% for id,name,parent in areas %}<option value="{{ id }}" data-region="{{ parent }}" {% if selected_area == id|stringformat:"s" %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+  <select name="shop" aria-label="Phòng giao dịch"><option value="">Tất cả PGD</option>{% for id,code,name,region,area in shops %}<option value="{{ id }}" data-region="{{ region }}" data-area="{{ area }}" {% if selected_shop == id|stringformat:"s" %}selected{% endif %}>{{ code }} · {{ name }}</option>{% endfor %}</select>
+  <details class="crm-multi-status"><summary>Trạng thái{% if selected_statuses %} · {{ selected_statuses|length }} đã chọn{% endif %}</summary><div>
+    <label><input type="checkbox" name="status" value="not_started" {% if 'not_started' in selected_statuses %}checked{% endif %}> Chưa phản hồi</label>
+    <label><input type="checkbox" name="status" value="in_progress" {% if 'in_progress' in selected_statuses %}checked{% endif %}> Đang phản hồi</label>
+    <label><input type="checkbox" name="status" value="submitted" {% if 'submitted' in selected_statuses %}checked{% endif %}> Đã gửi</label>
+    <label><input type="checkbox" name="status" value="expired" {% if 'expired' in selected_statuses %}checked{% endif %}> Hết hạn</label>
+  </div></details><button class="crm-btn">Lọc dữ liệu</button>
+</form>

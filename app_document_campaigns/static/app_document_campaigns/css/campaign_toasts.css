@@ -1,0 +1,13 @@
+.campaign-toasts{position:fixed;top:86px;right:24px;z-index:120;width:min(360px,calc(100vw - 32px));display:flex;flex-direction:column;gap:10px;pointer-events:none;font:13px/1.5 "Segoe UI",Arial,sans-serif}
+.campaign-toast{display:flex;align-items:flex-start;gap:10px;padding:14px 12px;border:1px solid #dce5df;border-left:3px solid #3185c7;border-radius:12px;background:white;box-shadow:0 8px 26px rgba(24,45,33,.12);pointer-events:auto;opacity:0;transform:translateX(18px);transition:opacity .3s ease,transform .3s ease}
+.campaign-toast.is-visible{opacity:1;transform:translateX(0)}
+.campaign-toast.is-leaving{opacity:0;transform:translateX(18px)}
+.campaign-toast[data-level="success"]{border-left-color:#00844a}
+.campaign-toast[data-level="error"]{border-left-color:#d14343}
+.campaign-toast[data-level="warning"]{border-left-color:#cb8b22}
+.campaign-toast-message{flex:1;min-width:0;overflow-wrap:anywhere;color:#273a2e}
+.campaign-toast-close{flex:none;border:0;background:transparent;color:#85918a;font:20px/1 Arial,sans-serif;padding:0 3px;cursor:pointer}
+.campaign-toast-close:hover{color:#24372c}
+.campaign-toast-close:focus-visible{outline:2px solid #00844a;outline-offset:3px;border-radius:3px}
+@media(max-width:600px){.campaign-toasts{right:16px;top:78px}}
+@media(prefers-reduced-motion:reduce){.campaign-toast{transition:none;transform:none}}

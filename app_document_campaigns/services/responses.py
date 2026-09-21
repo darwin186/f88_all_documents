@@ -104,6 +104,9 @@ def save_response_batch(*, link, changes):
     link = ShopAccessLink.objects.select_for_update().select_related("campaign", "shop").get(pk=link.pk)
     _assert_link_editable(link)
     normalized = _normalize_changes(changes)
+    allowed = set(link.campaign.response_options.values_list("value", flat=True))
+    if allowed and any(item.answer_code and item.answer_code not in allowed for item in normalized):
+        raise ResponseValidationError("Phản hồi không nằm trong danh sách áp dụng cho chiến dịch.")
     uids = [item.error_uid for item in normalized]
     errors = {
         item.error_uid: item

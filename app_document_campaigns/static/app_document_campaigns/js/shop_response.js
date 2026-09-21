@@ -135,11 +135,24 @@
     row.querySelector('[data-note]').addEventListener('input', () => queueRow(row));
   });
 
+  root.querySelectorAll('[data-date-sort]').forEach((link) => {
+    link.addEventListener('click', async (event) => {
+      event.preventDefault();
+      try {
+        await flush();
+        window.location.assign(link.href);
+      } catch (error) {
+        setIndicator('error', 'Chưa lưu được phản hồi. Vui lòng thử lại trước khi sắp xếp.');
+      }
+    });
+  });
+
   submitButton?.addEventListener('click', async () => {
     const missing = missingRows();
     if (missing.length) {
       showMissingRows(missing);
       setIndicator('error', `Còn ${missing.length} dòng chưa chọn phản hồi`);
+      window.campaignToast?.(`Còn ${missing.length} dòng chưa chọn phản hồi.`, 'warning');
       updateProgress();
       return;
     }
@@ -170,6 +183,7 @@
         );
       }
       setIndicator('error', error.message);
+      window.campaignToast?.(error.message, 'error');
       submitButton.disabled = false;
     }
   });

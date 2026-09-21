@@ -1,4 +1,5 @@
 {% extends "app_documents/base_app_documents_v2.html" %}
+{% load campaign_workflow %}
 {% load static %}
 
 {% block title %}Tạo chiến dịch lỗi chứng từ{% endblock %}
@@ -11,19 +12,16 @@
 {% endblock %}
 
 {% block content %}
+{% campaign_workflow 1 %}
+
 <div class="dcf-page">
-  <a href="{% url 'document_campaigns:campaign_list' %}" class="dcf-back">← Danh sách chiến dịch</a>
-  <header class="dcf-header">
-    <div class="dcf-eyebrow">Vận hành · Book lỗi chứng từ</div>
-    <h1 class="dcf-title">Tạo chiến dịch</h1>
-    <p class="dcf-subtitle">Khai báo kỳ dữ liệu và hạn cuối để PGD hoàn tất phản hồi.</p>
-  </header>
+  
   <div class="dcf-layout">
     <form method="post" class="dcf-form">
       {% csrf_token %}
       <div class="dcf-fields">
         {% for field in form %}
-          <div class="dcf-field {% if field.name == 'campaign_type' or field.name == 'name' or field.name == 'response_deadline' %}is-wide{% endif %}">
+          <div class="dcf-field {% if field.name == 'campaign_type' or field.name == 'name' or field.name == 'response_deadline' or field.name == 'shop_instructions' or field.name == 'area_manager_instructions' or field.name == 'response_options' %}is-wide{% endif %}">
             <label for="{{ field.id_for_label }}" class="dcf-label">{{ field.label }}</label>
             {{ field }}
             {% if field.help_text %}<p class="dcf-help">{{ field.help_text }}</p>{% endif %}

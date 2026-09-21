@@ -1,0 +1,33 @@
+{% extends "app_documents/base_app_documents_v2.html" %}
+{% load campaign_workflow static %}
+{% block title %}Theo dõi theo QLKV · {{ campaign.code }}{% endblock %}
+{% block top_nav %}{% include "app_documents/components/top_nav_v2.html" %}{% endblock %}
+{% block main_extra_class %}pt-20 crm-monitor-main{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_monitor.css' %}"><script src="{% static 'app_document_campaigns/js/campaign_shop_links.js' %}" defer></script><script src="{% static 'app_document_campaigns/js/response_monitor.js' %}" defer></script><script src="{% static 'app_document_campaigns/js/area_monitor.js' %}" defer></script>{% endblock %}
+{% block content %}
+{% campaign_workflow 3 %}
+<div class="crm-page" data-area-monitor data-response-monitor>
+  {% include "app_document_campaigns/includes/response_monitor_info.html" %}
+  {% include "app_document_campaigns/includes/response_monitor_filters.html" %}
+  {% include "app_document_campaigns/includes/response_monitor_tabs.html" %}
+  <section class="crm-card crm-table-wrap" data-freeze-grid><table class="crm-table crm-area-table">
+    <thead><tr><th>Quản lý khu vực</th><th>Quản lý vùng</th><th>PGD quản lý</th><th>Dòng lỗi</th><th>Tiến độ phản hồi</th><th>Link QLKV</th><th>Trạng thái email</th><th>Thao tác</th></tr></thead>
+    <tbody>{% for row in rows %}<tr data-area-row data-area-name="{{ row.area_name }}">
+      <td><a class="crm-link" href="{% url 'document_campaigns:area_manager_detail' campaign.id row.area_id %}">{{ row.area_code }} · {{ row.area_name }}</a><small>{{ row.area_email|default:'Chưa có email' }}</small></td>
+      <td>{{ row.region_name }}</td><td><strong>{{ row.shops }}</strong><small>{{ row.submitted_shops }} PGD đã gửi</small></td><td>{{ row.errors }}</td>
+      <td><strong>{{ row.progress }}%</strong><small>{{ row.answered }}/{{ row.errors }} dòng</small><div class="crm-progress"><span style="width:{{ row.progress }}%;background:hsl({{ row.progress|add:'0' }},65%,43%)"></span></div></td>
+      <td data-area-link-status>{% if row.link %}<span class="dec-link-status {% if row.link.is_expired %}is-expired{% else %}is-issued{% endif %}">{% if row.link.is_expired %}Hết hạn{% else %}Đã tạo{% endif %}</span><small>{{ row.link.expires_at|date:'H:i d/m/Y' }}</small>{% else %}<span class="dec-link-status">Chưa tạo</span>{% endif %}</td>
+      <td>{% if row.link %}{{ row.link.get_email_status_display }}{% if row.link.emailed_at %}<small>{{ row.link.emailed_at|date:'H:i d/m/Y' }}</small>{% endif %}{% else %}—{% endif %}</td>
+      <td class="crm-link-actions"><div class="crm-row-actions">{% if can_manage_area_links %}
+        <form data-area-issue action="{% url 'document_campaigns:issue_area_manager_link' campaign.id row.area_id %}" method="post">{% csrf_token %}<button class="crm-mini-btn">Lấy link</button></form>
+        <form data-area-email action="{% url 'document_campaigns:email_area_manager_link' campaign.id row.area_id %}" method="post">{% csrf_token %}<button class="crm-mini-btn">Gửi email</button></form>
+        <button class="crm-mini-btn" type="button" data-area-extend data-url="{% url 'document_campaigns:extend_area_manager_link' campaign.id row.area_id %}" data-expires="{{ row.link.expires_at|date:'Y-m-d' }}T{{ row.link.expires_at|date:'H:i' }}" {% if not row.link %}disabled{% endif %}>Gia hạn</button>
+      {% endif %}<a class="crm-link" href="{% url 'document_campaigns:area_manager_detail' campaign.id row.area_id %}">Xem tổng hợp →</a></div>
+      {% if can_manage_area_links %}<div class="dec-link-result" data-area-link-result hidden><input readonly aria-label="Link xem của QLKV"><button class="crm-mini-btn is-copy" type="button" data-area-copy>Copy</button></div><p class="dec-link-feedback" aria-live="polite"></p>{% endif %}</td>
+    </tr>{% empty %}<tr><td colspan="8" class="crm-empty">Không có QLKV trong phạm vi dữ liệu.</td></tr>{% endfor %}</tbody>
+  </table></section>
+  <nav class="crm-pagination"><span>{{ page.start_index }}–{{ page.end_index }}/{{ page.paginator.count }} QLKV</span><div>{% if page.has_previous %}<a href="?{{ filter_query }}&page={{ page.previous_page_number }}">‹</a>{% endif %}<span>Trang {{ page.number }}/{{ page.paginator.num_pages }}</span>{% if page.has_next %}<a href="?{{ filter_query }}&page={{ page.next_page_number }}">›</a>{% endif %}</div></nav>
+  {% include "app_document_campaigns/includes/common_deadline_dialog.html" %}
+  {% if can_manage_area_links %}<dialog class="crm-extend-dialog" data-area-extend-dialog><form method="post">{% csrf_token %}<h2>Gia hạn link QLKV</h2><p data-area-extend-name></p><label>Ngày link hết hạn<input type="datetime-local" name="expires_at" required></label><p class="dec-link-feedback is-error" hidden></p><div><button type="button" class="crm-mini-btn" data-area-extend-close>Hủy</button><button class="crm-btn">Lưu gia hạn</button></div></form></dialog>{% endif %}
+</div>
+{% endblock %}

@@ -7,6 +7,7 @@ from . import master_data
 
 urlpatterns = [
     path('master-data/', master_data.catalog_page, name='master_data'),
+    path('master-data/response-options/', master_data.response_options_page, name='master_data_response_options'),
     path('master-data/tokens/', master_data.tokens_page, name='master_data_tokens'),
     path('master-data/jobs/', master_data.queue_catalog_job, name='master_data_job_create'),
     path('master-data/jobs/<int:job_id>/', master_data.catalog_job_status, name='master_data_job_status'),

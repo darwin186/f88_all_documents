@@ -4,8 +4,9 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Max, Q
+from django.db.models import Count, F, Max, Q
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -66,6 +67,7 @@ def campaign_list(request):
 
 
 @login_required
+@transaction.atomic
 def campaign_create(request):
     if not _is_campaign_admin(request.user):
         return HttpResponse("Chỉ admin được tạo chiến dịch.", status=403)
@@ -76,6 +78,7 @@ def campaign_create(request):
             campaign.status = Campaign.Status.DATA_REVIEW
             campaign.created_by = request.user
             campaign.save()
+            form.save_response_options()
             messages.success(request, "Đã tạo chiến dịch. Hãy tạo version nháp để chạy dữ liệu SQL.")
             return redirect("document_campaigns:campaign_detail", campaign_id=campaign.pk)
     else:
@@ -92,7 +95,7 @@ def campaign_detail(request, campaign_id):
     if requested_version:
         selected_version = next((item for item in versions if str(item.pk) == requested_version), None)
     if selected_version is None and versions:
-        selected_version = versions[0]
+        selected_version = next((item for item in versions if item.pk == campaign.current_version_id), versions[0])
 
     sources = []
     dataset_metrics = []
@@ -104,7 +107,7 @@ def campaign_detail(request, campaign_id):
         latest_job = selected_version.import_jobs.first()
         latest_export_job = (
             selected_version.import_jobs.filter(
-                job_type=CampaignImportJob.JobType.EXCEL_EXPORT,
+                job_type__in=[CampaignImportJob.JobType.SQL_STAGE, CampaignImportJob.JobType.EXCEL_EXPORT],
                 status=CampaignImportJob.Status.SUCCEEDED,
                 summary__export_kind__isnull=True,
             )
@@ -144,6 +147,11 @@ def campaign_detail(request, campaign_id):
     else:
         workflow_step, workflow_progress = 1, 0
     can_manage_shop_links = request.user.is_superuser or request.user.groups.filter(name="admin").exists()
+    from app_document_campaigns.services.sql_sources import sql_source_options
+    prepared_files = list(selected_version.import_jobs.filter(status=CampaignImportJob.Status.SUCCEEDED, job_type__in=[CampaignImportJob.JobType.SQL_STAGE, CampaignImportJob.JobType.EXCEL_EXPORT]).exclude(output_file="")) if selected_version else []
+    prepared_files = [job for job in prepared_files if job.summary.get("export_kind") != "reviewed" or (excel_source and job.summary.get("source_checksum") == excel_source.source_checksum)]
+    busy = bool(latest_job and latest_job.status in (CampaignImportJob.Status.QUEUED, CampaignImportJob.Status.RUNNING))
+    data_locked = campaign.status in (Campaign.Status.ACTIVE, Campaign.Status.CLOSED, Campaign.Status.CANCELLED) or bool(selected_version and selected_version.status == CampaignVersion.Status.PUBLISHED)
     return render(
         request,
         "app_document_campaigns/campaign_detail.html",
@@ -157,6 +165,12 @@ def campaign_detail(request, campaign_id):
             "has_sql": has_sql,
             "workflow_step": workflow_step,
             "workflow_progress": workflow_progress,
+            "prepared_files": prepared_files,
+            "sql_source_options": sql_source_options(),
+            "data_locked": data_locked,
+            "job_busy": busy,
+            "has_requested_data": bool(sources) or bool(selected_version and selected_version.import_jobs.filter(job_type=CampaignImportJob.JobType.SQL_STAGE).exists()),
+            "can_publish_data": bool(excel_source and excel_source.status == CampaignImportSource.Status.VALIDATED and not excel_source.invalid_count and not busy and not data_locked),
             "latest_job": latest_job,
             "latest_export_job": latest_export_job,
             "latest_reviewed_export_job": latest_reviewed_export_job,
@@ -182,20 +196,33 @@ def campaign_admin_required(view):
 
 @login_required
 @require_POST
+@transaction.atomic
 def update_campaign_deadline(request, campaign_id):
+    wants_json = (
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or "application/json" in request.headers.get("Accept", "")
+    )
     if not _is_campaign_admin(request.user):
+        if wants_json:
+            return JsonResponse({"ok": False, "error": "Chỉ Admin được cấu hình hạn phản hồi."}, status=403)
         return HttpResponse("Chỉ Admin được cấu hình hạn phản hồi.", status=403)
-    campaign = get_object_or_404(Campaign, pk=campaign_id)
+    campaign = get_object_or_404(Campaign.objects.select_for_update(), pk=campaign_id)
     form = CampaignDeadlineForm(request.POST, instance=campaign)
     if not form.is_valid():
+        if wants_json:
+            return JsonResponse({"ok": False, "error": " ".join(str(error) for errors in form.errors.values() for error in errors)}, status=400)
         messages.error(request, "Hạn phản hồi không hợp lệ.")
     else:
         campaign = form.save()
-        campaign.shop_links.update(
+        campaign.shop_links.filter(has_deadline_extension=False).update(
             response_deadline=campaign.response_deadline,
             expires_at=campaign.link_expires_at,
         )
         messages.success(request, "Đã cập nhật hạn PGD và hạn hiệu lực link.")
+        if wants_json:
+            return JsonResponse({"ok": True})
+    if request.POST.get("return_to") == "area_monitor":
+        return redirect("document_campaigns:campaign_area_monitor", campaign_id=campaign.pk)
     if request.POST.get("return_to") == "response_monitor":
         return redirect("document_campaigns:campaign_response_monitor", campaign_id=campaign.pk)
     return redirect("document_campaigns:campaign_detail", campaign_id=campaign.pk)
@@ -203,10 +230,11 @@ def update_campaign_deadline(request, campaign_id):
 
 @login_required
 @require_POST
+@transaction.atomic
 def update_campaign_settings(request, campaign_id):
     if not _is_campaign_admin(request.user):
         return HttpResponse("Chỉ Admin được chỉnh sửa chiến dịch.", status=403)
-    campaign = get_object_or_404(Campaign, pk=campaign_id)
+    campaign = get_object_or_404(Campaign.objects.select_for_update(), pk=campaign_id)
     form = CampaignSettingsForm(request.POST, instance=campaign)
     if not form.is_valid():
         error_text = " ".join(
@@ -217,10 +245,11 @@ def update_campaign_settings(request, campaign_id):
             f"{reverse('document_campaigns:campaign_detail', kwargs={'campaign_id': campaign.pk})}?settings=1"
         )
     campaign = form.save()
-    campaign.shop_links.update(
-        response_deadline=campaign.response_deadline,
-        expires_at=campaign.link_expires_at,
-    )
+    if "response_deadline" in form.changed_data:
+        campaign.shop_links.filter(has_deadline_extension=False).update(
+            response_deadline=campaign.response_deadline,
+            expires_at=campaign.link_expires_at,
+        )
     messages.success(request, "Đã cập nhật cài đặt chiến dịch.")
     return redirect("document_campaigns:campaign_detail", campaign_id=campaign.pk)
 
@@ -347,137 +376,111 @@ def publish_campaign_to_shops(request, campaign_id):
 
 @login_required
 def campaign_response_monitor(request, campaign_id):
+    from app_document_campaigns.services.email_metrics import emailed_area_manager_count
+    from app_document_campaigns.services.response_deadlines import shop_deadlines, shop_deadline_passed
     campaign = get_object_or_404(Campaign.objects.select_related("current_version"), pk=campaign_id)
-    base_errors = CampaignError.objects.filter(campaign=campaign).exclude(
-        status__in=[CampaignError.Status.EXCLUDED, CampaignError.Status.CANCELLED]
-    )
-    scoped_errors, access_scope = scope_campaign_errors(base_errors, request.user)
-
-    option_rows = scoped_errors.values(
-        "region_id",
-        "region__region_name",
-        "area_manager_id",
-        "area_manager__areaManager_name",
-        "shop_id",
-        "shop__shop_code",
-        "shop__shop_name",
-    ).distinct()
-    regions = sorted(
-        {(row["region_id"], row["region__region_name"] or "Chưa xác định") for row in option_rows},
-        key=lambda item: item[1],
-    )
-    areas = sorted(
-        {
-            (row["area_manager_id"], row["area_manager__areaManager_name"] or "Chưa xác định")
-            for row in option_rows
-        },
-        key=lambda item: item[1],
-    )
-    shops = sorted(
-        {
-            (row["shop_id"], row["shop__shop_code"], row["shop__shop_name"])
-            for row in option_rows
-        },
-        key=lambda item: (item[1] or 0, item[2]),
-    )
-
-    selected_region = request.GET.get("region", "").strip()
-    selected_area = request.GET.get("area", "").strip()
-    selected_shop = request.GET.get("shop", "").strip()
-    selected_status = request.GET.get("status", "").strip()
-    filtered_errors = scoped_errors
-    if selected_region.isdigit():
-        filtered_errors = filtered_errors.filter(region_id=int(selected_region))
-    if selected_area.isdigit():
-        filtered_errors = filtered_errors.filter(area_manager_id=int(selected_area))
-    if selected_shop.isdigit():
-        filtered_errors = filtered_errors.filter(shop_id=int(selected_shop))
-
-    grouped = list(
-        filtered_errors.values(
-            "shop_id",
-            "shop__shop_code",
-            "shop__shop_name",
-            "shop__shop_email",
-            "region__region_name",
-            "area_manager__areaManager_name",
-        )
-        .annotate(
-            total_errors=Count("id"),
-            answered_errors=Count(
-                "id",
-                filter=Q(shop_response__answer_code__isnull=False)
-                & ~Q(shop_response__answer_code=""),
-            ),
-            last_response_at=Max("shop_response__updated_at"),
-        )
-        .order_by("region__region_name", "area_manager__areaManager_name", "shop__shop_code")
-    )
-    submitted_shop_ids = set(
-        ShopSubmission.objects.filter(
-            campaign=campaign,
-            shop_id__in=[row["shop_id"] for row in grouped],
-        ).values_list("shop_id", flat=True)
-    )
-    can_manage_shop_links = _is_campaign_admin(request.user)
-    links_by_shop = {}
-    if can_manage_shop_links:
-        links_by_shop = {
-            link.shop_id: link
-            for link in ShopAccessLink.objects.filter(
-                campaign=campaign,
-                shop_id__in=[row["shop_id"] for row in grouped],
-            )
-        }
-    rows = []
+    errors, access_scope = scope_campaign_errors(CampaignError.objects.filter(campaign=campaign).exclude(status__in=["excluded", "cancelled"]), request.user)
+    grouped = list(errors.values("shop_id", "shop__shop_code", "shop__shop_name", "shop__shop_email",
+        "shop__manager_id__regionManager_id", "shop__manager_id__regionManager__regionManager_name",
+        "shop__manager_id__areaManager_id", "shop__manager_id__areaManager__areaManager_name").annotate(
+        total_errors=Count("id"), answered_errors=Count("id", filter=Q(shop_response__answer_code__isnull=False) & ~Q(shop_response__answer_code="")),
+        last_response_at=Max("shop_response__updated_at")))
+    ids = [row["shop_id"] for row in grouped]
+    submitted = set(ShopSubmission.objects.filter(campaign=campaign, shop_id__in=ids).values_list("shop_id", flat=True))
+    links = {link.shop_id: link for link in ShopAccessLink.objects.filter(campaign=campaign, shop_id__in=ids)}
+    from app_document_campaigns.models import TeamReview
+    reviewed_shops = set(TeamReview.objects.filter(error__campaign=campaign, error__shop_id__in=ids).values_list("error__shop_id", flat=True))
+    deadlines = shop_deadlines(campaign)
+    regions = sorted({(row["shop__manager_id__regionManager_id"], row["shop__manager_id__regionManager__regionManager_name"] or "Chưa xác định") for row in grouped if row["shop__manager_id__regionManager_id"]}, key=lambda pair: pair[1])
+    areas = sorted({(row["shop__manager_id__areaManager_id"], row["shop__manager_id__areaManager__areaManager_name"] or "Chưa xác định", row["shop__manager_id__regionManager_id"]) for row in grouped if row["shop__manager_id__areaManager_id"]}, key=lambda pair: pair[1])
+    shops = sorted([(row["shop_id"], row["shop__shop_code"], row["shop__shop_name"], row["shop__manager_id__regionManager_id"], row["shop__manager_id__areaManager_id"]) for row in grouped], key=lambda row: row[1] or 0)
+    region = request.GET.get("region", "").strip()
+    area = request.GET.get("area", "").strip()
+    shop = request.GET.get("shop", "").strip()
+    if region not in {str(pair[0]) for pair in regions}: region = ""
+    if area not in {str(pair[0]) for pair in areas if not region or str(pair[2]) == region}: area = ""
+    if shop not in {str(row[0]) for row in shops if (not region or str(row[3]) == region) and (not area or str(row[4]) == area)}: shop = ""
+    statuses = [value for value in request.GET.getlist("status") if value in {"not_started", "in_progress", "submitted", "expired"}]
+    all_rows = []
     for row in grouped:
-        if row["shop_id"] in submitted_shop_ids:
-            status, status_label = "submitted", "Đã gửi"
-        elif row["answered_errors"]:
-            status, status_label = "in_progress", "Đang phản hồi"
-        else:
-            status, status_label = "not_started", "Chưa phản hồi"
-        if selected_status and selected_status != status:
-            continue
-        row.update(
-            status=status,
-            status_label=status_label,
-            progress=int(row["answered_errors"] / max(row["total_errors"], 1) * 100),
-            access_link=links_by_shop.get(row["shop_id"]),
-        )
-        rows.append(row)
+        is_submitted = row["shop_id"] in submitted
+        link = links.get(row["shop_id"])
+        row["can_extend"] = bool(campaign.status == Campaign.Status.ACTIVE and link and not link.revoked_at and not is_submitted and row["shop_id"] not in reviewed_shops)
+        row["can_email"] = bool(campaign.status == Campaign.Status.ACTIVE and link and link.is_editable and not is_submitted)
+        expired = shop_deadline_passed(campaign, row["shop_id"], deadlines)
+        status = "submitted" if is_submitted else "expired" if expired else "in_progress" if row["answered_errors"] else "not_started"
+        labels = {"submitted": "Đã gửi", "expired": "Hết hạn phản hồi", "in_progress": "Đang phản hồi", "not_started": "Chưa phản hồi"}
+        response_progress = int(row["answered_errors"] * 100 / max(row["total_errors"], 1))
+        row.update(status=status, status_label=labels[status], complete=is_submitted or expired,
+            progress=response_progress,
+            progress_hue=round(response_progress * 1.2),
+            access_link=links.get(row["shop_id"]), deadline=deadlines.get(row["shop_id"], campaign.response_deadline),
+            region_manager_name=row["shop__manager_id__regionManager__regionManager_name"],
+            area_manager_name=row["shop__manager_id__areaManager__areaManager_name"])
+        all_rows.append(row)
+    total_errors = errors.count()
+    total_contracts = errors.exclude(contract_code="").values("contract_code").distinct().count()
+    submitted_count = sum(row["shop_id"] in submitted for row in all_rows)
+    summary = {"shops": len(all_rows), "issued": sum(bool(row["access_link"] and not row["access_link"].revoked_at) for row in all_rows),
+        "area_emailed": emailed_area_manager_count(campaign, ids),
+        "submitted": submitted_count,
+        "submitted_rate": round(submitted_count * 100 / len(all_rows)) if all_rows else 0,
+        "in_progress": sum(row["shop_id"] not in submitted and bool(row["answered_errors"]) for row in all_rows),
+        "not_started": sum(row["shop_id"] not in submitted and not row["answered_errors"] for row in all_rows),
+        "errors": total_errors, "contracts": total_contracts}
+    rows = [row for row in all_rows if (not region or str(row["shop__manager_id__regionManager_id"]) == region)
+        and (not area or str(row["shop__manager_id__areaManager_id"]) == area)
+        and (not shop or str(row["shop_id"]) == shop) and (not statuses or row["status"] in statuses)]
+    rows.sort(key=lambda row: (row["complete"], row["progress"], row["shop__shop_code"] or 0, row["shop_id"]))
+    page = Paginator(rows, 50).get_page(request.GET.get("page"))
+    params = request.GET.copy()
+    params.pop("page", None)
+    progress = round(sum(row["complete"] for row in all_rows) * 100 / len(all_rows)) if all_rows else 0
+    return render(request, "app_document_campaigns/campaign_response_monitor.html", {
+        "campaign": campaign, "access_scope": access_scope, "rows": page.object_list, "page": page,
+        "page_range": page.paginator.get_elided_page_range(page.number, on_each_side=2, on_ends=1), "filter_query": params.urlencode(),
+        "regions": regions, "areas": areas, "shops": shops, "selected_region": region, "selected_area": area,
+        "selected_shop": shop, "selected_statuses": statuses, "summary": summary, "shop_response_progress": progress,
+        "active_monitor_tab": "shops",
+        "can_manage_shop_links": _is_campaign_admin(request.user), "issued_shop_link_count": summary["issued"],
+        "deadline_form": CampaignDeadlineForm(instance=campaign), "can_publish_shop_links": bool(campaign.current_version
+            and campaign.current_version.status == CampaignVersion.Status.PUBLISHED
+            and campaign.status not in (Campaign.Status.CLOSED, Campaign.Status.CANCELLED)
+            and campaign.response_deadline and campaign.response_deadline > timezone.now())})
 
-    return render(
-        request,
-        "app_document_campaigns/campaign_response_monitor.html",
-        {
-            "campaign": campaign,
-            "access_scope": access_scope,
-            "rows": rows,
-            "regions": regions,
-            "areas": areas,
-            "shops": shops,
-            "selected_region": selected_region,
-            "selected_area": selected_area,
-            "selected_shop": selected_shop,
-            "selected_status": selected_status,
-            "can_manage_shop_links": can_manage_shop_links,
-            "issued_shop_link_count": len(links_by_shop),
-            "deadline_form": CampaignDeadlineForm(instance=campaign),
-            "can_publish_shop_links": bool(
-                campaign.current_version
-                and campaign.current_version.status == CampaignVersion.Status.PUBLISHED
-                and campaign.response_deadline
-                and campaign.response_deadline > timezone.now()
-            ),
-            "summary": {
-                "shops": len(rows),
-                "submitted": sum(row["status"] == "submitted" for row in rows),
-                "in_progress": sum(row["status"] == "in_progress" for row in rows),
-                "not_started": sum(row["status"] == "not_started" for row in rows),
-            },
-        },
+
+def _occurrence_order(request):
+    direction = request.GET.get("date_order", "asc")
+    if direction not in {"asc", "desc"}:
+        direction = "asc"
+    field = F("source_created_at")
+    return direction, field.desc(nulls_last=True) if direction == "desc" else field.asc(nulls_last=True)
+
+
+@login_required
+def campaign_response_records(request, campaign_id):
+    campaign = get_object_or_404(Campaign, pk=campaign_id)
+    queryset, scope = scope_campaign_errors(
+        CampaignError.objects.filter(campaign=campaign)
+        .exclude(status__in=[CampaignError.Status.EXCLUDED, CampaignError.Status.CANCELLED])
+        .select_related("shop", "shop_response"), request.user,
     )
+    shops = list(queryset.order_by("shop__shop_code").values("shop_id", "shop__shop_code", "shop__shop_name").distinct())
+    shop_filter = request.GET.get("shop", "")
+    if shop_filter.isdigit():
+        queryset = queryset.filter(shop_id=int(shop_filter))
+    elif shop_filter:
+        queryset = queryset.none()
+    direction, ordering = _occurrence_order(request)
+    page = Paginator(queryset.order_by(ordering, "id"), 50).get_page(request.GET.get("page"))
+    labels = dict(campaign.response_options.values_list("value", "label"))
+    for error in page:
+        response = getattr(error, "shop_response", None)
+        error.response_label = labels.get(response.answer_code, response.answer_code) if response else ""
+    return render(request, "app_document_campaigns/campaign_response_records.html", {
+        "campaign": campaign, "page": page, "shops": shops, "access_scope": scope,
+        "shop_filter": shop_filter, "date_order": direction,
+    })
 
 
 @login_required
@@ -489,11 +492,16 @@ def shop_response_monitor_detail(request, campaign_id, shop_id):
         .select_related("shop", "region", "area_manager", "shop_response")
     )
     scoped_errors, access_scope = scope_campaign_errors(base_errors, request.user)
-    errors = list(scoped_errors.filter(shop_id=shop_id).order_by("id"))
+    direction, ordering = _occurrence_order(request)
+    errors = list(scoped_errors.filter(shop_id=shop_id).order_by(ordering, "id"))
     if not errors:
         raise Http404("Không tìm thấy PGD trong phạm vi được phép.")
     shop = errors[0].shop
     submission = ShopSubmission.objects.filter(campaign=campaign, shop=shop).first()
+    labels = dict(campaign.response_options.values_list("value", "label"))
+    for error in errors:
+        response = getattr(error, "shop_response", None)
+        error.response_label = labels.get(response.answer_code, response.answer_code) if response else ""
     answered = sum(bool(getattr(error, "shop_response", None) and error.shop_response.answer_code) for error in errors)
     return render(
         request,
@@ -506,6 +514,7 @@ def shop_response_monitor_detail(request, campaign_id, shop_id):
             "answered": answered,
             "total": len(errors),
             "access_scope": access_scope,
+            "date_order": direction,
         },
     )
 
@@ -514,24 +523,29 @@ def shop_response_monitor_detail(request, campaign_id, shop_id):
 @require_POST
 @campaign_admin_required
 def create_campaign_version(request, campaign_id):
+    try:
+        selected_sources = _selected_sql_sources(request) if request.POST.get("start_sql") == "1" else None
+    except CampaignImportError as exc:
+        return HttpResponse(str(exc), status=400)
     with transaction.atomic():
         campaign = get_object_or_404(Campaign.objects.select_for_update(), pk=campaign_id)
+        existing = campaign.current_version or campaign.versions.first()
+        if existing:
+            messages.info(request, "Kỳ đã có bộ dữ liệu làm việc. Không tạo thêm version.")
+            return redirect(f"{reverse('document_campaigns:campaign_detail', kwargs={'campaign_id': campaign.pk})}?version={existing.pk}")
         if campaign.status in (Campaign.Status.ACTIVE, Campaign.Status.CLOSED, Campaign.Status.CANCELLED):
             messages.error(request, "Trạng thái chiến dịch hiện tại không cho tạo version SQL mới.")
             return redirect("document_campaigns:campaign_detail", campaign_id=campaign.pk)
-        existing = campaign.versions.filter(status=CampaignVersion.Status.DRAFT).first()
-        if existing:
-            messages.info(request, f"Chiến dịch đã có version nháp v{existing.version_number}.")
-            version = existing
-        else:
-            next_number = (campaign.versions.aggregate(value=Max("version_number"))["value"] or 0) + 1
-            version = CampaignVersion.objects.create(
-                campaign=campaign,
-                version_number=next_number,
-                source_type=CampaignVersion.SourceType.SQL,
-                created_by=request.user,
-            )
-            messages.success(request, f"Đã tạo version nháp v{version.version_number}.")
+        version = CampaignVersion.objects.create(
+            campaign=campaign,
+            version_number=1,
+            source_type=CampaignVersion.SourceType.SQL,
+            created_by=request.user,
+        )
+        messages.success(request, "Đã khởi tạo bộ dữ liệu của kỳ.")
+        if request.POST.get("start_sql") == "1":
+            job = CampaignImportJob.objects.create(version=version, created_by=request.user, total_steps=len(selected_sources)+1, summary={"prepare_excel": True, "source_names": selected_sources})
+            transaction.on_commit(lambda: _enqueue_import_job(job, run_campaign_sql_import))
     return redirect(f"{request.path_info.rsplit('/versions/', 1)[0]}/?version={version.pk}")
 
 
@@ -540,11 +554,19 @@ def create_campaign_version(request, campaign_id):
 @campaign_admin_required
 def stage_sql_version(request, version_id):
     version = get_object_or_404(CampaignVersion.objects.select_related("campaign"), pk=version_id)
+    if version.status == CampaignVersion.Status.PUBLISHED or version.campaign.status in (Campaign.Status.ACTIVE, Campaign.Status.CLOSED, Campaign.Status.CANCELLED):
+        return HttpResponse("Dữ liệu đã phát hành hoặc kỳ đã khóa; không thể truy xuất lại.", status=409)
+    try:
+        selected_sources = _selected_sql_sources(request)
+    except CampaignImportError as exc:
+        return HttpResponse(str(exc), status=400)
     try:
         with transaction.atomic():
             job = CampaignImportJob.objects.create(
                 version=version,
                 created_by=request.user,
+                total_steps=len(selected_sources) + (1 if request.POST.get("prepare_excel") == "1" else 0),
+                summary={"source_names": selected_sources, "prepare_excel": request.POST.get("prepare_excel") == "1"},
             )
             transaction.on_commit(lambda: _enqueue_import_job(job, run_campaign_sql_import))
     except IntegrityError:
@@ -560,6 +582,15 @@ def stage_sql_version(request, version_id):
         campaign_id=version.campaign_id,
         permanent=False,
     )
+
+
+def _selected_sql_sources(request):
+    from app_document_campaigns.services.sql_sources import sql_source_options
+    allowed = [name for name, _ in sql_source_options()]
+    selected = request.POST.getlist("sources") if request.POST.get("select_sources") == "1" else allowed
+    if not selected or set(selected) - set(allowed):
+        raise CampaignImportError("Hãy chọn ít nhất một nguồn dữ liệu hợp lệ.")
+    return list(dict.fromkeys(selected))
 
 
 def _enqueue_import_job(job, task):
@@ -648,7 +679,7 @@ def export_staging_excel(request, version_id):
     )
     job = (
         version.import_jobs.filter(
-            job_type=CampaignImportJob.JobType.EXCEL_EXPORT,
+            job_type__in=[CampaignImportJob.JobType.SQL_STAGE, CampaignImportJob.JobType.EXCEL_EXPORT],
             status=CampaignImportJob.Status.SUCCEEDED,
             summary__export_kind__isnull=True,
         )
@@ -663,14 +694,28 @@ def export_staging_excel(request, version_id):
             summary__export_kind="reviewed",
             summary__source_checksum=source.source_checksum if source else "missing",
         ).exclude(output_file="").first()
+    if request.GET.get("job"):
+        try:
+            job_id = int(request.GET["job"])
+        except (TypeError, ValueError):
+            return HttpResponse("File không hợp lệ.", status=400)
+        job = version.import_jobs.filter(pk=job_id, status=CampaignImportJob.Status.SUCCEEDED, job_type__in=[CampaignImportJob.JobType.SQL_STAGE, CampaignImportJob.JobType.EXCEL_EXPORT]).exclude(output_file="").first()
+        if job and job.summary.get("export_kind") == "reviewed":
+            source = version.import_sources.filter(source_type="excel", name="team-cleaning-excel").first()
+            if not source or source.source_checksum != job.summary.get("source_checksum"):
+                return HttpResponse("File kết quả đã cũ; hãy chuẩn bị lại file từ dữ liệu hiện tại.", status=409)
     if job is None:
         return HttpResponse(
             "Chưa có file Excel được tạo thành công.",
             status=409,
             content_type="text/plain; charset=utf-8",
         )
+    try:
+        stream = job.output_file.open("rb")
+    except FileNotFoundError:
+        return HttpResponse("Không tìm thấy file. Kiểm tra media dùng chung giữa web và worker hoặc chuẩn bị lại file.", status=404)
     response = FileResponse(
-        job.output_file.open("rb"),
+        stream,
         as_attachment=True,
         filename=job.output_filename or job.output_file.name.rsplit("/", 1)[-1],
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -727,6 +772,8 @@ def import_staging_excel(request, version_id):
         pk=version_id,
     )
     uploaded_file = request.FILES.get("file")
+    if version.status == CampaignVersion.Status.PUBLISHED or version.campaign.status in (Campaign.Status.ACTIVE, Campaign.Status.CLOSED, Campaign.Status.CANCELLED):
+        return HttpResponse("Dữ liệu đã phát hành hoặc kỳ đã khóa; không thể upload lại.", status=409)
     if uploaded_file is None:
         if _is_html_form(request):
             messages.error(request, "Chưa chọn file Excel.")
@@ -809,6 +856,7 @@ def shop_response_page(request, raw_token):
     if error_response:
         return error_response
 
+    direction, ordering = _occurrence_order(request)
     errors = list(
         CampaignError.objects.filter(campaign=link.campaign, shop=link.shop)
         .exclude(status__in=[CampaignError.Status.EXCLUDED, CampaignError.Status.CANCELLED])
@@ -818,17 +866,18 @@ def shop_response_page(request, raw_token):
             "campaign__campaign_type__shop_checklist_template__questions",
             "shop_response",
         )
-        .order_by("id")
+        .order_by(ordering, "id")
     )
     rows = []
     completed = 0
+    campaign_options = list(link.campaign.response_options.values("value", "label"))
     for error in errors:
         response = getattr(error, "shop_response", None)
         if response and response.answer_code:
             completed += 1
-        options = []
+        options = list(campaign_options)
         checklist = error.checklist_template or error.campaign.campaign_type.shop_checklist_template
-        if checklist:
+        if checklist and not campaign_options:
             for question in checklist.questions.all():
                 if not question.is_active or question.question_type != question.QuestionType.SINGLE:
                     continue
@@ -871,6 +920,7 @@ def shop_response_page(request, raw_token):
             "total": len(rows),
             "submitted": submitted,
             "read_only": read_only,
+            "date_order": direction,
         },
     )
     response["Cache-Control"] = "no-store"

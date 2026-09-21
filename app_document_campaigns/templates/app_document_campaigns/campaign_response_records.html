@@ -1,0 +1,22 @@
+{% extends "app_documents/base_app_documents_v2.html" %}
+{% load static campaign_workflow %}
+{% block title %}Phản hồi PGD theo hợp đồng · {{ campaign.code }}{% endblock %}
+{% block top_nav %}{% include "app_documents/components/top_nav_v2.html" %}{% endblock %}
+{% block main_extra_class %}pt-20{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_monitor.css' %}">{% endblock %}
+{% block content %}
+{% campaign_workflow 3 %}
+<div class="crm-page">
+  <form method="get" class="flex flex-wrap items-center gap-3 mb-5 text-sm">
+    <label for="records-shop">Phòng giao dịch</label>
+    <select name="shop" id="records-shop" class="rounded-lg border-gray-200"><option value="">Tất cả PGD trong phạm vi</option>{% for shop in shops %}<option value="{{ shop.shop_id }}" {% if shop_filter == shop.shop_id|stringformat:'s' %}selected{% endif %}>{{ shop.shop__shop_code }} · {{ shop.shop__shop_name }}</option>{% endfor %}</select>
+    <label for="records-date">Ngày phát sinh</label><select name="date_order" id="records-date" class="rounded-lg border-gray-200"><option value="asc" {% if date_order == 'asc' %}selected{% endif %}>Cũ đến mới ↑</option><option value="desc" {% if date_order == 'desc' %}selected{% endif %}>Mới đến cũ ↓</option></select>
+    <button class="rounded-lg bg-[#00844A] px-4 py-2 text-white">Lọc</button>
+  </form>
+  <section class="crm-card crm-table-wrap"><table class="crm-table">
+    <thead><tr><th>Tên phòng giao dịch</th><th>Mã hợp đồng</th><th class="whitespace-nowrap"><a href="?shop={{ shop_filter|urlencode }}&date_order={% if date_order == 'asc' %}desc{% else %}asc{% endif %}">Ngày phát sinh {% if date_order == 'asc' %}↑{% else %}↓{% endif %}</a></th><th>Loại lỗi</th><th>Tên nhân viên</th><th>Lỗi</th><th>Nghiệp vụ</th><th>PGD phản hồi</th><th>Ghi chú</th></tr></thead>
+    <tbody>{% for error in page %}<tr><td>{{ error.shop.shop_code }} · {{ error.shop.shop_name }}</td><td><strong>{{ error.contract_code|default:error.code|default:'—' }}</strong></td><td class="whitespace-nowrap">{{ error.source_created_at|date:'d/m/Y'|default:'—' }}</td><td>{{ error.get_error_type_display }}</td><td>{{ error.employee_name|default:'—' }}</td><td>{{ error.checking_issue }}{% if error.document_type_name %}<ul class="list-disc pl-4 mt-2">{% for document in error.document_type_name.splitlines %}<li>{{ document }}</li>{% endfor %}</ul>{% endif %}</td><td>{{ error.business_type_name|default:'—' }}</td><td>{{ error.response_label|default:'Chưa phản hồi' }}{% if error.shop_response.answer_code %}<div class="crm-muted">{{ error.shop_response.get_status_display }}</div>{% endif %}</td><td>{{ error.shop_response.note|default:'—' }}</td></tr>{% empty %}<tr><td colspan="9">Không có dữ liệu trong phạm vi/bộ lọc đã chọn.</td></tr>{% endfor %}</tbody>
+  </table></section>
+  <nav class="flex justify-between gap-4 mt-4 text-sm" aria-label="Phân trang">{% if page.has_previous %}<a href="?shop={{ shop_filter|urlencode }}&date_order={{ date_order }}&page={{ page.previous_page_number }}">Trang trước</a>{% endif %}<span>Trang {{ page.number }}/{{ page.paginator.num_pages }}</span>{% if page.has_next %}<a href="?shop={{ shop_filter|urlencode }}&date_order={{ date_order }}&page={{ page.next_page_number }}">Trang sau</a>{% endif %}</nav>
+</div>
+{% endblock %}

@@ -1,0 +1,5 @@
+{% load static %}
+<link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_toasts.css' %}">
+<div class="campaign-toasts" data-campaign-toasts role="region" aria-label="Thông báo book lỗi"></div>
+<div hidden data-toast-seeds>{% for message in messages %}<span data-toast-level="{{ message.level_tag }}">{{ message }}</span>{% endfor %}</div>
+<script src="{% static 'app_document_campaigns/js/campaign_toasts.js' %}"></script>

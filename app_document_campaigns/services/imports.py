@@ -251,6 +251,8 @@ def publish_excel_version(*, version, confirmed_by):
     ).get(pk=version.campaign_id)
     if campaign.status == Campaign.Status.ACTIVE:
         raise CampaignImportError("Không được import đè campaign đang active.")
+    if version.import_jobs.filter(status__in=["queued", "running"]).exists():
+        raise CampaignImportError("Dữ liệu đang xử lý; hãy chờ job hoàn tất trước khi phát hành.")
     if version.status not in (CampaignVersion.Status.DRAFT, CampaignVersion.Status.VALIDATED):
         raise CampaignImportError("Chỉ được xác nhận version nháp hoặc đã kiểm tra.")
     try:

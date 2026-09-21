@@ -1,18 +1,21 @@
 {% extends "app_documents/base_app_documents_v2.html" %}
+{% load campaign_workflow %}
 {% load static %}
 {% block title %}{{ shop.shop_name }} · Kết quả phản hồi{% endblock %}
 {% block top_nav %}{% include "app_documents/components/top_nav_v2.html" %}{% endblock %}
 {% block main_extra_class %}pt-20{% endblock %}
 {% block extra_head %}<link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_monitor.css' %}">{% endblock %}
 {% block content %}
+{% campaign_workflow 3 %}
+
 <div class="crm-page">
   <header class="crm-top">
-    <div><a class="crm-back" href="{% url 'document_campaigns:campaign_response_monitor' campaign.id %}">← Danh sách PGD</a><div class="crm-eyebrow">{{ campaign.code }} · {{ shop.shop_code }}</div><h1 class="crm-title">{{ shop.shop_name }}</h1><p class="crm-copy">Kết quả phản hồi theo từng hợp đồng · {{ answered }}/{{ total }} dòng đã có câu trả lời.</p></div>
+    <div><p class="crm-copy">{{ shop.shop_code }} · {{ shop.shop_name }} · {{ answered }}/{{ total }} dòng đã có câu trả lời.</p></div>
     <div class="crm-scope">{% if submission %}Đã gửi lúc {{ submission.submitted_at|date:"H:i d/m/Y" }}{% else %}Chưa gửi chính thức{% endif %}</div>
   </header>
   <section class="crm-card crm-table-wrap"><table class="crm-table">
-    <thead><tr><th>STT</th><th>Hợp đồng</th><th>Loại lỗi</th><th>Nội dung lỗi</th><th>PGD phản hồi</th><th>Ghi chú</th><th>Cập nhật</th></tr></thead>
-    <tbody>{% for error in errors %}<tr><td>{{ forloop.counter }}</td><td><strong>{{ error.contract_code|default:error.code|default:"—" }}</strong></td><td>{{ error.get_error_type_display }}</td><td>{{ error.checking_issue }}</td><td>{% if error.shop_response.answer_code %}<strong>{{ error.shop_response.answer_code }}</strong>{% else %}<span class="crm-muted">Chưa phản hồi</span>{% endif %}</td><td>{{ error.shop_response.note|default:"—" }}</td><td class="crm-muted">{{ error.shop_response.updated_at|date:"H:i d/m/Y"|default:"—" }}</td></tr>{% endfor %}</tbody>
+    <thead><tr><th>STT</th><th>Tên phòng giao dịch</th><th>Hợp đồng</th><th><a href="?date_order={% if date_order == 'asc' %}desc{% else %}asc{% endif %}">Ngày phát sinh {% if date_order == 'asc' %}↑{% else %}↓{% endif %}</a></th><th>Loại lỗi</th><th>Nội dung lỗi</th><th>PGD phản hồi</th><th>Ghi chú</th><th>Cập nhật</th></tr></thead>
+    <tbody>{% for error in errors %}<tr><td>{{ forloop.counter }}</td><td>{{ error.shop.shop_code }} · {{ error.shop.shop_name }}</td><td><strong>{{ error.contract_code|default:error.code|default:"—" }}</strong><div class="crm-muted">Nhân viên: {{ error.employee_name|default:"—" }}</div><div class="crm-muted">Nghiệp vụ: {{ error.business_type_name|default:"—" }}</div></td><td>{{ error.source_created_at|date:"d/m/Y"|default:"—" }}</td><td>{{ error.get_error_type_display }}</td><td>{{ error.checking_issue }}</td><td>{% if error.shop_response.answer_code %}<strong>{{ error.response_label }}</strong>{% else %}<span class="crm-muted">Chưa phản hồi</span>{% endif %}</td><td>{{ error.shop_response.note|default:"—" }}</td><td class="crm-muted">{{ error.shop_response.updated_at|date:"H:i d/m/Y"|default:"—" }}</td></tr>{% endfor %}</tbody>
   </table></section>
 </div>
 {% endblock %}

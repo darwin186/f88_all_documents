@@ -39,6 +39,8 @@
         <span class="text-gray-300">•</span>
         <a href="{% url 'master_data_tokens' %}" class="{% if request.resolver_match.url_name == 'master_data_tokens' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">API Token</a>
         <span class="text-gray-300">•</span>
+        <a href="{% url 'master_data_response_options' %}" class="{% if request.resolver_match.url_name == 'master_data_response_options' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Phản hồi PGD</a>
+        <span class="text-gray-300">•</span>
         <div class="group relative inline-flex items-center">
           <a href="{% url 'master_data_api_docs' %}" class="inline-flex items-center gap-1 {% if request.resolver_match.url_name == 'master_data_api_docs' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Tài liệu API <span class="text-[8px]">⌄</span></a>
           <div class="absolute left-0 top-full z-50 hidden min-w-[210px] pt-2 group-hover:block group-focus-within:block">
@@ -76,7 +78,7 @@
           <a href="{% url 'document_campaigns:campaign_list' %}" class="inline-flex items-center gap-1 {% if request.resolver_match.namespace == 'document_campaigns' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Chiến dịch lỗi <span class="text-[8px]">⌄</span></a>
           <div class="absolute left-0 top-full z-50 hidden min-w-[210px] pt-2 group-hover:block group-focus-within:block">
             <div class="overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
-              <a href="{% url 'document_campaigns:campaign_list' %}" class="block px-3 py-2 text-[9px] {% if request.resolver_match.namespace == 'document_campaigns' and request.resolver_match.url_name != 'campaign_create' %}bg-green-50 font-semibold text-f88green{% else %}text-gray-700 hover:bg-gray-50 hover:text-f88green{% endif %}">Danh sách và tiến độ chiến dịch</a>
+              {% if campaign %}<a href="{% url 'document_campaigns:campaign_review' campaign.id %}" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Review phản hồi PGD</a>{% endif %}
               {% if can_manage_campaigns or can_manage_shop_links or is_admin or is_super_admin %}<a href="{% url 'document_campaigns:campaign_create' %}" class="block border-t border-gray-100 px-3 py-2 text-[9px] {% if request.resolver_match.url_name == 'campaign_create' %}bg-green-50 font-semibold text-f88green{% else %}text-gray-700 hover:bg-gray-50 hover:text-f88green{% endif %}">Tạo chiến dịch mới</a>{% endif %}
             </div>
           </div>
@@ -110,6 +112,7 @@
         {% endif %}
       </div>
     </div>
+    {% if request.resolver_match.namespace == 'document_campaigns' %}<a href="{% url 'document_campaigns:campaign_list' %}" class="mr-auto whitespace-nowrap rounded-lg px-3 py-2 text-[11px] hover:bg-green-50 {% if request.resolver_match.url_name == 'campaign_list' %}bg-green-50 font-semibold text-f88green{% else %}text-gray-600 hover:text-f88green{% endif %}" {% if request.resolver_match.url_name == 'campaign_list' %}aria-current="page"{% endif %}>Danh sách kỳ</a>{% endif %}
     <div class="relative text-[9px] text-gray-700" data-user-menu>
       <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50" data-user-toggle aria-expanded="false">
         <div class="hidden sm:flex flex-col leading-tight text-right">

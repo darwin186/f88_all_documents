@@ -20,5 +20,5 @@ document.addEventListener("DOMContentLoaded", () => {
     event.preventDefault();
     closeDialog();
   });
-  if (dialog.hasAttribute("data-open-on-load")) openDialog();
+  if (dialog.hasAttribute("data-open-on-load") || new URLSearchParams(window.location.search).get("settings") === "1") openDialog();
 });

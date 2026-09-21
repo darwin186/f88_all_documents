@@ -1,15 +1,17 @@
 {% extends "app_documents/base_app_documents_v2.html" %}
+{% load campaign_workflow %}
 
 {% block title %}Khởi tạo kỳ book lỗi chứng từ{% endblock %}
 {% block top_nav %}{% include "app_documents/components/top_nav_v2.html" %}{% endblock %}
 {% block main_extra_class %}pt-20{% endblock %}
 
 {% block content %}
+{% campaign_workflow 1 %}
+
 <div class="mx-auto max-w-[1500px] space-y-4 px-3">
   <section class="flex items-end justify-between gap-4">
     <div>
-    <div class="text-[10px] font-bold uppercase tracking-[.14em] text-emerald-700">Vận hành · Chứng từ</div>
-    <h1 class="mt-1 text-2xl font-extrabold tracking-tight text-gray-950">Khởi tạo kỳ book lỗi chứng từ.</h1>
+    <h1 class="campaign-heading-1">Khởi tạo kỳ book lỗi chứng từ.</h1>
     <p class="mt-1 text-[11px] text-gray-500">Tạo kỳ gửi lỗi để chuẩn bị dữ liệu lỗi theo từng tháng.</p>
     </div>
     {% if can_manage_campaigns %}<a href="{% url 'document_campaigns:campaign_create' %}" class="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-800">Tạo chiến dịch</a>{% endif %}

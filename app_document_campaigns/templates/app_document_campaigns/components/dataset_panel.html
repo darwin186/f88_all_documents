@@ -1,0 +1,51 @@
+{% load humanize %}
+<section class="dec-dataset-panel" aria-label="Thống kê bộ dữ liệu">
+  <div class="dec-dataset-columns">
+    <div class="dec-dataset-column"><h2>Nguồn dữ liệu của version</h2>
+      <div class="dec-source-list">{% for source in sources %}<div class="dec-source"><strong>{{ source.display_name }}</strong><div class="dec-source-meta"><span>{{ source.row_count|intcomma }} dòng</span><span class="{% if source.invalid_count %}dec-invalid{% else %}dec-valid{% endif %}">{{ source.invalid_count|intcomma }} lỗi</span>{% if source.preview_summary.removed_from_sql != None %}<span>{{ source.preview_summary.removed_from_sql|intcomma }} dòng loại</span>{% endif %}</div></div>{% empty %}<p>Chưa có dữ liệu nguồn.</p>{% endfor %}</div>
+    </div>
+    <div class="dec-dataset-column"><h2>Thống kê nguồn dữ liệu</h2><p>{% if excel_source %}Ưu tiên dữ liệu Excel team đã upload.{% else %}Dữ liệu SQL ban đầu.{% endif %}</p>
+      <dl class="dec-stat-list">{% for metric in dataset_metrics %}<div><dt>{{ metric.label }}</dt><dd>{{ metric.value|intcomma }}</dd></div>{% empty %}<p>Chưa có bộ dữ liệu để thống kê.</p>{% endfor %}</dl>
+    </div>
+    <div class="dec-dataset-column"><h2>Trạng thái &amp; file</h2><span class="dec-data-state">{% if selected_version.status == 'published' %}✓ Đã phát hành{% else %}Draft{% endif %}</span>
+      {% if excel_source %}<p>Excel: {{ excel_source.get_status_display }} · {{ excel_source.invalid_count|intcomma }} lỗi</p>{% endif %}
+      <p>{{ prepared_files|length }} file đã chuẩn bị.</p>
+      {% if data_locked %}<p>Dữ liệu đã khóa, không thể truy xuất hoặc upload lại.</p>{% elif job_busy %}<p role="status">Đang xử lý dữ liệu, vui lòng chờ.</p>{% elif not can_publish_data %}<p>Upload Excel đã review và xử lý hết lỗi trước khi phát hành dữ liệu.</p>{% endif %}
+      {% if latest_job %}<div class="dec-job" {% if not latest_job.summary.message and not latest_job.error_message %}hidden{% endif %} data-import-job data-status="{{ latest_job.status }}" data-status-url="{% url 'document_campaigns:latest_import_job' selected_version.id %}"><span data-job-status hidden>{{ latest_job.get_status_display }}</span><p data-job-message {% if not latest_job.summary.message %}hidden{% endif %}>{{ latest_job.summary.message }}</p><p class="dec-job-error" data-job-error {% if not latest_job.error_message %}hidden{% endif %}>{{ latest_job.error_message }}</p></div>{% endif %}
+    </div>
+  </div>
+  <div class="dec-dataset-actions" aria-label="Thao tác dữ liệu">
+    {% if can_manage_shop_links %}<button type="button" data-dataset-open="sources" class="dec-btn {% if not has_requested_data %}dec-btn-primary{% else %}dec-btn-secondary{% endif %}" {% if job_busy or data_locked %}disabled{% endif %}>{% if has_requested_data %}↻ Lấy lại dữ liệu{% else %}Bắt đầu lấy dữ liệu{% endif %}</button>{% endif %}
+    <button type="button" class="dec-btn dec-btn-secondary" data-dataset-open="downloads" {% if not prepared_files or job_busy %}disabled{% endif %}>↓ Tải file để review</button>
+    {% if can_manage_shop_links %}<button type="button" class="dec-btn dec-btn-secondary" data-dataset-open="upload" {% if job_busy or data_locked or not has_sql %}disabled{% endif %}>↑ Upload lại file đã review</button>
+      <form method="post" action="{% if selected_version %}{% url 'document_campaigns:confirm_staging_excel' selected_version.id %}{% endif %}" onsubmit="return confirm('Phát hành Excel đã review thành dữ liệu chính thức của kỳ? Chưa gửi thông báo tới PGD.')">{% csrf_token %}<input type="hidden" name="return_to" value="campaign_detail"><button class="dec-btn {% if can_publish_data %}dec-btn-primary{% else %}dec-btn-secondary{% endif %}" {% if not can_publish_data %}disabled{% endif %}>{% if selected_version.status == 'published' %}✓ Đã phát hành{% else %}Phát hành dữ liệu{% endif %}</button></form>
+    {% endif %}
+  </div>
+</section>
+
+<dialog class="dec-action-dialog" data-dataset-dialog="downloads" aria-labelledby="dataset-download-title">
+  <div class="dec-dialog-head"><div><h2 id="dataset-download-title">File đã chuẩn bị</h2><p>Bấm vào thẻ Excel để tải file.</p></div><button type="button" data-dataset-close aria-label="Đóng">×</button></div>
+  <div class="dec-file-grid">{% for file in prepared_files %}<a class="dec-file-tile" href="{% url 'document_campaigns:export_staging_excel' selected_version.id %}?job={{ file.pk }}">{% include 'app_document_campaigns/components/file_action_icon.html' with kind='excel' %}<strong>{{ file.output_filename|default:'File Excel' }}</strong><small>{{ file.finished_at|date:'H:i d/m/Y' }}</small><span>↓ Tải xuống</span></a>{% empty %}<p>Chưa có file đã chuẩn bị.</p>{% endfor %}</div>
+</dialog>
+{% if can_manage_shop_links %}
+<dialog class="dec-action-dialog" data-dataset-dialog="sources" aria-labelledby="dataset-sources-title">
+  <div class="dec-dialog-head"><div><h2 id="dataset-sources-title">{% if has_requested_data %}Lấy lại dữ liệu{% else %}Bắt đầu lấy dữ liệu{% endif %}</h2><p>Chọn nguồn cần truy xuất. Các nguồn không chọn được giữ nguyên.</p></div><button type="button" data-dataset-close aria-label="Đóng">×</button></div>
+  <form method="post" data-dataset-sources action="{% if selected_version %}{% url 'document_campaigns:stage_sql_version' selected_version.id %}{% else %}{% url 'document_campaigns:create_campaign_version' campaign.id %}{% endif %}">
+    {% csrf_token %}<input type="hidden" name="prepare_excel" value="1"><input type="hidden" name="start_sql" value="1"><input type="hidden" name="select_sources" value="1">
+    <label class="dec-source-choice dec-select-all"><input type="checkbox" data-sources-all checked> Chọn tất cả nguồn</label>
+    {% for key,label in sql_source_options %}<label class="dec-source-choice"><input type="checkbox" name="sources" value="{{ key }}" checked><span>{{ label }}</span></label>{% endfor %}
+    <p class="dec-dialog-hint">Sau khi truy xuất, hệ thống tự chuẩn bị file Excel từ bộ dữ liệu tổng hợp. Excel review cũ cần đối chiếu lại.</p>
+    <p data-sources-error class="dec-dialog-error" role="alert" hidden>Vui lòng chọn ít nhất một nguồn.</p>
+    <div class="dec-dialog-foot"><button type="button" class="dec-btn dec-btn-secondary" data-dataset-close>Hủy</button><button class="dec-btn dec-btn-primary">Truy xuất &amp; chuẩn bị Excel</button></div>
+  </form>
+</dialog>
+<dialog class="dec-action-dialog" data-dataset-dialog="upload" aria-labelledby="dataset-upload-title">
+  <div class="dec-dialog-head"><div><h2 id="dataset-upload-title">Upload file đã review</h2><p>Chọn một file Excel để đối chiếu dữ liệu.</p></div><button type="button" data-dataset-close aria-label="Đóng">×</button></div>
+  <form data-dataset-upload method="post" enctype="multipart/form-data" action="{% if selected_version %}{% url 'document_campaigns:import_staging_excel' selected_version.id %}{% endif %}">
+    {% csrf_token %}<input type="hidden" name="return_to" value="campaign_detail">
+    <label class="dec-upload-zone" data-dataset-drop>{% include 'app_document_campaigns/components/file_action_icon.html' with kind='upload' %}<strong>Kéo thả file vào đây hoặc chọn file</strong><span data-upload-name>Excel .xlsx · tối đa 10 MB</span><input type="file" name="file" accept=".xlsx" required data-dataset-file aria-label="Chọn file Excel đã review"></label>
+    <p class="dec-dialog-error" role="alert" data-upload-error hidden></p>
+    <div class="dec-dialog-foot"><button type="button" class="dec-btn dec-btn-secondary" data-dataset-close>Hủy</button><button class="dec-btn dec-btn-primary" data-upload-submit disabled>Upload &amp; đối chiếu</button></div>
+  </form>
+</dialog>
+{% endif %}

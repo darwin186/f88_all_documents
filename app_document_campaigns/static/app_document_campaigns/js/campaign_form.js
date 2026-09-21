@@ -6,6 +6,7 @@
     }
 
     const monthInput = document.querySelector("[data-campaign-month]");
+    const calendarLocale = { ...(window.flatpickr.l10ns?.vn || {}), firstDayOfWeek: 1 };
     const typeSelect = document.querySelector("select[name='campaign_type']");
     const codePreview = document.querySelector("[data-campaign-code-preview]");
     const updateCodePreview = () => {
@@ -18,6 +19,7 @@
     };
     if (monthInput && window.monthSelectPlugin) {
       window.flatpickr(monthInput, {
+        locale: calendarLocale,
         allowInput: false,
         disableMobile: true,
         dateFormat: "Y-m",
@@ -51,7 +53,7 @@
         altInput: true,
         altFormat: "d/m/Y H:i",
         monthSelectorType: "static",
-        locale: { firstDayOfWeek: 1 },
+        locale: calendarLocale,
       });
     }
   };
