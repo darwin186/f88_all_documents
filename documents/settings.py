@@ -240,11 +240,21 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'relay',
         },
+        'media_console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'relay',
+            'stream': 'ext://sys.stderr',
+        },
     },
     'loggers': {
         'gapo_relay': {
             'handlers': ['relay_console'],
             'level': os.getenv('GAPO_RELAY_LOG_LEVEL', 'INFO').upper(),
+            'propagate': False,
+        },
+        'media_diagnostics': {
+            'handlers': ['media_console'],
+            'level': os.getenv('MEDIA_DIAGNOSTICS_LOG_LEVEL', 'WARNING').upper(),
             'propagate': False,
         },
     },

@@ -35,4 +35,5 @@ path("integrations/gapo/", include("gapo_relay.urls")),
 ]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
 handler400 = 'app_documents.views.handle_400'
+handler404 = 'documents.error_handlers.handle_404'
 handler500 = 'app_documents.views.handle_500'
