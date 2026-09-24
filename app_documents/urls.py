@@ -60,6 +60,7 @@ urlpatterns = [
     path('api/document/<int:document_id>/note/', views.api_document_note_v2, name='api_document_note_v2'),
     path('api/package/<int:package_id>/partner/', views.api_package_partner, name='api_package_partner'),
     path('api/package/<int:package_id>/note/', views.api_package_note, name='api_package_note'),
+    path('api/package/<int:package_id>/transfer/', views.api_package_transfer, name='api_package_transfer'),
     path('package/bulk-validate/', views.package_bulk_validate, name='package_bulk_validate'),
     path('package/bulk-save/', views.package_bulk_save, name='package_bulk_save'),
     path('nhan-chung-tu-v2/import', views.receiving_import_v2, name='receiving_import_v2'),
@@ -117,6 +118,7 @@ urlpatterns = [
     path('api/gddb/<int:registration_id>/update/', views.api_gddb_update, name='api_gddb_update'),
     path('api/gddb/<int:registration_id>/note/', views.api_gddb_note_update, name='api_gddb_note_update'),
     path('api/gddb/<int:registration_id>/postmini/', views.api_gddb_postmini_update, name='api_gddb_postmini_update'),
+    path('api/gddb/gapo-group/send/', views.api_gddb_gapo_group_send, name='api_gddb_gapo_group_send'),
     # External, token-authenticated intake from the data-cleaning/Prefect platform.
     path('api/integrations/v1/batches/', intake_api.create_batch, name='document_intake_create_batch'),
     path('api/integrations/v1/catalog/', intake_api.catalog, name='document_intake_catalog'),

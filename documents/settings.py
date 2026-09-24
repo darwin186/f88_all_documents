@@ -199,6 +199,7 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL')
 GAPO_API_URL = os.getenv('GAPO_API_URL')
 GAPO_BOT_API_KEY = (os.getenv('BOT_API_KEY') or '').strip()
 GAPO_BOT_ID = os.getenv('BOT_ID')
+GDDB_GAPO_COLLAB_ID = (os.getenv('GDDB_GAPO_COLLAB_ID') or '').strip()
 GAPO_WEBHOOK_SECRET = (os.getenv('GAPO_WEBHOOK_SECRET') or '').strip()
 PUBLIC_APP_BASE_URL = (os.getenv('PUBLIC_APP_BASE_URL') or '').strip().rstrip('/')
 GAPO_CONNECT_TIMEOUT = float(os.getenv('GAPO_CONNECT_TIMEOUT', '3.05'))
@@ -285,3 +286,15 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+
+# File-backed Excel jobs may run eagerly inside the web service so every read
+# and write uses the web-mounted /app/media volume. Other Celery tasks remain
+# asynchronous. APP_ROLE=web is already present in the Kubernetes web manifest.
+_app_role = os.getenv('APP_ROLE', '').strip().lower()
+FILE_JOBS_RUN_ON_WEB = (
+    os.getenv(
+        'FILE_JOBS_RUN_ON_WEB',
+        'false' if _app_role == 'worker' else 'true',
+    ).strip().lower()
+    in {'1', 'true', 'yes', 'on'}
+)

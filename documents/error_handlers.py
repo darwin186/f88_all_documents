@@ -88,7 +88,8 @@ def _log_admindocument_media_404(request):
 
 
 def handle_404(request, exception):
-    if not _log_admindocument_media_404(request):
+    is_admindocument_media = _log_admindocument_media_404(request)
+    if not is_admindocument_media:
         logger.warning(
             "HTTP_404 method=%s path=%r user_id=%r",
             request.method,
@@ -98,4 +99,9 @@ def handle_404(request, exception):
             and request.user.is_authenticated
             else None,
         )
-    return render(request, "404.html", status=404)
+    return render(
+        request,
+        "404.html",
+        {"is_admindocument_media_missing": is_admindocument_media},
+        status=404,
+    )

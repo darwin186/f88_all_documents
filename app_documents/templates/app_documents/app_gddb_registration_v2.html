@@ -75,6 +75,14 @@
         <a href="?{{ queue_query_prefix }}queue=unassigned" class="queue-tab {% if queue_scope == 'unassigned' %}queue-tab-active{% endif %}">Case chưa ai nhận <span class="queue-count" data-gddb-counter="unassigned">{{ unassigned_count }}</span></a>
       </nav>
       <div class="flex flex-wrap items-center justify-end gap-3">
+        {% if is_admin or is_super_admin %}
+        <button
+          type="button"
+          id="gddb-gapo-open"
+          class="rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-[9px] font-bold text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-400"
+          {% if not gddb_gapo_group_configured %}disabled title="Chưa cấu hình GDDB_GAPO_COLLAB_ID"{% endif %}
+        >Gửi GAPO nhóm</button>
+        {% endif %}
         <div class="flex items-center gap-2 text-[8px] font-bold">
           <span class="text-emerald-700">F88 <span data-gddb-counter="source-f88">{{ f88_count }}</span></span>
           <span class="text-red-700">CIMB <span data-gddb-counter="source-cimb">{{ cimb_count }}</span></span>
@@ -878,6 +886,29 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
       </div>
     </div>
 
+    {% if is_admin or is_super_admin %}
+    <div id="gddb-gapo-modal" class="fixed inset-0 z-[90] hidden items-center justify-center p-3" aria-hidden="true">
+      <button type="button" class="absolute inset-0 bg-gray-900/40" data-gddb-gapo-close aria-label="Đóng"></button>
+      <div class="relative z-10 w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="flex items-start justify-between border-b border-gray-100 p-4">
+          <div><div class="text-[13px] font-bold text-gray-900">Gửi thông báo nhóm GDĐB</div><div class="mt-1 text-[9px] text-gray-500">Tin được đưa vào Celery và gửi tới nhóm GAPO đã cấu hình.</div></div>
+          <button type="button" data-gddb-gapo-close class="rounded-lg p-2 text-lg leading-none text-gray-400 hover:bg-gray-100">×</button>
+        </div>
+        <div class="p-4">
+          <label class="block">
+            <span class="mb-1 block text-[9px] font-semibold text-gray-600">Nội dung thông báo</span>
+            <textarea id="gddb-gapo-message" rows="7" maxlength="5000" class="w-full resize-y rounded-xl border border-gray-200 p-3 text-[10px] text-gray-800 outline-none focus:border-emerald-500" placeholder="Nhập nội dung gửi tới nhóm Giao dịch đảm bảo"></textarea>
+          </label>
+          <p id="gddb-gapo-status" class="mt-2 min-h-[14px] text-[9px] text-gray-500"></p>
+        </div>
+        <div class="flex flex-col-reverse gap-2 border-t border-gray-100 p-4 sm:flex-row sm:justify-end">
+          <button type="button" data-gddb-gapo-close class="rounded-lg border border-gray-200 px-4 py-2 font-bold text-gray-700">Hủy</button>
+          <button type="button" id="gddb-gapo-send" class="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700 disabled:opacity-50">Gửi thông báo</button>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
     {% if can_export_gddb %}
     <div id="gddb-export-modal" class="fixed inset-0 z-[90] hidden items-center justify-center p-3" aria-hidden="true">
       <button type="button" class="absolute inset-0 bg-gray-900/40" data-export-close aria-label="Đóng"></button>
@@ -1214,6 +1245,54 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
     toast.className = 'toast ' + (ok ? 'toast-success' : 'toast-error');
     setTimeout(() => toast.classList.add('hidden'), 2400);
   }
+
+  const gddbGapoModal = document.getElementById('gddb-gapo-modal');
+  const gddbGapoOpen = document.getElementById('gddb-gapo-open');
+  const gddbGapoSend = document.getElementById('gddb-gapo-send');
+  const gddbGapoMessage = document.getElementById('gddb-gapo-message');
+  const gddbGapoStatus = document.getElementById('gddb-gapo-status');
+  const closeGddbGapo = () => {
+    if (!gddbGapoModal) return;
+    gddbGapoModal.classList.add('hidden');
+    gddbGapoModal.classList.remove('flex');
+    gddbGapoModal.setAttribute('aria-hidden', 'true');
+  };
+  gddbGapoOpen?.addEventListener('click', () => {
+    gddbGapoStatus.textContent = '';
+    gddbGapoModal.classList.remove('hidden');
+    gddbGapoModal.classList.add('flex');
+    gddbGapoModal.setAttribute('aria-hidden', 'false');
+    gddbGapoMessage?.focus();
+  });
+  document.querySelectorAll('[data-gddb-gapo-close]').forEach((button) => button.addEventListener('click', closeGddbGapo));
+  gddbGapoSend?.addEventListener('click', async () => {
+    const message = (gddbGapoMessage?.value || '').trim();
+    if (!message) {
+      gddbGapoStatus.textContent = 'Vui lòng nhập nội dung thông báo.';
+      gddbGapoStatus.className = 'mt-2 min-h-[14px] text-[9px] text-red-600';
+      return;
+    }
+    gddbGapoSend.disabled = true;
+    gddbGapoStatus.textContent = 'Đang đưa tin vào hàng đợi gửi...';
+    gddbGapoStatus.className = 'mt-2 min-h-[14px] text-[9px] text-gray-500';
+    try {
+      const response = await fetch('{% url "api_gddb_gapo_group_send" %}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.CSRF_TOKEN || '' },
+        body: JSON.stringify({ message }),
+      });
+      const data = await response.json();
+      if (!response.ok || data.error) throw new Error(data.error || 'Không gửi được thông báo.');
+      gddbGapoMessage.value = '';
+      closeGddbGapo();
+      showGddbToast(data.message || 'Đã đưa thông báo vào hàng đợi gửi GAPO.', true);
+    } catch (error) {
+      gddbGapoStatus.textContent = error.message || 'Không gửi được thông báo.';
+      gddbGapoStatus.className = 'mt-2 min-h-[14px] text-[9px] text-red-600';
+    } finally {
+      gddbGapoSend.disabled = false;
+    }
+  });
 
   function updateGddbDrawerOperator(registrationId, username) {
     if (!registrationId || !username) return;

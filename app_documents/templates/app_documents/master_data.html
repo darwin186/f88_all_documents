@@ -44,7 +44,7 @@ function renderJob(job){
   if(busy){const spinner=document.createElement('span');spinner.className='spinner';spinner.setAttribute('aria-hidden','true');element.append(spinner);}
   if(job.status!=='succeeded' || job.kind==='import'){
     const text=document.createElement('span');
-    text.textContent=job.stalled?'Xử lý chậm. Kiểm tra worker rồi tải lại trang.':busy?(job.status==='queued'?'Đang chờ xử lý…':job.kind==='export'?'Đang xuất…':'Đang kiểm tra & cập nhật…'):(job.message || 'Không hoàn tất.');
+    text.textContent=job.stalled?'Xử lý chậm. Kiểm tra web service rồi tải lại trang.':busy?(job.status==='queued'?'Đang chờ xử lý…':job.kind==='export'?'Đang xuất…':'Đang kiểm tra & cập nhật…'):(job.message || 'Không hoàn tất.');
     if(job.status==='failed'||job.stalled)text.className='error';element.append(text);
   }
   if(busy){const progress=document.createElement('progress');progress.max=100;progress.value=job.progress;progress.setAttribute('aria-label','Tiến độ xử lý');element.append(progress);}

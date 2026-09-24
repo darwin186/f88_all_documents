@@ -68,6 +68,7 @@ from .models import (
     Folder,
     PackageFolderHistory,
     Package,
+    PackageTransfer,
     PartnerPackage,
     PartnerPackageStatus,
     PartnerPackageHistory,
@@ -982,6 +983,9 @@ def gddb_registration_view(request):
         "processing_posmini_count": processing_posmini_count,
         "total_count": total_count,
         "active_tab": active_tab,
+        "gddb_gapo_group_configured": bool(
+            getattr(settings, "GDDB_GAPO_COLLAB_ID", "")
+        ),
         "manual_batch": manual_batch,
         "manual_payload_draft": manual_payload_draft,
         "batch_page_obj": batch_page_obj,
@@ -2827,8 +2831,8 @@ def checking_transaction_view(request, template_name="app_documents/app_checking
                         message_success_content += f"Thêm ghi chú thành công cho chứng từ {documents_detail_instance_log.documents_code}\n"               
                 if package_code_submit:
                     try: 
-                        if Package.objects.filter(package_code = package_code_submit).exists():
-                            package_id = Package.objects.get(package_code = package_code_submit)
+                        if Package.objects.filter(package_code=package_code_submit, replaced_by__isnull=True).exists():
+                            package_id = Package.objects.get(package_code=package_code_submit, replaced_by__isnull=True)
                             documents_detail_instance.update(package_id = package_id)
                             message_success_content += f"Gán thùng thành công cho chứng từ {documents_detail_instance_log.documents_code}\n" 
                             # Lưu lại log gán thùng chứng từ 
@@ -3135,8 +3139,8 @@ def checking_transaction_view_v2(request):
                     messages.add_message(request, messages.ERROR, error_msg)
                     return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
                 try:
-                    if Package.objects.filter(package_code=package_code_submit).exists():
-                        package_id = Package.objects.get(package_code=package_code_submit)
+                    if Package.objects.filter(package_code=package_code_submit, replaced_by__isnull=True).exists():
+                        package_id = Package.objects.get(package_code=package_code_submit, replaced_by__isnull=True)
                         documents_detail_instance.update(package_id=package_id)
                         message_success_content += f"Gán thùng thành công cho chứng từ {documents_detail_instance_log.documents_code}\n"
                         PackageDocumentHistory.objects.create(
@@ -3694,7 +3698,7 @@ def receive_folder_view(request, template_name="app_documents/app_receivingtrans
                 if folder_status_submit:
                     # Nếu trạng thái quyển submit khác với trạng thái quyển hiện tại thì cập nhật trạng thái mới.
                     if folder_status_submit != folder_status_previous:
-                        if Package.objects.filter(package_code = choice_package_code).exists():
+                        if Package.objects.filter(package_code=choice_package_code, replaced_by__isnull=True).exists():
                             is_folderstatus_changed = True
                             folder_detail_instance.update(  folder_status_id = folder_status_submit, 
                                                             lastest_received_date= lasted_received_date_submit, 
@@ -3725,9 +3729,9 @@ def receive_folder_view(request, template_name="app_documents/app_receivingtrans
                 # Nếu nhận được mã thùng mới, kiểm tra xem mã thùng đã có trong hệ thống chưa? Nếu có trong hệ thống thì cho nhập, nếu không thì báo lỗi chưa có thùng
                 if choice_package_code:
                     try: 
-                        if Package.objects.filter(package_code = choice_package_code).exists():
+                        if Package.objects.filter(package_code=choice_package_code, replaced_by__isnull=True).exists():
                             create_package_time = timezone.now()
-                            package_id = Package.objects.get(package_code = choice_package_code)
+                            package_id = Package.objects.get(package_code=choice_package_code, replaced_by__isnull=True)
                             folder_detail_instance.update(package_id = package_id)
                             messages_success_content += f"Gán thùng thành công cho quyển {folder_detail_instance_log.folder_code}" 
                             PackageFolderHistory.objects.create(
@@ -4422,7 +4426,10 @@ def api_receive_folder_update_v2(request):
     try:
         with transaction.atomic():
             folder = Folder.objects.select_for_update().get(folder_id=folder_id)
-            package = Package.objects.select_related('package_type').get(package_code=package_code)
+            package = Package.objects.select_related('package_type').get(
+                package_code=package_code,
+                replaced_by__isnull=True,
+            )
             folder_status = FolderStatus.objects.get(folder_status_id=folder_status_id)
             issue_types, issue_error = _get_valid_issue_types(issue_type_ids)
             if issue_error:
@@ -4614,7 +4621,10 @@ def bulk_receive_folder_view(request):
             elif require_issue_types:
                 return JsonResponse({'success': False, 'error': 'Vui lòng chọn ít nhất 1 trạng thái lỗi.'})
 
-            package_id_instance = Package.objects.select_related('package_type').get(package_code=package_choice)
+            package_id_instance = Package.objects.select_related('package_type').get(
+                package_code=package_choice,
+                replaced_by__isnull=True,
+            )
             folder_status_instance = FolderStatus.objects.get(folder_status_id=folder_status_choice)
             package_type_code = (package_id_instance.package_type.package_type if package_id_instance.package_type else None)
             if not package_type_code:
@@ -4721,7 +4731,10 @@ def receiving_additional_view(request, folder_id):
                 return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
             
             # Nếu thùng không tồn tại thì thông báo lỗi 
-            if not Package.objects.filter(package_code=choice_additional_package_code).exists() :
+            if not Package.objects.filter(
+                package_code=choice_additional_package_code,
+                replaced_by__isnull=True,
+            ).exists():
                 messages.error(request, 'Thùng không tồn tại. Vui lòng tạo 1 thùng mới.')
                 return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
                 
@@ -4732,7 +4745,10 @@ def receiving_additional_view(request, folder_id):
             try : 
                 created_date = timezone.now()   
                 folder_status_id_found = FolderStatus.objects.get(folder_status_id=choice_additional_folder_status)
-                package_id_found = Package.objects.get(package_code=choice_additional_package_code)        
+                package_id_found = Package.objects.get(
+                    package_code=choice_additional_package_code,
+                    replaced_by__isnull=True,
+                )
                 # Try to create a new CheckingAdditional instance
                 folder_aditional_instance = Folder.objects.create(
                     folder_code=folder_code_additional,
@@ -4945,6 +4961,7 @@ def package_list_management_view(request):
             'package_type',
             'region_id',
             'created_by',
+            'replaced_by',
         )
         .order_by(package_order)
     )
@@ -5040,6 +5057,8 @@ def package_list_management_view(request):
             'shopCount': counts['shop_count'],
             'note': package.note or '',
             'createdBy': package.created_by.get_full_name() or package.created_by.username if package.created_by else '',
+            'isReplaced': bool(package.replaced_by_id),
+            'replacedByCode': package.replaced_by.package_code if package.replaced_by_id else '',
         })
 
     statuses = PartnerPackageStatus.objects.all().order_by('package_status_name')
@@ -5341,6 +5360,260 @@ def api_package_note(request, package_id):
     return JsonResponse({"success": True, "note": pkg.note or ""})
 
 
+def _package_is_in_warehouse(package):
+    partner_package = (
+        PartnerPackage.objects.select_related("status_id")
+        .filter(package_id=package)
+        .first()
+    )
+    if not partner_package or not partner_package.status_id:
+        return True
+    return bool(partner_package.status_id.is_in_warehouse)
+
+
+def _package_transfer_preview(source_package, target_package):
+    source_folder_ids = list(
+        Folder.objects.filter(package_id=source_package).values_list("folder_id", flat=True)
+    )
+    source_document_ids = list(
+        DocumentsDetail.objects.filter(package_id=source_package).values_list(
+            "documents_id", flat=True
+        )
+    )
+    source_folder_count = len(source_folder_ids)
+    source_document_count = len(source_document_ids)
+    target_folder_count = Folder.objects.filter(package_id=target_package).count()
+    target_document_count = DocumentsDetail.objects.filter(package_id=target_package).count()
+
+    folder_document_mismatch = DocumentsDetail.objects.filter(
+        folder_id_id__in=source_folder_ids
+    ).exclude(package_id=source_package).count()
+    document_folder_mismatch = DocumentsDetail.objects.filter(
+        documents_id__in=source_document_ids,
+        folder_id__isnull=False,
+    ).exclude(folder_id__package_id=source_package).count()
+    borrowed_or_lost_count = DocumentsDetail.objects.filter(
+        documents_id__in=source_document_ids
+    ).filter(
+        Q(document_status_id__is_borrow=True)
+        | Q(document_status_id__is_lost=True)
+        | Q(
+            borrowingdocument__borrow_status_id__flag_is_borrowing=True
+        )
+        | Q(borrowingdocument__borrow_status_id__flag_is_lost=True)
+    ).distinct().count()
+
+    errors = []
+    if source_package.pk == target_package.pk:
+        errors.append("Thùng nguồn và thùng thay thế phải khác nhau.")
+    if source_package.replaced_by_id:
+        errors.append(
+            f"Thùng nguồn đã được thay thế bởi {source_package.replaced_by.package_code}."
+        )
+    if target_package.replaced_by_id:
+        errors.append("Thùng thay thế đã ngừng sử dụng do từng được thay thế.")
+    if source_package.package_type_id != target_package.package_type_id:
+        errors.append("Thùng nguồn và thùng thay thế không cùng loại thùng.")
+    if source_package.region_id_id != target_package.region_id_id:
+        errors.append("Thùng nguồn và thùng thay thế không cùng vùng lưu trữ.")
+    if not _package_is_in_warehouse(source_package):
+        errors.append("Thùng nguồn không ở trạng thái Trong kho.")
+    if not _package_is_in_warehouse(target_package):
+        errors.append("Thùng thay thế không ở trạng thái Trong kho.")
+    if target_folder_count or target_document_count:
+        errors.append("Thùng thay thế phải là thùng trống.")
+    if not source_folder_count and not source_document_count:
+        errors.append("Thùng nguồn không có quyển hoặc chứng từ để chuyển.")
+    if folder_document_mismatch or document_folder_mismatch:
+        errors.append(
+            "Dữ liệu quyển và chứng từ đang lệch mã thùng; cần đối soát trước khi chuyển."
+        )
+    if borrowed_or_lost_count:
+        errors.append(
+            f"Có {borrowed_or_lost_count} chứng từ đang mượn hoặc báo mất."
+        )
+
+    return {
+        "eligible": not errors,
+        "errors": errors,
+        "source": {
+            "id": source_package.pk,
+            "code": source_package.package_code,
+        },
+        "target": {
+            "id": target_package.pk,
+            "code": target_package.package_code,
+        },
+        "folder_count": source_folder_count,
+        "document_count": source_document_count,
+        "target_folder_count": target_folder_count,
+        "target_document_count": target_document_count,
+        "inconsistent_count": folder_document_mismatch + document_folder_mismatch,
+        "borrowed_or_lost_count": borrowed_or_lost_count,
+    }
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_package_transfer(request, package_id):
+    user_context = get_user_context(request.user)
+    if not user_context.get("is_admin") and not user_context.get("is_checker"):
+        return JsonResponse({"error": "Bạn không có quyền chuyển thùng."}, status=403)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Payload không hợp lệ."}, status=400)
+
+    target_code = (payload.get("target_package_code") or "").strip()
+    reason = (payload.get("reason") or "").strip()
+    confirm = bool(payload.get("confirm"))
+    if not target_code:
+        return JsonResponse({"error": "Vui lòng nhập mã thùng thay thế."}, status=400)
+    if not reason:
+        return JsonResponse({"error": "Vui lòng nhập lý do chuyển thùng."}, status=400)
+
+    try:
+        source_package = Package.objects.select_related("replaced_by").get(pk=package_id)
+        target_package = Package.objects.select_related("replaced_by").get(
+            package_code__iexact=target_code
+        )
+    except Package.DoesNotExist:
+        return JsonResponse({"error": "Không tìm thấy thùng nguồn hoặc thùng thay thế."}, status=404)
+
+    preview = _package_transfer_preview(source_package, target_package)
+    if not confirm:
+        return JsonResponse(preview)
+    if not preview["eligible"]:
+        return JsonResponse(preview, status=409)
+
+    try:
+        with transaction.atomic():
+            locked_packages = {
+                package.pk: package
+                for package in Package.objects.select_for_update()
+                .filter(pk__in=[source_package.pk, target_package.pk])
+            }
+            source_package = locked_packages[source_package.pk]
+            target_package = locked_packages[target_package.pk]
+            list(
+                PartnerPackage.objects.select_for_update().filter(
+                    package_id__in=[source_package.pk, target_package.pk]
+                )
+            )
+            folder_ids = list(
+                Folder.objects.select_for_update()
+                .filter(package_id=source_package)
+                .values_list("folder_id", flat=True)
+            )
+            document_ids = list(
+                DocumentsDetail.objects.select_for_update()
+                .filter(package_id=source_package)
+                .values_list("documents_id", flat=True)
+            )
+
+            preview = _package_transfer_preview(source_package, target_package)
+            if not preview["eligible"]:
+                transaction.set_rollback(True)
+                return JsonResponse(preview, status=409)
+
+            transfer = PackageTransfer.objects.create(
+                source_package=source_package,
+                target_package=target_package,
+                reason=reason,
+                folder_count=len(folder_ids),
+                document_count=len(document_ids),
+                created_by=request.user,
+            )
+            now = timezone.now()
+            Folder.objects.filter(folder_id__in=folder_ids).update(package_id=target_package)
+            DocumentsDetail.objects.filter(documents_id__in=document_ids).update(
+                package_id=target_package
+            )
+
+            PackageFolderHistory.objects.bulk_create(
+                [
+                    PackageFolderHistory(
+                        folder_id_id=folder_id,
+                        package_id=package,
+                        trans_created_by=request.user,
+                        action=action,
+                        transfer=transfer,
+                    )
+                    for folder_id in folder_ids
+                    for package, action in (
+                        (source_package, PackageHistoryAction.TRANSFERRED_OUT),
+                        (target_package, PackageHistoryAction.TRANSFERRED_IN),
+                    )
+                ]
+            )
+            PackageDocumentHistory.objects.bulk_create(
+                [
+                    PackageDocumentHistory(
+                        document_id_id=document_id,
+                        package_id=package,
+                        trans_created_by=request.user,
+                        action=action,
+                        transfer=transfer,
+                    )
+                    for document_id in document_ids
+                    for package, action in (
+                        (source_package, PackageHistoryAction.TRANSFERRED_OUT),
+                        (target_package, PackageHistoryAction.TRANSFERRED_IN),
+                    )
+                ]
+            )
+            PartnerPackageHistory.objects.bulk_create(
+                [
+                    PartnerPackageHistory(
+                        package=source_package,
+                        action="package_transfer_out",
+                        old_value=source_package.package_code,
+                        new_value=target_package.package_code,
+                        note=reason,
+                        created_by=request.user,
+                    ),
+                    PartnerPackageHistory(
+                        package=target_package,
+                        action="package_transfer_in",
+                        old_value=source_package.package_code,
+                        new_value=target_package.package_code,
+                        note=reason,
+                        created_by=request.user,
+                    ),
+                ]
+            )
+            source_package.replaced_by = target_package
+            source_package.replaced_at = now
+            source_package.replaced_by_user = request.user
+            source_package.updated_date = now
+            source_package.save(
+                update_fields=[
+                    "replaced_by",
+                    "replaced_at",
+                    "replaced_by_user",
+                    "updated_date",
+                ]
+            )
+    except IntegrityError:
+        return JsonResponse(
+            {"error": "Thùng nguồn đã được chuyển bởi một thao tác khác."},
+            status=409,
+        )
+
+    return JsonResponse(
+        {
+            "success": True,
+            "transfer_id": transfer.pk,
+            "message": (
+                f"Đã chuyển {transfer.folder_count} quyển và "
+                f"{transfer.document_count} chứng từ từ "
+                f"{source_package.package_code} sang {target_package.package_code}."
+            ),
+        }
+    )
+
+
 @login_required
 def package_list_detail_view(request, package_id):
     user = request.user
@@ -5349,7 +5622,7 @@ def package_list_detail_view(request, package_id):
         return JsonResponse({'error': 'Unauthorized access.'}, status=403)
 
     package = get_object_or_404(
-        Package.objects.select_related('partnerpackage', 'package_type', 'region_id'),
+        Package.objects.select_related('partnerpackage', 'package_type', 'region_id', 'replaced_by'),
         pk=package_id
     )
 
@@ -5361,7 +5634,7 @@ def package_list_detail_view(request, package_id):
         'folder_set',
         queryset=Folder.objects.select_related('shop_id', 'folder_type_id', 'folder_status_id').prefetch_related(documents_prefetch).order_by('shop_id__shop_name', 'folder_created_date')
     )
-    package = Package.objects.select_related('partnerpackage', 'package_type', 'region_id').prefetch_related(folders_prefetch).get(pk=package_id)
+    package = Package.objects.select_related('partnerpackage', 'package_type', 'region_id', 'replaced_by').prefetch_related(folders_prefetch).get(pk=package_id)
 
     partner_package = getattr(package, 'partnerpackage', None)
     status = partner_package.status_id if partner_package else None
@@ -5471,6 +5744,8 @@ def package_list_detail_view(request, package_id):
         'shopCount': len(shop_groups.keys()),
         'foldersByShop': list(shop_groups.values()),
         'note': package.note or '',
+        'isReplaced': bool(package.replaced_by_id),
+        'replacedByCode': package.replaced_by.package_code if package.replaced_by_id else '',
         'history': [],
     }
     history_qs = PartnerPackageHistory.objects.filter(package=package).select_related('created_by').order_by('-created_at')[:20]
@@ -6304,6 +6579,11 @@ def _validate_offline_receiving(df, uploader, upload_filename=""):
                 package_obj = Package.objects.filter(package_code=package_code).first()
                 if package_obj:
                     package_cache[package_code] = package_obj
+                    if package_obj.replaced_by_id:
+                        errors.append(
+                            f"Thùng '{package_code}' đã được chuyển sang "
+                            f"'{package_obj.replaced_by.package_code}'."
+                        )
 
         folder_obj = None
         fallback_used = False
@@ -6801,7 +7081,10 @@ def receiving_import_save(request):
             if not package_obj:
                 package_obj = package_cache.get(package_code)
             if not package_obj:
-                package_obj = Package.objects.filter(package_code=package_code).first()
+                package_obj = Package.objects.filter(
+                    package_code=package_code,
+                    replaced_by__isnull=True,
+                ).first()
             if not package_obj:
                 created_dt = datetime.combine(receive_date, datetime.min.time())
                 if timezone.is_naive(created_dt):
@@ -7920,6 +8203,56 @@ def export_kpi_shop_detail(request):
         ])
 
     return response
+
+@login_required
+@require_http_methods(["POST"])
+def api_gddb_gapo_group_send(request):
+    if not _is_gddb_admin(request.user):
+        return JsonResponse({"error": "Chỉ Admin GDĐB được gửi thông báo nhóm."}, status=403)
+
+    collab_id = (getattr(settings, "GDDB_GAPO_COLLAB_ID", "") or "").strip()
+    if not collab_id:
+        return JsonResponse(
+            {"error": "Chưa cấu hình GDDB_GAPO_COLLAB_ID cho nhóm GAPO GDĐB."},
+            status=503,
+        )
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Payload không hợp lệ."}, status=400)
+    message = (payload.get("message") or "").strip()
+    if not message:
+        return JsonResponse({"error": "Vui lòng nhập nội dung thông báo."}, status=400)
+    if len(message) > 5000:
+        return JsonResponse({"error": "Nội dung thông báo tối đa 5.000 ký tự."}, status=400)
+
+    schedule = GapoScheduledMessage.objects.create(
+        collab_id=collab_id,
+        message=message,
+        body_type=GapoScheduledMessage.BodyType.TEXT,
+        body_metadata={},
+        schedule_at=timezone.now(),
+        created_by=request.user,
+    )
+    try:
+        send_gapo_scheduled_message.apply_async(args=[schedule.id])
+    except Exception as exc:
+        schedule.status = GapoScheduledMessage.Status.FAILED
+        schedule.last_error = f"Không gửi được task Celery: {exc}"
+        schedule.save(update_fields=["status", "last_error", "updated_at"])
+        return JsonResponse(
+            {"error": "Không kết nối được worker gửi GAPO. Vui lòng thử lại."},
+            status=503,
+        )
+    return JsonResponse(
+        {
+            "success": True,
+            "schedule_id": schedule.pk,
+            "message": "Đã đưa thông báo nhóm GDĐB vào hàng đợi gửi GAPO.",
+        },
+        status=202,
+    )
+
 
 @login_required
 def gapo_schedule_view(request):

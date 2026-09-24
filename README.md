@@ -440,11 +440,18 @@ This project now includes a basic Celery setup.
   ```
 - Add your own tasks in `app_documents/tasks.py` (or any app’s `tasks.py`); Celery will autodiscover.
 
+### File-backed Excel jobs on the web service
+
+- Set `APP_ROLE=web` or `FILE_JOBS_RUN_ON_WEB=true` on the web deployment to execute Master Data and Document Campaign import/export tasks inside the web process. This keeps all file reads/writes on the web-mounted `/app/media` volume; email, GAPO and other tasks remain asynchronous through Celery.
+- Gunicorn uses `GUNICORN_TIMEOUT=1200` and `GUNICORN_GRACEFUL_TIMEOUT=120` by default. Configure the reverse-proxy/Ingress request timeout to at least the same duration for synchronous Excel requests.
+- Set `FILE_JOBS_RUN_ON_WEB=false` to restore Celery execution after web and worker share one storage backend.
+
 ### GAPO scheduled messaging (demo)
 - Model: `GapoScheduledMessage` stores receiver_id, message, schedule_at, status.
 - Task: `app_documents.tasks.send_gapo_scheduled_message` enqueues via Celery; it will send at `schedule_at` and update status/log errors.
 - UI: Admin menu → “Thông tin khác” → “Gửi tin GAPO hẹn giờ” to create schedule (receiver_id, message, time) and view recent tasks.
-- Broker required: Celery + Redis must be running; GAPO env vars (`GAPO_API_URL`, `GAPO_BOT_API_KEY`, `GAPO_BOT_ID`) must be set.
+- Broker required: Celery + Redis must be running; GAPO env vars (`GAPO_API_URL`, `BOT_API_KEY`, `BOT_ID`) must be set.
+- Gửi GAPO nhóm Giao dịch đảm bảo: cấu hình `GDDB_GAPO_COLLAB_ID` bằng ID nhóm/collab nhận tin. Nút gửi chỉ hiện cho Admin và sẽ khóa nếu chưa cấu hình biến này.
 
 ## Cấp số văn bản hành chính (allocate number)
 - Bảng `adm_document_counter` lưu `next_number` theo bộ `(doc_type, company, year)` và được khóa `select_for_update` khi cấp số.
@@ -469,4 +476,3 @@ This project now includes a basic Celery setup.
 - 2025-02-03: GAPO scheduler: thêm AI hỗ trợ soạn tin (Gemini), layout rộng hơn, bảng lịch sử có cuộn; thêm endpoint `gapo/schedule/ai-draft/`.
 - 2025-02-03: Administrative docs list: thêm cột STT lên đầu, “Số hiệu” đứng thứ 2.
 - 2025-02-03: Paper documents list: thêm ô tìm kiếm theo số hiệu/mã vận đơn, thêm cột STT.
-

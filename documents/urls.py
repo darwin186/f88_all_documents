@@ -20,9 +20,15 @@ from django.conf import settings
 from django.conf.urls.static import static 
 from django.http import Http404
 from app_documents.views import CustomPasswordResetView
+from app_admindocuments.media_views import protected_admindocument_file
 
 
 urlpatterns = [
+path(
+    "media/admindocuments/files/<path:relative_path>",
+    protected_admindocument_file,
+    name="protected_admindocument_file",
+),
 path('admin/', admin.site.urls),
 path("", include("app_documents.urls")),
 path("error-campaigns/", include("app_document_campaigns.urls")),

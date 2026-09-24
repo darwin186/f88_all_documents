@@ -10,6 +10,7 @@ from django.contrib.admin.models import CHANGE, LogEntry
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.core.validators import validate_email
@@ -256,7 +257,7 @@ def queue_catalog_job(request):
         return JsonResponse({"error": "Chọn file .xlsx, tối đa 10 MB."}, status=400)
     try:
         with transaction.atomic():
-            job = ShopCatalogJob.objects.create(kind=kind, requested_by=request.user, message="Đang chờ worker")
+            job = ShopCatalogJob.objects.create(kind=kind, requested_by=request.user, message="Đang chờ xử lý")
     except IntegrityError:
         existing = ShopCatalogJob.objects.filter(kind=kind, status__in=["queued", "running"]).first()
         if not existing:
@@ -266,10 +267,14 @@ def queue_catalog_job(request):
         if kind == "import":
             job.input_file.save(f"pgd-import-{job.pk}.xlsx", upload)
         from .tasks import process_shop_catalog_job
-        process_shop_catalog_job.delay(job.pk)
+        if settings.FILE_JOBS_RUN_ON_WEB:
+            process_shop_catalog_job.apply(args=[job.pk], throw=False)
+        else:
+            process_shop_catalog_job.delay(job.pk)
+        job.refresh_from_db()
     except Exception:
         job.status = "failed"
-        job.message = "Không thể gửi job tới Celery. Kiểm tra Redis/worker và thử lại."
+        job.message = "Không thể xử lý file trên web service. Kiểm tra log web và thử lại."
         job.save(update_fields=["status", "message", "updated_at"])
     return JsonResponse({"id": job.pk, "kind": kind, "status": job.status, "progress": job.progress, "message": job.message}, status=202)
 
@@ -291,4 +296,11 @@ def catalog_job_download(request, job_id):
     job = get_object_or_404(ShopCatalogJob, pk=job_id)
     if not job.output_file or job.status not in {"succeeded", "failed"}:
         return JsonResponse({"error": "File chưa sẵn sàng."}, status=409)
-    return FileResponse(job.output_file.open("rb"), as_attachment=True, filename=job.output_file.name.rsplit("/", 1)[-1], content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    try:
+        stream = job.output_file.open("rb")
+    except (FileNotFoundError, OSError):
+        return JsonResponse(
+            {"error": "Không tìm thấy file trên media của web service. Hãy tạo lại file."},
+            status=404,
+        )
+    return FileResponse(stream, as_attachment=True, filename=job.output_file.name.rsplit("/", 1)[-1], content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

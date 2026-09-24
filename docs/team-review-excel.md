@@ -12,4 +12,4 @@ Giới hạn file 50 MB, giải nén 512 MB, 100.000 dòng; ingress trên IDA c�
 
 Mỗi dòng có ID lỗi và snapshot ký số. Import từ chối sai kỳ, trùng ID, sửa cột gốc, lựa chọn ngoài droplist, nhận xét quá dài, thay đổi đồng thời hoặc PGD chưa gửi/chưa hết hạn. Toàn bộ validation hoàn tất trước khi áp dụng trong transaction; chỉ thêm lịch sử `TeamReview`, không cập nhật phản hồi PGD hay xóa lỗi. Dòng bị bỏ khỏi file, hoặc dòng không thay đổi, được giữ nguyên. Dữ liệu thay đổi trên web cần xuất lại file.
 
-Deploy: chạy migration `0011`, collectstatic, restart web và worker. Các pod phải truy cập cùng storage `/app/media`; missing file trả thông báo 404 ở endpoint tải mới thay vì traceback 500. Hard timeout của worker có thể cần kiểm tra job bị kẹt trước khi chạy lại.
+Deploy: chạy migration `0011`, collectstatic và restart web. Với `APP_ROLE=web` (hoặc `FILE_JOBS_RUN_ON_WEB=true`), các job Excel chạy ngay trong web service và dùng `/app/media` của web; worker không cần chia sẻ media cho các job này. Gunicorn mặc định chờ tối đa 1.200 giây, nhưng timeout của Ingress/Nginx cũng phải được cấu hình tương ứng. Missing file trả thông báo 404 thay vì traceback 500.

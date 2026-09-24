@@ -3,6 +3,7 @@ import json
 from datetime import timedelta
 
 from django.contrib.auth.decorators import login_required
+from django.conf import settings
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Count, OuterRef, Q, Subquery
@@ -50,16 +51,20 @@ def queue_review_excel(request, campaign_id):
         return JsonResponse({"error": "Chỉ import file .xlsx tối đa 50 MB khi kỳ đang team review."}, status=400)
     try:
         with transaction.atomic():
-            job = TeamReviewExcelJob.objects.create(campaign=campaign, requested_by=request.user, kind=kind, message="Đang chờ worker")
+            job = TeamReviewExcelJob.objects.create(campaign=campaign, requested_by=request.user, kind=kind, message="Đang chờ xử lý")
     except IntegrityError:
         return JsonResponse({"error": "Đang có file cùng loại được xử lý. Vui lòng chờ."}, status=409)
     try:
         if upload and kind == "import":
             job.input_file.save(f"team-review-import-{job.pk}.xlsx", upload)
         from .tasks import process_team_review_excel
-        process_team_review_excel.delay(job.pk)
+        if settings.FILE_JOBS_RUN_ON_WEB:
+            process_team_review_excel.apply(args=[job.pk], throw=False)
+        else:
+            process_team_review_excel.delay(job.pk)
+        job.refresh_from_db()
     except Exception:
-        TeamReviewExcelJob.objects.filter(pk=job.pk).update(status="failed", message="Không gửi được job. Kiểm tra storage, Redis và worker.", updated_at=timezone.now())
+        TeamReviewExcelJob.objects.filter(pk=job.pk).update(status="failed", message="Không xử lý được file trên web service. Kiểm tra storage và log web.", updated_at=timezone.now())
     return JsonResponse({"id": job.pk}, status=202)
 
 
@@ -69,7 +74,7 @@ def review_excel_status(request, campaign_id, job_id):
     job = get_object_or_404(TeamReviewExcelJob, pk=job_id, campaign_id=campaign_id)
     cutoff = timezone.now() - timedelta(minutes=12)
     if job.status in {"queued", "running"} and job.updated_at < cutoff:
-        TeamReviewExcelJob.objects.filter(pk=job.pk, status__in=["queued", "running"], updated_at__lt=cutoff).update(status="failed", message="Quá 12 phút không có tiến độ. Kiểm tra worker và tạo lại file.", updated_at=timezone.now())
+        TeamReviewExcelJob.objects.filter(pk=job.pk, status__in=["queued", "running"], updated_at__lt=cutoff).update(status="failed", message="Quá 12 phút không có tiến độ. Kiểm tra web service và tạo lại file.", updated_at=timezone.now())
         job.refresh_from_db()
     response = JsonResponse({"id": job.pk, "kind": job.kind, "status": job.status, "progress": job.progress, "message": job.message, "summary": job.summary, "download_url": f"/error-campaigns/campaigns/{campaign_id}/review/excel/{job.pk}/download/" if job.output_file and job.status == "succeeded" else None})
     response["Cache-Control"] = "no-store"
@@ -85,7 +90,7 @@ def download_review_excel(request, campaign_id, job_id):
             raise FileNotFoundError()
         stream = job.output_file.open("rb")
     except FileNotFoundError:
-        return JsonResponse({"error": "Không tìm thấy file trên storage của web. Kiểm tra volume dùng chung với worker và tạo lại file."}, status=404)
+        return JsonResponse({"error": "Không tìm thấy file trên media của web service. Hãy tạo lại file."}, status=404)
     response = FileResponse(stream, as_attachment=True, filename=job.output_file.name.rsplit("/", 1)[-1], content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     response["Cache-Control"] = "no-store"
     return response

@@ -23,6 +23,12 @@ class Media404DiagnosticsTests(SimpleTestCase):
                     response = handle_404(request, Exception("not found"))
 
             self.assertEqual(response.status_code, 404)
+            self.assertContains(response, "Không tìm thấy file", status_code=404)
+            self.assertContains(
+                response,
+                "Kiểm tra media dùng chung giữa web và worker hoặc chuẩn bị lại file.",
+                status_code=404,
+            )
             message = "\n".join(logs.output)
             self.assertIn("ADMINDOCUMENT_MEDIA_404", message)
             self.assertIn("exists=True", message)

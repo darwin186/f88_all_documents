@@ -19,6 +19,10 @@ services:
       DATABASE_PORT: ${DATABASE_PORT:-5432}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      APP_ROLE: web
+      FILE_JOBS_RUN_ON_WEB: ${FILE_JOBS_RUN_ON_WEB:-true}
+      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-1200}
+      GUNICORN_GRACEFUL_TIMEOUT: ${GUNICORN_GRACEFUL_TIMEOUT:-120}
     volumes:
       - .:/app
       - media:/app/media

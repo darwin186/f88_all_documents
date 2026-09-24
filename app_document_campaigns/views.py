@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.conf import settings
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Count, F, Max, Q
@@ -576,7 +577,7 @@ def stage_sql_version(request, version_id):
         if job.status == CampaignImportJob.Status.FAILED:
             messages.error(request, job.error_message)
         else:
-            messages.success(request, "Đã đưa yêu cầu vào hàng đợi. Bạn có thể theo dõi tiến độ ngay trên trang.")
+            messages.success(request, "Đã đưa yêu cầu vào hàng đợi xử lý trên web service.")
     return redirect(
         "document_campaigns:campaign_detail",
         campaign_id=version.campaign_id,
@@ -594,16 +595,29 @@ def _selected_sql_sources(request):
 
 
 def _enqueue_import_job(job, task):
+    """Run file jobs on web media in production, with Celery as fallback."""
     try:
-        result = task.delay(job.pk)
+        if settings.FILE_JOBS_RUN_ON_WEB:
+            result = task.apply(args=[job.pk], throw=False)
+            if result.failed():
+                CampaignImportJob.objects.filter(pk=job.pk).exclude(
+                    status=CampaignImportJob.Status.FAILED
+                ).update(
+                    status=CampaignImportJob.Status.FAILED,
+                    error_message="Không thể xử lý file trên web service. Kiểm tra log web và thử lại.",
+                    finished_at=timezone.now(),
+                )
+        else:
+            result = task.delay(job.pk)
+            CampaignImportJob.objects.filter(pk=job.pk).update(celery_task_id=result.id)
     except Exception:
-        CampaignImportJob.objects.filter(pk=job.pk).update(
+        CampaignImportJob.objects.filter(pk=job.pk).exclude(
+            status=CampaignImportJob.Status.FAILED
+        ).update(
             status=CampaignImportJob.Status.FAILED,
-            error_message="Không kết nối được Celery broker. Kiểm tra Redis/worker rồi chạy lại.",
+            error_message="Không thể xử lý file trên web service. Kiểm tra log web và thử lại.",
             finished_at=timezone.now(),
         )
-    else:
-        CampaignImportJob.objects.filter(pk=job.pk).update(celery_task_id=result.id)
 
 
 def _expire_stale_job(job):
@@ -623,7 +637,7 @@ def _expire_stale_job(job):
         job.status = CampaignImportJob.Status.FAILED
         job.finished_at = now
         job.error_message = (
-            "Celery worker chưa nhận job trong thời gian cho phép."
+            "Web service chưa bắt đầu job trong thời gian cho phép."
             if not job.started_at
             else "Job vượt quá thời gian xử lý cho phép."
         )
@@ -713,7 +727,7 @@ def export_staging_excel(request, version_id):
     try:
         stream = job.output_file.open("rb")
     except FileNotFoundError:
-        return HttpResponse("Không tìm thấy file. Kiểm tra media dùng chung giữa web và worker hoặc chuẩn bị lại file.", status=404)
+        return HttpResponse("Không tìm thấy file trên media của web service. Hãy chuẩn bị lại file.", status=404)
     response = FileResponse(
         stream,
         as_attachment=True,
@@ -758,7 +772,7 @@ def queue_staging_excel_export(request, version_id):
         else:
             messages.success(
                 request,
-                "Đã đưa yêu cầu tạo file Excel vào hàng đợi. File tải sẽ xuất hiện khi job hoàn tất.",
+                "Đã đưa yêu cầu tạo file Excel vào hàng đợi xử lý trên web service. File tải sẽ xuất hiện khi hoàn tất.",
             )
     return _version_detail_redirect(version)
 
@@ -816,7 +830,7 @@ def import_staging_excel(request, version_id):
         else:
             messages.success(
                 request,
-                "Đã tải file lên và đưa vào hàng đợi đối chiếu. Bạn có thể theo dõi tiến độ ngay trên trang.",
+                "Đã tải file lên và đưa vào hàng đợi đối chiếu trên web service.",
             )
         return _version_detail_redirect(version)
     return JsonResponse({"ok": True, "job_id": job.pk, "status": job.status}, status=202)

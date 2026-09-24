@@ -89,17 +89,11 @@ from .services import (
     allocate_running_number,
     send_via_gapo,
 )
+from .access import has_admin_docs_access
 
 
 def _has_admin_docs_access(user) -> bool:
-    allowed_groups = ["administrative staff", "adminpaper"]
-    is_checker = user.groups.filter(name="checker").exists()
-    if getattr(user, "is_superuser", False):
-        return True
-    # Block checkers even if they are added to admin groups
-    if is_checker:
-        return False
-    return user.groups.filter(name__in=allowed_groups).exists()
+    return has_admin_docs_access(user)
 
 
 def _has_incoming_dispatch_create_access(user) -> bool:

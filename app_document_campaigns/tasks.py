@@ -240,7 +240,7 @@ def run_campaign_sql_import(job_id):
     except Exception:
         CampaignImportJob.objects.filter(pk=job_id).update(
             status=CampaignImportJob.Status.FAILED,
-            error_message="Không thể truy xuất dữ liệu. Vui lòng kiểm tra log worker và chạy lại.",
+            error_message="Không thể truy xuất dữ liệu. Vui lòng kiểm tra log tiến trình xử lý và chạy lại.",
             finished_at=timezone.now(),
         )
         raise
@@ -294,7 +294,7 @@ def run_campaign_excel_export(job_id):
     except Exception:
         CampaignImportJob.objects.filter(pk=job_id).update(
             status=CampaignImportJob.Status.FAILED,
-            error_message="Không thể tạo file Excel. Vui lòng kiểm tra dữ liệu staging và log worker.",
+            error_message="Không thể tạo file Excel. Vui lòng kiểm tra dữ liệu staging và log tiến trình xử lý.",
             finished_at=timezone.now(),
         )
         raise
@@ -339,7 +339,7 @@ def run_campaign_excel_import(job_id):
     except Exception:
         CampaignImportJob.objects.filter(pk=job_id).update(
             status=CampaignImportJob.Status.FAILED,
-            error_message="Không thể đối chiếu file Excel. Vui lòng kiểm tra log worker và thử lại.",
+            error_message="Không thể đối chiếu file Excel. Vui lòng kiểm tra log tiến trình xử lý và thử lại.",
             finished_at=timezone.now(),
         )
         raise

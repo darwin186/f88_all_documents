@@ -7,7 +7,7 @@ from .models import (
     DocumentType, BusinessType, FolderType, DocumentStatus, CheckingStatusType, FolderStatus, CheckingTransactionStatus,PartnerPackageStatus,
     DocumentsDetail, Folder, DocumentsTransactionChecking, FoldersTransactionReceiving,
     Package,LoanDetail, PartnerPackage, ContractDetail, Partner,
-    HistoricalDocuments,HistoricalFolder,PackageDocumentHistory, PackageFolderHistory,
+    HistoricalDocuments,HistoricalFolder,PackageDocumentHistory, PackageFolderHistory, PackageTransfer,
     UserProfile,ChangeRequest,
     CheckingAdditional,
     BorrowingDocument,BorrowingStatus, FolderDeadlineRule,FolderGroup,
@@ -499,10 +499,44 @@ admin.site.register(FolderType,FolderTypeAdmin)
 
 # PackageAdmin
 class PackageAdmin(admin.ModelAdmin):
-    list_display = ('package_code', 'package_type', 'created_date', 'region_id')
-    list_filter = ('package_type', 'created_date', 'region_id')
+    list_display = ('package_code', 'package_type', 'created_date', 'region_id', 'replaced_by', 'replaced_at')
+    list_filter = ('package_type', 'created_date', 'region_id', 'replaced_at')
     search_fields = ('package_code',)
 admin.site.register(Package,PackageAdmin)
+
+
+@admin.register(PackageTransfer)
+class PackageTransferAdmin(admin.ModelAdmin):
+    list_display = (
+        'transfer_id',
+        'source_package',
+        'target_package',
+        'folder_count',
+        'document_count',
+        'created_by',
+        'created_at',
+    )
+    search_fields = ('source_package__package_code', 'target_package__package_code', 'reason', 'created_by__username')
+    list_filter = ('transfer_type', 'created_at')
+    readonly_fields = (
+        'transfer_type',
+        'source_package',
+        'target_package',
+        'reason',
+        'folder_count',
+        'document_count',
+        'created_by',
+        'created_at',
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 # PartnerPackageAdmin
 class PartnerPackageAdmin(admin.ModelAdmin):

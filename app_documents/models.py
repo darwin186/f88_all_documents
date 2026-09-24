@@ -680,6 +680,26 @@ class Package(models.Model):
 
     note = models.TextField(null=True, blank=True)
 
+    replaced_by = models.ForeignKey(
+        "self",
+        db_column="replaced_by_id",
+        related_name="replacement_sources",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+    )
+
+    replaced_at = models.DateTimeField(null=True, blank=True)
+
+    replaced_by_user = models.ForeignKey(
+        User,
+        db_column="replaced_by_user_id",
+        related_name="package_replacements",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+
     
 
     class Meta:
@@ -1875,6 +1895,53 @@ class FoldersTransactionReceiving(models.Model):
 class PackageHistoryAction(models.TextChoices):
     ASSIGNED = "assigned", "Gán thùng"
     UNASSIGNED = "unassigned", "Gỡ thùng"
+    TRANSFERRED_OUT = "transferred_out", "Chuyển khỏi thùng"
+    TRANSFERRED_IN = "transferred_in", "Chuyển vào thùng"
+
+
+class PackageTransfer(models.Model):
+    class TransferType(models.TextChoices):
+        REPLACEMENT = "replacement", "Đổi thùng"
+
+    transfer_id = models.AutoField(primary_key=True)
+    transfer_type = models.CharField(
+        max_length=30,
+        choices=TransferType.choices,
+        default=TransferType.REPLACEMENT,
+    )
+    source_package = models.ForeignKey(
+        Package,
+        related_name="outgoing_transfers",
+        on_delete=models.PROTECT,
+    )
+    target_package = models.ForeignKey(
+        Package,
+        related_name="incoming_transfers",
+        on_delete=models.PROTECT,
+    )
+    reason = models.TextField()
+    folder_count = models.PositiveIntegerField(default=0)
+    document_count = models.PositiveIntegerField(default=0)
+    created_by = models.ForeignKey(
+        User,
+        related_name="package_transfers",
+        on_delete=models.PROTECT,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "f_PackageTransfer"
+        ordering = ["-created_at", "-transfer_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source_package"],
+                name="one_replacement_per_source_package",
+            ),
+            models.CheckConstraint(
+                check=~models.Q(source_package=models.F("target_package")),
+                name="package_transfer_source_target_differ",
+            ),
+        ]
 
 
 # Lịch sử luân chuyển Thùng - chứng từ
@@ -1896,6 +1963,14 @@ class PackageDocumentHistory(models.Model):
         choices=PackageHistoryAction.choices,
         default=PackageHistoryAction.ASSIGNED,
         db_index=True,
+    )
+
+    transfer = models.ForeignKey(
+        PackageTransfer,
+        related_name="document_history",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
     )
 
     
@@ -1925,6 +2000,14 @@ class PackageFolderHistory(models.Model):
         choices=PackageHistoryAction.choices,
         default=PackageHistoryAction.ASSIGNED,
         db_index=True,
+    )
+
+    transfer = models.ForeignKey(
+        PackageTransfer,
+        related_name="folder_history",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
     )
 
 
