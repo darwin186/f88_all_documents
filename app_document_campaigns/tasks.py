@@ -23,11 +23,12 @@ def campaign_health_ping(campaign_id):
 @shared_task(soft_time_limit=60, time_limit=90)
 def send_campaign_shop_link(link_id, url, delivery_id=None):
     from django.core.mail import EmailMessage
-    from django.core.validators import validate_email
-    from django.core.exceptions import ValidationError
+    from django.db.models import F
     from urllib.parse import urlparse
     from app_document_campaigns.models import ShopEmailDelivery
     from app_document_campaigns.services.access_links import token_digest
+    from app_document_campaigns.services.email_templates import campaign_email_config, render_campaign_email
+    from app_document_campaigns.services.email_html import email_body_html
 
     if delivery_id is None:
         delivery_id = ShopEmailDelivery.objects.create(link_id=link_id).pk
@@ -39,30 +40,46 @@ def send_campaign_shop_link(link_id, url, delivery_id=None):
         if token_digest(urlparse(url).path.strip("/").split("/")[-1]) != link.token_digest or not link.is_editable or link.campaign.status != Campaign.Status.ACTIVE or ShopSubmission.objects.filter(campaign=link.campaign, shop=link.shop).exists():
             delivery.update(status="skipped", message="Link không còn nhận phản hồi.", finished_at=timezone.now())
             return {"status": "skipped", "delivery_id": delivery_id}
-        validate_email(link.allowed_email)
-        manager = link.shop.manager_id
-        cc, area_email, area_id = [], "", None
-        if manager:
-            area_candidate = manager.qlkv_email or (manager.areaManager.areaManager_email if manager.areaManager else None)
-            region_candidate = manager.qlv_email or (manager.regionManager.regionManager_email if manager.regionManager else None)
-            for email in [area_candidate, region_candidate]:
-                if not email:
-                    continue
-                email = email.strip()
-                try:
-                    validate_email(email)
-                except ValidationError:
-                    continue
-                if email.lower() != link.allowed_email.lower() and email.lower() not in {item.lower() for item in cc}:
-                    cc.append(email)
-            if area_candidate and area_candidate.strip().lower() in {email.lower() for email in cc + [link.allowed_email]}:
-                area_email = area_candidate.strip()
-                area_id = manager.areaManager_id
-        delivery.update(to_email=link.allowed_email, cc_emails=cc, area_email=area_email, area_manager_id=area_id)
+        config = campaign_email_config(link.campaign)
+        rendered = render_campaign_email(config, link.campaign, link.shop, url)
+        delivery.update(
+            to_email=rendered.to[0],
+            cc_emails=rendered.cc,
+            bcc_emails=rendered.bcc,
+            area_email=rendered.area_email,
+            area_manager_id=rendered.area_manager_id,
+            subject=rendered.subject,
+            template_version=config.template_version,
+            attempt_count=F("attempt_count") + 1,
+        )
+        if settings.EMAIL_TRANSPORT == "power_automate":
+            from app_document_campaigns.services.power_automate_email import dispatch_shop_email
+            result = dispatch_shop_email(link, rendered, config.template_version, ShopEmailDelivery.objects.get(pk=delivery_id))
+            delivery.update(status="sending", message="Power Automate đã nhận email; đang chờ kết quả gửi.")
+            return {"status": "accepted", "link_id": link_id, "delivery_id": delivery_id, "provider_batch_id": result.provider_batch_id}
+        if settings.EMAIL_TRANSPORT == "microsoft_graph":
+            from app_document_campaigns.services.microsoft_graph_email import send_rendered_email
+            result = send_rendered_email(rendered)
+            delivery.update(
+                status="sent",
+                message="Microsoft Graph đã nhận yêu cầu gửi email.",
+                finished_at=timezone.now(),
+            )
+            return {
+                "status": "sent",
+                "link_id": link_id,
+                "delivery_id": delivery_id,
+                "provider_message_id": result.request_id,
+            }
         message = EmailMessage(
-            subject=f"{link.campaign.code} · {link.campaign.name}",
-            body=f"Phòng giao dịch: {link.shop.shop_name}\nHạn phản hồi: {link.response_deadline:%H:%M %d/%m/%Y}\nLink hết hạn: {link.expires_at:%H:%M %d/%m/%Y}\n\nPhản hồi tại: {url}",
-            from_email=settings.DEFAULT_FROM_EMAIL, to=[link.allowed_email], cc=cc)
+            subject=rendered.subject,
+            body=email_body_html(rendered.body),
+            from_email=rendered.from_email,
+            to=rendered.to,
+            cc=rendered.cc,
+            bcc=rendered.bcc,
+        )
+        message.content_subtype = "html"
         if message.send(fail_silently=False) != 1:
             raise RuntimeError("Email chưa được gửi.")
         delivery.update(status="sent", message="Đã gửi email thành công.", finished_at=timezone.now())
@@ -79,6 +96,7 @@ def send_area_manager_view_link(link_id, url):
     from django.core.validators import validate_email
     from app_document_campaigns.models import AreaManagerAccessLink
     from app_document_campaigns.services.access_links import token_digest
+    from app_document_campaigns.services.email_templates import campaign_area_email_config, render_area_email
 
     link = AreaManagerAccessLink.objects.select_related("campaign", "area_manager").get(pk=link_id)
     try:
@@ -86,16 +104,33 @@ def send_area_manager_view_link(link_id, url):
         if token_digest(supplied) != link.token_digest or link.revoked_at or link.is_expired:
             raise ValueError("Link QLKV không còn hiệu lực.")
         validate_email(link.allowed_email)
-        message = EmailMessage(
-            subject=f"{link.campaign.code} · Dữ liệu phản hồi PGD thuộc khu vực quản lý",
-            body=(
-                f"Quản lý khu vực: {link.area_manager.areaManager_name}\n"
-                f"Link chỉ xem dữ liệu các PGD đang quản lý: {url}\n"
-                f"Link hết hạn: {link.expires_at:%H:%M %d/%m/%Y}"
-            ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[link.allowed_email],
+        confirmation_mode = link.stage == AreaManagerAccessLink.Stage.CONFIRMATION
+        rendered = render_area_email(
+            campaign_area_email_config(link.campaign), link.campaign, link.area_manager, url,
+            confirmation_mode=confirmation_mode, expires_at=link.expires_at,
         )
+        if settings.EMAIL_TRANSPORT == "power_automate":
+            from app_document_campaigns.services.power_automate_email import dispatch_area_email
+            config = campaign_area_email_config(link.campaign)
+            result = dispatch_area_email(link, rendered, config.template_version)
+            AreaManagerAccessLink.objects.filter(pk=link.pk).update(
+                email_status=AreaManagerAccessLink.EmailStatus.QUEUED,
+                email_message="Power Automate đã nhận email; đang chờ kết quả gửi.",
+            )
+            return {"status": "accepted", "link_id": link.pk, "provider_batch_id": result.provider_batch_id}
+        if settings.EMAIL_TRANSPORT == "microsoft_graph":
+            from app_document_campaigns.services.microsoft_graph_email import send_rendered_email
+            result = send_rendered_email(rendered)
+            AreaManagerAccessLink.objects.filter(pk=link.pk).update(
+                email_status=AreaManagerAccessLink.EmailStatus.SENT,
+                email_message="Microsoft Graph đã nhận yêu cầu gửi email QLKV.",
+                emailed_at=timezone.now(),
+            )
+            return {"status": "sent", "link_id": link.pk, "provider_message_id": result.request_id}
+        from app_document_campaigns.services.email_html import email_body_html
+        message = EmailMessage(subject=rendered.subject, body=email_body_html(rendered.body), from_email=rendered.from_email,
+                               to=rendered.to, cc=rendered.cc, bcc=rendered.bcc)
+        message.content_subtype = "html"
         if message.send(fail_silently=False) != 1:
             raise RuntimeError("Email chưa được gửi.")
         AreaManagerAccessLink.objects.filter(pk=link.pk).update(
@@ -110,6 +145,150 @@ def send_area_manager_view_link(link_id, url):
             email_message="Không gửi được email QLKV. Kiểm tra cấu hình gửi thư.",
         )
         raise
+
+
+@shared_task(soft_time_limit=300, time_limit=360)
+def send_bulk_campaign_email_batches(items):
+    """Send selected batches sequentially through the provider saved on each batch."""
+    from email.utils import formataddr
+    from django.core.mail import EmailMessage, get_connection
+    from django.db.models import Count, F, Q
+    from app_document_campaigns.models import (
+        AreaManagerAccessLink,
+        CampaignEmailBatch,
+        CampaignEmailDelivery,
+        ShopEmailDelivery,
+    )
+    from app_document_campaigns.services.power_automate_email import dispatch_email_chunk
+
+    def finish_smtp_batch(batch, messages):
+        now = timezone.now()
+        CampaignEmailBatch.objects.filter(pk=batch.pk).update(
+            status=CampaignEmailBatch.Status.DISPATCHING,
+            submitted_at=now,
+            provider_batch_id=f"smtp:{batch.pk}",
+        )
+        connection = get_connection()
+        connection.open()
+        try:
+            for payload in messages:
+                delivery = CampaignEmailDelivery.objects.get(pk=payload["message_id"], batch=batch)
+                CampaignEmailDelivery.objects.filter(pk=delivery.pk).update(
+                    status=CampaignEmailDelivery.Status.SUBMITTING,
+                    attempt_count=F("attempt_count") + 1,
+                )
+                try:
+                    sender = payload.get("from") or {}
+                    from_email = formataddr((sender.get("name", ""), sender.get("address", "")))
+                    body = payload.get("body") or {}
+                    message = EmailMessage(
+                        subject=payload.get("subject", ""),
+                        body=body.get("content", ""),
+                        from_email=from_email,
+                        to=payload.get("to") or [],
+                        cc=payload.get("cc") or [],
+                        bcc=payload.get("bcc") or [],
+                        connection=connection,
+                    )
+                    message.content_subtype = "html"
+                    if connection.send_messages([message]) != 1:
+                        raise RuntimeError("SMTP không xác nhận đã gửi email.")
+                    sent_at = timezone.now()
+                    CampaignEmailDelivery.objects.filter(pk=delivery.pk).update(
+                        status=CampaignEmailDelivery.Status.SENT,
+                        sent_at=sent_at,
+                        failed_at=None,
+                        error_code="",
+                        error_message="",
+                    )
+                    if delivery.legacy_shop_delivery_id:
+                        ShopEmailDelivery.objects.filter(pk=delivery.legacy_shop_delivery_id).update(
+                            status="sent", message="Đã gửi email thành công qua SMTP.", finished_at=sent_at,
+                        )
+                    if delivery.area_access_link_id:
+                        AreaManagerAccessLink.objects.filter(pk=delivery.area_access_link_id).update(
+                            email_status=AreaManagerAccessLink.EmailStatus.SENT,
+                            email_message="Đã gửi email QLKV thành công qua SMTP.",
+                            emailed_at=sent_at,
+                        )
+                except Exception as exc:
+                    failed_at = timezone.now()
+                    CampaignEmailDelivery.objects.filter(pk=delivery.pk).update(
+                        status=CampaignEmailDelivery.Status.FAILED,
+                        failed_at=failed_at,
+                        error_code="smtp_send_failed",
+                        error_message=str(exc)[:500],
+                    )
+                    if delivery.legacy_shop_delivery_id:
+                        ShopEmailDelivery.objects.filter(pk=delivery.legacy_shop_delivery_id).update(
+                            status="failed", message="Không gửi được email qua SMTP.", finished_at=failed_at,
+                        )
+                    if delivery.area_access_link_id:
+                        AreaManagerAccessLink.objects.filter(pk=delivery.area_access_link_id).update(
+                            email_status=AreaManagerAccessLink.EmailStatus.FAILED,
+                            email_message="Không gửi được email QLKV qua SMTP.",
+                        )
+        finally:
+            connection.close()
+        counts = batch.deliveries.aggregate(
+            sent=Count("id", filter=Q(status=CampaignEmailDelivery.Status.SENT)),
+            failed=Count("id", filter=Q(status=CampaignEmailDelivery.Status.FAILED)),
+        )
+        status = CampaignEmailBatch.Status.COMPLETED
+        if counts["failed"]:
+            status = (
+                CampaignEmailBatch.Status.FAILED
+                if counts["failed"] == batch.total_count
+                else CampaignEmailBatch.Status.PARTIALLY_FAILED
+            )
+        CampaignEmailBatch.objects.filter(pk=batch.pk).update(
+            status=status,
+            sent_count=counts["sent"],
+            failed_count=counts["failed"],
+            completed_at=timezone.now(),
+        )
+        return counts
+
+    results = []
+    for item in items:
+        batch_id = item.get("batch_id")
+        messages = item.get("messages") or []
+        try:
+            batch = CampaignEmailBatch.objects.select_related("campaign").get(pk=batch_id)
+            transport = item.get("transport") or batch.transport_provider
+            if transport != batch.transport_provider:
+                raise ValueError("Kênh gửi trong task không khớp batch.")
+            if transport == CampaignEmailBatch.TransportProvider.SMTP:
+                counts = finish_smtp_batch(batch, messages)
+                batch.refresh_from_db(fields=["status"])
+                results.append({"batch_id": str(batch.pk), "status": batch.status, **counts})
+            elif transport == CampaignEmailBatch.TransportProvider.MICROSOFT_GRAPH:
+                from app_document_campaigns.services.microsoft_graph_email import dispatch_email_batch
+                counts = dispatch_email_batch(batch, messages)
+                batch.refresh_from_db(fields=["status"])
+                results.append({"batch_id": str(batch.pk), "status": batch.status, **counts})
+            else:
+                result = dispatch_email_chunk(batch, messages)
+                results.append({"batch_id": str(batch.pk), "status": "accepted", "accepted": len(result.accepted_message_ids)})
+        except Exception as exc:
+            now = timezone.now()
+            CampaignEmailBatch.objects.filter(pk=batch_id).update(
+                status=CampaignEmailBatch.Status.FAILED,
+                failed_count=len(messages),
+                completed_at=now,
+                last_error_code="submit_failed",
+                last_error_message=str(exc)[:500],
+            )
+            CampaignEmailDelivery.objects.filter(batch_id=batch_id).exclude(
+                status__in=[CampaignEmailDelivery.Status.ACCEPTED, CampaignEmailDelivery.Status.SENT]
+            ).update(
+                status=CampaignEmailDelivery.Status.FAILED,
+                failed_at=now,
+                error_code="submit_failed",
+                error_message="Không gửi được batch qua kênh đã chọn.",
+            )
+            results.append({"batch_id": str(batch_id), "status": "failed"})
+    return {"status": "processed", "batches": results}
 
 
 @shared_task(soft_time_limit=540, time_limit=600)
@@ -136,6 +315,33 @@ def process_team_review_excel(job_id):
                 content = stream.read(MAX_FILE_SIZE + 1)
             summary = import_workbook(job.campaign_id, user, content, lambda value: update(progress=max(5, value)))
             update(status="succeeded", progress=100, summary=summary, message=f"Đã cập nhật {summary['updated']} dòng review.")
+        return {"status": "succeeded", "summary": summary}
+    except Exception as exc:
+        update(status="failed", message=f"Không hoàn tất: {str(exc)[:1500]}")
+        return {"status": "failed"}
+
+
+@shared_task(soft_time_limit=540, time_limit=600)
+def process_area_confirmation_excel(job_id):
+    from app_document_campaigns.models import AreaConfirmationExcelJob
+    from app_document_campaigns.services.area_confirmation_excel import build_workbook, import_workbook, MAX_FILE_SIZE
+
+    if not AreaConfirmationExcelJob.objects.filter(pk=job_id, status="queued").update(status="running", progress=5, updated_at=timezone.now()):
+        return {"status": "skipped"}
+    job = AreaConfirmationExcelJob.objects.select_related("campaign", "requested_by").get(pk=job_id)
+    def update(**fields):
+        AreaConfirmationExcelJob.objects.filter(pk=job_id).update(updated_at=timezone.now(), **fields)
+    try:
+        if job.kind == "export":
+            content, rows = build_workbook(job.campaign, lambda value: update(progress=max(5, value)))
+            job.output_file.save(f"qlkv-confirmation-{job.campaign.code}-{job.pk}.xlsx", ContentFile(content), save=False)
+            summary = {"rows": rows}
+            update(output_file=job.output_file.name, status="succeeded", progress=100, summary=summary, message="Đã tạo file xác nhận QLKV.")
+        else:
+            with job.input_file.open("rb") as stream:
+                content = stream.read(MAX_FILE_SIZE + 1)
+            summary = import_workbook(job.campaign_id, job.requested_by, content, lambda value: update(progress=max(5, value)))
+            update(status="succeeded", progress=100, summary=summary, message=f"Đã cập nhật {summary['updated']} dòng xác nhận QLKV.")
         return {"status": "succeeded", "summary": summary}
     except Exception as exc:
         update(status="failed", message=f"Không hoàn tất: {str(exc)[:1500]}")

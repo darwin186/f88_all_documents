@@ -18,9 +18,11 @@ from django.views.decorators.http import require_POST
 from app_document_campaigns.forms import (
     CampaignCreateForm,
     CampaignDeadlineForm,
+    CampaignEmailConfigForm,
     CampaignSettingsForm,
 )
 from app_document_campaigns.models import (
+    AreaManagerAccessLink,
     Campaign,
     CampaignError,
     CampaignImportSource,
@@ -80,6 +82,7 @@ def campaign_create(request):
             campaign.created_by = request.user
             campaign.save()
             form.save_response_options()
+            form.save_risk_error_codes()
             messages.success(request, "Đã tạo chiến dịch. Hãy tạo version nháp để chạy dữ liệu SQL.")
             return redirect("document_campaigns:campaign_detail", campaign_id=campaign.pk)
     else:
@@ -104,6 +107,7 @@ def campaign_detail(request, campaign_id):
     latest_job = None
     latest_export_job = None
     latest_reviewed_export_job = None
+    latest_cleaned_upload_job = None
     if selected_version:
         latest_job = selected_version.import_jobs.first()
         latest_export_job = (
@@ -121,6 +125,10 @@ def campaign_detail(request, campaign_id):
             None,
         )
         if excel_source:
+            latest_cleaned_upload_job = selected_version.import_jobs.filter(
+                job_type=CampaignImportJob.JobType.EXCEL_IMPORT,
+                status=CampaignImportJob.Status.SUCCEEDED,
+            ).exclude(input_file="").first()
             latest_reviewed_export_job = selected_version.import_jobs.filter(
                 job_type=CampaignImportJob.JobType.EXCEL_EXPORT,
                 status=CampaignImportJob.Status.SUCCEEDED,
@@ -175,6 +183,7 @@ def campaign_detail(request, campaign_id):
             "latest_job": latest_job,
             "latest_export_job": latest_export_job,
             "latest_reviewed_export_job": latest_reviewed_export_job,
+            "latest_cleaned_upload_job": latest_cleaned_upload_job,
             "can_manage_shop_links": can_manage_shop_links,
             "settings_form": CampaignSettingsForm(instance=campaign),
             "open_settings": request.GET.get("settings") == "1",
@@ -251,6 +260,13 @@ def update_campaign_settings(request, campaign_id):
             response_deadline=campaign.response_deadline,
             expires_at=campaign.link_expires_at,
         )
+        campaign.area_manager_links.filter(
+            stage=AreaManagerAccessLink.Stage.MONITORING,
+        ).update(expires_at=campaign.link_expires_at)
+    if "area_response_deadline" in form.changed_data and campaign.area_response_deadline:
+        campaign.area_manager_links.filter(
+            stage=AreaManagerAccessLink.Stage.CONFIRMATION,
+        ).update(expires_at=campaign.area_response_deadline)
     messages.success(request, "Đã cập nhật cài đặt chiến dịch.")
     return redirect("document_campaigns:campaign_detail", campaign_id=campaign.pk)
 
@@ -378,6 +394,7 @@ def publish_campaign_to_shops(request, campaign_id):
 @login_required
 def campaign_response_monitor(request, campaign_id):
     from app_document_campaigns.services.email_metrics import emailed_area_manager_count
+    from app_document_campaigns.services.email_templates import ALLOWED_VARIABLES, campaign_email_config
     from app_document_campaigns.services.response_deadlines import shop_deadlines, shop_deadline_passed
     campaign = get_object_or_404(Campaign.objects.select_related("current_version"), pk=campaign_id)
     errors, access_scope = scope_campaign_errors(CampaignError.objects.filter(campaign=campaign).exclude(status__in=["excluded", "cancelled"]), request.user)
@@ -437,13 +454,18 @@ def campaign_response_monitor(request, campaign_id):
     params = request.GET.copy()
     params.pop("page", None)
     progress = round(sum(row["complete"] for row in all_rows) * 100 / len(all_rows)) if all_rows else 0
+    can_manage_shop_links = _is_campaign_admin(request.user)
+    email_config = campaign_email_config(campaign) if can_manage_shop_links else None
     return render(request, "app_document_campaigns/campaign_response_monitor.html", {
         "campaign": campaign, "access_scope": access_scope, "rows": page.object_list, "page": page,
         "page_range": page.paginator.get_elided_page_range(page.number, on_each_side=2, on_ends=1), "filter_query": params.urlencode(),
         "regions": regions, "areas": areas, "shops": shops, "selected_region": region, "selected_area": area,
         "selected_shop": shop, "selected_statuses": statuses, "summary": summary, "shop_response_progress": progress,
         "active_monitor_tab": "shops",
-        "can_manage_shop_links": _is_campaign_admin(request.user), "issued_shop_link_count": summary["issued"],
+        "can_manage_shop_links": can_manage_shop_links, "issued_shop_link_count": summary["issued"],
+        "email_config_form": CampaignEmailConfigForm(instance=email_config) if email_config else None,
+        "email_variables": ALLOWED_VARIABLES,
+        "email_from_address": settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER or "Chưa cấu hình",
         "deadline_form": CampaignDeadlineForm(instance=campaign), "can_publish_shop_links": bool(campaign.current_version
             and campaign.current_version.status == CampaignVersion.Status.PUBLISHED
             and campaign.status not in (Campaign.Status.CLOSED, Campaign.Status.CANCELLED)
@@ -739,6 +761,44 @@ def export_staging_excel(request, version_id):
 
 
 @login_required
+def download_cleaned_upload(request, version_id):
+    version = get_object_or_404(
+        CampaignVersion.objects.select_related("campaign"),
+        pk=version_id,
+    )
+    job = (
+        version.import_jobs.filter(
+            job_type=CampaignImportJob.JobType.EXCEL_IMPORT,
+            status=CampaignImportJob.Status.SUCCEEDED,
+        )
+        .exclude(input_file="")
+        .first()
+    )
+    if job is None:
+        return HttpResponse(
+            "Chưa có file Excel team đã làm sạch được upload thành công.",
+            status=404,
+            content_type="text/plain; charset=utf-8",
+        )
+    try:
+        stream = job.input_file.open("rb")
+    except FileNotFoundError:
+        return HttpResponse(
+            "Không tìm thấy file đã upload trên media của web service.",
+            status=404,
+            content_type="text/plain; charset=utf-8",
+        )
+    response = FileResponse(
+        stream,
+        as_attachment=True,
+        filename=job.input_filename or job.input_file.name.rsplit("/", 1)[-1],
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@login_required
 @require_POST
 @campaign_admin_required
 def queue_staging_excel_export(request, version_id):
@@ -857,16 +917,27 @@ def confirm_staging_excel(request, version_id):
     return JsonResponse({"ok": True, "applied": summary})
 
 
-def _resolve_link_or_response(raw_token):
+def _resolve_link_or_response(request, raw_token):
     try:
         return resolve_shop_access_link(raw_token, touch=True), None
     except AccessLinkError as exc:
-        return None, HttpResponse(str(exc), status=410)
+        response = render(
+            request,
+            "app_document_campaigns/area_link_unavailable.html",
+            {
+                "reason": str(exc),
+                "eyebrow": "Phản hồi Phòng giao dịch",
+                "description": "Liên kết này không thể tiếp tục sử dụng để xem hoặc cập nhật phản hồi lỗi chứng từ.",
+            },
+            status=410,
+        )
+        response["Cache-Control"] = "no-store"
+        return None, response
 
 
 @ensure_csrf_cookie
 def shop_response_page(request, raw_token):
-    link, error_response = _resolve_link_or_response(raw_token)
+    link, error_response = _resolve_link_or_response(request, raw_token)
     if error_response:
         return error_response
 
@@ -884,7 +955,7 @@ def shop_response_page(request, raw_token):
     )
     rows = []
     completed = 0
-    campaign_options = list(link.campaign.response_options.values("value", "label"))
+    campaign_options = list(link.campaign.response_options.values("value", "label", "guidance_text"))
     for error in errors:
         response = getattr(error, "shop_response", None)
         if response and response.answer_code:
@@ -901,9 +972,10 @@ def shop_response_page(request, raw_token):
                     {
                         "value": str(option.get("value", "")).strip(),
                         "label": str(option.get("label", option.get("value", ""))).strip(),
+                        "guidance_text": "",
                     }
                     if isinstance(option, dict)
-                    else {"value": str(option), "label": str(option)}
+                    else {"value": str(option), "label": str(option), "guidance_text": ""}
                     for option in question.options
                 ]
                 break

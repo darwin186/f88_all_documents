@@ -233,3 +233,44 @@ Verify mục tiêu:
 3. Internal workflow: DEC-08 → DEC-10.
 4. Reporting: DEC-11.
 5. UI hardening và production readiness: DEC-12 → DEC-13.
+
+## Bổ sung workflow sau phản hồi PGD — 29/09/2026
+
+### DEC-14 — Hoàn thiện dữ liệu và tracking Step 2–3
+
+- [x] Cho tải lại đúng file Excel team đã upload và làm sạch, không chỉ file hệ thống xuất ra.
+- [x] Hiển thị email PGD ngay dưới tên PGD tại lưới theo dõi Step 3.
+- [x] Ghi nhận riêng thời điểm PGD mở link lần đầu và lần truy cập gần nhất.
+- [x] Hiển thị trạng thái `Chưa mở`/`Đã mở lần đầu` trên lưới Admin.
+
+### DEC-15 — Email QLKV tại Step 3
+
+- [x] Cấu hình template email QLKV độc lập với template email PGD.
+- [ ] Preview trực tiếp bằng một QLKV mẫu, hỗ trợ unique link QLKV.
+- [ ] Preflight email QLKV và gửi thử không dùng link thật.
+- [x] Phát hành/gửi email QLKV theo từng khu vực và theo dõi kết quả gửi.
+
+### DEC-16 — Team review và mapping quyển tại Step 4
+
+- [x] Mapping lỗi thiếu quyển với dữ liệu quyển hiện tại.
+- [x] Hiển thị loại quyển, trạng thái quyển, trạng thái nhận và ngày nhận.
+- [x] Filter theo loại quyển và trạng thái quyển.
+- [x] File Excel Team review chứa các trường trạng thái quyển tương ứng.
+- [x] Progress Step 4 phản ánh số dòng đã có kết luận cuối.
+- [x] Chỉ bật thao tác chuyển Step 5 khi toàn bộ dòng đủ điều kiện đã được review.
+
+### DEC-17 — QLKV xác nhận tại Step 5
+
+- [x] Admin phát hành vòng xác nhận sau khi hoàn tất Step 4.
+- [x] Link, deadline, email và bảng theo dõi riêng cho QLKV.
+- [ ] QLKV chỉ xem dữ liệu PGD thuộc phạm vi mình và xác nhận/trả lại theo dòng.
+- [x] Ghi lịch sử người/thời điểm/kết luận; dữ liệu PGD và Team review giữ nguyên.
+- [ ] Progress Step 5 theo số dòng QLKV đã xác nhận hoặc hết hạn.
+
+### DEC-18 — Book lỗi gửi QTRR tại Step 6
+
+- [x] Đổi tên Step 6 thành `Book lỗi gửi QTRR`.
+- [x] Master Data mã lỗi QTRR gồm Nhóm lỗi, Nguồn và Mã lỗi.
+- [x] Mapping dữ liệu đã được QLKV xác nhận sang mã lỗi QTRR.
+- [x] Cảnh báo các dòng chưa mapping, không cho chốt file cuối khi còn thiếu mã.
+- [ ] Xuất file cuối gửi QTRR và lưu snapshot/audit của lần xuất.

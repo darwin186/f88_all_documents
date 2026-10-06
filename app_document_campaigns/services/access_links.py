@@ -45,6 +45,7 @@ def issue_shop_access_link(*, campaign, shop, allowed_email, created_by, respons
             "response_deadline": deadline,
             "expires_at": expiration,
             "revoked_at": None,
+            "first_accessed_at": None,
             "last_accessed_at": None,
             "created_by": created_by,
         },
@@ -59,21 +60,30 @@ def resolve_shop_access_link(raw_token, *, touch=False):
             .get(token_digest=token_digest(raw_token))
         )
     except ShopAccessLink.DoesNotExist as exc:
-        raise AccessLinkNotFound("Link không hợp lệ.") from exc
+        raise AccessLinkNotFound("Link PGD không hợp lệ.") from exc
 
     now = timezone.now()
     if link.revoked_at:
-        raise AccessLinkRevoked("Link đã bị thu hồi.")
+        raise AccessLinkRevoked("Link PGD đã bị thu hồi.")
     if now >= link.expires_at:
-        raise AccessLinkExpired("Link đã hết hạn.")
+        raise AccessLinkExpired("Link PGD đã hết hạn.")
 
     if touch:
-        ShopAccessLink.objects.filter(pk=link.pk).update(last_accessed_at=now)
+        first_open = ShopAccessLink.objects.filter(pk=link.pk, first_accessed_at__isnull=True).update(
+            first_accessed_at=now,
+            last_accessed_at=now,
+        )
+        if not first_open:
+            ShopAccessLink.objects.filter(pk=link.pk).update(last_accessed_at=now)
+        if first_open:
+            link.first_accessed_at = now
         link.last_accessed_at = now
     return link
 
 
-def issue_area_manager_access_link(*, campaign, area_manager, allowed_email, created_by, expires_at=None):
+def issue_area_manager_access_link(*, campaign, area_manager, allowed_email, created_by, stage=AreaManagerAccessLink.Stage.MONITORING, expires_at=None):
+    if stage not in AreaManagerAccessLink.Stage.values:
+        raise ValueError("Giai đoạn link QLKV không hợp lệ.")
     raw_token = secrets.token_urlsafe(32)
     expiration = expires_at or campaign.link_expires_at
     if not expiration:
@@ -81,6 +91,7 @@ def issue_area_manager_access_link(*, campaign, area_manager, allowed_email, cre
     link, _ = AreaManagerAccessLink.objects.update_or_create(
         campaign=campaign,
         area_manager=area_manager,
+        stage=stage,
         defaults={
             "allowed_email": allowed_email,
             "token_digest": token_digest(raw_token),

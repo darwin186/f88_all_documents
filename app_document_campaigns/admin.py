@@ -6,6 +6,10 @@ from app_document_campaigns.models import (
     Campaign,
     CampaignType,
     CampaignError,
+    CampaignEmailAttempt,
+    CampaignEmailBatch,
+    CampaignEmailDelivery,
+    CampaignEmailWebhookEvent,
     CampaignImportSource,
     CampaignImportJob,
     CampaignSnapshot,
@@ -14,6 +18,7 @@ from app_document_campaigns.models import (
     CampaignVersion,
     ChecklistQuestion,
     ChecklistTemplate,
+    RiskErrorCode,
     ShopAccessLink,
     ShopResponse,
     ShopSubmission,
@@ -133,3 +138,41 @@ admin.site.register(TeamReview)
 admin.site.register(AreaConfirmation)
 admin.site.register(CampaignSnapshot)
 admin.site.register(CampaignSnapshotMetric)
+
+
+@admin.register(RiskErrorCode)
+class RiskErrorCodeAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "source", "is_active", "sort_order")
+    list_filter = ("source", "is_active")
+    list_editable = ("is_active", "sort_order")
+    search_fields = ("code", "name")
+
+
+@admin.register(CampaignEmailBatch)
+class CampaignEmailBatchAdmin(admin.ModelAdmin):
+    list_display = ("id", "campaign", "email_type", "transport_provider", "is_test", "status", "total_count", "sent_count", "failed_count", "created_at")
+    list_filter = ("email_type", "transport_provider", "is_test", "status")
+    search_fields = ("idempotency_key", "provider_batch_id", "campaign__code")
+    readonly_fields = [field.name for field in CampaignEmailBatch._meta.fields]
+
+
+@admin.register(CampaignEmailDelivery)
+class CampaignEmailDeliveryAdmin(admin.ModelAdmin):
+    list_display = ("id", "batch", "target_type", "target_id", "status", "attempt_count", "updated_at")
+    list_filter = ("target_type", "status")
+    search_fields = ("idempotency_key", "provider_message_id", "rendered_subject")
+    readonly_fields = [field.name for field in CampaignEmailDelivery._meta.fields]
+
+
+@admin.register(CampaignEmailAttempt)
+class CampaignEmailAttemptAdmin(admin.ModelAdmin):
+    list_display = ("delivery", "attempt_number", "outcome", "http_status", "duration_ms", "created_at")
+    list_filter = ("outcome", "http_status")
+    readonly_fields = [field.name for field in CampaignEmailAttempt._meta.fields]
+
+
+@admin.register(CampaignEmailWebhookEvent)
+class CampaignEmailWebhookEventAdmin(admin.ModelAdmin):
+    list_display = ("event_id", "batch", "status", "received_at", "processed_at")
+    list_filter = ("status",)
+    readonly_fields = [field.name for field in CampaignEmailWebhookEvent._meta.fields]

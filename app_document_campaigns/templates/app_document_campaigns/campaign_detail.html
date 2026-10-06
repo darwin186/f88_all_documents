@@ -6,12 +6,12 @@
 {% block title %}{{ campaign.code }}{% endblock %}
 {% block top_nav %}{% include "app_documents/components/top_nav_v2.html" %}{% endblock %}
 {% block main_extra_class %}pt-20{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_workflow.css' %}"><script src="{% static 'app_document_campaigns/js/campaign_workflow.js' %}" defer></script><script src="{% static 'app_document_campaigns/js/campaign_settings.js' %}" defer></script>{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_workflow.css' %}?v=20260930-5"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/datetime_picker.css' %}?v=20261002-2"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/response_guidance_config.css' %}?v=20260930-5"><script src="https://cdn.jsdelivr.net/npm/flatpickr"></script><script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/vn.js"></script><script src="{% static 'app_document_campaigns/js/datetime_picker.js' %}?v=20261002-2" defer></script><script src="{% static 'app_document_campaigns/js/campaign_workflow.js' %}" defer></script><script src="{% static 'app_document_campaigns/js/campaign_settings.js' %}" defer></script><script src="{% static 'app_document_campaigns/js/response_guidance_config.js' %}" defer></script>{% endblock %}
 
 {% block content %}
 {% campaign_workflow 2 %}
 
-<style>.dec-response-choices #id_response_options{max-height:260px;overflow:auto;padding:8px;border:1px solid #dce4df;border-radius:9px}.dec-response-choices #id_response_options label{display:flex;gap:8px;padding:7px;font-size:12px;line-height:1.5}.dec-response-choices input[type=checkbox]{width:16px!important;height:16px;min-height:16px!important;flex:none;accent-color:#00844a}</style>
+<style>.dec-response-choices #id_response_options,.dec-response-choices #id_risk_error_codes{max-height:260px;overflow:auto;padding:8px;border:1px solid #dce4df;border-radius:9px}.dec-response-choices #id_response_options label,.dec-response-choices #id_risk_error_codes label{display:flex;gap:8px;padding:7px;font-size:12px;line-height:1.5}.dec-response-choices input[type=checkbox]{width:16px!important;height:16px;min-height:16px!important;flex:none;accent-color:#00844a}</style>
 <div class="dec-page">
   
   <div class="dec-preparation-row">
@@ -33,6 +33,7 @@
     <dialog class="dec-settings-dialog" data-campaign-settings {% if open_settings %}data-open-on-load{% endif %}>
       {% if can_manage_shop_links %}<form method="post" action="{% url 'document_campaigns:update_campaign_settings' campaign.id %}">
         {% csrf_token %}
+        <input type="hidden" name="risk_error_codes_present" value="1">
         <div class="dec-settings-head">
           <div><span>Cài đặt chiến dịch</span><h2>Thông tin kỳ</h2></div>
           <button type="button" class="dec-settings-close" data-close-campaign-settings aria-label="Đóng">×</button>
@@ -45,11 +46,32 @@
             <div><span>Trạng thái</span><strong>{{ campaign.get_status_display }}</strong></div>
           </div>
           <p class="dec-settings-note">Các thông tin định danh được khóa vì chiến dịch đã liên kết với dữ liệu SQL/Excel.</p>
+          <div class="dec-settings-deadlines">
+            <div class="dec-settings-field">
+              <label for="{{ settings_form.response_deadline.id_for_label }}">Hạn cuối PGD phản hồi</label>
+              {% include "app_document_campaigns/components/datetime_picker.html" with field=settings_form.response_deadline %}
+              <small>Link PGD chuyển sang chỉ đọc sau hạn này và hết hiệu lực sau thêm 31 ngày.</small>
+              {% for error in settings_form.response_deadline.errors %}<p class="dcf-error">{{ error }}</p>{% endfor %}
+            </div>
+            <div class="dec-settings-field">
+              <label for="{{ settings_form.area_response_deadline.id_for_label }}">{{ settings_form.area_response_deadline.label }}</label>
+              {% include "app_document_campaigns/components/datetime_picker.html" with field=settings_form.area_response_deadline %}
+              <small>{{ settings_form.area_response_deadline.help_text }}</small>
+              {% for error in settings_form.area_response_deadline.errors %}<p class="dcf-error">{{ error }}</p>{% endfor %}
+            </div>
+          </div>
+          <div class="dec-settings-field dec-response-choices">
+            <label>{{ settings_form.risk_error_codes.label }}</label>
+            {{ settings_form.risk_error_codes }}
+            <small>{{ settings_form.risk_error_codes.help_text }}</small>
+            {% for error in settings_form.risk_error_codes.errors %}<p class="dcf-error">{{ error }}</p>{% endfor %}
+          </div>
           <div class="dec-settings-field dec-response-choices">
             <label>{{ settings_form.response_options.label }}</label>
             {{ settings_form.response_options }}
             <small>{{ settings_form.response_options.help_text }}</small>
           </div>
+          {% include "app_document_campaigns/components/response_guidance_fields.html" with form=settings_form %}
           <div class="dec-settings-field">
             <label for="{{ settings_form.shop_instructions.id_for_label }}">{{ settings_form.shop_instructions.label }}</label>
             {{ settings_form.shop_instructions }}
@@ -58,16 +80,11 @@
           <div class="dec-settings-field">
             <label for="{{ settings_form.area_manager_instructions.id_for_label }}">{{ settings_form.area_manager_instructions.label }}</label>
             {{ settings_form.area_manager_instructions }}
-            <small>Hiển thị trên link tổng hợp chỉ xem dành cho QLKV.</small>
+            <small>Hiển thị phía trên dữ liệu trên link theo dõi và link xác nhận của QLKV.</small>
           </div>
           <div class="dec-settings-field">
             <label for="{{ settings_form.name.id_for_label }}">{{ settings_form.name.label }}</label>
             {{ settings_form.name }}
-          </div>
-          <div class="dec-settings-field">
-            <label for="{{ settings_form.response_deadline.id_for_label }}">{{ settings_form.response_deadline.label }}</label>
-            {{ settings_form.response_deadline }}
-            <small>Link PGD chuyển sang chỉ đọc sau hạn này và hết hiệu lực sau thêm 31 ngày.</small>
           </div>
         </div>
         <div class="dec-settings-actions">

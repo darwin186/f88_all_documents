@@ -27,7 +27,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const commonDeadline = root.querySelector("[data-common-deadline-dialog]");
   if (commonDeadline) {
     const form = commonDeadline.querySelector("form"), errorBox = form.querySelector("[data-common-deadline-error]");
-    root.querySelector("[data-open-common-deadline]").addEventListener("click", () => {errorBox.hidden = true; commonDeadline.showModal();});
+    root.querySelector("[data-open-common-deadline]")?.addEventListener("click", () => {
+      errorBox.hidden = true;
+      window.campaignDateTimePicker?.refresh(commonDeadline);
+      commonDeadline.showModal();
+    });
     commonDeadline.querySelector("[data-close-common-deadline]").addEventListener("click", () => commonDeadline.close());
     form.addEventListener("submit", async event => {
       event.preventDefault();
@@ -41,12 +45,106 @@ document.addEventListener("DOMContentLoaded", () => {
       finally {button.disabled = false;}
     });
   }
+  const closeEmailDialog = event => event.currentTarget.closest("dialog")?.close();
+  root.querySelectorAll("[data-close-email-dialog]").forEach(button => button.addEventListener("click", closeEmailDialog));
+  const configDialog = root.querySelector("[data-email-config-dialog]");
+  const configForm = root.querySelector("[data-email-config-form]");
+  let emailPreviewSample = null;
+  const splitEmails = value => [...new Set((value || "").split(/[;,\n]+/).map(item => item.trim()).filter(Boolean).map(item => item.toLowerCase()))];
+  const renderEmailTemplate = (template, context) => (template || "").replace(/{{\s*([a-z_]+)\s*}}/g, (token, key) => Object.hasOwn(context, key) ? context[key] : token);
+  const updateEmailPreview = () => {
+    if (!configForm || !emailPreviewSample) return;
+    const context = {...emailPreviewSample.context, support_email: configForm.elements.support_email.value.trim()};
+    const to = emailPreviewSample.to[0] || "—";
+    const cc = splitEmails(configForm.elements.cc_emails_text.value);
+    if (configForm.elements.cc_area_manager.checked && emailPreviewSample.area_email) cc.unshift(emailPreviewSample.area_email.toLowerCase());
+    const uniqueCc = [...new Set(cc)].filter(email => email !== to.toLowerCase());
+    const bcc = splitEmails(configForm.elements.bcc_emails_text.value).filter(email => email !== to.toLowerCase() && !uniqueCc.includes(email));
+    const fromAddress = configForm.querySelector("[data-email-from-address]").value;
+    const fromName = configForm.elements.from_name.value.trim();
+    configDialog.querySelector("[data-live-preview-shop]").textContent = emailPreviewSample.shop;
+    configDialog.querySelector("[data-live-preview-from]").textContent = fromName ? `${fromName} <${fromAddress}>` : fromAddress;
+    configDialog.querySelector("[data-live-preview-to]").textContent = to;
+    configDialog.querySelector("[data-live-preview-cc]").textContent = uniqueCc.join(", ") || "—";
+    configDialog.querySelector("[data-live-preview-bcc]").textContent = bcc.join(", ") || "—";
+    configDialog.querySelector("[data-live-preview-subject]").textContent = renderEmailTemplate(configForm.elements.subject_template.value, context) || "—";
+    const bodyTemplate = window.campaignRichEmail?.html(configForm.elements.body_template) || configForm.elements.body_template.value;
+    const bodyPreview = configDialog.querySelector("[data-live-preview-body]");
+    if (window.campaignRichEmail) bodyPreview.innerHTML = window.campaignRichEmail.render(bodyTemplate, context) || "—";
+    else bodyPreview.textContent = renderEmailTemplate(bodyTemplate, context) || "—";
+  };
+  const loadEmailPreview = async () => {
+    const errorBox = configDialog.querySelector("[data-live-preview-error]");
+    errorBox.hidden = true;
+    try {
+      const response = await fetch(configDialog.dataset.previewUrl, {credentials:"same-origin", cache:"no-store"});
+      const data = await readJson(response);
+      if (!response.ok || !data.ok) throw new Error(data.error || "Không thể tải dữ liệu xem trước.");
+      emailPreviewSample = data;
+      updateEmailPreview();
+    } catch (error) {
+      errorBox.textContent = error.message;
+      errorBox.hidden = false;
+    }
+  };
+  root.querySelector("[data-open-email-config]")?.addEventListener("click", () => {
+    configDialog?.showModal();
+    loadEmailPreview();
+  });
+  if (configForm) {
+    let activeTemplateField = configForm.elements.body_template;
+    [configForm.elements.subject_template, configForm.elements.body_template].forEach(field => {
+      field?.addEventListener("focus", () => { activeTemplateField = field; });
+    });
+    configForm.querySelector("[data-rich-email-editor]")?.addEventListener("focus", () => { activeTemplateField = configForm.elements.body_template; });
+    configForm.querySelectorAll("[data-email-variable]").forEach(button => button.addEventListener("click", () => {
+      const field = activeTemplateField || configForm.elements.body_template;
+      const token = `{{${button.dataset.emailVariable}}}`;
+      if (field === configForm.elements.body_template && window.campaignRichEmail) {
+        window.campaignRichEmail.insert(field, token);
+      } else {
+        const start = field.selectionStart ?? field.value.length, end = field.selectionEnd ?? start;
+        field.setRangeText(token, start, end, "end"); field.focus();
+      }
+      updateEmailPreview();
+    }));
+    configForm.addEventListener("input", updateEmailPreview);
+    configForm.addEventListener("change", updateEmailPreview);
+    configForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      const button = configForm.querySelector('[type="submit"]'), errorBox = configForm.querySelector("[data-email-config-error]");
+      const originalLabel = button.textContent;
+      button.disabled = true; button.classList.add("is-loading"); button.textContent = "Đang lưu…"; errorBox.hidden = true;
+      try {
+        const response = await fetch(configForm.action, {method:"POST", body:new FormData(configForm), credentials:"same-origin", headers:{"Accept":"application/json"}});
+        const data = await readJson(response);
+        if (!response.ok || !data.ok) {
+          const details = data.errors ? Object.values(data.errors).flat().join(" ") : data.error;
+          throw new Error(details || "Không thể lưu cấu hình email.");
+        }
+        configDialog.close(); window.campaignToast?.("Đã lưu cấu hình email chiến dịch.", "success");
+      } catch (error) { errorBox.textContent = error.message; errorBox.hidden = false; }
+      finally { button.disabled = false; button.classList.remove("is-loading"); button.textContent = originalLabel; }
+    });
+  }
+  const preflightDialog = root.querySelector("[data-email-preflight-dialog]");
+  root.querySelector("[data-open-email-preflight]")?.addEventListener("click", async () => {
+    const content=preflightDialog.querySelector("[data-email-preflight-content]");content.replaceChildren(Object.assign(document.createElement("p"),{textContent:"Đang kiểm tra dữ liệu…"}));preflightDialog.showModal();
+    try {
+      const response=await fetch(preflightDialog.dataset.url,{credentials:"same-origin",cache:"no-store"}),data=await readJson(response);if(!response.ok||!data.ok)throw new Error(data.error||"Không thể kiểm tra người nhận.");
+      const metrics=document.createElement("div");metrics.className="crm-preflight-metrics";[["Tổng PGD",data.total],["Có thể gửi",data.valid],["Email PGD lỗi",data.invalid],["Thiếu email QLKV",data.missing_area]].forEach(([label,value])=>{const card=document.createElement("article"),span=document.createElement("span"),strong=document.createElement("strong");span.textContent=label;strong.textContent=value;card.append(span,strong);metrics.append(card);});
+      const list=document.createElement("ul");data.issues.forEach(item=>{const li=document.createElement("li"),shop=document.createElement("span"),issue=document.createElement("span");shop.textContent=item.shop;issue.textContent=item.issue;li.append(shop,issue);list.append(li);});if(!data.issues.length){const li=document.createElement("li");li.textContent="Không phát hiện lỗi người nhận.";list.append(li);}content.replaceChildren(metrics,list);
+    } catch(error){content.replaceChildren(Object.assign(document.createElement("p"),{className:"crm-dialog-error",textContent:error.message}));}
+  });
+  const testDialog=root.querySelector("[data-email-test-dialog]"),testForm=root.querySelector("[data-email-test-form]");
+  root.querySelector("[data-open-email-test]")?.addEventListener("click",()=>testDialog?.showModal());
+  testForm?.addEventListener("submit",async event=>{event.preventDefault();const button=event.submitter||testForm.querySelector('button[type="submit"]'),errorBox=testForm.querySelector("[data-email-test-error]");if(button)button.disabled=true;errorBox.hidden=true;try{const response=await fetch(testForm.action,{method:"POST",body:new FormData(testForm),credentials:"same-origin",headers:{"Accept":"application/json"}}),data=await readJson(response);if(!response.ok||!data.ok)throw new Error(data.error||"Không thể gửi email thử.");testDialog.close();window.campaignToast?.(data.message,"success");}catch(error){errorBox.textContent=error.message;errorBox.hidden=false;}finally{if(button)button.disabled=false;}});
   const pollEmail = async (url, feedback, attempt = 0) => {
     try {
       const response = await fetch(url, {credentials:"same-origin", cache:"no-store"});
       if (!response.ok) throw new Error("Không kiểm tra được kết quả gửi email.");
       const data = await response.json();
-      root.querySelector("[data-area-emailed]").textContent = data.area_emailed;
+      root.querySelector("[data-area-emailed]").textContent = new Intl.NumberFormat('en-US').format(data.area_emailed || 0);
       if (["sent", "failed", "skipped"].includes(data.status)) {
         feedback.textContent = data.message;
         feedback.classList.toggle("is-error", data.status !== "sent");
@@ -82,6 +180,7 @@ document.addEventListener("DOMContentLoaded", () => {
     root.querySelectorAll("[data-extend-deadline]").forEach(button => button.addEventListener("click", () => {
       form.action = button.dataset.url;
       form.elements.deadline.value = button.dataset.deadline;
+      window.campaignDateTimePicker?.refresh(dialog);
       dialog.querySelector("[data-extend-shop]").textContent = button.closest("[data-shop-link-row]").dataset.shopName;
       dialog.showModal();
     }));

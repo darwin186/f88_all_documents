@@ -46,11 +46,39 @@ class ShopResponseOption(models.Model):
         return self.label
 
 
+class ResponseGuidanceTemplate(models.Model):
+    code = models.CharField(max_length=40, unique=True)
+    name = models.CharField(max_length=255)
+    guidance_text = models.TextField(max_length=2000)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "dec_response_guidance_template"
+        ordering = ["sort_order", "id"]
+
+    def __str__(self):
+        return self.name
+
+
 class CampaignResponseOption(models.Model):
     campaign = models.ForeignKey("Campaign", related_name="response_options", on_delete=models.CASCADE)
     option = models.ForeignKey(ShopResponseOption, on_delete=models.PROTECT)
+    guidance_template = models.ForeignKey(
+        ResponseGuidanceTemplate,
+        related_name="campaign_response_options",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+    )
     value = models.CharField(max_length=255)
     label = models.CharField(max_length=255)
+    guidance_text = models.TextField(
+        blank=True,
+        default="",
+        max_length=2000,
+        help_text="Hướng dẫn hiện dưới ô ghi chú khi PGD chọn phản hồi này.",
+    )
     sort_order = models.PositiveIntegerField(default=0)
 
     class Meta:
@@ -80,6 +108,18 @@ class Campaign(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT, db_index=True)
     response_opens_at = models.DateTimeField(null=True, blank=True)
     response_deadline = models.DateTimeField(null=True, blank=True)
+    area_response_deadline = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Hạn cuối QLKV xác nhận kết quả sau Team review.",
+    )
+    risk_error_codes = models.ManyToManyField(
+        "RiskErrorCode",
+        related_name="campaigns",
+        blank=True,
+        db_table="dec_campaign_risk_error_code",
+        help_text="Danh sách mã lỗi được phép sử dụng khi book lỗi gửi QTRR.",
+    )
     link_expires_at = models.DateTimeField(null=True, blank=True)
     current_version = models.ForeignKey(
         "CampaignVersion",
@@ -116,6 +156,11 @@ class Campaign(models.Model):
         if self.response_deadline and self.link_expires_at:
             if self.link_expires_at < self.response_deadline:
                 raise ValidationError({"link_expires_at": "Link không được hết hạn trước hạn phản hồi."})
+        if self.response_deadline and self.area_response_deadline:
+            if self.area_response_deadline <= self.response_deadline:
+                raise ValidationError(
+                    {"area_response_deadline": "Hạn QLKV xác nhận phải sau hạn PGD phản hồi."}
+                )
 
     def save(self, *args, **kwargs):
         if not self.code and self.campaign_type_id and self.report_month:
@@ -445,6 +490,7 @@ class ShopAccessLink(models.Model):
     has_deadline_extension = models.BooleanField(default=False)
     expires_at = models.DateTimeField()
     revoked_at = models.DateTimeField(null=True, blank=True)
+    first_accessed_at = models.DateTimeField(null=True, blank=True)
     last_accessed_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -485,6 +531,10 @@ class ShopEmailDelivery(models.Model):
     area_email = models.EmailField(blank=True)
     to_email = models.EmailField(blank=True)
     cc_emails = models.JSONField(default=list, blank=True)
+    bcc_emails = models.JSONField(default=list, blank=True)
+    subject = models.CharField(max_length=500, blank=True)
+    template_version = models.PositiveIntegerField(default=1)
+    attempt_count = models.PositiveIntegerField(default=0)
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.QUEUED, db_index=True)
     message = models.CharField(max_length=500, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -494,7 +544,245 @@ class ShopEmailDelivery(models.Model):
         db_table = "dec_shop_email_delivery"
 
 
+class CampaignEmailConfig(models.Model):
+    campaign = models.OneToOneField(Campaign, related_name="email_config", on_delete=models.CASCADE)
+    subject_template = models.CharField(
+        max_length=500,
+        default="{{campaign_code}} · {{campaign_name}}",
+    )
+    body_template = models.TextField(
+        default=(
+            "Kính gửi PGD {{shop_name}},\n\n"
+            "Phòng giao dịch vui lòng kiểm tra và phản hồi chiến dịch {{campaign_name}}.\n"
+            "Hạn phản hồi: {{response_deadline}}\n"
+            "Link hết hạn: {{link_expires_at}}\n\n"
+            "Link phản hồi: {{response_url}}\n\n"
+            "Trân trọng."
+        )
+    )
+    from_name = models.CharField(max_length=200, blank=True, default="")
+    cc_area_manager = models.BooleanField(default=True)
+    cc_emails = models.JSONField(default=list, blank=True)
+    bcc_emails = models.JSONField(default=list, blank=True)
+    support_email = models.EmailField(blank=True, default="")
+    template_version = models.PositiveIntegerField(default=1)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="document_campaign_email_configs_updated",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "dec_campaign_email_config"
+
+    def __str__(self):
+        return f"Email · {self.campaign.code} · v{self.template_version}"
+
+
+class CampaignAreaEmailConfig(models.Model):
+    campaign = models.OneToOneField(Campaign, related_name="area_email_config", on_delete=models.CASCADE)
+    monitoring_subject_template = models.CharField(
+        max_length=500,
+        default="{{campaign_code}} · Theo dõi phản hồi PGD",
+    )
+    monitoring_body_template = models.TextField(
+        default=(
+            "Kính gửi {{area_manager_name}},\n\n"
+            "Anh/chị vui lòng theo dõi phản hồi của các PGD thuộc khu vực trong kỳ {{report_month}}.\n"
+            "Link theo dõi: {{manager_url}}\n"
+            "Link hết hạn: {{link_expires_at}}\n\nTrân trọng."
+        ),
+    )
+    confirmation_subject_template = models.CharField(
+        max_length=500,
+        default="{{campaign_code}} · Xác nhận kết quả book lỗi",
+    )
+    confirmation_body_template = models.TextField(
+        default=(
+            "Kính gửi {{area_manager_name}},\n\n"
+            "Anh/chị vui lòng kiểm tra và xác nhận kết quả Team review cho kỳ {{report_month}}.\n"
+            "Link xác nhận: {{manager_url}}\n"
+            "Link hết hạn: {{link_expires_at}}\n\nTrân trọng."
+        ),
+    )
+    from_name = models.CharField(max_length=200, blank=True, default="")
+    cc_emails = models.JSONField(default=list, blank=True)
+    bcc_emails = models.JSONField(default=list, blank=True)
+    support_email = models.EmailField(blank=True, default="")
+    template_version = models.PositiveIntegerField(default=1)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="document_campaign_area_email_configs_updated",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "dec_campaign_area_email_config"
+
+    def __str__(self):
+        return f"Email QLKV · {self.campaign.code} · v{self.template_version}"
+
+
+class CampaignEmailBatch(models.Model):
+    class TransportProvider(models.TextChoices):
+        POWER_AUTOMATE = "power_automate", "Power Automate"
+        MICROSOFT_GRAPH = "microsoft_graph", "Microsoft Graph"
+        SMTP = "smtp", "SMTP"
+
+    class EmailType(models.TextChoices):
+        PGD_RESPONSE = "pgd_response", "Gửi PGD phản hồi"
+        AREA_MONITORING = "area_monitoring", "QLKV theo dõi"
+        AREA_CONFIRMATION = "area_confirmation", "QLKV xác nhận"
+        SHOP_SUBMISSION_RECEIPT = "shop_submission_receipt", "Xác nhận PGD đã gửi"
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Chờ gửi"
+        DISPATCHING = "dispatching", "Đang chuyển"
+        ACCEPTED = "accepted", "Power Automate đã nhận"
+        PROCESSING = "processing", "Đang gửi"
+        COMPLETED = "completed", "Hoàn tất"
+        PARTIALLY_FAILED = "partially_failed", "Hoàn tất một phần"
+        FAILED = "failed", "Thất bại"
+        CANCELLED = "cancelled", "Đã hủy"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    campaign = models.ForeignKey(Campaign, related_name="email_batches", on_delete=models.CASCADE)
+    email_type = models.CharField(max_length=32, choices=EmailType.choices)
+    transport_provider = models.CharField(
+        max_length=24, choices=TransportProvider.choices, default=TransportProvider.POWER_AUTOMATE
+    )
+    is_test = models.BooleanField(default=False, db_index=True)
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.QUEUED, db_index=True)
+    idempotency_key = models.CharField(max_length=255, unique=True)
+    total_count = models.PositiveIntegerField(default=0)
+    accepted_count = models.PositiveIntegerField(default=0)
+    sent_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+    skipped_count = models.PositiveIntegerField(default=0)
+    provider_batch_id = models.CharField(max_length=255, blank=True)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, related_name="document_campaign_email_batches", on_delete=models.PROTECT
+    )
+    queued_at = models.DateTimeField(default=timezone.now)
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    last_error_code = models.CharField(max_length=100, blank=True)
+    last_error_message = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "dec_campaign_email_batch"
+        indexes = [models.Index(fields=["campaign", "-created_at"], name="dec_email_batch_campaign_idx")]
+
+
+class CampaignEmailDelivery(models.Model):
+    class TargetType(models.TextChoices):
+        SHOP = "shop", "Phòng giao dịch"
+        AREA_MANAGER = "area_manager", "Quản lý khu vực"
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Chờ gửi"
+        SUBMITTING = "submitting", "Đang chuyển"
+        ACCEPTED = "accepted", "Power Automate đã nhận"
+        SENT = "sent", "Đã gửi"
+        FAILED = "failed", "Thất bại"
+        SKIPPED = "skipped", "Bỏ qua"
+        CANCELLED = "cancelled", "Đã hủy"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    batch = models.ForeignKey(CampaignEmailBatch, related_name="deliveries", on_delete=models.CASCADE)
+    target_type = models.CharField(max_length=20, choices=TargetType.choices)
+    target_id = models.PositiveBigIntegerField()
+    shop_access_link = models.ForeignKey(
+        "ShopAccessLink", related_name="transport_deliveries", null=True, blank=True, on_delete=models.SET_NULL
+    )
+    area_access_link = models.ForeignKey(
+        "AreaManagerAccessLink", related_name="transport_deliveries", null=True, blank=True, on_delete=models.SET_NULL
+    )
+    legacy_shop_delivery = models.OneToOneField(
+        ShopEmailDelivery, related_name="transport_delivery", null=True, blank=True, on_delete=models.SET_NULL
+    )
+    to_emails = models.JSONField(default=list)
+    cc_emails = models.JSONField(default=list, blank=True)
+    bcc_emails = models.JSONField(default=list, blank=True)
+    from_email = models.EmailField()
+    from_name = models.CharField(max_length=200, blank=True)
+    rendered_subject = models.CharField(max_length=500)
+    rendered_body_redacted = models.TextField(blank=True)
+    encrypted_payload = models.TextField(blank=True)
+    template_version = models.PositiveIntegerField(default=1)
+    idempotency_key = models.CharField(max_length=255, unique=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.QUEUED, db_index=True)
+    attempt_count = models.PositiveIntegerField(default=0)
+    provider_batch_id = models.CharField(max_length=255, blank=True)
+    provider_message_id = models.CharField(max_length=255, blank=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    failed_at = models.DateTimeField(null=True, blank=True)
+    error_code = models.CharField(max_length=100, blank=True)
+    error_message = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "dec_campaign_email_delivery"
+        indexes = [models.Index(fields=["batch", "status"], name="dec_email_delivery_batch_idx")]
+
+
+class CampaignEmailAttempt(models.Model):
+    class Outcome(models.TextChoices):
+        ACCEPTED = "accepted", "Đã nhận"
+        REJECTED = "rejected", "Bị từ chối"
+        TIMEOUT = "timeout", "Timeout"
+        TRANSPORT_ERROR = "transport_error", "Lỗi kết nối"
+
+    delivery = models.ForeignKey(CampaignEmailDelivery, related_name="attempts", on_delete=models.CASCADE)
+    attempt_number = models.PositiveIntegerField()
+    request_id = models.UUIDField(default=uuid.uuid4, editable=False)
+    http_status = models.PositiveSmallIntegerField(null=True, blank=True)
+    provider_batch_id = models.CharField(max_length=255, blank=True)
+    outcome = models.CharField(max_length=20, choices=Outcome.choices)
+    duration_ms = models.PositiveIntegerField(default=0)
+    error_code = models.CharField(max_length=100, blank=True)
+    error_message = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "dec_campaign_email_attempt"
+        constraints = [models.UniqueConstraint(fields=["delivery", "attempt_number"], name="dec_uq_email_attempt")]
+
+
+class CampaignEmailWebhookEvent(models.Model):
+    class Status(models.TextChoices):
+        PROCESSED = "processed", "Đã xử lý"
+        REJECTED = "rejected", "Bị từ chối"
+
+    event_id = models.UUIDField(primary_key=True, editable=False)
+    batch = models.ForeignKey(CampaignEmailBatch, related_name="webhook_events", on_delete=models.CASCADE)
+    received_at = models.DateTimeField(auto_now_add=True)
+    payload_digest = models.CharField(max_length=64)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=12, choices=Status.choices)
+    message = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        db_table = "dec_campaign_email_webhook_event"
+
+
 class AreaManagerAccessLink(models.Model):
+    class Stage(models.TextChoices):
+        MONITORING = "monitoring", "Theo dõi phản hồi PGD"
+        CONFIRMATION = "confirmation", "Xác nhận kết quả"
+
     class EmailStatus(models.TextChoices):
         NOT_SENT = "not_sent", "Chưa gửi"
         QUEUED = "queued", "Chờ gửi"
@@ -504,6 +792,7 @@ class AreaManagerAccessLink(models.Model):
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     campaign = models.ForeignKey(Campaign, related_name="area_manager_links", on_delete=models.CASCADE)
     area_manager = models.ForeignKey("app_documents.AreaManager", related_name="document_campaign_links", on_delete=models.PROTECT)
+    stage = models.CharField(max_length=20, choices=Stage.choices, default=Stage.MONITORING, db_index=True)
     allowed_email = models.EmailField(max_length=254)
     token_digest = models.CharField(max_length=64, unique=True, editable=False)
     expires_at = models.DateTimeField()
@@ -517,7 +806,7 @@ class AreaManagerAccessLink(models.Model):
 
     class Meta:
         db_table = "dec_area_manager_access_link"
-        constraints = [models.UniqueConstraint(fields=["campaign", "area_manager"], name="dec_uq_campaign_area_link")]
+        constraints = [models.UniqueConstraint(fields=["campaign", "area_manager", "stage"], name="dec_uq_campaign_area_stage")]
 
     @property
     def is_expired(self):
@@ -598,19 +887,67 @@ class TeamReview(models.Model):
 
 
 class AreaConfirmation(models.Model):
-    class Decision(models.TextChoices):
-        CONFIRMED = "confirmed", "Xác nhận"
-        RETURNED = "returned", "Trả lại team"
-
     error = models.ForeignKey(CampaignError, related_name="area_confirmations", on_delete=models.CASCADE)
-    decision = models.CharField(max_length=20, choices=Decision.choices)
+    area_manager = models.ForeignKey(
+        "app_documents.AreaManager",
+        related_name="document_campaign_confirmations",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+    )
+    access_link = models.ForeignKey(
+        AreaManagerAccessLink,
+        related_name="confirmations",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    is_agreed = models.BooleanField(
+        choices=((True, "Đồng thuận"), (False, "Không đồng thuận")),
+        verbose_name="QLKV đồng thuận",
+    )
     note = models.TextField(blank=True)
-    confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="document_campaign_area_actions", on_delete=models.PROTECT)
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="document_campaign_area_actions",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = "dec_area_confirmation"
         indexes = [models.Index(fields=["error", "-created_at"], name="dec_area_error_time_idx")]
+
+
+class RiskErrorCode(models.Model):
+    name = models.CharField(max_length=500)
+    source = models.CharField(max_length=100, blank=True, default="")
+    code = models.CharField(max_length=50, unique=True)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "dec_risk_error_code"
+        ordering = ["sort_order", "code"]
+
+    def __str__(self):
+        return f"{self.code} · {self.name}"
+
+
+class CampaignErrorBooking(models.Model):
+    error = models.OneToOneField(CampaignError, related_name="risk_booking", on_delete=models.CASCADE)
+    risk_code = models.ForeignKey(RiskErrorCode, related_name="campaign_bookings", on_delete=models.PROTECT)
+    note = models.TextField(blank=True, max_length=2000)
+    mapped_by = models.ForeignKey(settings.AUTH_USER_MODEL, related_name="document_campaign_risk_mappings", on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "dec_campaign_error_booking"
 
 
 class CampaignSnapshot(models.Model):
@@ -673,6 +1010,29 @@ class TeamReviewExcelJob(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["campaign", "kind"], condition=Q(status__in=["queued", "running"]), name="dec_one_active_review_excel")]
+
+
+class AreaConfirmationExcelJob(models.Model):
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name="area_confirmation_excel_jobs")
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    kind = models.CharField(max_length=10, choices=[("export", "Xuất Excel"), ("import", "Import Excel")])
+    status = models.CharField(max_length=12, default="queued")
+    progress = models.PositiveSmallIntegerField(default=0)
+    message = models.TextField(blank=True)
+    summary = models.JSONField(default=dict, blank=True)
+    input_file = models.FileField(upload_to="document_campaigns/area_confirmation/imports/%Y/%m/", blank=True)
+    output_file = models.FileField(upload_to="document_campaigns/area_confirmation/exports/%Y/%m/", blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["campaign", "kind"],
+                condition=Q(status__in=["queued", "running"]),
+                name="dec_one_active_area_excel",
+            )
+        ]
 
 
 class CampaignStatusHistory(models.Model):

@@ -5,7 +5,7 @@ from unittest.mock import patch
 from django.core import mail
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -19,6 +19,10 @@ from app_documents.models import (
 )
 from app_document_campaigns.models import (
     Campaign,
+    CampaignEmailBatch,
+    CampaignEmailDelivery,
+    CampaignEmailConfig,
+    CampaignAreaEmailConfig,
     CampaignError,
     CampaignType,
     CampaignVersion,
@@ -28,8 +32,12 @@ from app_document_campaigns.models import (
     ShopSubmission,
     ShopResponseOption,
     CampaignResponseOption,
+    ResponseGuidanceTemplate,
     ShopEmailDelivery,
     AreaManagerAccessLink,
+    TeamReview,
+    CampaignErrorBooking,
+    RiskErrorCode,
 )
 from app_document_campaigns.services.access_links import issue_shop_access_link, resolve_shop_access_link
 from app_document_campaigns.tasks import process_shop_submission
@@ -145,13 +153,13 @@ class ShopResponseFlowTests(TestCase):
         workbook = load_workbook(BytesIO(content))
         sheet = workbook["Team review"]
         validation = list(sheet.data_validations.dataValidation)[0]
-        self.assertEqual(validation.formula1, '"Giữ lỗi,Loại lỗi"')
-        self.assertEqual(str(validation.sqref), "O2:O3")
+        self.assertEqual(validation.formula1, '"Giữ lỗi,Gỡ lỗi"')
+        self.assertEqual(str(validation.sqref), "Q2:Q3")
         self.assertTrue(validation.showErrorMessage)
-        self.assertFalse(sheet["O2"].protection.locked)
+        self.assertFalse(sheet["Q2"].protection.locked)
         self.assertTrue(sheet["K2"].protection.locked)
         workbook.close()
-        edited = self._review_file(content, [(2, 15, "Loại lỗi"), (2, 16, "Team đã kiểm tra")], delete_row=3)
+        edited = self._review_file(content, [(2, 17, "Gỡ lỗi"), (2, 18, "Team đã kiểm tra")], delete_row=3)
         self.assertEqual(import_workbook(self.campaign.pk, self.user, edited)["updated"], 1)
         self.assertEqual(TeamReview.objects.get(error=self.error_1).decision, "excluded")
         self.assertFalse(TeamReview.objects.filter(error=self.error_2).exists())
@@ -176,11 +184,11 @@ class ShopResponseFlowTests(TestCase):
         from app_document_campaigns.services.team_review_excel import build_workbook, import_workbook
         self._review_admin()
         content, _ = build_workbook(self.campaign)
-        for edits in [[(2, 15, "Giữ lỗi"), (3, 15, "Sai lựa chọn")], [(2, 15, "Giữ lỗi"), (2, 12, "Sửa phản hồi PGD")], [(2, 17, "Sai chữ ký")]]:
+        for edits in [[(2, 17, "Giữ lỗi"), (3, 17, "Sai lựa chọn")], [(2, 17, "Giữ lỗi"), (2, 12, "Sửa phản hồi PGD")], [(2, 19, "Sai chữ ký")]]:
             with self.subTest(edits=edits), self.assertRaises(ValueError):
                 import_workbook(self.campaign.pk, self.user, self._review_file(content, edits))
             self.assertEqual(TeamReview.objects.count(), 0)
-        edited = self._review_file(content, [(2, 15, "Giữ lỗi")])
+        edited = self._review_file(content, [(2, 17, "Giữ lỗi")])
         with self.assertRaises(ValueError):
             import_workbook(self.campaign.pk + 1, self.user, edited)
         self.campaign.response_deadline = timezone.now() + timedelta(days=1)
@@ -212,7 +220,7 @@ class ShopResponseFlowTests(TestCase):
             with job.output_file.open("rb") as file:
                 content = file.read()
             imported = TeamReviewExcelJob.objects.create(campaign=self.campaign, requested_by=self.user, kind="import")
-            imported.input_file.save("review.xlsx", ContentFile(self._review_file(content, [(2, 15, "Giữ lỗi")])))
+            imported.input_file.save("review.xlsx", ContentFile(self._review_file(content, [(2, 17, "Giữ lỗi")])))
             self.assertEqual(process_team_review_excel(imported.pk)["status"], "succeeded")
             imported.refresh_from_db()
             self.assertEqual(imported.summary["updated"], 1)
@@ -220,6 +228,7 @@ class ShopResponseFlowTests(TestCase):
             bad.input_file.save("bad.xlsx", ContentFile(b"invalid"))
             self.assertEqual(process_team_review_excel(bad.pk)["status"], "failed")
 
+    @override_settings(FILE_JOBS_RUN_ON_WEB=False)
     def test_team_review_excel_endpoints_permissions_single_job_and_missing_file(self):
         from app_document_campaigns.models import TeamReviewExcelJob
         self.client.force_login(self.user)
@@ -437,7 +446,7 @@ class ShopResponseFlowTests(TestCase):
         self.assertEqual(autosave.status_code, 200)
         self.assertContains(
             page,
-            '<option value="PGD hẹn bổ sung chứng từ" selected>PGD hẹn bổ sung chứng từ</option>',
+            '<option value="PGD hẹn bổ sung chứng từ" data-guidance="" selected>PGD hẹn bổ sung chứng từ</option>',
             count=1,
         )
 
@@ -609,10 +618,261 @@ class ShopResponseFlowTests(TestCase):
         self.assertEqual(delivery.status, ShopEmailDelivery.Status.SENT)
         self.assertEqual(delivery.area_manager, self.area)
         self.assertEqual(mail.outbox[-1].to, [self.shop.shop_email])
-        self.assertCountEqual(mail.outbox[-1].cc, [self.manager.qlkv_email, self.manager.qlv_email])
+        self.assertEqual(mail.outbox[-1].cc, [self.area.areaManager_email])
         self.assertIn("Hạn phản hồi:", mail.outbox[-1].body)
         status = self.client.get(response.json()["status_url"])
         self.assertEqual(status.json()["area_emailed"], 1)
+
+    @override_settings(STATICFILES_STORAGE="django.contrib.staticfiles.storage.StaticFilesStorage")
+    def test_admin_configures_previews_and_preflights_campaign_email(self):
+        admin = self._scoped_user("email-config-admin", "admin")
+        self.client.force_login(admin)
+        monitor_url = reverse("document_campaigns:campaign_response_monitor", kwargs={"campaign_id": self.campaign.pk})
+        monitor = self.client.get(monitor_url)
+        self.assertContains(monitor, "Cấu hình email")
+        self.assertContains(monitor, "Email gửi phòng giao dịch xác nhận")
+        self.assertContains(monitor, "PREVIEW TRỰC TIẾP")
+        self.assertContains(monitor, "data-rich-email-editor")
+        self.assertContains(monitor, "Kiểm tra người nhận")
+        self.assertContains(monitor, "Gửi email thử")
+        self.assertNotContains(monitor, "data-open-email-preview")
+        self.assertContains(monitor, "Địa chỉ gửi do hệ thống cấu hình")
+        self.assertNotContains(monitor, "Reply-To")
+        self.assertTrue(
+            CampaignEmailConfig.objects.get(campaign=self.campaign).body_template.startswith(
+                "Kính gửi PGD {{shop_name}}"
+            )
+        )
+
+        settings_url = reverse("document_campaigns:campaign_email_settings", kwargs={"campaign_id": self.campaign.pk})
+        response = self.client.post(settings_url, {
+            "from_name": "Team Chứng từ",
+            "subject_template": "{{campaign_code}} · {{shop_name}}",
+            "body_template": '<p>Xin chào <strong>{{shop_name}}</strong></p><p><a href="{{response_url}}">Phản hồi tại đây</a></p><script>alert(1)</script>',
+            "cc_area_manager": "on",
+            "cc_emails_text": "ops@example.com",
+            "bcc_emails_text": "audit@example.com",
+            "support_email": "support@example.com",
+        })
+        self.assertEqual(response.status_code, 200)
+        config = CampaignEmailConfig.objects.get(campaign=self.campaign)
+        self.assertEqual(config.cc_emails, ["ops@example.com"])
+        self.assertEqual(config.bcc_emails, ["audit@example.com"])
+        self.assertIn("<strong>{{shop_name}}</strong>", config.body_template)
+        self.assertNotIn("<script", config.body_template)
+
+        preview = self.client.get(reverse("document_campaigns:campaign_email_preview", kwargs={"campaign_id": self.campaign.pk}))
+        self.assertEqual(preview.status_code, 200)
+        self.assertIn(self.shop.shop_name, preview.json()["subject"])
+        self.assertIn("example.invalid/respond/preview-only", preview.json()["body"])
+        self.assertEqual(preview.json()["context"]["shop_name"], self.shop.shop_name)
+        self.assertEqual(preview.json()["context"]["response_url"], "https://example.invalid/respond/preview-only/")
+        self.assertCountEqual(preview.json()["cc"], [self.area.areaManager_email, "ops@example.com"])
+        self.assertEqual(preview.json()["bcc"], ["audit@example.com"])
+
+        preflight = self.client.get(reverse("document_campaigns:campaign_email_preflight", kwargs={"campaign_id": self.campaign.pk}))
+        self.assertEqual(preflight.status_code, 200)
+        self.assertEqual(preflight.json()["total"], 1)
+        self.assertEqual(preflight.json()["valid"], 1)
+        self.assertEqual(preflight.json()["invalid"], 0)
+
+    def test_email_config_rejects_unknown_or_missing_link_parameter(self):
+        admin = self._scoped_user("email-invalid-admin", "admin")
+        self.client.force_login(admin)
+        url = reverse("document_campaigns:campaign_email_settings", kwargs={"campaign_id": self.campaign.pk})
+        missing = self.client.post(url, {"subject_template": "Thông báo", "body_template": "Không có link"})
+        unknown = self.client.post(url, {"subject_template": "{{unsafe}}", "body_template": "{{response_url}}"})
+        self.assertEqual(missing.status_code, 400)
+        self.assertIn("response_url", str(missing.json()["errors"]))
+        self.assertEqual(unknown.status_code, 400)
+        self.assertIn("unsafe", str(unknown.json()["errors"]))
+
+    @override_settings(
+        EMAIL_TRANSPORT="smtp",
+        EMAIL_HOST="smtp.example.invalid",
+        DEFAULT_FROM_EMAIL="phongvanhanh@example.com",
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    )
+    @patch("app_document_campaigns.tasks.send_bulk_campaign_email_batches.delay")
+    def test_test_email_only_goes_to_safe_override_without_real_cc_or_bcc(self, queue_task):
+        from app_document_campaigns.tasks import send_bulk_campaign_email_batches
+
+        admin = self._scoped_user("email-test-admin", "admin")
+        self.client.force_login(admin)
+        CampaignEmailConfig.objects.create(
+            campaign=self.campaign,
+            subject_template="{{campaign_code}} · thử",
+            body_template="{{shop_name}} {{response_url}}",
+            cc_area_manager=True,
+            cc_emails=["ops@example.com"],
+            bcc_emails=["audit@example.com"],
+        )
+        response = self.client.post(
+            reverse("document_campaigns:campaign_email_test", kwargs={"campaign_id": self.campaign.pk}),
+            {"test_email": "tester@example.com", "transport": "smtp"},
+        )
+        self.assertEqual(response.status_code, 202)
+        batch = CampaignEmailBatch.objects.get(is_test=True)
+        self.assertEqual(batch.transport_provider, CampaignEmailBatch.TransportProvider.SMTP)
+        self.assertEqual(batch.deliveries.get().cc_emails, [])
+        self.assertEqual(batch.deliveries.get().bcc_emails, [])
+        send_bulk_campaign_email_batches(queue_task.call_args.args[0])
+        self.assertEqual(mail.outbox[-1].to, ["tester@example.com"])
+        self.assertEqual(mail.outbox[-1].cc, [])
+        self.assertEqual(mail.outbox[-1].bcc, [])
+        self.assertTrue(mail.outbox[-1].subject.startswith("[TEST]"))
+        self.assertIn("không phải link phản hồi thật", mail.outbox[-1].body)
+        self.link.refresh_from_db()
+        self.assertIsNone(self.link.revoked_at)
+
+    @override_settings(
+        EMAIL_TRANSPORT="smtp",
+        EMAIL_HOST="smtp.example.invalid",
+        DEFAULT_FROM_EMAIL="phongvanhanh@example.com",
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    )
+    @patch("app_document_campaigns.tasks.send_bulk_campaign_email_batches.delay")
+    def test_area_confirmation_test_email_uses_selected_real_transport(self, queue_task):
+        from app_document_campaigns.tasks import send_bulk_campaign_email_batches
+
+        admin = self._scoped_user("area-email-test-admin", "admin")
+        self.client.force_login(admin)
+        response = self.client.post(
+            reverse("document_campaigns:area_email_test", kwargs={"campaign_id": self.campaign.pk}),
+            {"test_email": "area-tester@example.com", "transport": "smtp", "stage": "confirmation"},
+        )
+        self.assertEqual(response.status_code, 202)
+        batch = CampaignEmailBatch.objects.get(is_test=True)
+        self.assertEqual(batch.email_type, CampaignEmailBatch.EmailType.AREA_CONFIRMATION)
+        self.assertEqual(batch.transport_provider, CampaignEmailBatch.TransportProvider.SMTP)
+        self.assertFalse(AreaManagerAccessLink.objects.filter(
+            campaign=self.campaign, stage=AreaManagerAccessLink.Stage.CONFIRMATION,
+        ).exists())
+        send_bulk_campaign_email_batches(queue_task.call_args.args[0])
+        self.assertEqual(mail.outbox[-1].to, ["area-tester@example.com"])
+        self.assertTrue(mail.outbox[-1].subject.startswith("[TEST]"))
+
+    @override_settings(
+        EMAIL_TRANSPORT="power_automate",
+        POWER_AUTOMATE_EMAIL_CHUNK_SIZE=25,
+        POWER_AUTOMATE_EMAIL_WEBHOOK_URL="https://example.invalid/intake",
+        POWER_AUTOMATE_EMAIL_WEBHOOK_SECRET="intake-secret",
+        POWER_AUTOMATE_EMAIL_CALLBACK_SECRET="callback-secret",
+        POWER_AUTOMATE_EMAIL_CALLBACK_URL="https://example.invalid/callback",
+    )
+    @patch("app_document_campaigns.tasks.send_bulk_campaign_email_batches.delay")
+    def test_admin_can_prepare_select_and_queue_pgd_email_batches(self, queue_task):
+        admin = self._scoped_user("bulk-email-admin", "admin")
+        self.client.force_login(admin)
+        monitor = self.client.get(
+            reverse("document_campaigns:campaign_response_monitor", kwargs={"campaign_id": self.campaign.pk})
+        )
+        self.assertContains(monitor, "Gửi email hàng loạt")
+        self.assertContains(monitor, 'data-bulk-email-kind="pgd_response"')
+
+        prepare_url = reverse(
+            "document_campaigns:prepare_bulk_email_batches", kwargs={"campaign_id": self.campaign.pk}
+        )
+        prepared = self.client.get(prepare_url, {"kind": "pgd_response"})
+        self.assertEqual(prepared.status_code, 200)
+        self.assertEqual(prepared.json()["eligible"], 1)
+        self.assertEqual(prepared.json()["batches"][0]["target_ids"], [self.shop.pk])
+        self.assertEqual(prepared.json()["default_transport"], "power_automate")
+
+        send_url = reverse(
+            "document_campaigns:send_bulk_email_batches", kwargs={"campaign_id": self.campaign.pk}
+        )
+        sent = self._post_json(send_url, {
+            "kind": "pgd_response", "transport": "power_automate", "batches": [[self.shop.pk]],
+        })
+        self.assertEqual(sent.status_code, 202)
+        self.assertEqual(sent.json()["batch_count"], 1)
+        self.assertEqual(sent.json()["email_count"], 1)
+        batch = CampaignEmailBatch.objects.get(email_type=CampaignEmailBatch.EmailType.PGD_RESPONSE)
+        self.assertEqual(batch.total_count, 1)
+        self.assertEqual(batch.transport_provider, CampaignEmailBatch.TransportProvider.POWER_AUTOMATE)
+        self.assertEqual(CampaignEmailDelivery.objects.filter(batch=batch).count(), 1)
+        queue_task.assert_called_once()
+
+    @override_settings(
+        EMAIL_TRANSPORT="power_automate",
+        POWER_AUTOMATE_EMAIL_CHUNK_SIZE=25,
+        POWER_AUTOMATE_EMAIL_WEBHOOK_URL="https://example.invalid/intake",
+        POWER_AUTOMATE_EMAIL_WEBHOOK_SECRET="intake-secret",
+        POWER_AUTOMATE_EMAIL_CALLBACK_SECRET="callback-secret",
+        POWER_AUTOMATE_EMAIL_CALLBACK_URL="https://example.invalid/callback",
+    )
+    def test_step5_shows_and_prepares_area_confirmation_bulk_email(self):
+        admin = self._scoped_user("bulk-area-email-admin", "admin")
+        self.client.force_login(admin)
+        monitoring = self.client.get(
+            reverse("document_campaigns:campaign_area_monitor", kwargs={"campaign_id": self.campaign.pk})
+        )
+        self.assertContains(monitoring, 'data-bulk-email-kind="area_monitoring"')
+        monitoring_batches = self.client.get(
+            reverse("document_campaigns:prepare_bulk_email_batches", kwargs={"campaign_id": self.campaign.pk}),
+            {"kind": "area_monitoring"},
+        )
+        self.assertEqual(monitoring_batches.status_code, 200)
+        self.assertEqual(monitoring_batches.json()["eligible"], 1)
+
+        self.campaign.area_response_deadline = timezone.now() + timedelta(days=5)
+        self.campaign.save(update_fields=["area_response_deadline"])
+        TeamReview.objects.create(
+            error=self.error_1,
+            decision=TeamReview.Decision.APPROVED,
+            reviewed_by=admin,
+        )
+        self.error_1.status = CampaignError.Status.WAITING_AREA
+        self.error_1.save(update_fields=["status"])
+
+        monitor = self.client.get(
+            reverse("document_campaigns:campaign_area_monitor", kwargs={"campaign_id": self.campaign.pk}),
+            {"stage": "confirmation"},
+        )
+        self.assertContains(monitor, "Gửi email hàng loạt")
+        self.assertContains(monitor, 'data-bulk-email-kind="area_confirmation"')
+        prepared = self.client.get(
+            reverse("document_campaigns:prepare_bulk_email_batches", kwargs={"campaign_id": self.campaign.pk}),
+            {"kind": "area_confirmation"},
+        )
+        self.assertEqual(prepared.status_code, 200)
+        self.assertEqual(prepared.json()["eligible"], 1)
+        self.assertEqual(prepared.json()["batches"][0]["target_ids"], [self.area.pk])
+
+    @override_settings(
+        EMAIL_TRANSPORT="smtp",
+        EMAIL_HOST="smtp.example.invalid",
+        DEFAULT_FROM_EMAIL="phongvanhanh@example.com",
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    )
+    @patch("app_document_campaigns.tasks.send_bulk_campaign_email_batches.delay")
+    def test_bulk_email_can_switch_to_smtp_and_records_provider(self, queue_task):
+        from app_document_campaigns.tasks import send_bulk_campaign_email_batches
+
+        admin = self._scoped_user("bulk-smtp-admin", "admin")
+        self.client.force_login(admin)
+        prepared = self.client.get(
+            reverse("document_campaigns:prepare_bulk_email_batches", kwargs={"campaign_id": self.campaign.pk}),
+            {"kind": "pgd_response"},
+        )
+        self.assertEqual(prepared.status_code, 200)
+        self.assertEqual(prepared.json()["default_transport"], "smtp")
+        self.assertIn("smtp", [item["value"] for item in prepared.json()["transports"]])
+
+        response = self._post_json(
+            reverse("document_campaigns:send_bulk_email_batches", kwargs={"campaign_id": self.campaign.pk}),
+            {"kind": "pgd_response", "transport": "smtp", "batches": [[self.shop.pk]]},
+        )
+        self.assertEqual(response.status_code, 202)
+        batch = CampaignEmailBatch.objects.get(email_type=CampaignEmailBatch.EmailType.PGD_RESPONSE)
+        self.assertEqual(batch.transport_provider, CampaignEmailBatch.TransportProvider.SMTP)
+        queued_items = queue_task.call_args.args[0]
+        result = send_bulk_campaign_email_batches(queued_items)
+        batch.refresh_from_db()
+        self.assertEqual(result["batches"][0]["status"], CampaignEmailBatch.Status.COMPLETED)
+        self.assertEqual(batch.sent_count, 1)
+        self.assertEqual(len(mail.outbox), 1)
 
     def test_admin_can_issue_and_copy_a_new_shop_link_from_response_monitor(self):
         admin = self._scoped_user("link-admin", "admin")
@@ -635,7 +895,17 @@ class ShopResponseFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["ok"])
         raw_token = response.json()["url"].rstrip("/").split("/")[-1]
-        self.assertEqual(resolve_shop_access_link(raw_token).shop, self.shop)
+        link = resolve_shop_access_link(raw_token)
+        self.assertEqual(link.shop, self.shop)
+        self.assertIsNone(link.first_accessed_at)
+        self.assertEqual(self.client.get(response.json()["url"]).status_code, 200)
+        link.refresh_from_db()
+        first_open = link.first_accessed_at
+        self.assertIsNotNone(first_open)
+        self.assertIsNotNone(link.last_accessed_at)
+        self.assertEqual(self.client.get(response.json()["url"]).status_code, 200)
+        link.refresh_from_db()
+        self.assertEqual(link.first_accessed_at, first_open)
         old_link = self.client.get(
             reverse("document_campaigns:shop_response", kwargs={"raw_token": self.raw_token})
         )
@@ -720,6 +990,27 @@ class ShopResponseFlowTests(TestCase):
         self.link.refresh_from_db()
         self.assertEqual(self.link.response_deadline, old_link_deadline)
 
+    def test_deadline_popup_returns_json_validation_when_after_area_deadline(self):
+        admin = self._scoped_user("deadline-order-admin", "admin")
+        self.client.force_login(admin)
+        self.campaign.area_response_deadline = timezone.now() + timedelta(days=5)
+        self.campaign.save(update_fields=["area_response_deadline"])
+
+        response = self.client.post(
+            reverse("document_campaigns:update_campaign_deadline", kwargs={"campaign_id": self.campaign.pk}),
+            {
+                "response_deadline": (timezone.now() + timedelta(days=6)).strftime("%Y-%m-%dT%H:%M"),
+                "return_to": "response_monitor",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            HTTP_ACCEPT="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response["Content-Type"], "application/json")
+        self.assertFalse(response.json()["ok"])
+        self.assertIn("Hạn QLKV xác nhận phải sau hạn PGD phản hồi", response.json()["error"])
+
     def test_admin_can_edit_campaign_name_and_deadline_from_settings_popup(self):
         admin = self._scoped_user("settings-admin", "admin")
         self.client.force_login(admin)
@@ -751,12 +1042,254 @@ class ShopResponseFlowTests(TestCase):
         self.assertEqual(self.link.response_deadline, self.campaign.response_deadline)
         self.assertEqual(self.link.expires_at, self.campaign.link_expires_at)
 
+    def test_admin_configures_separate_area_confirmation_deadline(self):
+        admin = self._scoped_user("area-deadline-admin", "admin")
+        self.client.force_login(admin)
+        pgd_deadline = timezone.now() + timedelta(days=10)
+        area_deadline = timezone.now() + timedelta(days=20)
+
+        response = self.client.post(
+            reverse("document_campaigns:update_campaign_settings", kwargs={"campaign_id": self.campaign.pk}),
+            {
+                "name": self.campaign.name,
+                "response_deadline": pgd_deadline.strftime("%Y-%m-%dT%H:%M"),
+                "area_response_deadline": area_deadline.strftime("%Y-%m-%dT%H:%M"),
+                "response_options": list(
+                    ShopResponseOption.objects.filter(is_active=True).values_list("pk", flat=True)
+                ),
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.campaign.refresh_from_db()
+        self.assertEqual(
+            self.campaign.area_response_deadline.replace(second=0, microsecond=0),
+            area_deadline.replace(second=0, microsecond=0),
+        )
+
+        issue = self.client.post(
+            reverse(
+                "document_campaigns:issue_area_manager_link",
+                kwargs={"campaign_id": self.campaign.pk, "area_id": self.area.pk},
+            ),
+            {"stage": "confirmation"},
+        )
+        self.assertEqual(issue.status_code, 200)
+        link = AreaManagerAccessLink.objects.get(
+            campaign=self.campaign,
+            area_manager=self.area,
+            stage=AreaManagerAccessLink.Stage.CONFIRMATION,
+        )
+        self.assertEqual(link.expires_at, self.campaign.area_response_deadline)
+
+    def test_step5_excel_uses_fixed_boolean_choices(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        from app_document_campaigns.models import TeamReview
+        from app_document_campaigns.services.area_confirmation_excel import build_workbook
+
+        TeamReview.objects.create(
+            error=self.error_1,
+            decision=TeamReview.Decision.APPROVED,
+            reviewed_by=self.user,
+        )
+        self.error_1.status = CampaignError.Status.WAITING_AREA
+        self.error_1.save(update_fields=["status"])
+
+        content, total = build_workbook(self.campaign)
+        self.assertEqual(total, 1)
+        workbook = load_workbook(BytesIO(content))
+        validation = list(workbook["QLKV xac nhan"].data_validations.dataValidation)[0]
+        self.assertEqual(validation.formula1, '"Đồng thuận,Không đồng thuận"')
+        workbook.close()
+
+    def test_area_confirmation_link_shows_campaign_identity_and_guidance(self):
+        from app_document_campaigns.models import TeamReview
+
+        self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
+        self.client.force_login(self.user)
+        self.campaign.area_response_deadline = timezone.now() + timedelta(days=10)
+        self.campaign.area_manager_instructions = "Kiểm tra từng dòng trước khi xác nhận."
+        self.campaign.save(update_fields=["area_response_deadline", "area_manager_instructions"])
+        TeamReview.objects.create(
+            error=self.error_1,
+            decision=TeamReview.Decision.APPROVED,
+            reviewed_by=self.user,
+        )
+        self.error_1.status = CampaignError.Status.WAITING_AREA
+        self.error_1.save(update_fields=["status"])
+
+        issued = self.client.post(
+            reverse(
+                "document_campaigns:issue_area_manager_link",
+                kwargs={"campaign_id": self.campaign.pk, "area_id": self.area.pk},
+            ),
+            {"stage": "confirmation"},
+        )
+        self.assertEqual(issued.status_code, 200)
+        page = self.client.get(issued.json()["url"])
+
+        self.assertContains(page, self.campaign.name)
+        self.assertContains(page, "Kỳ book lỗi 09/2026")
+        self.assertNotContains(page, self.campaign.code)
+        self.assertContains(page, 'class="am-nav-meta"')
+        self.assertEqual(page.content.count("Link hết hạn".encode()), 1)
+        self.assertContains(page, "Đang xác nhận")
+        self.assertContains(page, "Hướng dẫn QLKV")
+        self.assertContains(page, "Kiểm tra từng dòng trước khi xác nhận.")
+        self.assertContains(
+            page,
+            "Kết quả Phòng giao dịch phản hồi, Phòng Vận hành đã rà soát và cần Quản lý khu vực xác nhận.",
+        )
+
+    def test_expired_area_link_uses_decorated_status_page(self):
+        admin = self._scoped_user("expired-area-link-admin", "admin")
+        self.client.force_login(admin)
+        issued = self.client.post(
+            reverse(
+                "document_campaigns:issue_area_manager_link",
+                kwargs={"campaign_id": self.campaign.pk, "area_id": self.area.pk},
+            )
+        )
+        link = AreaManagerAccessLink.objects.get(
+            campaign=self.campaign,
+            area_manager=self.area,
+            stage=AreaManagerAccessLink.Stage.MONITORING,
+        )
+        link.expires_at = timezone.now() - timedelta(seconds=1)
+        link.save(update_fields=["expires_at"])
+
+        page = self.client.get(issued.json()["url"])
+
+        self.assertEqual(page.status_code, 410)
+        self.assertContains(page, "Link QLKV đã hết hạn.", status_code=410)
+        self.assertContains(page, "Vui lòng liên hệ Phòng Vận Hành", status_code=410)
+        self.assertEqual(page["Cache-Control"], "no-store")
+
+    def test_area_confirmation_autosaves_radio_note_and_bulk_agrees_filtered_rows(self):
+        from app_document_campaigns.models import AreaConfirmation, TeamReview
+
+        self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
+        self.client.force_login(self.user)
+        self.campaign.area_response_deadline = timezone.now() + timedelta(days=10)
+        self.campaign.save(update_fields=["area_response_deadline"])
+        for error in (self.error_1, self.error_2):
+            TeamReview.objects.create(
+                error=error,
+                decision=TeamReview.Decision.APPROVED,
+                reviewed_by=self.user,
+            )
+            error.status = CampaignError.Status.WAITING_AREA
+            error.save(update_fields=["status"])
+        issued = self.client.post(
+            reverse(
+                "document_campaigns:issue_area_manager_link",
+                kwargs={"campaign_id": self.campaign.pk, "area_id": self.area.pk},
+            ),
+            {"stage": "confirmation"},
+        )
+        raw_token = issued.json()["url"].rstrip("/").split("/")[-1]
+        page = self.client.get(issued.json()["url"])
+        self.assertContains(page, 'type="radio"', count=4)
+        self.assertContains(page, "Đồng thuận tất cả")
+        self.assertContains(page, "?v=20261001-4", html=False)
+        self.assertContains(page, "Ghi chú QLKV (tự động lưu)")
+        self.assertNotContains(page, "Lưu phản hồi")
+        self.assertContains(page, "Số lượng đồng thuận")
+        self.assertContains(page, "Số lượng không đồng thuận")
+        self.assertContains(page, "data-area-table-wrap")
+
+        save_url = reverse(
+            "document_campaigns:confirm_area_error",
+            kwargs={"raw_token": raw_token, "error_id": self.error_1.pk},
+        )
+        saved = self._post_json(save_url, {
+            "decision": False,
+            "note": "Cần Team kiểm tra lại",
+            "expected_confirmation_id": None,
+        })
+        self.assertEqual(saved.status_code, 200)
+        updated = self._post_json(save_url, {
+            "decision": False,
+            "note": "Ghi chú được tự động lưu",
+            "expected_confirmation_id": saved.json()["confirmation_id"],
+        })
+        self.assertEqual(updated.status_code, 200)
+
+        bulk = self._post_json(
+            reverse("document_campaigns:confirm_all_area_errors", kwargs={"raw_token": raw_token}),
+            {"shop": str(self.shop.pk)},
+        )
+        self.assertEqual(bulk.status_code, 200)
+        self.assertEqual(bulk.json()["updated"], 2)
+        self.assertEqual(bulk.json()["progress"], 100)
+        latest_first = self.error_1.area_confirmations.latest("created_at", "pk")
+        latest_second = self.error_2.area_confirmations.latest("created_at", "pk")
+        self.assertIs(latest_first.is_agreed, True)
+        self.assertEqual(latest_first.note, "Ghi chú được tự động lưu")
+        self.assertIs(latest_second.is_agreed, True)
+        refreshed = self.client.get(issued.json()["url"])
+        self.assertEqual(refreshed.context["agreed_count"], 2)
+        self.assertEqual(refreshed.context["disagreed_count"], 0)
+
+    def test_area_monitoring_and_confirmation_links_are_independent(self):
+        from app_document_campaigns.models import TeamReview
+
+        self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
+        self.client.force_login(self.user)
+        monitoring = self.client.post(
+            reverse(
+                "document_campaigns:issue_area_manager_link",
+                kwargs={"campaign_id": self.campaign.pk, "area_id": self.area.pk},
+            )
+        )
+        self.assertEqual(monitoring.status_code, 200)
+        self.assertEqual(monitoring.json()["stage"], AreaManagerAccessLink.Stage.MONITORING)
+        monitoring_token = monitoring.json()["url"].rstrip("/").split("/")[-1]
+
+        self.campaign.area_response_deadline = timezone.now() + timedelta(days=10)
+        self.campaign.save(update_fields=["area_response_deadline"])
+        TeamReview.objects.create(
+            error=self.error_1,
+            decision=TeamReview.Decision.APPROVED,
+            reviewed_by=self.user,
+        )
+        self.error_1.status = CampaignError.Status.WAITING_AREA
+        self.error_1.save(update_fields=["status"])
+        confirmation = self.client.post(
+            reverse(
+                "document_campaigns:issue_area_manager_link",
+                kwargs={"campaign_id": self.campaign.pk, "area_id": self.area.pk},
+            ),
+            {"stage": "confirmation"},
+        )
+        self.assertEqual(confirmation.status_code, 200)
+        self.assertEqual(confirmation.json()["stage"], AreaManagerAccessLink.Stage.CONFIRMATION)
+        self.assertEqual(
+            AreaManagerAccessLink.objects.filter(campaign=self.campaign, area_manager=self.area).count(),
+            2,
+        )
+
+        monitoring_page = self.client.get(monitoring.json()["url"])
+        confirmation_page = self.client.get(confirmation.json()["url"])
+        self.assertContains(monitoring_page, "Chỉ xem")
+        self.assertNotContains(monitoring_page, 'type="radio"')
+        self.assertContains(confirmation_page, 'type="radio"')
+        forbidden = self._post_json(
+            reverse(
+                "document_campaigns:confirm_area_error",
+                kwargs={"raw_token": monitoring_token, "error_id": self.error_1.pk},
+            ),
+            {"decision": "confirmed", "note": "", "expected_confirmation_id": None},
+        )
+        self.assertEqual(forbidden.status_code, 403)
+
     def test_shop_instructions_render_safely_and_edit_keeps_deadline(self):
         instructions = "Đọc hướng dẫn trước khi phản hồi.\n<script>alert(1)</script>"
         self.campaign.shop_instructions = instructions
         self.campaign.save()
         page = self.client.get(reverse("document_campaigns:shop_response", kwargs={"raw_token": self.raw_token}))
         self.assertContains(page, "Hướng Dẫn")
+        self.assertNotContains(page, self.campaign.code)
         self.assertContains(page, "&lt;script&gt;alert(1)&lt;/script&gt;")
         self.assertNotContains(page, "<script>alert(1)</script>")
         admin = self._scoped_user("instruction-admin", "admin")
@@ -793,6 +1326,56 @@ class ShopResponseFlowTests(TestCase):
         page = self.client.get(reverse("document_campaigns:shop_response", kwargs={"raw_token": self.raw_token}))
         self.assertContains(page, original.label)
         self.assertNotContains(page, "Đổi tên ở danh mục")
+
+    def test_campaign_response_guidance_is_saved_and_shown_below_shop_note(self):
+        from app_document_campaigns.forms import CampaignSettingsForm
+
+        first, second = list(ShopResponseOption.objects.order_by("pk")[:2])
+        guidance = ResponseGuidanceTemplate.objects.create(
+            code="GUIDE-SUPPLEMENT-DATE",
+            name="Yêu cầu ngày dự kiến bổ sung",
+            guidance_text="Vui lòng ghi rõ ngày dự kiến bổ sung chứng từ.",
+        )
+        data = {
+            "name": self.campaign.name,
+            "response_deadline": self.campaign.response_deadline.strftime("%Y-%m-%dT%H:%M"),
+            "response_options": [first.pk, second.pk],
+            f"response_guidance_{first.pk}": guidance.pk,
+            f"response_guidance_{second.pk}": "",
+        }
+        form = CampaignSettingsForm(data, instance=self.campaign)
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+
+        choice = CampaignResponseOption.objects.get(campaign=self.campaign, option=first)
+        self.assertEqual(choice.guidance_template, guidance)
+        self.assertEqual(choice.guidance_text, "Vui lòng ghi rõ ngày dự kiến bổ sung chứng từ.")
+        page = self.client.get(
+            reverse("document_campaigns:shop_response", kwargs={"raw_token": self.raw_token})
+        )
+        self.assertContains(page, 'data-guidance="Vui lòng ghi rõ ngày dự kiến bổ sung chứng từ."')
+        self.assertContains(page, "data-response-guidance", count=self.campaign.errors.count())
+
+    def test_guidance_master_data_is_admin_only_and_generates_code(self):
+        admin = self._scoped_user("guidance-admin", "admin")
+        self.client.force_login(admin)
+        response = self.client.post(
+            reverse("master_data_response_guidance"),
+            {
+                "name": "Yêu cầu lý do",
+                "guidance_text": "Vui lòng ghi rõ lý do trong ô Ghi chú.",
+                "sort_order": 10,
+                "is_active": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        guidance = ResponseGuidanceTemplate.objects.get(name="Yêu cầu lý do")
+        self.assertTrue(guidance.code.startswith("GUIDE-"))
+        self.assertContains(self.client.get(reverse("master_data_response_guidance")), "Yêu cầu lý do")
+
+        shop = self._scoped_user("guidance-shop", "shop", shop=self.shop)
+        self.client.force_login(shop)
+        self.assertEqual(self.client.get(reverse("master_data_response_guidance")).status_code, 403)
 
     def test_campaign_choices_reject_unselected_response_and_master_data_is_admin_only(self):
         from app_document_campaigns.services.responses import save_response_batch, ResponseValidationError
@@ -919,7 +1502,11 @@ class ShopResponseFlowTests(TestCase):
         issue = self.client.post(reverse("document_campaigns:issue_area_manager_link", kwargs={"campaign_id": self.campaign.pk, "area_id": self.area.pk}))
         self.assertEqual(issue.status_code, 200)
         self.assertTrue(issue.json()["ok"])
-        link = AreaManagerAccessLink.objects.get(campaign=self.campaign, area_manager=self.area)
+        link = AreaManagerAccessLink.objects.get(
+            campaign=self.campaign,
+            area_manager=self.area,
+            stage=AreaManagerAccessLink.Stage.MONITORING,
+        )
         public = self.client.get(issue.json()["url"])
         self.assertEqual(public.status_code, 200)
         self.assertContains(public, "Bộ dữ liệu tổng hợp")
@@ -930,7 +1517,7 @@ class ShopResponseFlowTests(TestCase):
         self.assertContains(public, self.error_1.contract_code)
         self.assertContains(public, self.error_2.contract_code)
         self.assertContains(public, "Chỉ xem")
-        self.assertNotContains(public, "textarea")
+        self.assertNotContains(public, "<textarea")
         self.assertContains(public, 'name="q"')
         self.assertContains(public, 'name="shop"')
         self.assertContains(public, 'name="response"')
@@ -952,7 +1539,11 @@ class ShopResponseFlowTests(TestCase):
         self.client.force_login(admin)
         email = self.client.post(reverse("document_campaigns:email_area_manager_link", kwargs={"campaign_id": self.campaign.pk, "area_id": self.area.pk}))
         self.assertEqual(email.status_code, 200)
-        link = AreaManagerAccessLink.objects.get(campaign=self.campaign, area_manager=self.area)
+        link = AreaManagerAccessLink.objects.get(
+            campaign=self.campaign,
+            area_manager=self.area,
+            stage=AreaManagerAccessLink.Stage.MONITORING,
+        )
         delay.assert_called_once_with(link.pk, email.json()["url"])
         self.assertEqual(link.email_status, AreaManagerAccessLink.EmailStatus.QUEUED)
         self.assertEqual(send_area_manager_view_link.run(link.pk, email.json()["url"])["status"], "sent")
@@ -965,6 +1556,100 @@ class ShopResponseFlowTests(TestCase):
         self.assertEqual(extended.status_code, 200)
         link.refresh_from_db()
         self.assertGreater(link.expires_at, timezone.now() + timedelta(days=29))
+
+    def test_admin_configures_area_email_for_monitoring_and_confirmation(self):
+        admin = self._scoped_user("area-template-admin", "admin")
+        self.client.force_login(admin)
+        listing = self.client.get(reverse("document_campaigns:campaign_area_monitor", kwargs={"campaign_id": self.campaign.pk}))
+        self.assertContains(listing, "Cấu hình email QLKV")
+        self.assertContains(listing, "Email gửi Quản lý khu vực")
+        self.assertContains(listing, "Step 3 · QLKV theo dõi PGD")
+        self.assertNotContains(listing, "Step 5 · QLKV xác nhận lỗi")
+
+        TeamReview.objects.create(error=self.error_1, decision=TeamReview.Decision.APPROVED, reviewed_by=admin)
+        self.error_1.status = CampaignError.Status.WAITING_AREA
+        self.error_1.save(update_fields=["status"])
+        confirmation = self.client.get(
+            reverse("document_campaigns:campaign_area_monitor", kwargs={"campaign_id": self.campaign.pk}),
+            {"stage": "confirmation"},
+        )
+        self.assertContains(confirmation, "Cấu hình email xác nhận QLKV")
+        self.assertContains(confirmation, "Email Quản lý Khu vực xác nhận lỗi")
+        self.assertContains(confirmation, "Step 5 · QLKV xác nhận lỗi")
+        self.assertNotContains(confirmation, "Step 3 · QLKV theo dõi PGD")
+        response = self.client.post(
+            reverse("document_campaigns:area_email_settings", kwargs={"campaign_id": self.campaign.pk}),
+            {
+                "from_name": "Phòng Vận Hành",
+                "monitoring_subject_template": "{{campaign_code}} · Theo dõi",
+                "monitoring_body_template": "Kính gửi {{area_manager_name}}\n{{manager_url}}",
+                "confirmation_subject_template": "{{campaign_code}} · Xác nhận",
+                "confirmation_body_template": "Kính gửi {{area_manager_name}}\n{{manager_url}}",
+                "support_email": "support@example.com",
+                "cc_emails_text": "audit@example.com",
+                "bcc_emails_text": "risk@example.com",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        config = CampaignAreaEmailConfig.objects.get(campaign=self.campaign)
+        self.assertEqual(config.from_name, "Phòng Vận Hành")
+        self.assertEqual(config.cc_emails, ["audit@example.com"])
+
+    def test_qtrr_mapping_and_final_excel_require_confirmed_rows(self):
+        admin = self._scoped_user("qtrr-admin", "admin")
+        self.client.force_login(admin)
+        CampaignError.objects.filter(pk__in=[self.error_1.pk, self.error_2.pk]).update(status=CampaignError.Status.AREA_CONFIRMED)
+        risk_code = RiskErrorCode.objects.create(code="TEST.1", name="Mã kiểm thử", source="File duyệt")
+        self.campaign.risk_error_codes.add(risk_code)
+        mapping = self._post_json(
+            reverse("document_campaigns:map_qtrr_codes", kwargs={"campaign_id": self.campaign.pk}),
+            {"error_ids": [self.error_1.pk, self.error_2.pk], "risk_code_id": risk_code.pk, "note": "QTRR mapping"},
+        )
+        self.assertEqual(mapping.status_code, 200)
+        self.assertEqual(CampaignErrorBooking.objects.filter(risk_code=risk_code).count(), 2)
+        page = self.client.get(reverse("document_campaigns:campaign_qtrr_booking", kwargs={"campaign_id": self.campaign.pk}))
+        self.assertContains(page, "Book lỗi gửi QTRR")
+        self.assertContains(page, "TEST.1")
+        self.assertContains(page, "/static/app_document_campaigns/css/qtrr_booking.css?v=20261001-2")
+        exported = self.client.get(reverse("document_campaigns:export_qtrr_excel", kwargs={"campaign_id": self.campaign.pk}))
+        self.assertEqual(exported.status_code, 200)
+        self.assertEqual(exported["Content-Type"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    def test_qtrr_manual_excel_uses_campaign_codes_and_imports_mapping(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        from app_document_campaigns.services.qtrr_booking_excel import build_workbook, import_workbook
+
+        admin = self._scoped_user("qtrr-excel-admin", "admin")
+        risk_code = RiskErrorCode.objects.create(code="TEST.XLSX.1", name="Thiếu bộ đóng", source="File duyệt")
+        other_code = RiskErrorCode.objects.create(code="TEST.XLSX.2", name="Không áp dụng kỳ này", source="File duyệt")
+        self.campaign.risk_error_codes.add(risk_code)
+        CampaignError.objects.filter(pk=self.error_1.pk).update(status=CampaignError.Status.AREA_CONFIRMED)
+
+        content, rows = build_workbook(self.campaign)
+        self.assertEqual(rows, 1)
+        workbook = load_workbook(BytesIO(content))
+        sheet = workbook["Book loi QTRR"]
+        self.assertEqual(len(sheet.data_validations.dataValidation), 1)
+        self.assertIn("TEST.XLSX.1", workbook["Danh muc ma loi"]["A2"].value)
+        self.assertNotIn(other_code.code, [cell.value for cell in workbook["Danh muc ma loi"]["A"]])
+        sheet["K2"] = "TEST.XLSX.1 · Thiếu bộ đóng"
+        sheet["L2"] = "Book thủ công"
+        output = BytesIO()
+        workbook.save(output)
+
+        summary = import_workbook(self.campaign.pk, admin, output.getvalue())
+        self.assertEqual(summary["updated"], 1)
+        booking = CampaignErrorBooking.objects.get(error=self.error_1)
+        self.assertEqual(booking.risk_code, risk_code)
+        self.assertEqual(booking.note, "Book thủ công")
+        self.client.force_login(admin)
+        page = self.client.get(reverse("document_campaigns:campaign_qtrr_booking", kwargs={"campaign_id": self.campaign.pk}))
+        self.assertContains(page, "Tải Excel để book lỗi")
+        self.assertContains(page, "Upload kết quả Excel")
+        exported = self.client.get(reverse("document_campaigns:export_qtrr_mapping_excel", kwargs={"campaign_id": self.campaign.pk}))
+        self.assertEqual(exported.status_code, 200)
+        self.assertIn("book-loi-qtrr-manual", exported["Content-Disposition"])
 
     def test_autosave_batches_rows_and_increments_versions(self):
         url = reverse("document_campaigns:autosave_batch", kwargs={"raw_token": self.raw_token})
@@ -1154,3 +1839,7 @@ class ShopResponseFlowTests(TestCase):
             reverse("document_campaigns:shop_response", kwargs={"raw_token": self.raw_token})
         )
         self.assertEqual(response.status_code, 410)
+        self.assertContains(response, "Link PGD đã hết hạn.", status_code=410)
+        self.assertContains(response, "Phản hồi Phòng giao dịch", status_code=410)
+        self.assertContains(response, "Vui lòng liên hệ Phòng Vận Hành", status_code=410)
+        self.assertEqual(response["Cache-Control"], "no-store")

@@ -1,0 +1,15 @@
+<section class="dec-guidance-config" data-response-guidance-config>
+  <div class="dec-guidance-config__head">
+    <strong>Hướng dẫn theo phản hồi</strong>
+    <span>Chọn mẫu Master Data sẽ hiện dưới ô Ghi chú khi PGD chọn phản hồi.</span>
+  </div>
+  <div class="dec-guidance-config__list">
+    {% for item in form.response_guidance_fields %}
+      <div class="dec-guidance-config__item" data-guidance-option="{{ item.option_id }}">
+        <label for="{{ item.field.id_for_label }}">Khi PGD chọn “{{ item.option_label }}”</label>
+        {{ item.field }}
+        {% for error in item.field.errors %}<p class="dec-guidance-config__error">{{ error }}</p>{% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+</section>

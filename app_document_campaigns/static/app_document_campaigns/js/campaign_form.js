@@ -41,21 +41,6 @@
     typeSelect?.addEventListener("change", updateCodePreview);
     updateCodePreview();
 
-    const deadlineInput = document.querySelector("[data-campaign-deadline]");
-    if (deadlineInput) {
-      window.flatpickr(deadlineInput, {
-        allowInput: false,
-        disableMobile: true,
-        enableTime: true,
-        time_24hr: true,
-        minuteIncrement: 15,
-        dateFormat: "Y-m-d\\TH:i",
-        altInput: true,
-        altFormat: "d/m/Y H:i",
-        monthSelectorType: "static",
-        locale: calendarLocale,
-      });
-    }
   };
 
   if (document.readyState === "loading") {

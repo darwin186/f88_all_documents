@@ -41,6 +41,8 @@
         <span class="text-gray-300">•</span>
         <a href="{% url 'master_data_response_options' %}" class="{% if request.resolver_match.url_name == 'master_data_response_options' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Phản hồi PGD</a>
         <span class="text-gray-300">•</span>
+        <a href="{% url 'master_data_response_guidance' %}" class="{% if request.resolver_match.url_name == 'master_data_response_guidance' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Hướng dẫn PGD</a>
+        <span class="text-gray-300">•</span>
         <div class="group relative inline-flex items-center">
           <a href="{% url 'master_data_api_docs' %}" class="inline-flex items-center gap-1 {% if request.resolver_match.url_name == 'master_data_api_docs' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Tài liệu API <span class="text-[8px]">⌄</span></a>
           <div class="absolute left-0 top-full z-50 hidden min-w-[210px] pt-2 group-hover:block group-focus-within:block">

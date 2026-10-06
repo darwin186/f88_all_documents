@@ -1962,6 +1962,7 @@ class PackageDocumentHistory(models.Model):
         max_length=20,
         choices=PackageHistoryAction.choices,
         default=PackageHistoryAction.ASSIGNED,
+        db_default=PackageHistoryAction.ASSIGNED,
         db_index=True,
     )
 
@@ -1999,6 +2000,7 @@ class PackageFolderHistory(models.Model):
         max_length=20,
         choices=PackageHistoryAction.choices,
         default=PackageHistoryAction.ASSIGNED,
+        db_default=PackageHistoryAction.ASSIGNED,
         db_index=True,
     )
 

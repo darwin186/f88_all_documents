@@ -5,7 +5,6 @@ from celery.exceptions import SoftTimeLimitExceeded
 
 from django.contrib.admin.models import CHANGE, LogEntry
 from django.contrib.contenttypes.models import ContentType
-from django.core import signing
 from django.core.files.base import ContentFile
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
@@ -16,6 +15,7 @@ from openpyxl.styles import Font, PatternFill
 
 from .models import Manager, Shop, ShopCatalogJob
 from .master_data import local_today, serialize, shop_queryset
+from documents import excel_snapshot
 
 HEADERS = ["shop_id", "shop_code", "shop_name", "shop_email", "is_shop_active", "manager_id", "shop_closed_date", "area_manager_name", "area_manager_email", "region_manager_name", "region_manager_email", "_snapshot"]
 SALT = "shop-catalog-v1"
@@ -58,7 +58,7 @@ def export_catalog(job):
         data = serialize(shop)
         original = snapshot(shop)
         org = data["orgchart"]
-        write_row(sheet, [shop.pk, shop.shop_code, shop.shop_name, shop.shop_email or "", shop.is_shop_active, shop.manager_id_id, data["shop_closed_date"], org["area_manager"]["name"], org["area_manager"]["email"], org["region_manager"]["name"], org["region_manager"]["email"], signing.dumps(original, salt=SALT, compress=True)])
+        write_row(sheet, [shop.pk, shop.shop_code, shop.shop_name, shop.shop_email or "", shop.is_shop_active, shop.manager_id_id, data["shop_closed_date"], org["area_manager"]["name"], org["area_manager"]["email"], org["region_manager"]["name"], org["region_manager"]["email"], excel_snapshot.dumps(original, salt=SALT)])
         if index % 100 == 0:
             update(job, message=f"Đã xuất {index} PGD", progress=50)
     sheet.auto_filter.ref = sheet.dimensions
@@ -119,7 +119,7 @@ def import_catalog(job):
                     if pk in seen:
                         raise ValueError("PGD trùng trong file.")
                     seen.add(pk)
-                    original = signing.loads(data["_snapshot"], salt=SALT)
+                    original = excel_snapshot.loads(data["_snapshot"], salt=SALT)
                     if original["shop_id"] != pk or original["shop_code"] != data["shop_code"] or original["shop_name"] != data["shop_name"]:
                         raise ValueError("Mã/tên PGD hoặc snapshot đã bị thay đổi.")
                     email = data["shop_email"] or ""

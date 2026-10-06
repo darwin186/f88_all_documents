@@ -44,6 +44,9 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from io import BytesIO
+
+logger = logging.getLogger(__name__)
+
 # Import các model
 from .models import (
     Manager,
@@ -2458,9 +2461,6 @@ class CustomPasswordResetView(PasswordResetView):
             print(response.text)
             raise ValueError(f"GAPO trả về lỗi {response.status_code}: {response.text}")
         
-logger = logging.getLogger(__name__)
-
-
 def _get_nested_gapo_value(payload, *paths):
     if not isinstance(payload, dict):
         return ""
@@ -2840,7 +2840,8 @@ def checking_transaction_view(request, template_name="app_documents/app_checking
                                 document_id = documents_detail_instance_log,
                                 package_id = package_id,
                                 trans_created_date = timezone.now(),
-                                trans_created_by = user
+                                trans_created_by = user,
+                                action=PackageHistoryAction.ASSIGNED,
                             )
                         else:
                             noti_error = f"Thùng {package_code_submit} không tồn tại. Vui lòng chọn một mã thùng đã tồn tại"  
@@ -3147,7 +3148,8 @@ def checking_transaction_view_v2(request):
                             document_id=documents_detail_instance_log,
                             package_id=package_id,
                             trans_created_date=timezone.now(),
-                            trans_created_by=user
+                            trans_created_by=user,
+                            action=PackageHistoryAction.ASSIGNED,
                         )
                     else:
                         noti_error = f"Thùng {package_code_submit} không tồn tại. Vui lòng chọn một mã thùng đã tồn tại"
@@ -3738,7 +3740,8 @@ def receive_folder_view(request, template_name="app_documents/app_receivingtrans
                                 folder_id = folder_detail_instance_log,
                                 package_id = package_id,
                                 trans_created_date = create_package_time,
-                                trans_created_by = user
+                                trans_created_by = user,
+                                action=PackageHistoryAction.ASSIGNED,
                             )
                             # Kiểm tra package_id tại documents_detail đã tồn tại folder_id chưa? Nếu chưa thì thêm vào package_id của folder tại package_id của documents_detail
                             if DocumentsDetail.objects.filter(folder_id = folder_id_submit).exists():
@@ -3751,7 +3754,9 @@ def receive_folder_view(request, template_name="app_documents/app_receivingtrans
                                             document_id = document,
                                             package_id = package_id,
                                             trans_created_date=create_package_time,
-                                            trans_created_by=user )
+                                            trans_created_by=user,
+                                            action=PackageHistoryAction.ASSIGNED,
+                                        )
                         # Nếu thùng không tồn tại thì thông báo lỗi
                         else:
                             noti_error = f"Thùng {choice_package_code} không tồn tại"  
@@ -4478,6 +4483,7 @@ def api_receive_folder_update_v2(request):
                 package_id=package,
                 trans_created_date=receive_time,
                 trans_created_by=request.user,
+                action=PackageHistoryAction.ASSIGNED,
             )
 
             document_details = DocumentsDetail.objects.select_for_update().filter(folder_id=folder.folder_id)
@@ -4490,6 +4496,7 @@ def api_receive_folder_update_v2(request):
                     package_id=package,
                     trans_created_date=receive_time,
                     trans_created_by=request.user,
+                    action=PackageHistoryAction.ASSIGNED,
                 )
             _replace_folder_issues(folder, issue_types, request.user)
 
@@ -4621,31 +4628,45 @@ def bulk_receive_folder_view(request):
             elif require_issue_types:
                 return JsonResponse({'success': False, 'error': 'Vui lòng chọn ít nhất 1 trạng thái lỗi.'})
 
-            package_id_instance = Package.objects.select_related('package_type').get(
-                package_code=package_choice,
-                replaced_by__isnull=True,
-            )
-            folder_status_instance = FolderStatus.objects.get(folder_status_id=folder_status_choice)
-            package_type_code = (package_id_instance.package_type.package_type if package_id_instance.package_type else None)
-            if not package_type_code:
-                return JsonResponse({'success': False, 'error': 'Không xác định được loại thùng của mã thùng.'})
-
-            folders = Folder.objects.select_related('folder_type_id').filter(folder_id__in=selected_folder)
-            if folders.count() != len(selected_folder):
-                return JsonResponse({'success': False, 'error': 'Có quyển không tồn tại, vui lòng tải lại.'})
-
-            mismatched = []
-            for folder in folders:
-                folder_pkg_type = folder.folder_type_id.package_type if folder.folder_type_id else None
-                if not folder_pkg_type or str(folder_pkg_type).strip().upper() != str(package_type_code).strip().upper():
-                    mismatched.append(folder.folder_code)
-
-            if mismatched:
-                preview = ', '.join(mismatched[:5])
-                suffix = '...' if len(mismatched) > 5 else ''
-                return JsonResponse({'success': False, 'error': f'Mã thùng không khớp loại quyển: {preview}{suffix}'})
-
             with transaction.atomic():
+                # Lock the package first, then every folder in a deterministic order.
+                # The package-transfer flow uses the same ordering, which avoids
+                # deadlocks while preventing two web pods from receiving the same
+                # folder and replacing its issue rows concurrently.
+                package_id_instance = (
+                    Package.objects.select_for_update(of=('self',))
+                    .select_related('package_type')
+                    .get(package_code=package_choice, replaced_by__isnull=True)
+                )
+                folder_status_instance = FolderStatus.objects.get(folder_status_id=folder_status_choice)
+                package_type_code = (
+                    package_id_instance.package_type.package_type
+                    if package_id_instance.package_type
+                    else None
+                )
+                if not package_type_code:
+                    return JsonResponse({'success': False, 'error': 'Không xác định được loại thùng của mã thùng.'})
+
+                folders = list(
+                    Folder.objects.select_for_update(of=('self',))
+                    .select_related('folder_type_id')
+                    .filter(folder_id__in=selected_folder)
+                    .order_by('folder_id')
+                )
+                if len(folders) != len(selected_folder):
+                    return JsonResponse({'success': False, 'error': 'Có quyển không tồn tại, vui lòng tải lại.'})
+
+                mismatched = []
+                for folder in folders:
+                    folder_pkg_type = folder.folder_type_id.package_type if folder.folder_type_id else None
+                    if not folder_pkg_type or str(folder_pkg_type).strip().upper() != str(package_type_code).strip().upper():
+                        mismatched.append(folder.folder_code)
+
+                if mismatched:
+                    preview = ', '.join(mismatched[:5])
+                    suffix = '...' if len(mismatched) > 5 else ''
+                    return JsonResponse({'success': False, 'error': f'Mã thùng không khớp loại quyển: {preview}{suffix}'})
+
                 for folder in folders:
                     # Cập nhật trạng thái quyển chứng từ
                     folder.folder_status_id = folder_status_instance
@@ -4675,7 +4696,9 @@ def bulk_receive_folder_view(request):
                         folder_id=folder,
                         package_id=folder.package_id,
                         trans_created_date=receive_time,
-                        trans_created_by=user)
+                        trans_created_by=user,
+                        action=PackageHistoryAction.ASSIGNED,
+                    )
                     document_details = DocumentsDetail.objects.select_for_update().filter(folder_id = folder.folder_id)
                     for document in document_details:
                         document.package_id = package_id_instance
@@ -4685,7 +4708,9 @@ def bulk_receive_folder_view(request):
                             document_id = document,
                             package_id = package_id_instance,
                             trans_created_date=receive_time,
-                            trans_created_by=user )
+                            trans_created_by=user,
+                            action=PackageHistoryAction.ASSIGNED,
+                        )
                     if issue_types:
                         _replace_folder_issues(folder, issue_types, user)
                 # Không set messages cho JSON response để tránh tràn sang màn hình khác
@@ -4694,11 +4719,34 @@ def bulk_receive_folder_view(request):
         except FolderStatus.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Trạng thái nhận không tồn tại.'})
         except IntegrityError:
-            messages.error(request, 'sys001-Có lỗi xảy ra khi xử lý dữ liệu. Vui lòng thử lại sau!')
-            return JsonResponse({'success': False, 'error': 'sys001-Có lỗi xảy ra khi xử lý dữ liệu. Vui lòng thử lại sau!'})           
+            logger.exception(
+                "BULK_RECEIVE_INTEGRITY_ERROR user_id=%s folder_ids=%s package_code=%r status_id=%r issue_type_ids=%s",
+                request.user.pk,
+                selected_folder,
+                package_choice,
+                folder_status_choice,
+                issue_type_ids,
+            )
+            return JsonResponse(
+                {
+                    'success': False,
+                    'error': 'sys001-Dữ liệu vừa thay đổi hoặc bị trùng trong lúc nhận. Vui lòng tải lại và thử lại.',
+                },
+                status=409,
+            )
         return JsonResponse({'success': True})
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+    except Exception:
+        logger.exception(
+            "BULK_RECEIVE_UNEXPECTED_ERROR user_id=%s",
+            request.user.pk,
+        )
+        return JsonResponse(
+            {
+                'success': False,
+                'error': 'sys002-Có lỗi xảy ra khi xử lý dữ liệu. Vui lòng thử lại sau.',
+            },
+            status=500,
+        )
 
 # Tạo quyển bổ sung 
 @login_required
@@ -4776,7 +4824,9 @@ def receiving_additional_view(request, folder_id):
                     folder_id = folder_aditional_instance,
                     package_id = package_id_found,
                     trans_created_date = created_date,
-                    trans_created_by = user)
+                    trans_created_by = user,
+                    action=PackageHistoryAction.ASSIGNED,
+                )
                 
                 messages.success(request, message_of_success_additional)  
                 redirect_url = f"{reverse(redirect_name)}?{urlencode(filter_params)}"
@@ -7131,6 +7181,7 @@ def receiving_import_save(request):
                 package_id=package_obj,
                 trans_created_date=received_dt,
                 trans_created_by=receiver,
+                action=PackageHistoryAction.ASSIGNED,
             )
 
             documents = DocumentsDetail.objects.select_for_update().filter(folder_id=folder.folder_id)
@@ -7142,6 +7193,7 @@ def receiving_import_save(request):
                     package_id=package_obj,
                     trans_created_date=received_dt,
                     trans_created_by=receiver,
+                    action=PackageHistoryAction.ASSIGNED,
                 )
 
     return JsonResponse(

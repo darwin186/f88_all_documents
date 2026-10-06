@@ -4,7 +4,7 @@
 {% block title %}Theo dõi phản hồi · {{ campaign.code }}{% endblock %}
 {% block top_nav %}{% include "app_documents/components/top_nav_v2.html" %}{% endblock %}
 {% block main_extra_class %}pt-20 crm-monitor-main{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_monitor.css' %}"><script src="{% static 'app_document_campaigns/js/campaign_shop_links.js' %}" defer></script><script src="{% static 'app_document_campaigns/js/response_monitor.js' %}" defer></script>{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_monitor.css' %}?v=20261005-13"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/datetime_picker.css' %}?v=20261002-2"><script src="https://cdn.jsdelivr.net/npm/flatpickr"></script><script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/vn.js"></script><script src="{% static 'app_document_campaigns/js/datetime_picker.js' %}?v=20261002-2" defer></script><script src="{% static 'app_document_campaigns/js/campaign_shop_links.js' %}" defer></script><script src="{% static 'app_document_campaigns/js/email_rich_editor.js' %}?v=20261002-1" defer></script><script src="{% static 'app_document_campaigns/js/response_monitor.js' %}?v=20261002-7" defer></script><script src="{% static 'app_document_campaigns/js/bulk_email_batches.js' %}?v=20261005-4" defer></script>{% endblock %}
 {% block content %}
 {% campaign_workflow 3 %}
 
@@ -15,11 +15,11 @@
   <section class="crm-card crm-table-wrap" data-freeze-grid>
     <table class="crm-table"><thead><tr><th>PGD</th><th>Quản lý vùng</th><th>Quản lý khu vực</th><th>Tiến độ</th><th>Phản hồi</th>{% if can_manage_shop_links %}<th>Link PGD</th>{% endif %}<th>Cập nhật cuối</th><th>Thao tác</th></tr></thead>
       <tbody>{% for row in rows %}<tr data-shop-link-row data-shop-id="{{ row.shop_id }}" data-shop-code="{{ row.shop__shop_code }}" data-shop-name="{{ row.shop__shop_name }}">
-        <td><a class="crm-link" href="{% url 'document_campaigns:shop_response_monitor_detail' campaign.id row.shop_id %}">{{ row.shop__shop_code }} · {{ row.shop__shop_name }}</a></td>
+        <td><a class="crm-link" href="{% url 'document_campaigns:shop_response_monitor_detail' campaign.id row.shop_id %}">{{ row.shop__shop_code }} · {{ row.shop__shop_name }}</a><small class="crm-muted">{{ row.shop__shop_email|default:"Chưa cấu hình email" }}</small></td>
         <td>{{ row.region_manager_name|default:"—" }}</td><td>{{ row.area_manager_name|default:"—" }}</td>
         <td><strong>{{ row.progress }}%</strong><small class="crm-muted">{{ row.answered_errors }}/{{ row.total_errors }} dòng</small><div class="crm-progress"><span style="width:{{ row.progress }}%;background:hsl({{ row.progress_hue }},65%,43%)"></span></div></td>
         <td><span class="crm-status {{ row.status }}">{{ row.status_label }}</span><small class="crm-muted">Hạn: {{ row.deadline|date:"H:i d/m/Y"|default:"—" }}</small></td>
-        {% if can_manage_shop_links %}<td data-link-status>{% if row.access_link %}<span class="dec-link-status {% if row.access_link.is_expired %}is-expired{% else %}is-issued{% endif %}">{% if row.access_link.is_expired %}Hết hạn{% else %}Đã phát hành{% endif %}</span><small>{{ row.access_link.created_at|date:"H:i d/m/Y" }}</small>{% else %}<span class="dec-link-status">Chưa tạo</span>{% endif %}</td>{% endif %}
+        {% if can_manage_shop_links %}<td data-link-status>{% if row.access_link %}<span class="dec-link-status {% if row.access_link.is_expired %}is-expired{% else %}is-issued{% endif %}">{% if row.access_link.is_expired %}Hết hạn{% else %}Đã phát hành{% endif %}</span><small>{{ row.access_link.created_at|date:"H:i d/m/Y" }}</small><small>{% if row.access_link.first_accessed_at %}Mở lần đầu: {{ row.access_link.first_accessed_at|date:"H:i d/m/Y" }}{% else %}PGD chưa mở link{% endif %}</small>{% else %}<span class="dec-link-status">Chưa tạo</span>{% endif %}</td>{% endif %}
         <td class="crm-muted">{{ row.last_response_at|date:"H:i d/m/Y"|default:"Chưa cập nhật" }}</td>
         <td class="crm-link-actions"><div class="crm-row-actions">{% if can_manage_shop_links %}
           <form method="post" action="{% url 'document_campaigns:issue_campaign_shop_link' campaign.id row.shop_id %}" data-issue-link data-has-link="{% if row.access_link %}true{% else %}false{% endif %}">{% csrf_token %}<button class="crm-mini-btn" {% if not campaign.response_deadline %}disabled{% endif %}>{% if row.access_link %}Đổi link{% else %}Tạo link{% endif %}</button></form>
@@ -40,6 +40,8 @@
   </div></nav>
   {% if can_manage_shop_links %}
   {% include "app_document_campaigns/includes/common_deadline_dialog.html" %}
-  <dialog class="crm-extend-dialog" data-extend-dialog><form data-extend-form>{% csrf_token %}<h2>Gia hạn phản hồi PGD</h2><p data-extend-shop></p><label>Deadline riêng mới<input type="datetime-local" name="deadline" required></label><div><button type="button" class="crm-mini-btn" data-close-extend>Hủy</button><button class="crm-btn">Lưu gia hạn</button></div></form></dialog>{% endif %}
+  {% include "app_document_campaigns/includes/campaign_email_dialogs.html" %}
+  {% include "app_document_campaigns/includes/bulk_email_dialog.html" %}
+  <dialog class="crm-extend-dialog crm-schedule-dialog" data-extend-dialog><form data-extend-form>{% csrf_token %}<h2>Gia hạn phản hồi PGD</h2><p data-extend-shop></p>{% include "app_document_campaigns/components/datetime_picker.html" with name="deadline" %}<div><button type="button" class="crm-mini-btn" data-close-extend>Hủy</button><button class="crm-btn">Lưu gia hạn</button></div></form></dialog>{% endif %}
 </div>
 {% endblock %}

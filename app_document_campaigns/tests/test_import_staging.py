@@ -97,7 +97,7 @@ class CampaignImportStagingTests(TestCase):
                 self.assertNotContains(response, '<span class="flow-state">')
                 self.assertContains(response, 'aria-current="step"', count=1)
                 self.assertContains(response, "QLKV xác nhận")
-                self.assertContains(response, "QLV kết quả cuối")
+                self.assertContains(response, "Book lỗi gửi QTRR")
                 self.assertContains(response, "Chưa triển khai", count=2)
                 self.assertContains(response, 'campaign-heading-1')
                 if route == "campaign_list":
@@ -113,10 +113,12 @@ class CampaignImportStagingTests(TestCase):
                     self.assertNotContains(response, 'Job #')
                     self.assertContains(response, 'Nguồn dữ liệu của version')
                 if route == "campaign_review":
-                    header = response.content.decode().split('<header class="review-heading-row">', 1)[1].split('</header>', 1)[0]
-                    self.assertNotIn('<h1', header)
-                    self.assertIn('data-review-excel', header)
-                    self.assertNotIn('Phạm vi:', header)
+                    self.assertContains(response, 'class="review-dashboard"', count=1)
+                    self.assertContains(response, 'class="review-dashboard-actions"', count=1)
+                    self.assertContains(response, 'data-review-excel', count=1)
+                    self.assertNotContains(response, 'class="review-release-bar"')
+                    self.assertContains(response, 'data-review-progress', count=3)
+                    self.assertContains(response, 'dòng đã review · còn')
                 if kwargs:
                     self.assertContains(response, 'data-campaign-identity', count=1)
                     self.assertContains(response, f'<span class="flow-code">{self.campaign.code}</span>', html=True)
@@ -135,6 +137,7 @@ class CampaignImportStagingTests(TestCase):
         request.user = self.user
         navigation = campaign_workflow({"request": request, "campaign": self.campaign}, 3)
         self.assertTrue(navigation["steps"][0]["done"])
+        self.assertEqual(navigation["steps"][0]["progress"], 100)
         self.assertTrue(navigation["steps"][2]["current"])
         self.assertNotIn("settings=1", navigation["steps"][0]["url"])
         self.assertFalse(navigation["steps"][2]["done"])
@@ -169,6 +172,46 @@ class CampaignImportStagingTests(TestCase):
         self.assertTrue(navigation["steps"][3]["done"])
         TeamReview.objects.create(error=error, decision="supplement", reviewed_by=self.user)
         self.assertFalse(campaign_workflow({"request": request, "campaign": self.campaign}, 4)["steps"][3]["done"])
+
+    def test_area_confirmation_progress_waits_for_confirmations_or_deadline(self):
+        from datetime import timedelta
+        from django.test import RequestFactory
+        from django.utils import timezone
+        from app_document_campaigns.models import ShopSubmission, TeamReview
+        from app_document_campaigns.templatetags.campaign_workflow import campaign_workflow
+
+        self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
+        request = RequestFactory().get("/")
+        request.user = self.user
+        self.version.status = CampaignVersion.Status.PUBLISHED
+        self.version.save(update_fields=["status"])
+        self.campaign.current_version = self.version
+        self.campaign.response_deadline = timezone.now() - timedelta(days=1)
+        self.campaign.area_response_deadline = timezone.now() + timedelta(days=1)
+        error = CampaignError.objects.create(
+            campaign=self.campaign,
+            version=self.version,
+            source_key="folder:area-progress",
+            source_object_id=999,
+            error_type="folder",
+            shop=self.shop,
+            checking_issue="Thiếu chứng từ",
+        )
+        ShopSubmission.objects.create(campaign=self.campaign, shop=self.shop, response_count=1)
+        TeamReview.objects.create(error=error, decision="approved", reviewed_by=self.user)
+
+        navigation = campaign_workflow({"request": request, "campaign": self.campaign}, 5)
+        self.assertEqual(navigation["steps"][4]["progress"], 0)
+        self.assertFalse(navigation["steps"][4]["done"])
+        self.assertIsNone(navigation["steps"][5]["url"])
+        self.assertIn("hạn", navigation["steps"][4]["progress_detail"])
+
+        self.campaign.area_response_deadline = timezone.now() - timedelta(minutes=1)
+        navigation = campaign_workflow({"request": request, "campaign": self.campaign}, 5)
+        self.assertEqual(navigation["steps"][4]["progress"], 100)
+        self.assertTrue(navigation["steps"][4]["done"])
+        self.assertIsNotNone(navigation["steps"][5]["url"])
+        self.assertIn("đã hết hạn", navigation["steps"][4]["progress_detail"])
 
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="import-admin")
@@ -1003,6 +1046,23 @@ class CampaignImportStagingTests(TestCase):
             self.assertEqual(job.status, CampaignImportJob.Status.SUCCEEDED)
             self.assertEqual(job.current_step, 3)
             self.assertEqual(job.summary["rows"], 1)
+            self.client.force_login(self.user)
+            download = self.client.get(
+                reverse(
+                    "document_campaigns:download_cleaned_upload",
+                    kwargs={"version_id": self.version.pk},
+                )
+            )
+            self.assertEqual(download.status_code, 200)
+            self.assertTrue(b"".join(download.streaming_content).startswith(b"PK"))
+            detail = self.client.get(
+                reverse(
+                    "document_campaigns:campaign_detail",
+                    kwargs={"campaign_id": self.campaign.pk},
+                )
+            )
+            self.assertContains(detail, "Dữ liệu Excel team đã làm sạch")
+            self.assertContains(detail, "cleaned.xlsx")
             self.assertTrue(
                 CampaignImportSource.objects.filter(
                     version=self.version,

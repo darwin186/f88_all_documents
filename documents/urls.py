@@ -21,9 +21,15 @@ from django.conf.urls.static import static
 from django.http import Http404
 from app_documents.views import CustomPasswordResetView
 from app_admindocuments.media_views import protected_admindocument_file
+from app_document_campaigns.email_webhook_views import power_automate_email_callback
 
 
 urlpatterns = [
+path(
+    "api/integrations/power-automate/email/callback/",
+    power_automate_email_callback,
+    name="power_automate_email_callback",
+),
 path(
     "media/admindocuments/files/<path:relative_path>",
     protected_admindocument_file,

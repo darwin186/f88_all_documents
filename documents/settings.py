@@ -189,11 +189,36 @@ LOGIN_REDIRECT_URL = 'home'
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = os.environ.get('EMAIL_HOST')
-EMAIL_PORT = os.environ.get('EMAIL_PORT')
-EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '25'))
+EMAIL_USE_TLS = (os.environ.get('EMAIL_USE_TLS', 'False') or '').strip().lower() in ('1', 'true', 'yes', 'on')
+EMAIL_USE_SSL = (os.environ.get('EMAIL_USE_SSL', 'False') or '').strip().lower() in ('1', 'true', 'yes', 'on')
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL')
+
+# Campaign email transport. Keep SMTP as the safe default during rollout.
+EMAIL_TRANSPORT = (os.getenv('EMAIL_TRANSPORT', 'smtp') or 'smtp').strip().lower()
+POWER_AUTOMATE_EMAIL_WEBHOOK_URL = (os.getenv('POWER_AUTOMATE_EMAIL_WEBHOOK_URL') or '').strip()
+POWER_AUTOMATE_EMAIL_WEBHOOK_SECRET = (os.getenv('POWER_AUTOMATE_EMAIL_WEBHOOK_SECRET') or '').strip()
+POWER_AUTOMATE_EMAIL_CALLBACK_SECRET = (os.getenv('POWER_AUTOMATE_EMAIL_CALLBACK_SECRET') or '').strip()
+POWER_AUTOMATE_EMAIL_CALLBACK_URL = (os.getenv('POWER_AUTOMATE_EMAIL_CALLBACK_URL') or '').strip()
+POWER_AUTOMATE_EMAIL_CONNECT_TIMEOUT = float(os.getenv('POWER_AUTOMATE_EMAIL_CONNECT_TIMEOUT', '3.05'))
+POWER_AUTOMATE_EMAIL_READ_TIMEOUT = float(os.getenv('POWER_AUTOMATE_EMAIL_READ_TIMEOUT', '30'))
+POWER_AUTOMATE_EMAIL_MAX_CALLBACK_BYTES = int(os.getenv('POWER_AUTOMATE_EMAIL_MAX_CALLBACK_BYTES', '1048576'))
+POWER_AUTOMATE_EMAIL_CHUNK_SIZE = int(os.getenv('POWER_AUTOMATE_EMAIL_CHUNK_SIZE', '25'))
+POWER_AUTOMATE_EMAIL_MAX_RETRIES = int(os.getenv('POWER_AUTOMATE_EMAIL_MAX_RETRIES', '3'))
+
+# Microsoft Graph app-only email transport. MS_VALUE must be the client secret
+# value (not the secret ID shown in Entra). MS_SECRET_ID and MS_OBJECT_ID are
+# deployment metadata only and are deliberately not used for authentication.
+MICROSOFT_GRAPH_CLIENT_SECRET = (os.getenv('MS_VALUE') or '').strip()
+MICROSOFT_GRAPH_TENANT_ID = (os.getenv('MS_TENANT_ID') or '').strip()
+MICROSOFT_GRAPH_CLIENT_ID = (os.getenv('MS_APPLICATION_ID') or '').strip()
+MICROSOFT_GRAPH_SENDER_EMAIL = (
+    os.getenv('MS_GRAPH_SENDER_EMAIL') or DEFAULT_FROM_EMAIL or ''
+).strip()
+MICROSOFT_GRAPH_CONNECT_TIMEOUT = float(os.getenv('MS_GRAPH_CONNECT_TIMEOUT', '10'))
+MICROSOFT_GRAPH_READ_TIMEOUT = float(os.getenv('MS_GRAPH_READ_TIMEOUT', '30'))
 
 # GAPO bot settings
 GAPO_API_URL = os.getenv('GAPO_API_URL')

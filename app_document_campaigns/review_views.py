@@ -8,14 +8,16 @@ from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Count, OuterRef, Q, Subquery
 from django.http import FileResponse, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.contrib import messages
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import Campaign, CampaignError, ShopSubmission, TeamReview, TeamReviewExcelJob
+from .models import Campaign, CampaignError, CampaignSnapshot, CampaignStatusHistory, ShopSubmission, TeamReview, TeamReviewExcelJob
 from .services.monitoring_access import scope_campaign_errors
 from .services.team_review_excel import eligible_errors, MAX_FILE_SIZE
-from .services.folder_receipt import with_folder_receipt, receipt_values
+from .services.folder_receipt import folder_state_values, with_folder_receipt, receipt_values
 from .views import _is_campaign_admin, campaign_admin_required
 
 
@@ -36,6 +38,54 @@ def metrics(queryset):
 
 def deadline_passed(campaign):
     return bool(campaign.response_deadline and timezone.now() >= campaign.response_deadline)
+
+
+def team_review_release_state(campaign):
+    rows = review_queryset(campaign)
+    total = rows.count()
+    pending = rows.filter(Q(review_id__isnull=True) | ~Q(review_decision__in=[TeamReview.Decision.APPROVED, TeamReview.Decision.EXCLUDED])).count()
+    released = rows.filter(status__in=[CampaignError.Status.WAITING_AREA, CampaignError.Status.AREA_RETURNED, CampaignError.Status.AREA_CONFIRMED]).exists()
+    return {"total": total, "pending": pending, "ready": bool(total and not pending), "released": released}
+
+
+@login_required
+@require_POST
+@campaign_admin_required
+def release_team_review_to_area(request, campaign_id):
+    with transaction.atomic():
+        campaign = get_object_or_404(Campaign.objects.select_for_update(), pk=campaign_id)
+        rows = list(review_queryset(campaign).select_for_update(of=("self",)))
+        if not rows:
+            messages.error(request, "Không có dòng lỗi để chuyển QLKV xác nhận.")
+            return redirect("document_campaigns:campaign_review", campaign_id=campaign.pk)
+        if any(row.review_decision not in {TeamReview.Decision.APPROVED, TeamReview.Decision.EXCLUDED} for row in rows):
+            messages.error(request, "Chưa thể chuyển bước: vẫn còn dòng chưa có kết luận Team review.")
+            return redirect("document_campaigns:campaign_review", campaign_id=campaign.pk)
+        if any(row.status in {CampaignError.Status.WAITING_AREA, CampaignError.Status.AREA_RETURNED, CampaignError.Status.AREA_CONFIRMED} for row in rows):
+            messages.info(request, "Dữ liệu đã được chuyển sang bước QLKV xác nhận.")
+            return redirect(f"{reverse('document_campaigns:campaign_area_monitor', kwargs={'campaign_id': campaign.pk})}?stage=confirmation")
+        approved_ids = [row.pk for row in rows if row.review_decision == TeamReview.Decision.APPROVED]
+        excluded_ids = [row.pk for row in rows if row.review_decision == TeamReview.Decision.EXCLUDED]
+        CampaignError.objects.filter(pk__in=approved_ids).update(status=CampaignError.Status.WAITING_AREA, updated_at=timezone.now())
+        CampaignError.objects.filter(pk__in=excluded_ids).update(status=CampaignError.Status.EXCLUDED, updated_at=timezone.now())
+        CampaignStatusHistory.objects.bulk_create([
+            CampaignStatusHistory(
+                campaign=campaign,
+                error=row,
+                from_status=row.status,
+                to_status=CampaignError.Status.WAITING_AREA if row.pk in approved_ids else CampaignError.Status.EXCLUDED,
+                reason="Hoàn tất Team review và chuyển bước QLKV xác nhận.",
+                changed_by=request.user,
+            )
+            for row in rows
+        ], batch_size=500)
+        CampaignSnapshot.objects.create(
+            campaign=campaign,
+            trigger=CampaignSnapshot.Trigger.TEAM_APPROVED,
+            metadata={"approved": len(approved_ids), "excluded": len(excluded_ids)},
+        )
+    messages.success(request, f"Đã chuyển {len(approved_ids)} dòng giữ lỗi sang QLKV xác nhận; gỡ {len(excluded_ids)} dòng.")
+    return redirect(f"{reverse('document_campaigns:campaign_area_monitor', kwargs={'campaign_id': campaign.pk})}?stage=confirmation")
 
 
 @login_required
@@ -101,8 +151,14 @@ def download_review_excel(request, campaign_id, job_id):
 def refresh_folder_receipt(request, campaign_id, error_id):
     campaign = get_object_or_404(Campaign, pk=campaign_id)
     error = get_object_or_404(review_queryset(campaign), pk=error_id)
-    label, date = receipt_values(error)
-    response = JsonResponse({"label": label, "date": date, "received": bool(error.error_type == "folder" and error.receipt_received)})
+    _, label = folder_state_values(error)
+    _, date = receipt_values(error)
+    response = JsonResponse({
+        "label": label,
+        "date": date,
+        "received": bool(error.error_type == "folder" and error.receipt_received),
+        "color": error.receipt_status_badge_color or "",
+    })
     response["Cache-Control"] = "no-store"
     return response
 
@@ -113,6 +169,20 @@ def campaign_review(request, campaign_id):
     queryset, scope = scope_campaign_errors(review_queryset(campaign), request.user)
     stats = metrics(queryset)
     shops = queryset.order_by("shop__shop_code").values("shop_id", "shop__shop_code", "shop__shop_name").distinct()
+    folder_type_options = list(
+        queryset.filter(error_type=CampaignError.ErrorType.FOLDER)
+        .exclude(receipt_folder_type_id__isnull=True)
+        .order_by("receipt_folder_type_name", "receipt_folder_type_code")
+        .values_list("receipt_folder_type_id", "receipt_folder_type_code", "receipt_folder_type_name")
+        .distinct()
+    )
+    folder_status_options = list(
+        queryset.filter(error_type=CampaignError.ErrorType.FOLDER)
+        .exclude(receipt_status_id__isnull=True)
+        .order_by("receipt_status_name", "receipt_status_code")
+        .values_list("receipt_status_id", "receipt_status_code", "receipt_status_name")
+        .distinct()
+    )
     shop_filter = request.GET.get("shop", "")
     if shop_filter.isdigit():
         queryset = queryset.filter(shop_id=int(shop_filter))
@@ -133,6 +203,20 @@ def campaign_review(request, campaign_id):
         queryset = queryset.filter(review_id__isnull=True)
     elif decision in {"approved", "excluded"}:
         queryset = queryset.filter(review_decision=decision)
+    folder_type_filter = request.GET.get("folder_type", "").strip()
+    if folder_type_filter == "__missing__":
+        queryset = queryset.filter(error_type=CampaignError.ErrorType.FOLDER, receipt_folder_id__isnull=True)
+    elif folder_type_filter.isdigit() and any(str(item[0]) == folder_type_filter for item in folder_type_options):
+        queryset = queryset.filter(receipt_folder_type_id=int(folder_type_filter))
+    else:
+        folder_type_filter = ""
+    folder_status_filter = request.GET.get("folder_status", "").strip()
+    if folder_status_filter == "__missing__":
+        queryset = queryset.filter(error_type=CampaignError.ErrorType.FOLDER, receipt_folder_id__isnull=True)
+    elif folder_status_filter.isdigit() and any(str(item[0]) == folder_status_filter for item in folder_status_options):
+        queryset = queryset.filter(receipt_status_id=int(folder_status_filter))
+    else:
+        folder_status_filter = ""
     page = Paginator(queryset.order_by("shop__shop_code", "id"), 50).get_page(request.GET.get("page"))
     submitted_shops = set(ShopSubmission.objects.filter(campaign=campaign).values_list("shop_id", flat=True))
     expired = deadline_passed(campaign)
@@ -142,12 +226,14 @@ def campaign_review(request, campaign_id):
     for error in page:
         response = getattr(error, "shop_response", None)
         error.response_label = labels.get(response.answer_code, response.answer_code) if response else ""
-        error.can_review = can_manage and campaign.status == Campaign.Status.ACTIVE and (error.shop_id in submitted_shops or shop_deadline_passed(campaign, error.shop_id, deadlines))
+        error.can_review = can_manage and campaign.status == Campaign.Status.ACTIVE and error.status not in {CampaignError.Status.WAITING_AREA, CampaignError.Status.AREA_RETURNED, CampaignError.Status.AREA_CONFIRMED} and (error.shop_id in submitted_shops or shop_deadline_passed(campaign, error.shop_id, deadlines))
         error.shop_submitted = error.shop_id in submitted_shops
         error.shop_expired = shop_deadline_passed(campaign, error.shop_id, deadlines)
+        error.receipt_folder_type, error.receipt_current_status = folder_state_values(error)
         error.receipt_label, error.receipt_display_date = receipt_values(error)
     excel_jobs = {kind: campaign.review_excel_jobs.filter(kind=kind).order_by("-pk").values_list("pk", flat=True).first() for kind in ("export", "import")} if can_manage else {}
-    return render(request, "app_document_campaigns/campaign_review.html", {"campaign": campaign, "page": page, "shops": shops, "stats": stats, "percent": round(stats["reviewed"] * 100 / stats["total"]) if stats["total"] else 0, "can_manage_campaigns": can_manage, "scope": scope, "q": query, "shop_filter": shop_filter, "decision_filter": decision, "expired": expired, "excel_jobs": excel_jobs, "response_filter": response_filter, "response_choices": response_choices.items()})
+    release_state = team_review_release_state(campaign)
+    return render(request, "app_document_campaigns/campaign_review.html", {"campaign": campaign, "page": page, "shops": shops, "stats": stats, "percent": round(stats["reviewed"] * 100 / stats["total"]) if stats["total"] else 0, "can_manage_campaigns": can_manage, "scope": scope, "q": query, "shop_filter": shop_filter, "decision_filter": decision, "expired": expired, "excel_jobs": excel_jobs, "response_filter": response_filter, "response_choices": response_choices.items(), "folder_type_options": folder_type_options, "folder_status_options": folder_status_options, "folder_type_filter": folder_type_filter, "folder_status_filter": folder_status_filter, "release_state": release_state})
 
 
 @login_required
@@ -217,7 +303,7 @@ def save_team_review(request, campaign_id, error_id):
     with transaction.atomic():
         campaign = get_object_or_404(Campaign.objects.select_for_update(), pk=campaign_id)
         error = get_object_or_404(CampaignError.objects.select_for_update(), campaign=campaign, pk=error_id)
-        if campaign.status != Campaign.Status.ACTIVE or error.status == CampaignError.Status.CANCELLED or (error.status == CampaignError.Status.EXCLUDED and not error.team_reviews.exists()):
+        if campaign.status != Campaign.Status.ACTIVE or error.status in {CampaignError.Status.CANCELLED, CampaignError.Status.WAITING_AREA, CampaignError.Status.AREA_RETURNED, CampaignError.Status.AREA_CONFIRMED, CampaignError.Status.CLOSED} or (error.status == CampaignError.Status.EXCLUDED and not error.team_reviews.exists()):
             return JsonResponse({"error": "Dòng dữ liệu không ở giai đoạn review phản hồi PGD."}, status=409)
         if not shop_deadline_passed(campaign, error.shop_id) and not ShopSubmission.objects.filter(campaign=campaign, shop_id=error.shop_id).exists():
             return JsonResponse({"error": "PGD chưa gửi chính thức và chưa hết hạn phản hồi."}, status=409)

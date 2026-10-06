@@ -1,6 +1,6 @@
 # Excel team review
 
-Tại bước 4, Admin xuất toàn bộ dữ liệu review của kỳ (không chỉ trang/bộ lọc đang xem), sửa hai cột **Kết luận review** và **Nhận xét team**, rồi import lại. Kết luận có droplist `Giữ lỗi / Loại lỗi`; nhận xét không bắt buộc. Dữ liệu PGD và dữ liệu gốc chỉ đọc.
+Tại bước 4, Admin xuất toàn bộ dữ liệu review của kỳ (không chỉ trang/bộ lọc đang xem), sửa hai cột **Phòng vận hành xác nhận** và **Nhận xét team**, rồi import lại. Cột xác nhận có droplist `Giữ lỗi / Gỡ lỗi`; nhận xét không bắt buộc. Dữ liệu PGD và dữ liệu gốc chỉ đọc.
 
 Xuất/import chạy Celery, UI có spinner và polling tiến độ. Mỗi kỳ chỉ có một job đang xử lý cho mỗi loại thao tác. Nút tải nằm dưới nút xuất; không có danh sách lịch sử job.
 

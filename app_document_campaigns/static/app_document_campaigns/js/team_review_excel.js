@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (kind === 'export' && job.download_url) {
         const link = document.createElement('a');
         link.href = job.download_url;
-        link.textContent = '↓ Tải Excel review';
+        link.textContent = '↓ Tải file Excel';
         states[kind].append(link);
         if (notify) window.campaignToast?.('Đã tạo file Excel review.', 'success');
       } else {

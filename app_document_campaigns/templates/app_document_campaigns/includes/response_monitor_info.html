@@ -1,21 +1,43 @@
+{% load humanize %}
 <section class="crm-info-zone">
   <div class="crm-info-grid">
-    <article><span>Số lượng phòng giao dịch phát sinh lỗi trong kỳ</span><strong>{{ summary.shops }}</strong></article>
-    <article><span>PGD đã nhận phát hành</span><strong>{{ summary.issued }}</strong></article>
-    <article><span>PGD đã phản hồi</span><strong>{{ summary.submitted }} <small>{{ summary.submitted_rate }}%</small></strong></article>
-    <article><span>PGD đang phản hồi</span><strong>{{ summary.in_progress }}</strong></article>
-    <article><span>PGD chưa phản hồi</span><strong>{{ summary.not_started }}</strong></article>
-    <article><span>Số lượng lỗi phát sinh</span><strong>{{ summary.errors }}</strong></article>
-    <article><span>Số lượng hợp đồng phát sinh lỗi chứng từ</span><strong>{{ summary.contracts }}</strong></article>
-    <article title="Số QLKV khác nhau đã được CC trong email gửi thành công cho PGD thuộc phạm vi xem. Chưa xác nhận đã đọc email."><span>QLKV đã được gửi email</span><strong data-area-emailed>{{ summary.area_emailed }}</strong></article>
-    <article><span>Hạn PGD phản hồi</span><strong class="crm-info-date">{{ campaign.response_deadline|date:"H:i d/m/Y"|default:"Chưa cấu hình" }}</strong></article>
-    <article><span>Link hết hạn</span><strong class="crm-info-date">{{ campaign.link_expires_at|date:"H:i d/m/Y"|default:"Chưa cấu hình" }}</strong></article>
+    {% if confirmation_stage %}
+    <article><strong>{{ summary.areas|intcomma }}</strong><span>Số lượng Quản lý khu vực</span></article>
+    <article><strong>{{ summary.area_links_issued|intcomma }}</strong><span>QLKV đã có link xác nhận</span></article>
+    <article><strong>{{ summary.area_emails_sent|intcomma }}</strong><span>QLKV đã nhận email</span></article>
+    <article><strong>{{ summary.area_confirmation_done|intcomma }} <small>/ {{ summary.area_confirmation_total|intcomma }}</small></strong><span>Dòng QLKV đã xác nhận</span></article>
+    <article><strong class="crm-info-date">{{ campaign.area_response_deadline|date:"H:i d/m/Y"|default:"Chưa cấu hình" }}</strong><span>Hạn QLKV phản hồi</span></article>
+    {% else %}
+    <article><strong>{{ summary.shops|intcomma }}</strong><span>Số lượng phòng giao dịch phát sinh lỗi trong kỳ</span></article>
+    <article><strong>{{ summary.issued|intcomma }}</strong><span>PGD đã nhận phát hành</span></article>
+    <article><strong>{{ summary.submitted|intcomma }} <small>{{ summary.submitted_rate }}%</small></strong><span>PGD đã phản hồi</span></article>
+    <article><strong>{{ summary.in_progress|intcomma }}</strong><span>PGD đang phản hồi</span></article>
+    <article><strong>{{ summary.not_started|intcomma }}</strong><span>PGD chưa phản hồi</span></article>
+    <article><strong>{{ summary.errors|intcomma }}</strong><span>Số lượng lỗi phát sinh</span></article>
+    <article><strong>{{ summary.contracts|intcomma }}</strong><span>Số lượng hợp đồng phát sinh lỗi chứng từ</span></article>
+    <article title="Số QLKV khác nhau đã được CC trong email gửi thành công cho PGD thuộc phạm vi xem. Chưa xác nhận đã đọc email."><strong data-area-emailed>{{ summary.area_emailed|intcomma }}</strong><span>QLKV đã được gửi email</span></article>
+    <article><strong class="crm-info-date">{{ campaign.response_deadline|date:"H:i d/m/Y"|default:"Chưa cấu hình" }}</strong><span>Hạn PGD phản hồi</span></article>
+    <article><strong class="crm-info-date">{{ campaign.link_expires_at|date:"H:i d/m/Y"|default:"Chưa cấu hình" }}</strong><span>Link hết hạn</span></article>
+    {% endif %}
   </div>
   <div class="crm-info-actions">
+    {% if active_monitor_tab == 'areas' %}
+      {% if can_manage_area_links %}
+      <button type="button" class="crm-mini-btn" data-open-area-email-config>Cấu hình email QLKV</button>
+      <button type="button" class="crm-mini-btn" data-open-area-email-test>Gửi email QLKV thử</button>
+      <button type="button" class="crm-mini-btn" data-open-bulk-email data-bulk-email-kind="area_monitoring" data-bulk-email-title="Gửi email theo dõi hàng loạt tới QLKV">Gửi email hàng loạt</button>
+      {% endif %}
+    {% else %}
     {% if can_manage_shop_links %}
     <form method="post" action="{% url 'document_campaigns:publish_campaign_to_shops' campaign.id %}" data-publish-shop-links data-has-links="{% if issued_shop_link_count %}true{% else %}false{% endif %}">{% csrf_token %}<button class="crm-mini-btn" {% if not can_publish_shop_links %}disabled{% endif %}>{% if issued_shop_link_count %}Tạo lại toàn bộ link{% else %}Phát hành tới PGD{% endif %}</button></form>
     <button class="crm-mini-btn" data-copy-all-links hidden>Copy toàn bộ link</button>
-    <button type="button" class="crm-mini-btn" data-open-common-deadline>Điều chỉnh deadline chung</button>
+    <button type="button" class="crm-mini-btn" data-open-common-deadline>Điều chỉnh deadline PGD phản hồi</button>
+    <span class="crm-action-divider" aria-hidden="true"></span>
+    <button type="button" class="crm-mini-btn" data-open-email-config>Cấu hình email</button>
+    <button type="button" class="crm-mini-btn" data-open-email-preflight>Kiểm tra người nhận</button>
+    <button type="button" class="crm-mini-btn" data-open-email-test>Gửi email thử</button>
+    <button type="button" class="crm-mini-btn" data-open-bulk-email data-bulk-email-kind="pgd_response" data-bulk-email-title="Gửi email hàng loạt tới PGD">Gửi email hàng loạt</button>
+    {% endif %}
     {% endif %}
   </div>
   <p data-publish-feedback class="crm-release-feedback" aria-live="polite"></p>

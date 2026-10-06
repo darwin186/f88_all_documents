@@ -30,6 +30,19 @@ body, button, input, select, textarea {
   font-weight: 600;
 }
 
+.dec-response-guidance {
+  margin: 7px 0 0;
+  border-left: 3px solid #d97706;
+  border-radius: 0 8px 8px 0;
+  background: #fffbeb;
+  padding: 8px 10px;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
 .dec-document-types {
   margin: 8px 0 0;
   padding-left: 18px;

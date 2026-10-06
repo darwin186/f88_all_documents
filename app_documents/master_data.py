@@ -230,6 +230,55 @@ def response_options_page(request):
 
 
 @admin_only
+@require_http_methods(["GET", "POST"])
+def response_guidance_page(request):
+    from app_document_campaigns.models import ResponseGuidanceTemplate
+
+    class GuidanceForm(forms.ModelForm):
+        class Meta:
+            model = ResponseGuidanceTemplate
+            fields = ["name", "guidance_text", "sort_order", "is_active"]
+            labels = {
+                "name": "Tên mẫu hướng dẫn",
+                "guidance_text": "Nội dung cảnh báo cho PGD",
+                "sort_order": "Thứ tự",
+                "is_active": "Đang sử dụng",
+            }
+            widgets = {
+                "guidance_text": forms.Textarea(
+                    attrs={"rows": 5, "placeholder": "Nhập nội dung hiển thị dưới ô Ghi chú…"}
+                )
+            }
+
+    selected_id = request.POST.get("guidance_id") if request.method == "POST" else request.GET.get("edit")
+    instance = None
+    if selected_id:
+        if not selected_id.isdigit():
+            return HttpResponseForbidden("Mã hướng dẫn không hợp lệ.")
+        instance = get_object_or_404(ResponseGuidanceTemplate, pk=int(selected_id))
+    form = GuidanceForm(request.POST if request.method == "POST" else None, instance=instance)
+    if request.method == "POST" and form.is_valid():
+        guidance = form.save(commit=False)
+        if not guidance.code:
+            guidance.code = "GUIDE-" + uuid.uuid4().hex[:12].upper()
+        guidance.save()
+        messages.success(
+            request,
+            "Đã lưu mẫu hướng dẫn. Các chiến dịch đã chọn trước đó vẫn giữ nguyên nội dung snapshot.",
+        )
+        return redirect("master_data_response_guidance")
+    templates = ResponseGuidanceTemplate.objects.annotate(
+        uses=Count("campaign_response_options")
+    )
+    return render(
+        request,
+        "app_documents/master_data_response_guidance.html",
+        {**get_user_context(request.user), "form": form, "editing": instance, "guidance_templates": templates},
+        status=400 if request.method == "POST" else 200,
+    )
+
+
+@admin_only
 @require_http_methods(["POST"])
 def create_shop_token(request):
     name = request.POST.get("name", "").strip()

@@ -9,16 +9,20 @@ from django.db import transaction
 from django.db.models import Exists, OuterRef
 from django.utils import timezone
 from openpyxl import Workbook, load_workbook
+from openpyxl.utils import get_column_letter
 from openpyxl.styles import Font, PatternFill, Protection
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from app_document_campaigns.models import Campaign, CampaignError, ShopSubmission, TeamReview
-from .folder_receipt import with_folder_receipt, receipt_values
+from documents import excel_snapshot
+from .folder_receipt import folder_state_values, with_folder_receipt, receipt_values
 
-HEADERS = ["ID dòng lỗi", "Mã PGD", "Tên phòng giao dịch", "Mã hợp đồng", "Ngày phát sinh", "Loại lỗi", "Tên nhân viên", "Lỗi", "Nghiệp vụ", "Chứng từ", "PGD phản hồi", "Ghi chú PGD", "Kết luận review", "Nhận xét team", "_snapshot"]
+HEADERS = ["ID dòng lỗi", "Mã PGD", "Tên phòng giao dịch", "Mã hợp đồng", "Ngày phát sinh", "Loại lỗi", "Tên nhân viên", "Lỗi", "Nghiệp vụ", "Chứng từ", "PGD phản hồi", "Ghi chú PGD", "Phòng vận hành xác nhận", "Nhận xét team", "_snapshot"]
 LEGACY_HEADERS = list(HEADERS)
-HEADERS = HEADERS[:12] + ["Trạng thái nhận quyển", "Ngày nhận quyển"] + HEADERS[12:]
-DECISIONS = {"Giữ lỗi": "approved", "Loại lỗi": "excluded"}
+RECEIPT_HEADERS = HEADERS[:12] + ["Trạng thái nhận quyển", "Ngày nhận quyển"] + HEADERS[12:]
+HEADERS = RECEIPT_HEADERS[:14] + ["Loại quyển hiện tại", "Trạng thái quyển hiện tại"] + RECEIPT_HEADERS[14:]
+DECISIONS = {"Giữ lỗi": "approved", "Gỡ lỗi": "excluded", "Loại lỗi": "excluded"}
+EXPORT_DECISIONS = {"approved": "Giữ lỗi", "excluded": "Gỡ lỗi"}
 SALT = "campaign-team-review-excel-v1"
 MAX_ROWS = 100000
 MAX_FILE_SIZE = 50 * 1024 * 1024
@@ -36,7 +40,24 @@ def reference_values(error, labels):
     if occurred_at and timezone.is_aware(occurred_at):
         occurred_at = timezone.localtime(occurred_at)
     occurred_date = occurred_at.strftime("%d/%m/%Y") if occurred_at else ""
-    return [str(error.error_uid), str(error.shop.shop_code), error.shop.shop_name, error.contract_code or error.code or "", occurred_date, error.get_error_type_display(), error.employee_name, error.checking_issue, error.business_type_name, error.document_type_name, labels.get(response.answer_code, response.answer_code) if response else "", response.note if response else ""] + receipt_values(error)
+    return [str(error.error_uid), str(error.shop.shop_code), error.shop.shop_name, error.contract_code or error.code or "", occurred_date, error.get_error_type_display(), error.employee_name, error.checking_issue, error.business_type_name, error.document_type_name, labels.get(response.answer_code, response.answer_code) if response else "", response.note if response else ""] + receipt_values(error) + folder_state_values(error)
+
+
+def normalized(values):
+    return [str(value or "") for value in values]
+
+
+def unpack_snapshot(snapshot):
+    if snapshot.get("v") != 3 or "c" not in snapshot:
+        return snapshot
+    return {
+        "campaign": snapshot["c"],
+        "uid": str(UUID(snapshot["u"])),
+        "reference_hash": snapshot["r"],
+        "review_id": snapshot["i"],
+        "editable_hash": snapshot["e"],
+        "response_version": snapshot["p"],
+    }
 
 
 def build_workbook(campaign, progress=None):
@@ -51,34 +72,43 @@ def build_workbook(campaign, progress=None):
     sheet = workbook.active
     sheet.title = "Team review"
     sheet.append(HEADERS)
-    reverse_decisions = {value: label for label, value in DECISIONS.items()}
+    reverse_decisions = EXPORT_DECISIONS
     for index, error in enumerate(errors.iterator(chunk_size=1000), 1):
         values = reference_values(error, labels)
         decision = reverse_decisions.get(error.review_decision, "")
         note = error.review_note or ""
         response = getattr(error, "shop_response", None)
-        token = signing.dumps({"campaign": campaign.pk, "uid": str(error.error_uid), "reference": values, "review_id": error.review_id, "decision": decision, "note": note, "response_version": response.version_no if response else 0}, salt=SALT, compress=True)
+        token = excel_snapshot.dumps({
+            "v": 3,
+            "c": campaign.pk,
+            "u": error.error_uid.hex,
+            "r": excel_snapshot.digest(normalized(values)),
+            "i": error.review_id,
+            "e": excel_snapshot.digest([decision, note]),
+            "p": response.version_no if response else 0,
+        }, salt=SALT)
         sheet.append(values + [decision, note, token])
         row_number = index + 1
         for col in range(1, len(HEADERS) + 1):
             cell = sheet.cell(row_number, col)
             cell.data_type = "s"  # Never execute user text as an Excel formula.
-        for col in (15, 16):
+        for col in (len(HEADERS) - 2, len(HEADERS) - 1):
             sheet.cell(row_number, col).protection = Protection(locked=False)
         if progress and index % 1000 == 0:
             progress(round(index * 80 / max(total, 1)))
-    dropdown = DataValidation(type="list", formula1='"Giữ lỗi,Loại lỗi"', allow_blank=True)
+    dropdown = DataValidation(type="list", formula1='"Giữ lỗi,Gỡ lỗi"', allow_blank=True)
     dropdown.showDropDown = False
     dropdown.showErrorMessage = True
     dropdown.errorStyle = "stop"
     dropdown.errorTitle = "Kết luận không hợp lệ"
-    dropdown.error = "Chọn Giữ lỗi hoặc Loại lỗi trong danh sách."
+    dropdown.error = "Chọn Giữ lỗi hoặc Gỡ lỗi trong danh sách."
     sheet.add_data_validation(dropdown)
-    dropdown.add(f"O2:O{max(total + 1, 2)}")
+    decision_column = get_column_letter(len(HEADERS) - 2)
+    dropdown.add(f"{decision_column}2:{decision_column}{max(total + 1, 2)}")
     sheet.freeze_panes = "D2"
-    sheet.auto_filter.ref = f"B1:P{total + 1}"
+    sheet.auto_filter.ref = f"B1:{get_column_letter(len(HEADERS) - 1)}{total + 1}"
     sheet.column_dimensions["A"].hidden = True
-    sheet.column_dimensions["Q"].hidden = True
+    sheet.column_dimensions[get_column_letter(len(HEADERS))].hidden = True
     sheet.protection.sheet = True
     sheet.protection.autoFilter = False
     for col in ("B", "E", "F", "G", "I", "M", "N", "O"):
@@ -90,7 +120,7 @@ def build_workbook(campaign, progress=None):
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = PatternFill("solid", fgColor="00844A")
     guide = workbook.create_sheet("Hướng dẫn")
-    for text in [f"{campaign.code} · {campaign.name}", "Chỉ sửa Kết luận review (droplist) và Nhận xét team (không bắt buộc).", "Dòng để trống kết luận và không thay đổi được giữ nguyên. Xóa bớt dòng không xóa lỗi.", "Không sửa ID, dữ liệu PGD hoặc cột _snapshot; file chỉ dùng cho đúng kỳ đã xuất.", "Import có lỗi sẽ không cập nhật dòng nào. Nếu dữ liệu đã thay đổi trên web, xuất lại file.", "Chỉ áp dụng khi PGD đã gửi chính thức hoặc hết hạn; không sửa phản hồi PGD."]:
+    for text in [f"{campaign.code} · {campaign.name}", "Chỉ sửa Phòng vận hành xác nhận (droplist) và Nhận xét team (không bắt buộc).", "Dòng để trống xác nhận và không thay đổi được giữ nguyên. Xóa bớt dòng không xóa lỗi.", "Không sửa ID, dữ liệu PGD hoặc cột _snapshot; file chỉ dùng cho đúng kỳ đã xuất.", "Import có lỗi sẽ không cập nhật dòng nào. Nếu dữ liệu đã thay đổi trên web, xuất lại file.", "Chỉ áp dụng khi PGD đã gửi chính thức hoặc hết hạn; không sửa phản hồi PGD."]:
         guide.append([text])
     guide.column_dimensions["A"].width = 120
     stream = BytesIO()
@@ -114,7 +144,11 @@ def import_workbook(campaign_id, actor, content, progress=None):
             raise ValueError("File vượt giới hạn 100.000 dòng.")
         rows = sheet.iter_rows(values_only=True)
         headers = list(next(rows, ()))
-        if headers not in (HEADERS, LEGACY_HEADERS):
+        normalized_headers = [
+            "Phòng vận hành xác nhận" if value == "Kết luận review" else value
+            for value in headers
+        ]
+        if normalized_headers not in (HEADERS, RECEIPT_HEADERS, LEGACY_HEADERS):
             raise ValueError("Sai template. Hãy tải file từ màn hình Team review.")
         reference_count = len(headers) - 3
         changes, seen = [], set()
@@ -124,18 +158,29 @@ def import_workbook(campaign_id, actor, content, progress=None):
             if len(row) != len(headers):
                 raise ValueError(f"Dòng {line}: sai số cột.")
             try:
-                snapshot = signing.loads(str(row[-1] or ""), salt=SALT)
+                snapshot = unpack_snapshot(excel_snapshot.loads(row[-1], salt=SALT))
                 uid = str(UUID(str(row[0])))
                 if snapshot["campaign"] != campaign_id or snapshot["uid"] != uid or uid in seen:
                     raise ValueError("Sai kỳ, sai ID hoặc trùng dòng lỗi.")
                 seen.add(uid)
-                if [str(value or "") for value in row[:reference_count]] != snapshot["reference"]:
+                file_reference = normalized(row[:reference_count])
+                reference_matches = (
+                    excel_snapshot.digest(file_reference) == snapshot["reference_hash"]
+                    if "reference_hash" in snapshot
+                    else file_reference == snapshot["reference"]
+                )
+                if not reference_matches:
                     raise ValueError("Dữ liệu gốc/PGD bị sửa; chỉ sửa hai cột review.")
                 decision, note = str(row[-3] or "").strip(), str(row[-2] or "").strip()
-                if decision == snapshot["decision"] and note == snapshot["note"]:
+                editable_unchanged = (
+                    excel_snapshot.digest([decision, note]) == snapshot["editable_hash"]
+                    if "editable_hash" in snapshot
+                    else decision == snapshot["decision"] and note == snapshot["note"]
+                )
+                if editable_unchanged:
                     continue
                 if decision not in DECISIONS:
-                    raise ValueError("Chọn Giữ lỗi hoặc Loại lỗi; không được xóa kết luận đã có.")
+                    raise ValueError("Chọn Giữ lỗi hoặc Gỡ lỗi; không được xóa xác nhận đã có.")
                 if len(note) > 2000 or note.startswith("="):
                     raise ValueError("Nhận xét tối đa 2.000 ký tự và không dùng công thức.")
                 changes.append((line, uid, DECISIONS[decision], note, snapshot))
@@ -169,7 +214,13 @@ def import_workbook(campaign_id, actor, content, progress=None):
             if not error or (not shop_deadline_passed(campaign, error.shop_id, deadlines) and error.shop_id not in submitted):
                 raise ValueError(f"Dòng {line}: lỗi không còn khả dụng hoặc PGD chưa gửi/hết hạn.")
             response = getattr(error, "shop_response", None)
-            if latest_ids.get(error.pk) != snapshot["review_id"] or reference_values(error, labels)[:len(snapshot["reference"])] != snapshot["reference"] or (response.version_no if response else 0) != snapshot["response_version"]:
+            current_values = reference_values(error, labels)
+            source_unchanged = (
+                excel_snapshot.digest(normalized(current_values)) == snapshot["reference_hash"]
+                if "reference_hash" in snapshot
+                else current_values[:len(snapshot["reference"])] == snapshot["reference"]
+            )
+            if latest_ids.get(error.pk) != snapshot["review_id"] or not source_unchanged or (response.version_no if response else 0) != snapshot["response_version"]:
                 raise ValueError(f"Dòng {line}: dữ liệu đã thay đổi; hãy xuất lại file.")
             pending.append(TeamReview(error=error, decision=decision, note=note, reviewed_by=actor))
         TeamReview.objects.bulk_create(pending, batch_size=500)

@@ -1,0 +1,51 @@
+<dialog class="crm-email-dialog crm-email-compose-dialog" data-email-config-dialog data-preview-url="{% url 'document_campaigns:campaign_email_preview' campaign.id %}">
+  <form method="post" action="{% url 'document_campaigns:campaign_email_settings' campaign.id %}" data-email-config-form>
+    {% csrf_token %}
+    <div class="crm-dialog-head"><div><span>CẤU HÌNH EMAIL</span><h2>Email gửi phòng giao dịch xác nhận</h2></div><button type="button" data-close-email-dialog aria-label="Đóng">×</button></div>
+    <div class="crm-email-compose-layout">
+      <div class="crm-email-form-grid">
+        <label>Tên hiển thị người gửi{{ email_config_form.from_name }}</label>
+        <label>Địa chỉ gửi do hệ thống cấu hình<input type="email" value="{{ email_from_address }}" data-email-from-address disabled></label>
+        <label>{{ email_config_form.cc_emails_text.label }}{{ email_config_form.cc_emails_text }}</label>
+        <label>{{ email_config_form.bcc_emails_text.label }}{{ email_config_form.bcc_emails_text }}</label>
+        <label>Email hỗ trợ{{ email_config_form.support_email }}</label>
+        <label class="crm-email-check">{{ email_config_form.cc_area_manager }}<span>Tự động CC Quản lý khu vực hiện tại</span></label>
+        <label class="is-wide">Subject{{ email_config_form.subject_template }}</label>
+        {% include "app_document_campaigns/components/rich_email_editor.html" with field=email_config_form.body_template label="Nội dung email" %}
+        <div class="is-wide crm-email-variables"><span>Chèn tham số vào ô đang chọn</span><div>{% for key, label in email_variables.items %}<button type="button" data-email-variable="{{ key }}" title="{{ label }}">{{ key }}</button>{% endfor %}</div></div>
+      </div>
+      <aside class="crm-email-live-preview" aria-live="polite">
+        <div class="crm-email-preview-head"><span>PREVIEW TRỰC TIẾP</span><strong data-live-preview-shop>Đang tải PGD mẫu…</strong></div>
+        <dl>
+          <dt>From</dt><dd data-live-preview-from>—</dd>
+          <dt>To</dt><dd data-live-preview-to>—</dd>
+          <dt>CC</dt><dd data-live-preview-cc>—</dd>
+          <dt>BCC</dt><dd data-live-preview-bcc>—</dd>
+          <dt>Subject</dt><dd data-live-preview-subject>—</dd>
+        </dl>
+        <div class="crm-email-preview-body" data-live-preview-body>Đang chuẩn bị nội dung…</div>
+        <p data-live-preview-error hidden></p>
+      </aside>
+    </div>
+    <p class="crm-dialog-error" data-email-config-error hidden></p>
+    <div class="crm-dialog-actions"><button type="button" class="crm-mini-btn" data-close-email-dialog>Hủy</button><button class="crm-btn">Lưu cấu hình</button></div>
+  </form>
+</dialog>
+
+<dialog class="crm-email-dialog" data-email-preflight-dialog data-url="{% url 'document_campaigns:campaign_email_preflight' campaign.id %}">
+  <div class="crm-dialog-head"><div><span>PREFLIGHT</span><h2>Kiểm tra người nhận</h2></div><button type="button" data-close-email-dialog aria-label="Đóng">×</button></div>
+  <div class="crm-email-preflight" data-email-preflight-content><p>Đang kiểm tra dữ liệu…</p></div>
+  <div class="crm-dialog-actions"><button type="button" class="crm-mini-btn" data-close-email-dialog>Đóng</button></div>
+</dialog>
+
+<dialog class="crm-email-dialog is-small" data-email-test-dialog>
+  <form method="post" action="{% url 'document_campaigns:campaign_email_test' campaign.id %}" data-email-test-form>
+    {% csrf_token %}
+    <div class="crm-dialog-head"><div><span>EMAIL TEST</span><h2>Gửi email thử</h2></div><button type="button" data-close-email-dialog aria-label="Đóng">×</button></div>
+    <p>Email thử dùng dữ liệu của một PGD mẫu và link giả, không gửi CC/BCC thật.</p>
+    <fieldset class="crm-bulk-email-transports crm-test-email-transports" data-email-test-transports data-url="{% url 'document_campaigns:available_email_transports' campaign.id %}"><legend>Kênh gửi email</legend><p>Đang kiểm tra kênh gửi…</p></fieldset>
+    <label>Email nhận thử<input type="email" name="test_email" required placeholder="tester@f88.vn"></label>
+    <p class="crm-dialog-error" data-email-test-error hidden></p>
+    <div class="crm-dialog-actions"><button type="button" class="crm-mini-btn" data-close-email-dialog>Hủy</button><button type="submit" class="crm-btn">Gửi thử</button></div>
+  </form>
+</dialog>

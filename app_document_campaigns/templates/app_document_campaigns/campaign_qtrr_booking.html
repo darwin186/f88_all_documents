@@ -1,0 +1,98 @@
+{% extends "app_documents/base_app_documents_v2.html" %}
+{% load campaign_workflow static humanize %}
+{% block title %}Book lỗi gửi QTRR · {{ campaign.code }}{% endblock %}
+{% block top_nav %}{% include "app_documents/components/top_nav_v2.html" %}{% endblock %}
+{% block main_extra_class %}pt-20 review-main{% endblock %}
+{% block extra_head %}
+{% get_static_prefix as qtrr_static_prefix %}
+<link rel="stylesheet" href="{% static 'app_document_campaigns/css/team_review.css' %}?v=20261001-3">
+<link rel="stylesheet" href="{{ qtrr_static_prefix }}app_document_campaigns/css/qtrr_booking.css?v=20261001-2">
+<script src="{% static 'app_document_campaigns/js/review_sticky.js' %}" defer></script>
+<script src="{% static 'app_document_campaigns/js/qtrr_booking.js' %}?v=20261001-2" defer></script>
+{% endblock %}
+{% block content %}
+{% campaign_workflow 6 %}
+<main class="review-page qtrr-page" data-qtrr-booking data-map-url="{% url 'document_campaigns:map_qtrr_codes' campaign.id %}">
+  <section class="qtrr-dashboard" aria-label="Tổng quan dữ liệu gửi QTRR">
+    <div class="qtrr-metrics">
+      <article><strong>{{ total|intcomma }}</strong><span>Dòng gửi QTRR</span></article>
+      <article><strong>{{ confirmed|intcomma }}</strong><span>QLKV đã xác nhận</span></article>
+      <article><strong>{{ mapped|intcomma }}</strong><span>Đã mapping mã lỗi</span></article>
+      <article><strong>{{ waiting_mapping|intcomma }}</strong><span>Chưa mapping</span></article>
+    </div>
+    {% if can_manage %}
+    <div class="qtrr-export-card">
+      {% if ready_to_export %}
+      <a class="qtrr-primary-action" href="{% url 'document_campaigns:export_qtrr_excel' campaign.id %}">↓ Tải file cuối gửi QTRR</a>
+      <span>Dữ liệu đã đủ điều kiện xuất file</span>
+      {% else %}
+      <button class="qtrr-primary-action" type="button" disabled title="Cần QLKV xác nhận và mapping đủ 100%">↓ Tải file cuối gửi QTRR</button>
+      <span>Cần xác nhận và mapping đủ 100%</span>
+      {% endif %}
+    </div>
+    {% endif %}
+    <div class="qtrr-progress-grid">
+      <article>
+        <div><strong>QLKV xác nhận</strong><span>{{ confirmed|intcomma }}/{{ total|intcomma }} dòng · {{ area_progress }}%</span></div>
+        <div class="qtrr-progress" role="progressbar" aria-label="Tiến độ QLKV xác nhận" aria-valuenow="{{ area_progress }}" aria-valuemin="0" aria-valuemax="100"><span style="width:{{ area_progress }}%;background-color:hsl({{ area_progress|add:'0' }},65%,43%)"></span></div>
+      </article>
+      <article>
+        <div><strong>Mapping mã lỗi QTRR</strong><span>{{ mapped|intcomma }}/{{ total|intcomma }} dòng · {{ mapping_progress }}%</span></div>
+        <div class="qtrr-progress" role="progressbar" aria-label="Tiến độ mapping mã lỗi QTRR" aria-valuenow="{{ mapping_progress }}" aria-valuemin="0" aria-valuemax="100"><span style="width:{{ mapping_progress }}%;background-color:hsl({{ mapping_progress|add:'0' }},65%,43%)"></span></div>
+      </article>
+    </div>
+  </section>
+
+  {% if can_manage %}
+  <section class="qtrr-workbench">
+    <div class="qtrr-workbench-head">
+      <div><strong>Gán mã lỗi QTRR</strong><span>Chọn các dòng đã được QLKV xác nhận để cập nhật cùng lúc.</span></div>
+      <div class="qtrr-workbench-actions">
+        <a href="{% url 'document_campaigns:export_qtrr_mapping_excel' campaign.id %}">↓ Tải Excel để book lỗi</a>
+        <button type="button" data-qtrr-upload-open>↑ Upload kết quả Excel</button>
+        <span class="qtrr-selection"><b data-selected-count>0</b> dòng đã chọn</span>
+      </div>
+    </div>
+    <form class="qtrr-upload-form" method="post" enctype="multipart/form-data" action="{% url 'document_campaigns:import_qtrr_mapping_excel' campaign.id %}" data-qtrr-upload-form hidden>{% csrf_token %}<input type="file" name="file" accept=".xlsx" data-qtrr-upload-file></form>
+    <form data-qtrr-map-form>
+      <label><span>Mã lỗi QTRR</span><select name="risk_code_id" required><option value="">Chọn mã lỗi QTRR</option>{% for code in risk_codes %}<option value="{{ code.id }}">{{ code.code }} · {{ code.name }} · {{ code.source }}</option>{% endfor %}</select></label>
+      <label><span>Ghi chú mapping</span><input name="note" maxlength="2000" placeholder="Nhập ghi chú nếu cần"></label>
+      <button type="submit">Gán mã cho dòng đã chọn</button>
+      <span class="qtrr-map-feedback" data-map-feedback role="status"></span>
+    </form>
+  </section>
+  {% endif %}
+
+  <form method="get" class="qtrr-filters">
+    <input name="q" value="{{ query }}" placeholder="Tìm PGD, hợp đồng, nội dung lỗi…" aria-label="Tìm dữ liệu">
+    <select name="error_type" aria-label="Loại lỗi"><option value="">Tất cả loại lỗi</option>{% for value,label in error_type_options %}<option value="{{ value }}" {% if selected_type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    <select name="risk_code" aria-label="Mã lỗi QTRR"><option value="">Tất cả mã QTRR</option><option value="__missing__" {% if selected_code == '__missing__' %}selected{% endif %}>Chưa mapping</option>{% for code in risk_codes %}<option value="{{ code.id }}" {% if selected_code == code.id|stringformat:'s' %}selected{% endif %}>{{ code.code }} · {{ code.name }}</option>{% endfor %}</select>
+    <button type="submit">Lọc dữ liệu</button>
+    <a href="{% url 'document_campaigns:campaign_qtrr_booking' campaign.id %}">Xóa lọc</a>
+  </form>
+
+  <div class="review-table-wrap qtrr-table-wrap" data-review-grid>
+    <table class="review-table qtrr-table">
+      <thead><tr>{% if can_manage %}<th class="qtrr-check"><input type="checkbox" data-select-all aria-label="Chọn tất cả dòng đủ điều kiện trên trang"></th>{% endif %}<th>Phòng giao dịch</th><th>Hợp đồng</th><th>Loại lỗi</th><th>Nội dung lỗi</th><th>QLKV xác nhận</th><th>Mã lỗi QTRR</th></tr></thead>
+      <tbody>
+      {% for error in page %}
+      <tr data-qtrr-row data-error-id="{{ error.id }}">
+        {% if can_manage %}<td class="qtrr-check"><input type="checkbox" data-select-row aria-label="Chọn hợp đồng {{ error.contract_code }}" {% if error.status != 'area_confirmed' %}disabled{% endif %}></td>{% endif %}
+        <td><strong>{{ error.shop.shop_code }} · {{ error.shop.shop_name }}</strong></td>
+        <td><strong>{{ error.contract_code|default:'—' }}</strong><small>{{ error.source_created_at|date:'d/m/Y'|default:'Chưa có ngày phát sinh' }}</small>{% if error.employee_name %}<small>{{ error.employee_name }}{% if error.business_type_name %} · {{ error.business_type_name }}{% endif %}</small>{% endif %}</td>
+        <td>{{ error.get_error_type_display }}</td>
+        <td class="qtrr-issue">{{ error.checking_issue }}{% if error.document_type_name %}<ul>{% for document in error.document_type_name.splitlines %}<li>{{ document }}</li>{% endfor %}</ul>{% endif %}</td>
+        <td>{% if error.status == 'area_confirmed' %}<span class="review-tag">✓ Đã xác nhận</span>{% else %}<span class="review-tag draft">Chờ xác nhận</span>{% endif %}</td>
+        <td>{% if error.risk_booking %}<strong class="qtrr-code">{{ error.risk_booking.risk_code.code }}</strong><small>{{ error.risk_booking.risk_code.name }}</small><small>{{ error.risk_booking.risk_code.source }}</small>{% else %}<span class="review-tag draft">Chưa mapping</span>{% endif %}</td>
+      </tr>
+      {% empty %}<tr><td class="qtrr-empty" colspan="{% if can_manage %}7{% else %}6{% endif %}">Không có dữ liệu phù hợp với bộ lọc.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <nav class="qtrr-pager" aria-label="Phân trang">
+    <span>{{ page.start_index }}–{{ page.end_index }}/{{ page.paginator.count|intcomma }} dòng</span>
+    <div>{% if page.has_previous %}<a href="?{{ filter_query }}&page=1">First</a><a href="?{{ filter_query }}&page={{ page.previous_page_number }}">‹</a>{% endif %}<span>Trang {{ page.number }}/{{ page.paginator.num_pages }}</span>{% if page.has_next %}<a href="?{{ filter_query }}&page={{ page.next_page_number }}">›</a><a href="?{{ filter_query }}&page={{ page.paginator.num_pages }}">Last</a>{% endif %}</div>
+  </nav>
+  {% csrf_token %}
+</main>
+{% endblock %}

@@ -1,12 +1,16 @@
 document.addEventListener('DOMContentLoaded', () => {
   const csrf = () => document.querySelector('[name=csrfmiddlewaretoken]').value;
   const updateStats = (stats, percent) => {
-    document.querySelectorAll('[data-metric]').forEach(element => element.textContent = stats[element.dataset.metric]);
+    document.querySelectorAll('[data-metric]').forEach(element => {
+      element.textContent = new Intl.NumberFormat('en-US').format(stats[element.dataset.metric] || 0);
+    });
     const track = document.querySelector('[data-review-progress]');
     const value = document.querySelector('[data-review-progress-value]');
     if (track) track.setAttribute('aria-valuenow', percent);
+    if (track) track.title = `${stats.reviewed}/${stats.total} dòng đã review · còn ${Math.max(stats.total-stats.reviewed,0)} dòng`;
     if (value) { value.style.width = `${percent}%`; value.style.backgroundColor = `hsl(${percent * 1.2},65%,43%)`; }
     document.querySelectorAll('[data-review-progress-label]').forEach(element => element.textContent = `${percent}%`);
+    document.querySelectorAll('[data-review-progress-label]').forEach(element => { element.title = track?.title || ''; });
   };
   const post = async (url, data) => {
     const response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json','X-CSRFToken':csrf()}, body:JSON.stringify(data)});
@@ -23,6 +27,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const label = row.querySelector('[data-receipt-label]');
     label.textContent = receipt.label;
     label.classList.toggle('review-received', receipt.received);
+    label.style.backgroundColor = receipt.received ? '#d1f4e0' : (receipt.color || '#e5e7eb');
+    label.style.color = receipt.received ? '#006837' : '#0f172a';
+    label.style.borderColor = receipt.received ? '#9ee5bc' : '#d1d5db';
     row.querySelector('[data-receipt-date]').textContent = receipt.date || '—';
     if (notify && receipt.received) window.campaignToast?.(`Quyển này đã nhận${receipt.date ? ' ngày '+receipt.date : ''}. Hãy đối chiếu trước khi kết luận.`, 'warning');
   };

@@ -1,0 +1,65 @@
+.dec-guidance-config {
+  grid-column: 1 / -1;
+  border: 1px solid #dce4df;
+  border-radius: 12px;
+  background: #f8fbf9;
+  padding: 12px;
+}
+
+.dec-guidance-config__head strong,
+.dec-guidance-config__head span {
+  display: block;
+}
+
+.dec-guidance-config__head strong {
+  color: #24342b;
+  font-size: 12px;
+}
+
+.dec-guidance-config__head span {
+  margin-top: 3px;
+  color: #77837c;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.dec-guidance-config__list {
+  display: grid;
+  gap: 10px;
+  margin-top: 11px;
+}
+
+.dec-guidance-config__item label {
+  display: block;
+  margin-bottom: 5px;
+  color: #3c4c43;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dec-guidance-config__item textarea,
+.dec-guidance-config__item select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+  resize: vertical;
+  border: 1px solid #cfd9d3;
+  border-radius: 9px;
+  background: #fff;
+  padding: 9px 10px;
+  color: #17201c;
+  font: 12px/1.45 "Segoe UI", Arial, sans-serif;
+  outline: none;
+}
+
+.dec-guidance-config__item textarea:focus,
+.dec-guidance-config__item select:focus {
+  border-color: #00844a;
+  box-shadow: 0 0 0 3px rgba(0, 132, 74, .1);
+}
+
+.dec-guidance-config__error {
+  margin: 5px 0 0;
+  color: #b42318;
+  font-size: 11px;
+}

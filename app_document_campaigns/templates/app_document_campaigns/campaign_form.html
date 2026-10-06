@@ -8,7 +8,9 @@
 {% block extra_head %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/monthSelect/style.css">
-<link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_form.css' %}">
+<link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_form.css' %}?v=20261001-2">
+<link rel="stylesheet" href="{% static 'app_document_campaigns/css/datetime_picker.css' %}?v=20261002-2">
+<link rel="stylesheet" href="{% static 'app_document_campaigns/css/response_guidance_config.css' %}">
 {% endblock %}
 
 {% block content %}
@@ -19,15 +21,19 @@
   <div class="dcf-layout">
     <form method="post" class="dcf-form">
       {% csrf_token %}
+      <input type="hidden" name="risk_error_codes_present" value="1">
       <div class="dcf-fields">
         {% for field in form %}
-          <div class="dcf-field {% if field.name == 'campaign_type' or field.name == 'name' or field.name == 'response_deadline' or field.name == 'shop_instructions' or field.name == 'area_manager_instructions' or field.name == 'response_options' %}is-wide{% endif %}">
+          {% if field.name not in form.response_guidance_field_names %}
+          <div class="dcf-field {% if field.name == 'campaign_type' or field.name == 'name' or field.name == 'response_deadline' or field.name == 'area_response_deadline' or field.name == 'shop_instructions' or field.name == 'area_manager_instructions' or field.name == 'response_options' or field.name == 'risk_error_codes' %}is-wide{% endif %}">
             <label for="{{ field.id_for_label }}" class="dcf-label">{{ field.label }}</label>
-            {{ field }}
+            {% if field.name == 'response_deadline' or field.name == 'area_response_deadline' %}{% include "app_document_campaigns/components/datetime_picker.html" with field=field %}{% else %}{{ field }}{% endif %}
             {% if field.help_text %}<p class="dcf-help">{{ field.help_text }}</p>{% endif %}
             {% for error in field.errors %}<p class="dcf-error">{{ error }}</p>{% endfor %}
           </div>
+          {% if field.name == 'response_options' %}{% include "app_document_campaigns/components/response_guidance_fields.html" %}{% endif %}
           {% if field.name == 'campaign_type' %}<div class="dcf-code-preview"><span>Mã chiến dịch tự sinh</span><strong data-campaign-code-preview>Chọn loại và tháng chứng từ</strong></div>{% endif %}
+          {% endif %}
         {% endfor %}
       </div>
       {% for error in form.non_field_errors %}<p class="dcf-error">{{ error }}</p>{% endfor %}
@@ -46,5 +52,7 @@
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/vn.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/monthSelect/index.js"></script>
+<script src="{% static 'app_document_campaigns/js/datetime_picker.js' %}?v=20261002-2"></script>
 <script src="{% static 'app_document_campaigns/js/campaign_form.js' %}"></script>
+<script src="{% static 'app_document_campaigns/js/response_guidance_config.js' %}"></script>
 {% endblock %}

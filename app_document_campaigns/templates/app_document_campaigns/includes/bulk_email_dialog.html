@@ -1,0 +1,14 @@
+<dialog class="crm-email-dialog crm-bulk-email-dialog" data-bulk-email-dialog data-prepare-url="{% url 'document_campaigns:prepare_bulk_email_batches' campaign.id %}" data-send-url="{% url 'document_campaigns:send_bulk_email_batches' campaign.id %}">
+  <form data-bulk-email-form>{% csrf_token %}
+    <div class="crm-dialog-head"><div><span>GỬI EMAIL HÀNG LOẠT</span><h2 data-bulk-email-title>Chuẩn bị batch email</h2></div><button type="button" data-close-bulk-email aria-label="Đóng">×</button></div>
+    <div class="crm-bulk-email-summary" data-bulk-email-summary>Đang kiểm tra người nhận…</div>
+    <fieldset class="crm-bulk-email-transports" data-bulk-email-transports>
+      <legend>Kênh gửi email</legend>
+      <p>Đang kiểm tra các kênh đã được cấu hình…</p>
+    </fieldset>
+    <div class="crm-bulk-email-toolbar"><button type="button" class="crm-mini-btn" data-bulk-select-all>Chọn tất cả</button><span>Mỗi batch chỉ được gửi một lần; hệ thống xử lý tuần tự.</span></div>
+    <div class="crm-bulk-email-list" data-bulk-email-list></div>
+    <p class="crm-dialog-error" data-bulk-email-error hidden></p>
+    <div class="crm-dialog-actions"><button type="button" class="crm-mini-btn" data-close-bulk-email>Hủy</button><button class="crm-btn" type="submit" data-send-bulk-email disabled>Gửi các batch đã chọn</button></div>
+  </form>
+</dialog>

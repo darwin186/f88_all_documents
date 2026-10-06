@@ -1,6 +1,18 @@
 (() => {
   const root = document.querySelector('[data-response-root]');
-  if (!root || root.dataset.readOnly === 'true') return;
+  if (!root) return;
+
+  const updateResponseGuidance = (row) => {
+    const selected = row.querySelector('[data-answer]')?.selectedOptions?.[0];
+    const message = row.querySelector('[data-response-guidance]');
+    if (!message) return;
+    const guidance = selected?.dataset.guidance?.trim() || '';
+    message.textContent = guidance;
+    message.hidden = !guidance;
+  };
+
+  document.querySelectorAll('[data-response-row]').forEach(updateResponseGuidance);
+  if (root.dataset.readOnly === 'true') return;
 
   const indicator = document.getElementById('save-indicator');
   const submitButton = document.getElementById('submit-responses');
@@ -128,8 +140,10 @@
   };
 
   document.querySelectorAll('[data-response-row]').forEach((row) => {
+    updateResponseGuidance(row);
     row.querySelector('[data-answer]').addEventListener('change', () => {
       setRowInvalid(row, !row.querySelector('[data-answer]').value);
+      updateResponseGuidance(row);
       queueRow(row);
     });
     row.querySelector('[data-note]').addEventListener('input', () => queueRow(row));
