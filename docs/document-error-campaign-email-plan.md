@@ -37,7 +37,7 @@ Sau khi version dữ liệu đã publish, Admin cấu hình, kiểm tra và phá
 - [x] Preview theo một PGD mẫu.
 - [x] Preflight thống kê PGD/email hợp lệ và các lỗi Master Data.
 - [x] Gửi email thử chỉ tới địa chỉ kiểm thử, không gửi CC/BCC thật và không phát hành link thật.
-- [x] Sửa kiểu dữ liệu cấu hình SMTP (`EMAIL_PORT`, TLS/SSL boolean).
+- [x] Chuẩn hóa cấu hình Microsoft Graph dùng chung cho web và worker.
 
 ## Pha 2 — Phát hành email hàng loạt
 
@@ -63,7 +63,7 @@ Sau khi version dữ liệu đã publish, Admin cấu hình, kiểm tra và phá
 - [x] Unit test email thử không gửi tới PGD/QLKV thật.
 - [ ] Staging redirect toàn bộ email tới mailbox kiểm thử.
 - [ ] Production canary một shop test trước khi gửi toàn bộ.
-- [ ] Kiểm tra giới hạn SMTP, SPF/DKIM/DMARC và quyền relay tới domain ngoài.
+- [ ] Kiểm tra quyền Graph `Mail.Send`, Exchange Application RBAC và giới hạn gửi của mailbox.
 
 ## Điều kiện phát hành
 
@@ -71,4 +71,4 @@ Sau khi version dữ liệu đã publish, Admin cấu hình, kiểm tra và phá
 - Campaign chưa đóng/hủy và deadline còn hiệu lực.
 - Template hợp lệ, có `{{response_url}}`.
 - Có ít nhất một PGD với email hợp lệ.
-- SMTP đã qua bước gửi thử.
+- Microsoft Graph đã qua bước gửi thử.

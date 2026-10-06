@@ -4,8 +4,6 @@ from unittest.mock import Mock, patch
 
 from django.test import SimpleTestCase, override_settings
 
-from app_document_campaigns.bulk_email_views import _available_transports
-from app_document_campaigns.models import CampaignEmailBatch
 from app_document_campaigns.services import microsoft_graph_email
 
 
@@ -13,14 +11,10 @@ GRAPH_SETTINGS = {
     "MICROSOFT_GRAPH_TENANT_ID": "tenant-id",
     "MICROSOFT_GRAPH_CLIENT_ID": "application-id",
     "MICROSOFT_GRAPH_CLIENT_SECRET": "secret-value",
+    "MICROSOFT_GRAPH_MAILBOX_EMAIL": "datnm@f88.vn",
     "MICROSOFT_GRAPH_SENDER_EMAIL": "phongvanhanh@f88.vn",
     "MICROSOFT_GRAPH_CONNECT_TIMEOUT": 3.05,
     "MICROSOFT_GRAPH_READ_TIMEOUT": 30,
-    "POWER_AUTOMATE_EMAIL_WEBHOOK_URL": "",
-    "POWER_AUTOMATE_EMAIL_WEBHOOK_SECRET": "",
-    "POWER_AUTOMATE_EMAIL_CALLBACK_SECRET": "",
-    "POWER_AUTOMATE_EMAIL_CALLBACK_URL": "",
-    "EMAIL_HOST": "",
 }
 
 
@@ -34,13 +28,6 @@ class MicrosoftGraphEmailTests(SimpleTestCase):
     def setUp(self):
         microsoft_graph_email._token_value = ""
         microsoft_graph_email._token_expires_at = 0.0
-
-    def test_graph_is_available_as_ui_transport(self):
-        transports = _available_transports()
-        self.assertEqual(transports, [{
-            "value": CampaignEmailBatch.TransportProvider.MICROSOFT_GRAPH,
-            "label": "Microsoft Graph",
-        }])
 
     @patch("app_document_campaigns.services.microsoft_graph_email.requests.post")
     def test_send_message_gets_app_token_and_posts_html_email(self, post):
@@ -62,38 +49,53 @@ class MicrosoftGraphEmailTests(SimpleTestCase):
         token_call, send_call = post.call_args_list
         self.assertIn("/tenant-id/oauth2/v2.0/token", token_call.args[0])
         self.assertEqual(token_call.kwargs["data"]["client_secret"], "secret-value")
-        self.assertIn("/users/phongvanhanh@f88.vn/sendMail", send_call.args[0])
+        self.assertIn("/users/datnm@f88.vn/sendMail", send_call.args[0])
         self.assertEqual(send_call.kwargs["headers"]["Authorization"], f"Bearer {_app_token('Mail.Send')}")
         message = send_call.kwargs["json"]["message"]
         self.assertEqual(message["body"]["contentType"], "HTML")
+        self.assertEqual(message["from"]["emailAddress"]["address"], "phongvanhanh@f88.vn")
         self.assertEqual(message["toRecipients"][0]["emailAddress"]["address"], "pgd@example.com")
         self.assertEqual(message["ccRecipients"][0]["emailAddress"]["address"], "qlkv@example.com")
 
     @patch("app_document_campaigns.services.microsoft_graph_email.requests.post")
-    def test_sender_must_match_configured_graph_mailbox(self, post):
-        with self.assertRaises(microsoft_graph_email.MicrosoftGraphConfigurationError):
-            microsoft_graph_email.send_message({
+    def test_stale_template_sender_is_overridden_by_graph_configuration(self, post):
+        token_response = Mock(status_code=200)
+        token_response.json.return_value = {"access_token": _app_token("Mail.Send"), "expires_in": 3600}
+        send_response = Mock(status_code=202)
+        post.side_effect = [token_response, send_response]
+
+        with self.assertLogs(
+            "app_document_campaigns.services.microsoft_graph_email", level="WARNING"
+        ) as logs:
+            result = microsoft_graph_email.send_message({
                 "from": {"address": "another@f88.vn"},
                 "to": ["pgd@example.com"],
-                "subject": "Không hợp lệ",
+                "subject": "Sender cũ",
                 "body": {"content_type": "html", "content": "Test"},
             })
-        post.assert_not_called()
+        self.assertEqual(result.http_status, 202)
+        self.assertEqual(
+            post.call_args_list[1].kwargs["json"]["message"]["from"]["emailAddress"]["address"],
+            "phongvanhanh@f88.vn",
+        )
+        self.assertIn("MICROSOFT_GRAPH_FROM_OVERRIDDEN", " ".join(logs.output))
 
     @patch("app_document_campaigns.services.microsoft_graph_email.requests.post")
-    def test_token_without_mail_send_is_rejected_before_sending(self, post):
+    def test_token_without_mail_send_can_use_exchange_application_rbac(self, post):
         token_response = Mock(status_code=200)
         token_response.json.return_value = {"access_token": _app_token(), "expires_in": 3600}
-        post.return_value = token_response
+        send_response = Mock(status_code=202)
+        post.side_effect = [token_response, send_response]
 
-        with self.assertRaisesRegex(
-            microsoft_graph_email.MicrosoftGraphConfigurationError,
-            "Mail.Send",
-        ):
-            microsoft_graph_email.send_message({
+        with self.assertLogs(
+            "app_document_campaigns.services.microsoft_graph_email", level="WARNING"
+        ) as logs:
+            result = microsoft_graph_email.send_message({
                 "from": {"address": "phongvanhanh@f88.vn"},
                 "to": ["pgd@example.com"],
-                "subject": "Thiếu quyền",
+                "subject": "Exchange RBAC",
                 "body": {"content_type": "html", "content": "Test"},
             })
-        self.assertEqual(post.call_count, 1)
+        self.assertEqual(result.http_status, 202)
+        self.assertEqual(post.call_count, 2)
+        self.assertIn("relying_on=exchange_application_rbac", " ".join(logs.output))

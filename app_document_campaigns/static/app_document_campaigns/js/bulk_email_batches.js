@@ -1,47 +1,10 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const readTransportJson = async response => {
-    const type = response.headers.get("content-type") || "";
-    if (!type.includes("application/json")) throw new Error(`Máy chủ trả dữ liệu không hợp lệ (HTTP ${response.status}).`);
-    return response.json();
-  };
-  const renderTransportChoices = (fieldset, data) => {
-    fieldset.replaceChildren();
-    const legend = document.createElement("legend"); legend.textContent = "Kênh gửi email"; fieldset.append(legend);
-    data.transports.forEach(provider => {
-      const label = document.createElement("label"), input = document.createElement("input"), text = document.createElement("span");
-      input.type = "radio"; input.name = "transport"; input.value = provider.value; input.required = true;
-      input.checked = provider.value === data.default_transport;
-      const strong = document.createElement("strong"), small = document.createElement("small");
-      strong.textContent = provider.label;
-      small.textContent = provider.value === "power_automate"
-        ? "Gửi thử qua webhook thật"
-        : provider.value === "microsoft_graph"
-          ? "Gửi thử trực tiếp qua Microsoft Graph"
-          : "Gửi thử qua SMTP thật";
-      text.append(strong, small); label.append(input, text); fieldset.append(label);
-    });
-    if (!data.transports.length) {
-      const empty = document.createElement("p"); empty.textContent = "Chưa có kênh gửi email nào được cấu hình."; fieldset.append(empty);
-    }
-  };
-  document.querySelectorAll("[data-email-test-transports]").forEach(async fieldset => {
-    try {
-      const response = await fetch(fieldset.dataset.url, {credentials: "same-origin", cache: "no-store", headers: {Accept: "application/json"}});
-      const data = await readTransportJson(response);
-      if (!response.ok || !data.ok) throw new Error(data.error || "Không tải được kênh gửi.");
-      renderTransportChoices(fieldset, data);
-    } catch (error) {
-      fieldset.innerHTML = `<legend>Kênh gửi email</legend><p></p>`;
-      fieldset.querySelector("p").textContent = error.message;
-    }
-  });
   const root = document.querySelector("[data-bulk-email-dialog]");
   if (!root) return;
   const form = root.querySelector("[data-bulk-email-form]");
   const list = root.querySelector("[data-bulk-email-list]");
   const summary = root.querySelector("[data-bulk-email-summary]");
   const errorBox = root.querySelector("[data-bulk-email-error]");
-  const transports = root.querySelector("[data-bulk-email-transports]");
   const sendButton = root.querySelector("[data-send-bulk-email]");
   let kind = "", batches = [];
   const readJson = async response => {
@@ -54,26 +17,6 @@ document.addEventListener("DOMContentLoaded", () => {
     batches = data.batches;
     summary.textContent = `${data.eligible} email hợp lệ · ${data.invalid} email lỗi · ${data.batches.length} batch · tối đa ${data.chunk_size} email/batch`;
     list.replaceChildren();
-    transports.replaceChildren();
-    const legend = document.createElement("legend"); legend.textContent = "Kênh gửi email"; transports.append(legend);
-    data.transports.forEach(provider => {
-      const label = document.createElement("label");
-      const input = document.createElement("input");
-      input.type = "radio"; input.name = "bulk_email_transport"; input.value = provider.value;
-      input.checked = provider.value === data.default_transport;
-      const text = document.createElement("span");
-      const strong = document.createElement("strong"); strong.textContent = provider.label;
-      const small = document.createElement("small");
-      small.textContent = provider.value === "power_automate"
-        ? "Webhook · gửi theo batch 25–50 email"
-        : provider.value === "microsoft_graph"
-          ? "Microsoft 365 · worker gửi tuần tự qua Graph API"
-          : "Máy chủ SMTP · gửi tuần tự qua worker";
-      text.append(strong, small); label.append(input, text); transports.append(label);
-    });
-    if (!data.transports.length) {
-      const empty = document.createElement("p"); empty.textContent = "Chưa có kênh gửi email nào được cấu hình."; transports.append(empty);
-    }
     data.batches.forEach(batch => {
       const label = document.createElement("label");
       label.className = "crm-bulk-email-row";
@@ -96,7 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
     kind = button.dataset.bulkEmailKind;
     root.querySelector("[data-bulk-email-title]").textContent = button.dataset.bulkEmailTitle || "Chuẩn bị batch email";
     errorBox.hidden = true; summary.textContent = "Đang kiểm tra người nhận…"; list.replaceChildren();
-    transports.innerHTML = "<legend>Kênh gửi email</legend><p>Đang kiểm tra các kênh đã được cấu hình…</p>"; sendButton.disabled = true;
+    sendButton.disabled = true;
     root.showModal();
     try {
       const response = await fetch(`${root.dataset.prepareUrl}?kind=${encodeURIComponent(kind)}`, {credentials: "same-origin", cache: "no-store", headers: {Accept: "application/json"}});
@@ -114,13 +57,11 @@ document.addEventListener("DOMContentLoaded", () => {
     event.preventDefault();
     const selected = [...list.querySelectorAll("input:checked")].map(input => batches[Number(input.value) - 1].target_ids);
     if (!selected.length) return;
-    const transport = form.querySelector('input[name="bulk_email_transport"]:checked')?.value;
-    if (!transport) { errorBox.textContent = "Hãy chọn một kênh gửi email."; errorBox.hidden = false; return; }
     const original = sendButton.textContent;
     sendButton.disabled = true; sendButton.classList.add("is-loading"); sendButton.textContent = "Đang xếp hàng…"; errorBox.hidden = true;
     try {
       const csrf = form.querySelector('[name="csrfmiddlewaretoken"]').value;
-      const response = await fetch(root.dataset.sendUrl, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json", "Accept": "application/json", "X-CSRFToken": csrf}, body: JSON.stringify({kind, transport, batches: selected})});
+      const response = await fetch(root.dataset.sendUrl, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json", "Accept": "application/json", "X-CSRFToken": csrf}, body: JSON.stringify({kind, batches: selected})});
       const data = await readJson(response);
       if (!response.ok || !data.ok) throw new Error(data.error || "Không thể gửi batch.");
       root.close(); window.campaignToast?.(`${data.message} ${data.batch_count} batch · ${data.email_count} email.`, "success");

@@ -52,12 +52,13 @@ def _configuration():
     client_id = settings.MICROSOFT_GRAPH_CLIENT_ID
     client_secret = settings.MICROSOFT_GRAPH_CLIENT_SECRET
     sender_email = settings.MICROSOFT_GRAPH_SENDER_EMAIL
-    if not tenant_id or not client_id or not client_secret or not sender_email:
+    mailbox_email = settings.MICROSOFT_GRAPH_MAILBOX_EMAIL
+    if not tenant_id or not client_id or not client_secret or not sender_email or not mailbox_email:
         raise MicrosoftGraphConfigurationError(
-            "Thiếu MS_TENANT_ID, MS_APPLICATION_ID, MS_VALUE hoặc địa chỉ gửi "
-            "MS_GRAPH_SENDER_EMAIL/DEFAULT_FROM_EMAIL."
+            "Thiếu MS_TENANT_ID, MS_APPLICATION_ID, MS_VALUE, địa chỉ hiển thị "
+            "MS_GRAPH_SENDER_EMAIL hoặc mailbox MS_GRAPH_MAILBOX_EMAIL."
         )
-    return tenant_id, client_id, client_secret, sender_email
+    return tenant_id, client_id, client_secret, mailbox_email, sender_email
 
 
 def _access_token(*, force_refresh=False):
@@ -69,7 +70,7 @@ def _access_token(*, force_refresh=False):
         now = time.monotonic()
         if not force_refresh and _token_value and now < _token_expires_at - 60:
             return _token_value
-        tenant_id, client_id, client_secret, _ = _configuration()
+        tenant_id, client_id, client_secret, _, _ = _configuration()
         request_id = str(uuid.uuid4())
         try:
             response = requests.post(
@@ -121,9 +122,16 @@ def _access_token(*, force_refresh=False):
             raise MicrosoftGraphTransportError(
                 "Microsoft identity trả access token không đọc được.", code="invalid_access_token"
             ) from exc
+        # Exchange Online Application RBAC grants are independent from Entra
+        # application permissions. With RBAC, a valid app-only token may not
+        # contain a Mail.Send role claim; Exchange evaluates the scoped role
+        # when /users/{sender}/sendMail is called. Do not reject that valid
+        # setup before Graph has a chance to authorize the sender mailbox.
         if "Mail.Send" not in (claims.get("roles") or []):
-            raise MicrosoftGraphConfigurationError(
-                "Microsoft app chưa có Application permission Mail.Send hoặc quyền chưa được Admin consent."
+            logger.warning(
+                "MICROSOFT_GRAPH_TOKEN_WITHOUT_MAIL_SEND_ROLE "
+                "client_id=%s relying_on=exchange_application_rbac",
+                claims.get("appid") or claims.get("azp") or client_id,
             )
         _token_value = token
         _token_expires_at = time.monotonic() + expires_in
@@ -136,7 +144,7 @@ def _recipient(address):
 
 def _graph_message(payload):
     body = payload.get("body") or {}
-    return {
+    message = {
         "subject": payload.get("subject") or "",
         "body": {
             "contentType": "HTML" if str(body.get("content_type", "html")).lower() == "html" else "Text",
@@ -146,20 +154,28 @@ def _graph_message(payload):
         "ccRecipients": [_recipient(value) for value in payload.get("cc") or []],
         "bccRecipients": [_recipient(value) for value in payload.get("bcc") or []],
     }
+    from_address = parseaddr((payload.get("from") or {}).get("address", ""))[1]
+    if from_address:
+        message["from"] = _recipient(from_address)
+    return message
 
 
 def send_message(payload, *, token=None):
-    _, _, _, configured_sender = _configuration()
+    _, _, _, configured_mailbox, configured_sender = _configuration()
     requested_sender = parseaddr((payload.get("from") or {}).get("address", ""))[1]
     if requested_sender and requested_sender.casefold() != configured_sender.casefold():
-        raise MicrosoftGraphConfigurationError(
-            f"Email template đang dùng người gửi {requested_sender}, khác mailbox Graph đã cấu hình."
+        logger.warning(
+            "MICROSOFT_GRAPH_FROM_OVERRIDDEN requested_sender=%s configured_sender=%s",
+            requested_sender,
+            configured_sender,
         )
+    payload = dict(payload)
+    payload["from"] = {**(payload.get("from") or {}), "address": configured_sender}
     if not payload.get("to"):
         raise MicrosoftGraphConfigurationError("Email Microsoft Graph không có người nhận.")
     access_token = token or _access_token()
     request_id = str(uuid.uuid4())
-    endpoint = f"https://graph.microsoft.com/v1.0/users/{quote(configured_sender, safe='@.')}/sendMail"
+    endpoint = f"https://graph.microsoft.com/v1.0/users/{quote(configured_mailbox, safe='@.')}/sendMail"
     try:
         response = requests.post(
             endpoint,
@@ -185,9 +201,10 @@ def send_message(payload, *, token=None):
         ) from exc
     if response.status_code != 202:
         logger.error(
-            "MICROSOFT_GRAPH_SEND_REJECTED status=%s request_id=%s sender=%s",
+            "MICROSOFT_GRAPH_SEND_REJECTED status=%s request_id=%s mailbox=%s sender=%s",
             response.status_code,
             request_id,
+            configured_mailbox,
             configured_sender,
         )
         raise MicrosoftGraphTransportError(
@@ -252,10 +269,12 @@ def dispatch_email_batch(batch, messages):
         provider_batch_id=provider_batch_id,
     )
     token = _access_token()
+    _, _, _, _, configured_sender = _configuration()
     for payload in messages:
         delivery = CampaignEmailDelivery.objects.get(pk=payload["message_id"], batch=batch)
         CampaignEmailDelivery.objects.filter(pk=delivery.pk).update(
-            status=CampaignEmailDelivery.Status.SUBMITTING
+            status=CampaignEmailDelivery.Status.SUBMITTING,
+            from_email=configured_sender,
         )
         started = time.monotonic()
         try:

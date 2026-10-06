@@ -17,4 +17,4 @@
 
 ## Triển khai
 
-Chạy `python manage.py migrate` (đến migration `0015_campaign_area_manager_instructions`), collectstatic, restart web và Celery worker. Cần cấu hình SMTP và media dùng chung. Local đã migrate; production chưa triển khai trong thay đổi này.
+Chạy `python manage.py migrate`, collectstatic, restart web và Celery worker. Cần cấu hình Microsoft Graph đồng nhất trên web/worker và media dùng chung. Local đã migrate; production chưa triển khai trong thay đổi này.

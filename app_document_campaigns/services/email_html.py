@@ -70,7 +70,7 @@ def sanitize_email_template(value):
 
 
 def email_body_html(value):
-    """Return final safe HTML accepted by Power Automate/Outlook."""
+    """Return final safe HTML accepted by Microsoft Graph/Outlook."""
     value = sanitize_email_template(value)
     if is_html_email_template(value):
         content = value

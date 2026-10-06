@@ -1,5 +1,6 @@
 import csv
 import hashlib
+import logging
 import os
 import uuid
 from datetime import datetime, date, timedelta
@@ -26,7 +27,6 @@ from django.templatetags.static import static
 from django.utils import timezone
 from django.conf import settings
 from django.http import JsonResponse
-from django.core.files.base import ContentFile
 
 from openpyxl import Workbook
 from openpyxl import load_workbook
@@ -109,6 +109,8 @@ def _has_incoming_dispatch_status_edit_access(user) -> bool:
         return True
     return _has_admin_docs_access(user)
 
+
+logger = logging.getLogger(__name__)
 
 INCOMING_TYPE_DOC = "cong_van"
 INCOMING_TYPE_PARCEL = "buu_pham_buu_kien"
@@ -1409,26 +1411,8 @@ def _create_attachment_version(document, user, uploaded_file=None, link=None, no
     if not uploaded_file and not link:
         return None
 
-    def _clone_upload(file_obj):
-        if not file_obj:
-            return None
-        try:
-            # If temp file disappeared (e.g., container cleanup), clone into memory
-            if hasattr(file_obj, "temporary_file_path"):
-                path = file_obj.temporary_file_path()
-                if not os.path.exists(path):
-                    data = file_obj.read()
-                    return ContentFile(data, name=getattr(file_obj, "name", "upload"))
-            file_obj.seek(0)
-            return file_obj
-        except Exception:
-            try:
-                data = file_obj.read()
-                return ContentFile(data, name=getattr(file_obj, "name", "upload"))
-            except Exception:
-                return file_obj
-
-    uploaded_file = _clone_upload(uploaded_file)
+    if uploaded_file:
+        uploaded_file.seek(0)
 
     current_max = (
         document.attachments.aggregate(max_version=Max("version")).get("max_version")
@@ -4760,6 +4744,10 @@ def document_create(request):
         issue_date = timezone.localdate() if settings.USE_TZ else date.today()
     doc.issue_date = issue_date
 
+    # The upload is stored once, via _create_attachment_version below. Leaving it on
+    # doc.attachment would make doc.save() consume the upload (and move its temp file).
+    doc.attachment = None
+
     attempts = 0
     max_attempts = 30
     while attempts < max_attempts:
@@ -4771,12 +4759,6 @@ def document_create(request):
                     doc.doc_type_id, doc.issuing_company_id, current_year
                 )
                 doc.save()
-                _create_attachment_version(
-                    document=doc,
-                    user=request.user,
-                    uploaded_file=request.FILES.get("attachment"),
-                    link=attachment_link,
-                )
             break
         except IntegrityError:
             AdmDocumentCounter.objects.filter(
@@ -4790,6 +4772,21 @@ def document_create(request):
                 )
                 return redirect("admindocuments:admindocuments_list")
             continue
+
+    try:
+        _create_attachment_version(
+            document=doc,
+            user=request.user,
+            uploaded_file=request.FILES.get("attachment"),
+            link=attachment_link,
+        )
+    except Exception:
+        logger.exception("Attachment upload failed for document %s", doc.pk)
+        messages.warning(
+            request,
+            "Văn bản đã được tạo nhưng tải file đính kèm thất bại. "
+            "Vui lòng tải lại file trong trang chi tiết.",
+        )
 
     messages.success(
         request,

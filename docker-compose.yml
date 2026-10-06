@@ -34,13 +34,16 @@ services:
 
   worker:
     build: .
+    restart: unless-stopped
     environment:
       SECRET_KEY: ${SECRET_KEY:-devsecret}
       DEBUG: ${DEBUG:-True}
       DATABASE_NAME: ${DATABASE_NAME:-test}
       DATABASE_USER: ${DATABASE_USER:-postgres}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-postgres}
-      DATABASE_HOST: ${DATABASE_HOST:-db}
+      # A host-side .env commonly uses 127.0.0.1. Inside Docker the worker
+      # must reach PostgreSQL by its Compose service/container hostname.
+      DATABASE_HOST: ${WORKER_DATABASE_HOST:-db}
       DATABASE_PORT: ${DATABASE_PORT:-5432}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}

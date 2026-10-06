@@ -40,7 +40,6 @@
     {% csrf_token %}
     <div class="crm-dialog-head"><div><span>EMAIL TEST</span><h2>{% if confirmation_stage %}Gửi thử email xác nhận QLKV{% else %}Gửi thử email theo dõi QLKV{% endif %}</h2></div><button type="button" data-close-area-email aria-label="Đóng">×</button></div>
     <input type="hidden" name="stage" value="{% if confirmation_stage %}confirmation{% else %}monitoring{% endif %}">
-    <fieldset class="crm-bulk-email-transports crm-test-email-transports" data-email-test-transports data-url="{% url 'document_campaigns:available_email_transports' campaign.id %}"><legend>Kênh gửi email</legend><p>Đang kiểm tra kênh gửi…</p></fieldset>
     <label>Email nhận thử<input type="email" name="test_email" required placeholder="tester@f88.vn"></label>
     <p class="crm-dialog-error" data-area-email-test-error hidden></p>
     <div class="crm-dialog-actions"><button type="button" class="crm-mini-btn" data-close-area-email>Hủy</button><button type="submit" class="crm-btn">Gửi thử</button></div>

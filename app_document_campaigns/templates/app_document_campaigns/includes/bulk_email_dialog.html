@@ -2,10 +2,6 @@
   <form data-bulk-email-form>{% csrf_token %}
     <div class="crm-dialog-head"><div><span>GỬI EMAIL HÀNG LOẠT</span><h2 data-bulk-email-title>Chuẩn bị batch email</h2></div><button type="button" data-close-bulk-email aria-label="Đóng">×</button></div>
     <div class="crm-bulk-email-summary" data-bulk-email-summary>Đang kiểm tra người nhận…</div>
-    <fieldset class="crm-bulk-email-transports" data-bulk-email-transports>
-      <legend>Kênh gửi email</legend>
-      <p>Đang kiểm tra các kênh đã được cấu hình…</p>
-    </fieldset>
     <div class="crm-bulk-email-toolbar"><button type="button" class="crm-mini-btn" data-bulk-select-all>Chọn tất cả</button><span>Mỗi batch chỉ được gửi một lần; hệ thống xử lý tuần tự.</span></div>
     <div class="crm-bulk-email-list" data-bulk-email-list></div>
     <p class="crm-dialog-error" data-bulk-email-error hidden></p>

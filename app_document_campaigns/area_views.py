@@ -650,13 +650,12 @@ def send_area_test_email(request, campaign_id):
     if not area:
         return JsonResponse({"ok": False, "error": "Chiến dịch chưa có QLKV để gửi thử."}, status=409)
     test_email = (request.POST.get("test_email") or "").strip()
-    transport = (request.POST.get("transport") or "").strip()
     confirmation_mode = request.POST.get("stage") == AreaManagerAccessLink.Stage.CONFIRMATION
     try:
         validate_email(test_email)
-        from app_document_campaigns.bulk_email_views import _validate_transport
+        from app_document_campaigns.bulk_email_views import _validate_graph_configuration
         from app_document_campaigns.services.test_email_delivery import queue_test_email
-        _validate_transport(transport)
+        _validate_graph_configuration()
         config = campaign_area_email_config(campaign)
         rendered = render_area_email(
             config, campaign, area,
@@ -677,7 +676,6 @@ def send_area_test_email(request, campaign_id):
                 CampaignEmailBatch.EmailType.AREA_CONFIRMATION
                 if confirmation_mode else CampaignEmailBatch.EmailType.AREA_MONITORING
             ),
-            transport=transport,
             target=area,
             rendered=rendered,
             template_version=config.template_version,
@@ -693,7 +691,6 @@ def send_area_test_email(request, campaign_id):
         "ok": True,
         "message": f"Đã đưa email QLKV thử tới {test_email} vào hàng đợi.",
         "batch_id": str(batch.pk),
-        "transport": batch.transport_provider,
     }, status=202)
 
 

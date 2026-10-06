@@ -6,11 +6,12 @@ from django.utils import timezone
 
 from app_document_campaigns.models import CampaignEmailBatch, CampaignEmailDelivery
 from app_document_campaigns.services.email_html import email_body_html
-from app_document_campaigns.services.power_automate_email import _message_payload, _redact_access_urls
+from app_document_campaigns.services.email_delivery_payload import message_payload, redact_access_urls
 
 
-def queue_test_email(*, campaign, email_type, transport, target, rendered, template_version, requested_by):
+def queue_test_email(*, campaign, email_type, target, rendered, template_version, requested_by):
     """Queue one audited test email without issuing or revoking any access link."""
+    transport = CampaignEmailBatch.TransportProvider.MICROSOFT_GRAPH
     key = f"test:{campaign.pk}:{email_type}:{transport}:{uuid.uuid4()}"
     with transaction.atomic():
         batch = CampaignEmailBatch.objects.create(
@@ -37,11 +38,11 @@ def queue_test_email(*, campaign, email_type, transport, target, rendered, templ
             from_email=parseaddr(rendered.from_email)[1],
             from_name=parseaddr(rendered.from_email)[0],
             rendered_subject=rendered.subject,
-            rendered_body_redacted=_redact_access_urls(email_body_html(rendered.body)),
+            rendered_body_redacted=redact_access_urls(email_body_html(rendered.body)),
             template_version=template_version,
             idempotency_key=key,
         )
-        message = _message_payload(delivery, target, rendered, {
+        message = message_payload(delivery, target, rendered, {
             "test": True,
             "template_version": template_version,
         })
@@ -52,7 +53,6 @@ def queue_test_email(*, campaign, email_type, transport, target, rendered, templ
     try:
         send_bulk_campaign_email_batches.delay([{
             "batch_id": str(batch.pk),
-            "transport": transport,
             "messages": [message],
         }])
     except Exception:

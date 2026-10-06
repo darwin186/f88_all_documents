@@ -36,7 +36,7 @@ from app_document_campaigns.services.email_templates import (
     validate_area_templates,
     validate_templates,
 )
-from app_document_campaigns.services.power_automate_email import _message_payload, _redact_access_urls
+from app_document_campaigns.services.email_delivery_payload import message_payload, redact_access_urls
 
 
 SUPPORTED_KINDS = {
@@ -51,46 +51,18 @@ def _is_admin(user):
 
 
 def _chunk_size():
-    return max(25, min(int(settings.POWER_AUTOMATE_EMAIL_CHUNK_SIZE), 50))
+    return max(1, min(int(settings.MICROSOFT_GRAPH_EMAIL_CHUNK_SIZE), 50))
 
 
-def _available_transports():
-    transports = []
-    if (settings.POWER_AUTOMATE_EMAIL_WEBHOOK_URL
-            and settings.POWER_AUTOMATE_EMAIL_WEBHOOK_SECRET
-            and settings.POWER_AUTOMATE_EMAIL_CALLBACK_SECRET
-            and settings.POWER_AUTOMATE_EMAIL_CALLBACK_URL):
-        transports.append({"value": CampaignEmailBatch.TransportProvider.POWER_AUTOMATE, "label": "Power Automate"})
-    if (settings.MICROSOFT_GRAPH_TENANT_ID
-            and settings.MICROSOFT_GRAPH_CLIENT_ID
-            and settings.MICROSOFT_GRAPH_CLIENT_SECRET
-            and settings.MICROSOFT_GRAPH_SENDER_EMAIL):
-        transports.append({
-            "value": CampaignEmailBatch.TransportProvider.MICROSOFT_GRAPH,
-            "label": "Microsoft Graph",
-        })
-    if settings.EMAIL_HOST and (settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER):
-        transports.append({"value": CampaignEmailBatch.TransportProvider.SMTP, "label": "SMTP"})
-    return transports
-
-
-def _validate_transport(transport):
-    available = {item["value"] for item in _available_transports()}
-    if transport not in available:
-        raise ValueError("Kênh gửi email chưa được cấu hình hoặc hiện không khả dụng.")
-
-
-@login_required
-@require_GET
-def available_email_transports(request, campaign_id):
-    if not _is_admin(request.user):
-        return JsonResponse({"ok": False, "error": "Chỉ Admin được xem kênh gửi email."}, status=403)
-    get_object_or_404(Campaign, pk=campaign_id)
-    transports = _available_transports()
-    preferred = settings.EMAIL_TRANSPORT if settings.EMAIL_TRANSPORT in {
-        item["value"] for item in transports
-    } else (transports[0]["value"] if transports else "")
-    return JsonResponse({"ok": True, "transports": transports, "default_transport": preferred})
+def _validate_graph_configuration():
+    if not all((
+        settings.MICROSOFT_GRAPH_TENANT_ID,
+        settings.MICROSOFT_GRAPH_CLIENT_ID,
+        settings.MICROSOFT_GRAPH_CLIENT_SECRET,
+        settings.MICROSOFT_GRAPH_MAILBOX_EMAIL,
+        settings.MICROSOFT_GRAPH_SENDER_EMAIL,
+    )):
+        raise ValueError("Microsoft Graph chưa được cấu hình đầy đủ.")
 
 
 def _valid_email(value):
@@ -194,6 +166,7 @@ def prepare_bulk_email_batches(request, campaign_id):
         return JsonResponse({"ok": False, "error": "Loại email hàng loạt không hợp lệ."}, status=400)
     try:
         _validate_campaign(campaign, kind)
+        _validate_graph_configuration()
     except (ValueError, EmailTemplateError) as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=409)
     objects, email_for, label_for = _targets(campaign, kind)
@@ -202,10 +175,6 @@ def prepare_bulk_email_batches(request, campaign_id):
         target = {"id": item.pk, "label": label_for(item), "email": email_for(item)}
         (eligible if target["email"] else invalid).append(target)
     size = _chunk_size()
-    transports = _available_transports()
-    preferred = settings.EMAIL_TRANSPORT if settings.EMAIL_TRANSPORT in {
-        item["value"] for item in transports
-    } else (transports[0]["value"] if transports else "")
     batches = []
     for offset in range(0, len(eligible), size):
         rows = eligible[offset:offset + size]
@@ -219,11 +188,10 @@ def prepare_bulk_email_batches(request, campaign_id):
     return JsonResponse({
         "ok": True, "kind": kind, "chunk_size": size, "eligible": len(eligible),
         "invalid": len(invalid), "invalid_samples": invalid[:10], "batches": batches,
-        "transports": transports, "default_transport": preferred,
     })
 
 
-def _build_shop_batch(request, campaign, target_ids, config, transport):
+def _build_shop_batch(request, campaign, target_ids, config):
     valid_ids = set(_eligible_shop_ids(campaign))
     ids = [item for item in target_ids if item in valid_ids]
     shops = list(Shop.objects.filter(pk__in=ids).select_related("manager_id__areaManager").order_by("shop_code", "pk"))
@@ -231,7 +199,7 @@ def _build_shop_batch(request, campaign, target_ids, config, transport):
         raise ValueError("Danh sách PGD đã thay đổi; hãy chuẩn bị lại batch.")
     batch = CampaignEmailBatch.objects.create(
         campaign=campaign, email_type=CampaignEmailBatch.EmailType.PGD_RESPONSE,
-        transport_provider=transport,
+        transport_provider=CampaignEmailBatch.TransportProvider.MICROSOFT_GRAPH,
         idempotency_key=f"bulk:{campaign.pk}:pgd:{uuid.uuid4()}", total_count=len(shops), requested_by=request.user,
     )
     messages = []
@@ -256,17 +224,17 @@ def _build_shop_batch(request, campaign, target_ids, config, transport):
             cc_emails=rendered.cc, bcc_emails=rendered.bcc,
             from_email=parseaddr(rendered.from_email)[1], from_name=parseaddr(rendered.from_email)[0],
             rendered_subject=rendered.subject,
-            rendered_body_redacted=_redact_access_urls(email_body_html(rendered.body)),
+            rendered_body_redacted=redact_access_urls(email_body_html(rendered.body)),
             template_version=config.template_version, idempotency_key=key,
         )
-        messages.append(_message_payload(delivery, shop, rendered, {
+        messages.append(message_payload(delivery, shop, rendered, {
             "shop_link_id": link.pk, "template_version": config.template_version,
             "response_deadline": link.response_deadline.isoformat(), "link_expires_at": link.expires_at.isoformat(),
         }))
     return batch, messages
 
 
-def _build_area_batch(request, campaign, target_ids, config, kind, transport):
+def _build_area_batch(request, campaign, target_ids, config, kind):
     confirmation_mode = kind == CampaignEmailBatch.EmailType.AREA_CONFIRMATION
     valid_ids = set(_eligible_area_ids(campaign, confirmation=confirmation_mode))
     ids = [item for item in target_ids if item in valid_ids]
@@ -274,7 +242,8 @@ def _build_area_batch(request, campaign, target_ids, config, kind, transport):
     if len(areas) != len(set(target_ids)):
         raise ValueError("Danh sách QLKV đã thay đổi; hãy chuẩn bị lại batch.")
     batch = CampaignEmailBatch.objects.create(
-        campaign=campaign, email_type=kind, transport_provider=transport,
+        campaign=campaign, email_type=kind,
+        transport_provider=CampaignEmailBatch.TransportProvider.MICROSOFT_GRAPH,
         idempotency_key=f"bulk:{campaign.pk}:{kind}:{uuid.uuid4()}", total_count=len(areas), requested_by=request.user,
     )
     messages = []
@@ -300,13 +269,13 @@ def _build_area_batch(request, campaign, target_ids, config, kind, transport):
             area_access_link=link, to_emails=rendered.to, cc_emails=rendered.cc, bcc_emails=rendered.bcc,
             from_email=parseaddr(rendered.from_email)[1], from_name=parseaddr(rendered.from_email)[0],
             rendered_subject=rendered.subject,
-            rendered_body_redacted=_redact_access_urls(email_body_html(rendered.body)),
+            rendered_body_redacted=redact_access_urls(email_body_html(rendered.body)),
             template_version=config.template_version, idempotency_key=key,
         )
         AreaManagerAccessLink.objects.filter(pk=link.pk).update(
             email_status=AreaManagerAccessLink.EmailStatus.QUEUED, email_message="Đang chờ gửi email hàng loạt."
         )
-        messages.append(_message_payload(delivery, area, rendered, {
+        messages.append(message_payload(delivery, area, rendered, {
             "area_access_link_id": link.pk, "template_version": config.template_version,
             "link_expires_at": link.expires_at.isoformat(),
         }))
@@ -322,7 +291,6 @@ def send_bulk_email_batches(request, campaign_id):
     try:
         payload = json.loads(request.body)
         kind = payload["kind"]
-        transport = payload["transport"]
         selections = payload["batches"]
         if kind not in SUPPORTED_KINDS or not isinstance(selections, list) or not selections:
             raise ValueError
@@ -336,16 +304,16 @@ def send_bulk_email_batches(request, campaign_id):
         return JsonResponse({"ok": False, "error": "Danh sách batch không hợp lệ."}, status=400)
     try:
         config = _validate_campaign(campaign, kind)
-        _validate_transport(transport)
+        _validate_graph_configuration()
         queued = []
         with transaction.atomic():
             for ids in normalized:
                 batch, messages = (
-                    _build_shop_batch(request, campaign, ids, config, transport)
+                    _build_shop_batch(request, campaign, ids, config)
                     if kind == CampaignEmailBatch.EmailType.PGD_RESPONSE
-                    else _build_area_batch(request, campaign, ids, config, kind, transport)
+                    else _build_area_batch(request, campaign, ids, config, kind)
                 )
-                queued.append({"batch_id": str(batch.pk), "transport": transport, "messages": messages})
+                queued.append({"batch_id": str(batch.pk), "messages": messages})
     except (ValueError, EmailTemplateError) as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=409)
     from app_document_campaigns.tasks import send_bulk_campaign_email_batches

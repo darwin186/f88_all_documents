@@ -121,16 +121,15 @@ def send_campaign_test_email(request, campaign_id):
     if not shops:
         return JsonResponse({"ok": False, "error": "Chiến dịch chưa có PGD để gửi thử."}, status=409)
     test_email = (request.POST.get("test_email") or "").strip()
-    transport = (request.POST.get("transport") or "").strip()
     try:
         validate_email(test_email)
     except ValidationError:
         return JsonResponse({"ok": False, "error": "Email nhận thử không hợp lệ."}, status=400)
-    from app_document_campaigns.bulk_email_views import _validate_transport
+    from app_document_campaigns.bulk_email_views import _validate_graph_configuration
     from app_document_campaigns.services.test_email_delivery import queue_test_email
     config = campaign_email_config(campaign)
     try:
-        _validate_transport(transport)
+        _validate_graph_configuration()
         rendered = render_campaign_email(
             config,
             campaign,
@@ -149,7 +148,6 @@ def send_campaign_test_email(request, campaign_id):
         batch = queue_test_email(
             campaign=campaign,
             email_type=CampaignEmailBatch.EmailType.PGD_RESPONSE,
-            transport=transport,
             target=shops[0],
             rendered=rendered,
             template_version=config.template_version,
@@ -168,7 +166,6 @@ def send_campaign_test_email(request, campaign_id):
         "ok": True,
         "message": f"Đã đưa email thử tới {test_email} vào hàng đợi. Không gửi CC/BCC thật.",
         "batch_id": str(batch.pk),
-        "transport": batch.transport_provider,
     }, status=202)
 
 

@@ -83,14 +83,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   testForm?.addEventListener("submit", async event => {
     event.preventDefault();
-    const submit = testForm.querySelector('[type="submit"]'), errorBox = testForm.querySelector("[data-area-email-test-error]");
-    submit.disabled = true; errorBox.hidden = true;
+    const submit = event.submitter || testForm.querySelector('button[type="submit"]'), errorBox = testForm.querySelector("[data-area-email-test-error]");
+    if (submit) submit.disabled = true; errorBox.hidden = true;
     try {
       const response = await fetch(testForm.action, {method: "POST", body: new FormData(testForm), credentials: "same-origin", headers: {Accept: "application/json"}});
       const data = await readJson(response);
       if (!response.ok || !data.ok) throw new Error(data.error || "Không thể gửi thử.");
       testDialog.close(); window.campaignToast?.(data.message, "success");
     } catch (error) { errorBox.textContent = error.message; errorBox.hidden = false; }
-    finally { submit.disabled = false; }
+    finally { if (submit) submit.disabled = false; }
   });
 });

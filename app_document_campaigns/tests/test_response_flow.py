@@ -1,6 +1,6 @@
 import json
 from datetime import date, timedelta
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.core import mail
 from django.contrib.auth import get_user_model
@@ -41,6 +41,18 @@ from app_document_campaigns.models import (
 )
 from app_document_campaigns.services.access_links import issue_shop_access_link, resolve_shop_access_link
 from app_document_campaigns.tasks import process_shop_submission
+
+
+GRAPH_TEST_SETTINGS = {
+    "MICROSOFT_GRAPH_TENANT_ID": "tenant-id",
+    "MICROSOFT_GRAPH_CLIENT_ID": "application-id",
+    "MICROSOFT_GRAPH_CLIENT_SECRET": "secret-value",
+    "MICROSOFT_GRAPH_MAILBOX_EMAIL": "vanhanh_chungtu@f88.vn",
+    "MICROSOFT_GRAPH_SENDER_EMAIL": "vanhanh_chungtu@f88.vn",
+    "MICROSOFT_GRAPH_CONNECT_TIMEOUT": 3.05,
+    "MICROSOFT_GRAPH_READ_TIMEOUT": 30,
+    "MICROSOFT_GRAPH_EMAIL_CHUNK_SIZE": 25,
+}
 
 
 class ShopResponseFlowTests(TestCase):
@@ -604,9 +616,11 @@ class ShopResponseFlowTests(TestCase):
         self.assertEqual(monitor.context["shop_response_progress"], 100)
         self.assertEqual(monitor.context["rows"][0]["progress"], 0)
 
+    @patch("app_document_campaigns.services.microsoft_graph_email.send_rendered_email")
     @patch("app_document_campaigns.tasks.send_campaign_shop_link.delay")
-    def test_email_button_queues_new_link_and_mail_ccs_current_managers(self, delay):
+    def test_email_button_queues_new_link_and_mail_ccs_current_managers(self, delay, send_graph):
         from app_document_campaigns.tasks import send_campaign_shop_link
+        send_graph.return_value = Mock(request_id="graph-request-id")
         admin = self._scoped_user("email-admin", "admin")
         self.client.force_login(admin)
         response = self.client.post(reverse("document_campaigns:email_shop_link", kwargs={"campaign_id":self.campaign.pk,"shop_id":self.shop.pk}))
@@ -617,9 +631,10 @@ class ShopResponseFlowTests(TestCase):
         delivery.refresh_from_db()
         self.assertEqual(delivery.status, ShopEmailDelivery.Status.SENT)
         self.assertEqual(delivery.area_manager, self.area)
-        self.assertEqual(mail.outbox[-1].to, [self.shop.shop_email])
-        self.assertEqual(mail.outbox[-1].cc, [self.area.areaManager_email])
-        self.assertIn("Hạn phản hồi:", mail.outbox[-1].body)
+        rendered = send_graph.call_args.args[0]
+        self.assertEqual(rendered.to, [self.shop.shop_email])
+        self.assertEqual(rendered.cc, [self.area.areaManager_email])
+        self.assertIn("Hạn phản hồi:", rendered.body)
         status = self.client.get(response.json()["status_url"])
         self.assertEqual(status.json()["area_emailed"], 1)
 
@@ -633,6 +648,7 @@ class ShopResponseFlowTests(TestCase):
         self.assertContains(monitor, "Email gửi phòng giao dịch xác nhận")
         self.assertContains(monitor, "PREVIEW TRỰC TIẾP")
         self.assertContains(monitor, "data-rich-email-editor")
+        self.assertNotContains(monitor, "data-email-test-transports")
         self.assertContains(monitor, "Kiểm tra người nhận")
         self.assertContains(monitor, "Gửi email thử")
         self.assertNotContains(monitor, "data-open-email-preview")
@@ -687,16 +703,9 @@ class ShopResponseFlowTests(TestCase):
         self.assertEqual(unknown.status_code, 400)
         self.assertIn("unsafe", str(unknown.json()["errors"]))
 
-    @override_settings(
-        EMAIL_TRANSPORT="smtp",
-        EMAIL_HOST="smtp.example.invalid",
-        DEFAULT_FROM_EMAIL="phongvanhanh@example.com",
-        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
-    )
+    @override_settings(**GRAPH_TEST_SETTINGS)
     @patch("app_document_campaigns.tasks.send_bulk_campaign_email_batches.delay")
     def test_test_email_only_goes_to_safe_override_without_real_cc_or_bcc(self, queue_task):
-        from app_document_campaigns.tasks import send_bulk_campaign_email_batches
-
         admin = self._scoped_user("email-test-admin", "admin")
         self.client.force_login(admin)
         CampaignEmailConfig.objects.create(
@@ -709,57 +718,42 @@ class ShopResponseFlowTests(TestCase):
         )
         response = self.client.post(
             reverse("document_campaigns:campaign_email_test", kwargs={"campaign_id": self.campaign.pk}),
-            {"test_email": "tester@example.com", "transport": "smtp"},
+            {"test_email": "tester@example.com"},
         )
         self.assertEqual(response.status_code, 202)
         batch = CampaignEmailBatch.objects.get(is_test=True)
-        self.assertEqual(batch.transport_provider, CampaignEmailBatch.TransportProvider.SMTP)
-        self.assertEqual(batch.deliveries.get().cc_emails, [])
-        self.assertEqual(batch.deliveries.get().bcc_emails, [])
-        send_bulk_campaign_email_batches(queue_task.call_args.args[0])
-        self.assertEqual(mail.outbox[-1].to, ["tester@example.com"])
-        self.assertEqual(mail.outbox[-1].cc, [])
-        self.assertEqual(mail.outbox[-1].bcc, [])
-        self.assertTrue(mail.outbox[-1].subject.startswith("[TEST]"))
-        self.assertIn("không phải link phản hồi thật", mail.outbox[-1].body)
+        delivery = batch.deliveries.get()
+        self.assertEqual(batch.transport_provider, CampaignEmailBatch.TransportProvider.MICROSOFT_GRAPH)
+        self.assertEqual(delivery.to_emails, ["tester@example.com"])
+        self.assertEqual(delivery.cc_emails, [])
+        self.assertEqual(delivery.bcc_emails, [])
+        queued_message = queue_task.call_args.args[0][0]["messages"][0]
+        self.assertTrue(queued_message["subject"].startswith("[TEST]"))
+        self.assertIn("không phải link phản hồi thật", queued_message["body"]["content"])
         self.link.refresh_from_db()
         self.assertIsNone(self.link.revoked_at)
 
-    @override_settings(
-        EMAIL_TRANSPORT="smtp",
-        EMAIL_HOST="smtp.example.invalid",
-        DEFAULT_FROM_EMAIL="phongvanhanh@example.com",
-        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
-    )
+    @override_settings(**GRAPH_TEST_SETTINGS)
     @patch("app_document_campaigns.tasks.send_bulk_campaign_email_batches.delay")
     def test_area_confirmation_test_email_uses_selected_real_transport(self, queue_task):
-        from app_document_campaigns.tasks import send_bulk_campaign_email_batches
-
         admin = self._scoped_user("area-email-test-admin", "admin")
         self.client.force_login(admin)
         response = self.client.post(
             reverse("document_campaigns:area_email_test", kwargs={"campaign_id": self.campaign.pk}),
-            {"test_email": "area-tester@example.com", "transport": "smtp", "stage": "confirmation"},
+            {"test_email": "area-tester@example.com", "stage": "confirmation"},
         )
         self.assertEqual(response.status_code, 202)
         batch = CampaignEmailBatch.objects.get(is_test=True)
         self.assertEqual(batch.email_type, CampaignEmailBatch.EmailType.AREA_CONFIRMATION)
-        self.assertEqual(batch.transport_provider, CampaignEmailBatch.TransportProvider.SMTP)
+        self.assertEqual(batch.transport_provider, CampaignEmailBatch.TransportProvider.MICROSOFT_GRAPH)
         self.assertFalse(AreaManagerAccessLink.objects.filter(
             campaign=self.campaign, stage=AreaManagerAccessLink.Stage.CONFIRMATION,
         ).exists())
-        send_bulk_campaign_email_batches(queue_task.call_args.args[0])
-        self.assertEqual(mail.outbox[-1].to, ["area-tester@example.com"])
-        self.assertTrue(mail.outbox[-1].subject.startswith("[TEST]"))
+        queued_message = queue_task.call_args.args[0][0]["messages"][0]
+        self.assertEqual(queued_message["to"], ["area-tester@example.com"])
+        self.assertTrue(queued_message["subject"].startswith("[TEST]"))
 
-    @override_settings(
-        EMAIL_TRANSPORT="power_automate",
-        POWER_AUTOMATE_EMAIL_CHUNK_SIZE=25,
-        POWER_AUTOMATE_EMAIL_WEBHOOK_URL="https://example.invalid/intake",
-        POWER_AUTOMATE_EMAIL_WEBHOOK_SECRET="intake-secret",
-        POWER_AUTOMATE_EMAIL_CALLBACK_SECRET="callback-secret",
-        POWER_AUTOMATE_EMAIL_CALLBACK_URL="https://example.invalid/callback",
-    )
+    @override_settings(**GRAPH_TEST_SETTINGS)
     @patch("app_document_campaigns.tasks.send_bulk_campaign_email_batches.delay")
     def test_admin_can_prepare_select_and_queue_pgd_email_batches(self, queue_task):
         admin = self._scoped_user("bulk-email-admin", "admin")
@@ -777,31 +771,25 @@ class ShopResponseFlowTests(TestCase):
         self.assertEqual(prepared.status_code, 200)
         self.assertEqual(prepared.json()["eligible"], 1)
         self.assertEqual(prepared.json()["batches"][0]["target_ids"], [self.shop.pk])
-        self.assertEqual(prepared.json()["default_transport"], "power_automate")
+        self.assertNotIn("default_transport", prepared.json())
+        self.assertNotIn("transports", prepared.json())
 
         send_url = reverse(
             "document_campaigns:send_bulk_email_batches", kwargs={"campaign_id": self.campaign.pk}
         )
         sent = self._post_json(send_url, {
-            "kind": "pgd_response", "transport": "power_automate", "batches": [[self.shop.pk]],
+            "kind": "pgd_response", "batches": [[self.shop.pk]],
         })
         self.assertEqual(sent.status_code, 202)
         self.assertEqual(sent.json()["batch_count"], 1)
         self.assertEqual(sent.json()["email_count"], 1)
         batch = CampaignEmailBatch.objects.get(email_type=CampaignEmailBatch.EmailType.PGD_RESPONSE)
         self.assertEqual(batch.total_count, 1)
-        self.assertEqual(batch.transport_provider, CampaignEmailBatch.TransportProvider.POWER_AUTOMATE)
+        self.assertEqual(batch.transport_provider, CampaignEmailBatch.TransportProvider.MICROSOFT_GRAPH)
         self.assertEqual(CampaignEmailDelivery.objects.filter(batch=batch).count(), 1)
         queue_task.assert_called_once()
 
-    @override_settings(
-        EMAIL_TRANSPORT="power_automate",
-        POWER_AUTOMATE_EMAIL_CHUNK_SIZE=25,
-        POWER_AUTOMATE_EMAIL_WEBHOOK_URL="https://example.invalid/intake",
-        POWER_AUTOMATE_EMAIL_WEBHOOK_SECRET="intake-secret",
-        POWER_AUTOMATE_EMAIL_CALLBACK_SECRET="callback-secret",
-        POWER_AUTOMATE_EMAIL_CALLBACK_URL="https://example.invalid/callback",
-    )
+    @override_settings(**GRAPH_TEST_SETTINGS)
     def test_step5_shows_and_prepares_area_confirmation_bulk_email(self):
         admin = self._scoped_user("bulk-area-email-admin", "admin")
         self.client.force_login(admin)
@@ -839,40 +827,6 @@ class ShopResponseFlowTests(TestCase):
         self.assertEqual(prepared.status_code, 200)
         self.assertEqual(prepared.json()["eligible"], 1)
         self.assertEqual(prepared.json()["batches"][0]["target_ids"], [self.area.pk])
-
-    @override_settings(
-        EMAIL_TRANSPORT="smtp",
-        EMAIL_HOST="smtp.example.invalid",
-        DEFAULT_FROM_EMAIL="phongvanhanh@example.com",
-        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
-    )
-    @patch("app_document_campaigns.tasks.send_bulk_campaign_email_batches.delay")
-    def test_bulk_email_can_switch_to_smtp_and_records_provider(self, queue_task):
-        from app_document_campaigns.tasks import send_bulk_campaign_email_batches
-
-        admin = self._scoped_user("bulk-smtp-admin", "admin")
-        self.client.force_login(admin)
-        prepared = self.client.get(
-            reverse("document_campaigns:prepare_bulk_email_batches", kwargs={"campaign_id": self.campaign.pk}),
-            {"kind": "pgd_response"},
-        )
-        self.assertEqual(prepared.status_code, 200)
-        self.assertEqual(prepared.json()["default_transport"], "smtp")
-        self.assertIn("smtp", [item["value"] for item in prepared.json()["transports"]])
-
-        response = self._post_json(
-            reverse("document_campaigns:send_bulk_email_batches", kwargs={"campaign_id": self.campaign.pk}),
-            {"kind": "pgd_response", "transport": "smtp", "batches": [[self.shop.pk]]},
-        )
-        self.assertEqual(response.status_code, 202)
-        batch = CampaignEmailBatch.objects.get(email_type=CampaignEmailBatch.EmailType.PGD_RESPONSE)
-        self.assertEqual(batch.transport_provider, CampaignEmailBatch.TransportProvider.SMTP)
-        queued_items = queue_task.call_args.args[0]
-        result = send_bulk_campaign_email_batches(queued_items)
-        batch.refresh_from_db()
-        self.assertEqual(result["batches"][0]["status"], CampaignEmailBatch.Status.COMPLETED)
-        self.assertEqual(batch.sent_count, 1)
-        self.assertEqual(len(mail.outbox), 1)
 
     def test_admin_can_issue_and_copy_a_new_shop_link_from_response_monitor(self):
         admin = self._scoped_user("link-admin", "admin")
@@ -1532,9 +1486,11 @@ class ShopResponseFlowTests(TestCase):
         link.refresh_from_db()
         self.assertIsNotNone(link.last_accessed_at)
 
+    @patch("app_document_campaigns.services.microsoft_graph_email.send_rendered_email")
     @patch("app_document_campaigns.tasks.send_area_manager_view_link.delay")
-    def test_admin_can_email_and_extend_area_link(self, delay):
+    def test_admin_can_email_and_extend_area_link(self, delay, send_graph):
         from app_document_campaigns.tasks import send_area_manager_view_link
+        send_graph.return_value = Mock(request_id="graph-request-id")
         admin = self._scoped_user("area-email-admin", "admin")
         self.client.force_login(admin)
         email = self.client.post(reverse("document_campaigns:email_area_manager_link", kwargs={"campaign_id": self.campaign.pk, "area_id": self.area.pk}))
@@ -1547,7 +1503,7 @@ class ShopResponseFlowTests(TestCase):
         delay.assert_called_once_with(link.pk, email.json()["url"])
         self.assertEqual(link.email_status, AreaManagerAccessLink.EmailStatus.QUEUED)
         self.assertEqual(send_area_manager_view_link.run(link.pk, email.json()["url"])["status"], "sent")
-        self.assertEqual(mail.outbox[-1].to, [self.area.areaManager_email])
+        self.assertEqual(send_graph.call_args.args[0].to, [self.area.areaManager_email])
         new_expiration = timezone.now() + timedelta(days=30)
         extended = self.client.post(
             reverse("document_campaigns:extend_area_manager_link", kwargs={"campaign_id": self.campaign.pk, "area_id": self.area.pk}),
@@ -1565,6 +1521,7 @@ class ShopResponseFlowTests(TestCase):
         self.assertContains(listing, "Email gửi Quản lý khu vực")
         self.assertContains(listing, "Step 3 · QLKV theo dõi PGD")
         self.assertNotContains(listing, "Step 5 · QLKV xác nhận lỗi")
+        self.assertNotContains(listing, "data-email-test-transports")
 
         TeamReview.objects.create(error=self.error_1, decision=TeamReview.Decision.APPROVED, reviewed_by=admin)
         self.error_1.status = CampaignError.Status.WAITING_AREA
@@ -1811,7 +1768,9 @@ class ShopResponseFlowTests(TestCase):
         self.assertContains(page, "<li>Phiếu chi giải ngân</li>")
         self.assertContains(page, "<li>Ủy quyền epay</li>")
 
-    def test_post_submit_task_sends_confirmation_without_access_token(self):
+    @patch("app_document_campaigns.services.microsoft_graph_email.send_message")
+    def test_post_submit_task_sends_confirmation_without_access_token(self, send_graph):
+        send_graph.return_value = Mock(request_id="graph-request-id")
         autosave_url = reverse("document_campaigns:autosave_batch", kwargs={"raw_token": self.raw_token})
         changes = [
             {"error_uid": str(error.error_uid), "version_no": 0, "answer_code": "PGD xác nhận lỗi"}
@@ -1828,9 +1787,9 @@ class ShopResponseFlowTests(TestCase):
         result = process_shop_submission.run(submission.pk)
 
         self.assertEqual(result["status"], "sent")
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(mail.outbox[0].to, [self.shop.shop_email])
-        self.assertNotIn(self.raw_token, mail.outbox[0].body)
+        payload = send_graph.call_args.args[0]
+        self.assertEqual(payload["to"], [self.shop.shop_email])
+        self.assertNotIn(self.raw_token, payload["body"]["content"])
 
     def test_expired_link_is_rejected(self):
         self.link.expires_at = timezone.now() - timedelta(seconds=1)

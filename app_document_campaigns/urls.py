@@ -37,7 +37,6 @@ urlpatterns = [
     path("campaigns/<int:campaign_id>/email/preflight/", shop_actions.campaign_email_preflight, name="campaign_email_preflight"),
     path("campaigns/<int:campaign_id>/email/preview/", shop_actions.campaign_email_preview, name="campaign_email_preview"),
     path("campaigns/<int:campaign_id>/email/test/", shop_actions.send_campaign_test_email, name="campaign_email_test"),
-    path("campaigns/<int:campaign_id>/email/transports/", bulk_email_views.available_email_transports, name="available_email_transports"),
     path("campaigns/<int:campaign_id>/email/batches/prepare/", bulk_email_views.prepare_bulk_email_batches, name="prepare_bulk_email_batches"),
     path("campaigns/<int:campaign_id>/email/batches/send/", bulk_email_views.send_bulk_email_batches, name="send_bulk_email_batches"),
     path("campaigns/<int:campaign_id>/shop-links/<int:shop_id>/deadline/", shop_actions.extend_shop_deadline, name="extend_shop_deadline"),

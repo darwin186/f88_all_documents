@@ -19,7 +19,9 @@ COPY . .
 RUN python manage.py collectstatic --noinput || true
 
 COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# The repository is also developed on Windows. Strip CRLF so Linux does not
+# interpret the shebang as `bash\r` when Docker builds from a Windows checkout.
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
 EXPOSE 8000
 

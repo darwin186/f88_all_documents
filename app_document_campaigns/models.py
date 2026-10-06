@@ -633,9 +633,7 @@ class CampaignAreaEmailConfig(models.Model):
 
 class CampaignEmailBatch(models.Model):
     class TransportProvider(models.TextChoices):
-        POWER_AUTOMATE = "power_automate", "Power Automate"
         MICROSOFT_GRAPH = "microsoft_graph", "Microsoft Graph"
-        SMTP = "smtp", "SMTP"
 
     class EmailType(models.TextChoices):
         PGD_RESPONSE = "pgd_response", "Gửi PGD phản hồi"
@@ -646,7 +644,7 @@ class CampaignEmailBatch(models.Model):
     class Status(models.TextChoices):
         QUEUED = "queued", "Chờ gửi"
         DISPATCHING = "dispatching", "Đang chuyển"
-        ACCEPTED = "accepted", "Power Automate đã nhận"
+        ACCEPTED = "accepted", "Microsoft Graph đã nhận"
         PROCESSING = "processing", "Đang gửi"
         COMPLETED = "completed", "Hoàn tất"
         PARTIALLY_FAILED = "partially_failed", "Hoàn tất một phần"
@@ -657,7 +655,7 @@ class CampaignEmailBatch(models.Model):
     campaign = models.ForeignKey(Campaign, related_name="email_batches", on_delete=models.CASCADE)
     email_type = models.CharField(max_length=32, choices=EmailType.choices)
     transport_provider = models.CharField(
-        max_length=24, choices=TransportProvider.choices, default=TransportProvider.POWER_AUTOMATE
+        max_length=24, choices=TransportProvider.choices, default=TransportProvider.MICROSOFT_GRAPH
     )
     is_test = models.BooleanField(default=False, db_index=True)
     status = models.CharField(max_length=24, choices=Status.choices, default=Status.QUEUED, db_index=True)
@@ -692,7 +690,7 @@ class CampaignEmailDelivery(models.Model):
     class Status(models.TextChoices):
         QUEUED = "queued", "Chờ gửi"
         SUBMITTING = "submitting", "Đang chuyển"
-        ACCEPTED = "accepted", "Power Automate đã nhận"
+        ACCEPTED = "accepted", "Microsoft Graph đã nhận"
         SENT = "sent", "Đã gửi"
         FAILED = "failed", "Thất bại"
         SKIPPED = "skipped", "Bỏ qua"

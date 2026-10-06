@@ -43,7 +43,6 @@
     {% csrf_token %}
     <div class="crm-dialog-head"><div><span>EMAIL TEST</span><h2>Gửi email thử</h2></div><button type="button" data-close-email-dialog aria-label="Đóng">×</button></div>
     <p>Email thử dùng dữ liệu của một PGD mẫu và link giả, không gửi CC/BCC thật.</p>
-    <fieldset class="crm-bulk-email-transports crm-test-email-transports" data-email-test-transports data-url="{% url 'document_campaigns:available_email_transports' campaign.id %}"><legend>Kênh gửi email</legend><p>Đang kiểm tra kênh gửi…</p></fieldset>
     <label>Email nhận thử<input type="email" name="test_email" required placeholder="tester@f88.vn"></label>
     <p class="crm-dialog-error" data-email-test-error hidden></p>
     <div class="crm-dialog-actions"><button type="button" class="crm-mini-btn" data-close-email-dialog>Hủy</button><button type="submit" class="crm-btn">Gửi thử</button></div>
