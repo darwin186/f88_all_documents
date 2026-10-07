@@ -5464,8 +5464,6 @@ def _package_transfer_preview(source_package, target_package):
         errors.append("Thùng thay thế đã ngừng sử dụng do từng được thay thế.")
     if source_package.package_type_id != target_package.package_type_id:
         errors.append("Thùng nguồn và thùng thay thế không cùng loại thùng.")
-    if source_package.region_id_id != target_package.region_id_id:
-        errors.append("Thùng nguồn và thùng thay thế không cùng vùng lưu trữ.")
     if not _package_is_in_warehouse(source_package):
         errors.append("Thùng nguồn không ở trạng thái Trong kho.")
     if not _package_is_in_warehouse(target_package):

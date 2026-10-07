@@ -156,3 +156,23 @@ class PackageTransferTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["eligible"])
         self.assertIn("Thùng thay thế phải là thùng trống.", response.json()["errors"])
+
+    def test_can_transfer_to_an_empty_package_in_another_region(self):
+        another_region = Region.objects.create(
+            region_code="TR-OTHER",
+            region_name="Transfer Region Other",
+        )
+        self.target.region_id = another_region
+        self.target.save(update_fields=["region_id"])
+
+        preview = self._post(False)
+        confirmed = self._post(True)
+
+        self.assertEqual(preview.status_code, 200)
+        self.assertTrue(preview.json()["eligible"])
+        self.assertEqual(confirmed.status_code, 200)
+        self.assertTrue(confirmed.json()["success"])
+        self.folder.refresh_from_db()
+        self.document.refresh_from_db()
+        self.assertEqual(self.folder.package_id_id, self.target.pk)
+        self.assertEqual(self.document.package_id_id, self.target.pk)
