@@ -5,6 +5,7 @@
 
 {% block extrahead %}
   {{ block.super }}
+  {% include "includes/favicon.html" %}
   <link rel="stylesheet" href="{% static 'css/admin_override.css' %}">
 {% endblock %}
 

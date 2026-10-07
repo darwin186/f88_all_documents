@@ -24,11 +24,14 @@
     <div class="qtrr-export-card">
       {% if ready_to_export %}
       <a class="qtrr-primary-action" href="{% url 'document_campaigns:export_qtrr_excel' campaign.id %}">↓ Tải file cuối gửi QTRR</a>
-      <span>Dữ liệu đã đủ điều kiện xuất file</span>
+      <form method="post" action="{% url 'document_campaigns:archive_qtrr_excel' campaign.id %}" onsubmit="return confirm('Tạo file cuối và lưu trữ lên SharePoint?')">{% csrf_token %}<button class="qtrr-primary-action qtrr-archive-action" type="submit">☁ Lưu trữ SharePoint</button></form>
+      {% if latest_archive_job %}<span>Lần lưu gần nhất: {{ latest_archive_job.get_status_display }} · {{ latest_archive_job.created_at|date:'H:i d/m/Y' }}</span>{% else %}<span>Dữ liệu đã đủ điều kiện xuất và lưu trữ</span>{% endif %}
       {% else %}
       <button class="qtrr-primary-action" type="button" disabled title="Cần QLKV xác nhận và mapping đủ 100%">↓ Tải file cuối gửi QTRR</button>
+      <button class="qtrr-primary-action qtrr-archive-action" type="button" disabled title="Cần QLKV xác nhận và mapping đủ 100%">☁ Lưu trữ SharePoint</button>
       <span>Cần xác nhận và mapping đủ 100%</span>
       {% endif %}
+      <a class="qtrr-storage-link" href="{% url 'media_storage_browser' %}?path=app_documents_campaigns/book_loi/{{ campaign.code }}/final">Mở kho media →</a>
     </div>
     {% endif %}
     <div class="qtrr-progress-grid">

@@ -993,6 +993,47 @@ class CampaignSnapshotMetric(models.Model):
         ]
 
 
+class MediaArchiveJob(models.Model):
+    class SourceKind(models.TextChoices):
+        FILE = "file", "File"
+        FOLDER = "folder", "Thư mục"
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Đang chờ"
+        RUNNING = "running", "Đang đồng bộ"
+        SUCCEEDED = "succeeded", "Thành công"
+        PARTIAL = "partial", "Thành công một phần"
+        FAILED = "failed", "Thất bại"
+
+    source_path = models.CharField(max_length=1000, db_index=True)
+    source_kind = models.CharField(max_length=10, choices=SourceKind.choices)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.QUEUED, db_index=True)
+    total_files = models.PositiveIntegerField(default=0)
+    archived_files = models.PositiveIntegerField(default=0)
+    failed_files = models.PositiveIntegerField(default=0)
+    total_bytes = models.PositiveBigIntegerField(default=0)
+    archived_bytes = models.PositiveBigIntegerField(default=0)
+    remote_root = models.CharField(max_length=1200, blank=True)
+    remote_url = models.URLField(max_length=1500, blank=True)
+    remote_item_id = models.CharField(max_length=255, blank=True)
+    summary = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True)
+    celery_task_id = models.CharField(max_length=100, blank=True)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="media_archive_jobs",
+        on_delete=models.PROTECT,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "dec_media_archive_job"
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["source_path", "-created_at"], name="dec_media_archive_path_idx")]
+
+
 class TeamReviewExcelJob(models.Model):
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name="review_excel_jobs")
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)

@@ -213,6 +213,33 @@ MICROSOFT_GRAPH_CONNECT_TIMEOUT = float(os.getenv('MS_GRAPH_CONNECT_TIMEOUT', '1
 MICROSOFT_GRAPH_READ_TIMEOUT = float(os.getenv('MS_GRAPH_READ_TIMEOUT', '30'))
 MICROSOFT_GRAPH_EMAIL_CHUNK_SIZE = int(os.getenv('MS_GRAPH_EMAIL_CHUNK_SIZE', '25'))
 
+# Optional SharePoint/OneDrive for Business archive. The storage adapter only
+# uploads when both this switch and the calling workflow's requested flag are true.
+# MS_SP_VALUE is the client secret value; secret/object IDs are metadata only.
+MICROSOFT_GRAPH_STORAGE_ENABLED = (
+    os.getenv('MS_SP_STORAGE_ENABLED', 'False') or ''
+).strip().lower() in ('1', 'true', 'yes', 'on')
+MICROSOFT_GRAPH_STORAGE_CLIENT_SECRET = (os.getenv('MS_SP_VALUE') or '').strip()
+MICROSOFT_GRAPH_STORAGE_TENANT_ID = (os.getenv('MS_SP_TENANT_ID') or '').strip()
+MICROSOFT_GRAPH_STORAGE_CLIENT_ID = (os.getenv('MS_SP_APPLICATION_ID') or '').strip()
+MICROSOFT_GRAPH_STORAGE_SITE_URL = (
+    os.getenv('MS_SP_STORAGE_URL')
+    or os.getenv('URL_SP_TTVH_SITE')
+    or os.getenv('MS_SP_SITE_URL')
+    or os.getenv('MS_SP_REDIRECT_URI')
+    or ''
+).strip().rstrip('/')
+MICROSOFT_GRAPH_STORAGE_DRIVE_ID = (os.getenv('MS_SP_DRIVE_ID') or '').strip()
+MICROSOFT_GRAPH_STORAGE_ROOT_FOLDER = (
+    os.getenv('MS_SP_ROOT_FOLDER') or ''
+).strip().strip('/')
+MICROSOFT_GRAPH_STORAGE_MEDIA_PREFIX = (
+    os.getenv('MS_SP_MEDIA_PREFIX') or 'app_documents_campaigns'
+).strip().strip('/')
+MICROSOFT_GRAPH_STORAGE_MAX_FILES_PER_JOB = int(os.getenv('MS_SP_MAX_FILES_PER_JOB', '5000'))
+MICROSOFT_GRAPH_STORAGE_READ_TIMEOUT = float(os.getenv('MS_SP_READ_TIMEOUT', '60'))
+MICROSOFT_GRAPH_STORAGE_MAX_RETRIES = int(os.getenv('MS_SP_MAX_RETRIES', '3'))
+
 # GAPO bot settings
 GAPO_API_URL = os.getenv('GAPO_API_URL')
 GAPO_BOT_API_KEY = (os.getenv('BOT_API_KEY') or '').strip()

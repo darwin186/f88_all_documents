@@ -2,6 +2,8 @@ from io import BytesIO
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.db import transaction
 from django.db.models import Q
 from django.http import FileResponse, JsonResponse
@@ -11,7 +13,7 @@ from django.views.decorators.http import require_POST
 from openpyxl import Workbook
 
 from app_document_campaigns.models import (
-    Campaign, CampaignError, CampaignErrorBooking, RiskErrorCode,
+    Campaign, CampaignError, CampaignErrorBooking, MediaArchiveJob, RiskErrorCode,
 )
 from app_document_campaigns.services.monitoring_access import scope_campaign_errors
 from app_document_campaigns.views import _is_campaign_admin, campaign_admin_required
@@ -25,6 +27,30 @@ def _qtrr_rows(campaign):
         )
         .select_related("shop", "risk_booking__risk_code")
     )
+
+
+def _build_final_qtrr_workbook(campaign):
+    rows = _qtrr_rows(campaign).order_by("shop__shop_code", "contract_code", "pk")
+    total = rows.count()
+    if not total or rows.exclude(status=CampaignError.Status.AREA_CONFIRMED).exists():
+        raise ValueError("QLKV chưa xác nhận xong toàn bộ dữ liệu.")
+    if rows.filter(risk_booking__isnull=True).exists():
+        raise ValueError("Còn dòng chưa mapping mã lỗi QTRR.")
+    workbook = Workbook(write_only=True)
+    sheet = workbook.create_sheet("Book loi QTRR")
+    headers = ["Mã kỳ", "Mã PGD", "Tên PGD", "Mã hợp đồng", "Ngày phát sinh", "Loại lỗi", "Nội dung lỗi", "Nhân viên", "Nghiệp vụ", "Nguồn QTRR", "Mã lỗi QTRR", "Tên lỗi QTRR", "Ghi chú mapping"]
+    sheet.append(headers)
+    for error in rows.iterator(chunk_size=1000):
+        booking = error.risk_booking
+        sheet.append([
+            campaign.code, error.shop.shop_code, error.shop.shop_name, error.contract_code,
+            timezone.localtime(error.source_created_at).replace(tzinfo=None) if error.source_created_at and timezone.is_aware(error.source_created_at) else error.source_created_at,
+            error.get_error_type_display(), error.checking_issue, error.employee_name, error.business_type_name,
+            booking.risk_code.source, booking.risk_code.code, booking.risk_code.name, booking.note,
+        ])
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
 
 
 @login_required
@@ -54,6 +80,7 @@ def campaign_qtrr_booking(request, campaign_id):
     from django.core.paginator import Paginator
     page = Paginator(queryset.order_by("shop__shop_code", "contract_code", "pk"), 100).get_page(request.GET.get("page"))
     params = request.GET.copy(); params.pop("page", None)
+    archive_prefix = f"app_documents_campaigns/book_loi/{campaign.code}/final/"
     return render(request, "app_document_campaigns/campaign_qtrr_booking.html", {
         "campaign": campaign, "page": page, "scope": scope,
         "risk_codes": campaign.risk_error_codes.all().order_by("sort_order", "code"),
@@ -66,6 +93,7 @@ def campaign_qtrr_booking(request, campaign_id):
         "mapping_progress": round(mapped * 100 / total) if total else 0,
         "ready_to_export": bool(total and confirmed == total and mapped == total),
         "can_manage": _is_campaign_admin(request.user),
+        "latest_archive_job": MediaArchiveJob.objects.filter(source_path__startswith=archive_prefix).first(),
     })
 
 
@@ -147,23 +175,44 @@ def import_qtrr_mapping_excel(request, campaign_id):
 @campaign_admin_required
 def export_qtrr_excel(request, campaign_id):
     campaign = get_object_or_404(Campaign, pk=campaign_id)
-    rows = _qtrr_rows(campaign).order_by("shop__shop_code", "contract_code", "pk")
-    total = rows.count()
-    if not total or rows.exclude(status=CampaignError.Status.AREA_CONFIRMED).exists():
-        return JsonResponse({"error": "QLKV chưa xác nhận xong toàn bộ dữ liệu."}, status=409)
-    if rows.filter(risk_booking__isnull=True).exists():
-        return JsonResponse({"error": "Còn dòng chưa mapping mã lỗi QTRR."}, status=409)
-    workbook = Workbook(write_only=True)
-    sheet = workbook.create_sheet("Book loi QTRR")
-    headers = ["Mã kỳ", "Mã PGD", "Tên PGD", "Mã hợp đồng", "Ngày phát sinh", "Loại lỗi", "Nội dung lỗi", "Nhân viên", "Nghiệp vụ", "Nguồn QTRR", "Mã lỗi QTRR", "Tên lỗi QTRR", "Ghi chú mapping"]
-    sheet.append(headers)
-    for error in rows.iterator(chunk_size=1000):
-        booking = error.risk_booking
-        sheet.append([
-            campaign.code, error.shop.shop_code, error.shop.shop_name, error.contract_code,
-            timezone.localtime(error.source_created_at).replace(tzinfo=None) if error.source_created_at and timezone.is_aware(error.source_created_at) else error.source_created_at,
-            error.get_error_type_display(), error.checking_issue, error.employee_name, error.business_type_name,
-            booking.risk_code.source, booking.risk_code.code, booking.risk_code.name, booking.note,
-        ])
-    output = BytesIO(); workbook.save(output); output.seek(0)
-    return FileResponse(output, as_attachment=True, filename=f"book-loi-qtrr-{campaign.code}.xlsx", content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    try:
+        content = _build_final_qtrr_workbook(campaign)
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=409)
+    return FileResponse(BytesIO(content), as_attachment=True, filename=f"book-loi-qtrr-{campaign.code}.xlsx", content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@login_required
+@require_POST
+@campaign_admin_required
+def archive_qtrr_excel(request, campaign_id):
+    from app_document_campaigns.storage_views import enqueue_archive_job
+
+    campaign = get_object_or_404(Campaign, pk=campaign_id)
+    try:
+        content = _build_final_qtrr_workbook(campaign)
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect("document_campaigns:campaign_qtrr_booking", campaign_id=campaign.pk)
+    now = timezone.now()
+    if timezone.is_aware(now):
+        now = timezone.localtime(now)
+    timestamp = now.strftime("%Y%m%d-%H%M%S")
+    filename = f"book-loi-qtrr-{campaign.code}-{timestamp}.xlsx"
+    local_path = default_storage.save(
+        f"app_documents_campaigns/book_loi/{campaign.code}/final/{filename}",
+        ContentFile(content),
+    )
+    job = MediaArchiveJob.objects.create(
+        source_path=str(local_path).replace("\\", "/"),
+        source_kind=MediaArchiveJob.SourceKind.FILE,
+        requested_by=request.user,
+    )
+    job = enqueue_archive_job(job)
+    if job.status == MediaArchiveJob.Status.FAILED:
+        messages.error(request, f"Đã lưu file vào media nhưng chưa đồng bộ SharePoint: {job.error_message}")
+    elif job.status == MediaArchiveJob.Status.SUCCEEDED:
+        messages.success(request, "Đã lưu file cuối vào media và đồng bộ SharePoint thành công.")
+    else:
+        messages.success(request, "Đã lưu file cuối vào media và đưa yêu cầu SharePoint vào hàng đợi.")
+    return redirect("document_campaigns:campaign_qtrr_booking", campaign_id=campaign.pk)

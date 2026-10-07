@@ -19,16 +19,30 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static 
 from django.http import Http404
+from django.views.generic import RedirectView
 from app_documents.views import CustomPasswordResetView
 from app_admindocuments.media_views import protected_admindocument_file
+from app_document_campaigns import storage_views
 
 
 urlpatterns = [
+path(
+    "favicon.ico",
+    RedirectView.as_view(
+        url="https://f88.vn/images/root/logo-f88-primary.svg?v=20261007",
+        permanent=False,
+    ),
+    name="favicon",
+),
 path(
     "media/admindocuments/files/<path:relative_path>",
     protected_admindocument_file,
     name="protected_admindocument_file",
 ),
+path("storage/", storage_views.media_storage_browser, name="media_storage_browser"),
+path("storage/file/", storage_views.media_file_preview, name="media_file_preview"),
+path("storage/archive/", storage_views.queue_media_archive, name="queue_media_archive"),
+path("storage/jobs/<int:job_id>/", storage_views.media_archive_job_status, name="media_archive_job_status"),
 path('admin/', admin.site.urls),
 path("", include("app_documents.urls")),
 path("error-campaigns/", include("app_document_campaigns.urls")),

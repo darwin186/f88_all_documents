@@ -5,6 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Hệ thống chứng từ F88</title>
+  {% include "includes/favicon.html" %}
   <style>
     :root {
       --green: #008c4a;
@@ -43,8 +44,11 @@
       justify-content: space-between;
       gap: 20px;
     }
-    .brand { display: inline-flex; align-items: center; gap: 12px; color: var(--ink); text-decoration: none; }
+    .brand { display: inline-flex; align-items: center; gap: 14px; min-width: 0; color: var(--ink); text-decoration: none; }
     .brand img { width: auto; height: 34px; display: block; }
+    .navbar-copy { min-width: 0; padding-left: 14px; border-left: 1px solid var(--line); }
+    .navbar-title { display: block; color: #102219; font-size: 15px; font-weight: 800; line-height: 1.25; }
+    .navbar-greeting { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; line-height: 1.35; }
     .user-menu { position: relative; }
     .user-trigger {
       display: inline-flex;
@@ -115,10 +119,8 @@
       margin: 0 auto;
       padding: 44px 0 64px;
     }
-    .intro { max-width: 720px; }
-    .intro h1 { margin: 0 0 6px; color: #102219; font-size: clamp(28px, 3.4vw, 38px); line-height: 1.12; letter-spacing: -.04em; }
-    .intro p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
     .module-section { margin-top: 30px; }
+    .page > .module-section:first-child { margin-top: 0; }
     .module-section h2 { margin: 0 0 12px; color: var(--green-dark); font-size: 13px; font-weight: 800; letter-spacing: .12em; }
     .hero-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 14px; }
     .services-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -183,6 +185,11 @@
     }
     @media (max-width: 620px) {
       .topbar-inner, .page { width: min(100% - 24px, 1180px); }
+      .brand { gap: 9px; }
+      .brand img { height: 29px; }
+      .navbar-copy { padding-left: 9px; }
+      .navbar-title { font-size: 12px; }
+      .navbar-greeting { max-width: 130px; overflow: hidden; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
       .user-copy { display: none; }
       .page { padding-top: 36px; }
       .hero-grid { grid-template-columns: 1fr; }
@@ -195,6 +202,10 @@
     <div class="topbar-inner">
       <a class="brand" href="{% url 'home' %}">
         <img src="https://f88.vn/images/root/logo-f88-primary.svg" alt="F88">
+        <span class="navbar-copy">
+          <span class="navbar-title">Hệ thống chứng từ</span>
+          <span class="navbar-greeting">Xin chào <strong>{% if user.last_name or user.first_name %}{{ user.last_name }} {{ user.first_name }}{% else %}{{ user.username }}{% endif %}</strong>.</span>
+        </span>
       </a>
 
       <div class="user-menu" data-user-menu>
@@ -231,11 +242,6 @@
   </header>
 
   <main class="page">
-    <section class="intro">
-      <h1>Hệ thống chứng từ</h1>
-      <p>Xin chào <strong>{% if user.last_name or user.first_name %}{{ user.last_name }} {{ user.first_name }}{% else %}{{ user.username }}{% endif %}</strong>.</p>
-    </section>
-
     <section class="module-section" aria-labelledby="documents-heading">
       <h2 id="documents-heading">CHỨNG TỪ</h2>
       <div class="hero-grid">
@@ -276,6 +282,12 @@
           <span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 9h16l-2-4H6L4 9Z"/><path d="M5 9v8h14V9M8 17v2h8v-2M8 13h.01M16 13h.01"/></svg></span>
           <span class="card-kicker">Vận hành</span><h3>Giao dịch đảm bảo</h3>
         </a>
+        {% if is_admin or is_super_admin %}
+        <a class="hero-card" href="{% url 'media_storage_browser' %}">
+          <span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7.5h6l2 2H20v10H4z"/><path d="M4 7.5V5h6l2 2h6v2.5"/><path d="M12 12v5M9.5 14.5 12 12l2.5 2.5"/></svg></span>
+          <span class="card-kicker">Media · SharePoint</span><h3>Lưu trữ</h3>
+        </a>
+        {% endif %}
       </div>
     </section>
     {% if is_admin or is_super_admin %}

@@ -37,16 +37,22 @@
         {% if master_data_nav and is_admin or master_data_nav and is_super_admin %}
         <a href="{% url 'master_data' %}" class="{% if request.resolver_match.url_name == 'master_data' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Danh mục PGD</a>
         <span class="text-gray-300">•</span>
-        <a href="{% url 'master_data_tokens' %}" class="{% if request.resolver_match.url_name == 'master_data_tokens' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">API Token</a>
-        <span class="text-gray-300">•</span>
-        <a href="{% url 'master_data_response_options' %}" class="{% if request.resolver_match.url_name == 'master_data_response_options' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Phản hồi PGD</a>
-        <span class="text-gray-300">•</span>
-        <a href="{% url 'master_data_response_guidance' %}" class="{% if request.resolver_match.url_name == 'master_data_response_guidance' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Hướng dẫn PGD</a>
+        <div class="group relative inline-flex items-center">
+          <a href="{% url 'master_data_response_options' %}" class="inline-flex items-center gap-1 {% if request.resolver_match.url_name == 'master_data_response_options' or request.resolver_match.url_name == 'master_data_response_guidance' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Book lỗi chứng từ <span class="text-[8px]">⌄</span></a>
+          <div class="absolute left-0 top-full z-50 hidden min-w-[180px] pt-2 group-hover:block group-focus-within:block">
+            <div class="overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+              <a href="{% url 'master_data_response_options' %}" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Phản hồi PGD</a>
+              <a href="{% url 'master_data_response_guidance' %}" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Hướng dẫn PGD</a>
+            </div>
+          </div>
+        </div>
         <span class="text-gray-300">•</span>
         <div class="group relative inline-flex items-center">
-          <a href="{% url 'master_data_api_docs' %}" class="inline-flex items-center gap-1 {% if request.resolver_match.url_name == 'master_data_api_docs' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Tài liệu API <span class="text-[8px]">⌄</span></a>
+          <a href="{% url 'master_data_api_docs' %}" class="inline-flex items-center gap-1 {% if request.resolver_match.url_name == 'master_data_api_docs' or request.resolver_match.url_name == 'master_data_tokens' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">APIs <span class="text-[8px]">⌄</span></a>
           <div class="absolute left-0 top-full z-50 hidden min-w-[210px] pt-2 group-hover:block group-focus-within:block">
             <div class="overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
+              <a href="{% url 'master_data_tokens' %}" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">API Token</a>
+              <div class="mx-3 border-t border-gray-100"></div>
               <a href="{% url 'master_data_api_docs' %}" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Master Data · PGD</a>
               <a href="{% url 'document_intake_documentation' %}" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Intake dữ liệu</a>
               <a href="{% url 'gddb_registration_v2' %}?tab=api_docs" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Giao dịch bảo đảm</a>

@@ -22,6 +22,7 @@ urlpatterns = [
     path("campaigns/<int:campaign_id>/qtrr/manual-excel/export/", qtrr_views.export_qtrr_mapping_excel, name="export_qtrr_mapping_excel"),
     path("campaigns/<int:campaign_id>/qtrr/manual-excel/import/", qtrr_views.import_qtrr_mapping_excel, name="import_qtrr_mapping_excel"),
     path("campaigns/<int:campaign_id>/qtrr/export/", qtrr_views.export_qtrr_excel, name="export_qtrr_excel"),
+    path("campaigns/<int:campaign_id>/qtrr/archive/", qtrr_views.archive_qtrr_excel, name="archive_qtrr_excel"),
     path("campaigns/<int:campaign_id>/review/release-to-area/", review_views.release_team_review_to_area, name="release_team_review_to_area"),
     path("campaigns/<int:campaign_id>/review/errors/<int:error_id>/", review_views.save_team_review, name="save_team_review"),
     path("health/", views.health, name="health"),

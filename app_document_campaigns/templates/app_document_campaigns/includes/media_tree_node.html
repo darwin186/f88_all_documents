@@ -1,0 +1,10 @@
+<li>
+  {% if node.children %}
+  <details class="media-tree-branch" data-tree-path="{{ node.path }}" {% if node.is_open %}open{% endif %}>
+    <summary><span class="media-tree-caret" aria-hidden="true">›</span><a href="{% url 'media_storage_browser' %}{% if node.path %}?path={{ node.path|urlencode }}{% endif %}" class="media-tree-link {% if node.path == current_path %}is-current{% endif %}">{{ node.name }}</a></summary>
+    <ul>{% for child in node.children %}{% include "app_document_campaigns/includes/media_tree_node.html" with node=child current_path=current_path %}{% endfor %}</ul>
+  </details>
+  {% else %}
+  <a href="{% url 'media_storage_browser' %}{% if node.path %}?path={{ node.path|urlencode }}{% endif %}" class="media-tree-link media-tree-leaf {% if node.path == current_path %}is-current{% endif %}"><span class="media-tree-leaf-caret" aria-hidden="true">•</span>{{ node.name }}</a>
+  {% endif %}
+</li>

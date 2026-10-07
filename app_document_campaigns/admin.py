@@ -18,6 +18,7 @@ from app_document_campaigns.models import (
     CampaignVersion,
     ChecklistQuestion,
     ChecklistTemplate,
+    MediaArchiveJob,
     RiskErrorCode,
     ShopAccessLink,
     ShopResponse,
@@ -138,6 +139,14 @@ admin.site.register(TeamReview)
 admin.site.register(AreaConfirmation)
 admin.site.register(CampaignSnapshot)
 admin.site.register(CampaignSnapshotMetric)
+
+
+@admin.register(MediaArchiveJob)
+class MediaArchiveJobAdmin(admin.ModelAdmin):
+    list_display = ("id", "source_path", "source_kind", "status", "archived_files", "total_files", "requested_by", "created_at")
+    list_filter = ("source_kind", "status", "created_at")
+    search_fields = ("source_path", "requested_by__username", "remote_item_id")
+    readonly_fields = [field.name for field in MediaArchiveJob._meta.fields]
 
 
 @admin.register(RiskErrorCode)

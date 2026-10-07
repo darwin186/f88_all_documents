@@ -1,5 +1,6 @@
 from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
+from django.conf import settings
 from django.core.files.base import ContentFile
 from django.utils import timezone
 from django.utils.text import slugify
@@ -7,9 +8,105 @@ from django.utils.text import slugify
 from app_document_campaigns.models import (
     Campaign,
     CampaignImportJob,
+    MediaArchiveJob,
     ShopAccessLink,
     ShopSubmission,
 )
+
+
+@shared_task(soft_time_limit=3300, time_limit=3600)
+def process_media_archive(job_id):
+    if not MediaArchiveJob.objects.filter(
+        pk=job_id,
+        status=MediaArchiveJob.Status.QUEUED,
+    ).update(
+        status=MediaArchiveJob.Status.RUNNING,
+        started_at=timezone.now(),
+        error_message="",
+    ):
+        return {"status": "skipped", "job_id": job_id}
+
+    from app_document_campaigns.services.media_archive import (
+        iter_media_files,
+        remote_folder_for,
+        resolve_media_source,
+    )
+    from app_document_campaigns.services.microsoft_graph_storage import (
+        MicrosoftGraphArchiveStorage,
+    )
+
+    job = MediaArchiveJob.objects.get(pk=job_id)
+    try:
+        source = resolve_media_source(job.source_path)
+        files = list(iter_media_files(source))
+        max_files = int(getattr(settings, "MICROSOFT_GRAPH_STORAGE_MAX_FILES_PER_JOB", 5000))
+        if len(files) > max_files:
+            raise ValueError(f"Thư mục có {len(files):,} file, vượt giới hạn {max_files:,} file/job.")
+        total_bytes = sum(path.stat().st_size for _, path in files)
+        MediaArchiveJob.objects.filter(pk=job_id).update(
+            total_files=len(files),
+            total_bytes=total_bytes,
+        )
+        storage = MicrosoftGraphArchiveStorage()
+        if not storage.enabled:
+            raise ValueError("Lưu trữ SharePoint đang tắt trong cấu hình hệ thống.")
+
+        archived = 0
+        archived_bytes = 0
+        failures = []
+        last_result = None
+        remote_root = (
+            remote_folder_for(f"{source.relative_path}/placeholder")
+            if source.is_dir
+            else remote_folder_for(source.relative_path)
+        )
+        if not files and source.is_dir:
+            last_result = storage.ensure_folder(remote_root)
+        for relative, path in files:
+            try:
+                with path.open("rb") as stream:
+                    result = storage.archive(
+                        stream,
+                        filename=path.name,
+                        folder=remote_folder_for(relative),
+                        requested=True,
+                    )
+                if not result.stored:
+                    raise ValueError(f"SharePoint bỏ qua file: {result.reason}")
+                archived += 1
+                archived_bytes += path.stat().st_size
+                last_result = result
+            except Exception as exc:
+                failures.append({"path": relative, "error": str(exc)[:500]})
+            MediaArchiveJob.objects.filter(pk=job_id).update(
+                archived_files=archived,
+                failed_files=len(failures),
+                archived_bytes=archived_bytes,
+            )
+
+        status = MediaArchiveJob.Status.SUCCEEDED if not failures else (
+            MediaArchiveJob.Status.PARTIAL if archived else MediaArchiveJob.Status.FAILED
+        )
+        MediaArchiveJob.objects.filter(pk=job_id).update(
+            status=status,
+            archived_files=archived,
+            failed_files=len(failures),
+            archived_bytes=archived_bytes,
+            remote_root=remote_root,
+            remote_url=last_result.web_url if last_result and len(files) <= 1 else "",
+            remote_item_id=last_result.item_id if last_result and len(files) <= 1 else "",
+            summary={"failures": failures[:100]},
+            error_message=(failures[0]["error"] if failures and not archived else ""),
+            finished_at=timezone.now(),
+        )
+        return {"status": status, "job_id": job_id, "archived": archived, "failed": len(failures)}
+    except Exception as exc:
+        MediaArchiveJob.objects.filter(pk=job_id).update(
+            status=MediaArchiveJob.Status.FAILED,
+            error_message=str(exc)[:2000],
+            finished_at=timezone.now(),
+        )
+        return {"status": "failed", "job_id": job_id}
 
 
 @shared_task

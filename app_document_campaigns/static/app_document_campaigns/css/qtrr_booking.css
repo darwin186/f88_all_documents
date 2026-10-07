@@ -12,6 +12,7 @@
 .qtrr-primary-action{box-sizing:border-box;display:flex;width:100%;min-height:34px;align-items:center;justify-content:center;border:0;border-radius:8px;background:#00854a;padding:8px 11px;color:#fff;font-size:11px;font-weight:700;text-align:center;text-decoration:none;cursor:pointer}
 .qtrr-primary-action:hover{background:#007743;color:#fff}
 .qtrr-primary-action:disabled{background:#d7ddd9;color:#78837d;cursor:not-allowed}
+.qtrr-export-card form{margin:0}.qtrr-archive-action{border:1px solid #00854a;background:#fff;color:#007a45}.qtrr-archive-action:hover{background:#edf8f2;color:#006d3d}.qtrr-archive-action:disabled{border-color:#d7ddd9}.qtrr-storage-link{color:#53645b;font-size:9px;font-weight:700;text-align:center;text-decoration:none}.qtrr-storage-link:hover{color:#007a45;text-decoration:underline}
 .qtrr-export-card>span{color:#718078;font-size:9px;text-align:center}
 .qtrr-progress-grid{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;border-top:1px solid #e8eeea;padding-top:10px}
 .qtrr-progress-grid article{min-width:0}
