@@ -19,14 +19,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const confirmation = configForm.dataset.emailStage === "confirmation";
     const subject = configForm.elements[confirmation ? "confirmation_subject_template" : "monitoring_subject_template"];
     const body = configForm.elements[confirmation ? "confirmation_body_template" : "monitoring_body_template"];
+    const cc = configForm.elements[confirmation ? "confirmation_cc_template" : "monitoring_cc_template"];
+    const bcc = configForm.elements[confirmation ? "confirmation_bcc_template" : "monitoring_bcc_template"];
     const context = {...previewSample.context, support_email: configForm.elements.support_email.value.trim()};
     const fromAddress = previewSample.from_email.replace(/^.*<([^>]+)>$/, "$1");
     const fromName = configForm.elements.from_name.value.trim();
     configDialog.querySelector("[data-area-live-preview-name]").textContent = previewSample.area;
     configDialog.querySelector("[data-area-live-preview-from]").textContent = fromName ? `${fromName} <${fromAddress}>` : fromAddress;
     configDialog.querySelector("[data-area-live-preview-to]").textContent = previewSample.to.join(", ") || "—";
-    configDialog.querySelector("[data-area-live-preview-cc]").textContent = splitEmails(configForm.elements.cc_emails_text.value).join(", ") || "—";
-    configDialog.querySelector("[data-area-live-preview-bcc]").textContent = splitEmails(configForm.elements.bcc_emails_text.value).join(", ") || "—";
+    configDialog.querySelector("[data-area-live-preview-cc]").textContent = splitEmails(renderText(cc.value, context)).join(", ") || "—";
+    configDialog.querySelector("[data-area-live-preview-bcc]").textContent = splitEmails(renderText(bcc.value, context)).join(", ") || "—";
     configDialog.querySelector("[data-area-live-preview-subject]").textContent = renderText(subject.value, context) || "—";
     const bodyHtml = window.campaignRichEmail?.html(body) || body.value;
     const bodyPreview = configDialog.querySelector("[data-area-live-preview-body]");
@@ -49,7 +51,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let active = configForm.dataset.emailStage === "confirmation"
       ? configForm.elements.confirmation_body_template
       : configForm.elements.monitoring_body_template;
-    ["monitoring_subject_template", "monitoring_body_template", "confirmation_subject_template", "confirmation_body_template"].forEach(name => {
+    ["monitoring_subject_template", "monitoring_body_template", "monitoring_cc_template", "monitoring_bcc_template", "confirmation_subject_template", "confirmation_body_template", "confirmation_cc_template", "confirmation_bcc_template"].forEach(name => {
       configForm.elements[name]?.addEventListener("focus", event => { active = event.currentTarget; });
     });
     configForm.querySelector("[data-rich-email-editor]")?.addEventListener("focus", () => {
@@ -84,13 +86,15 @@ document.addEventListener("DOMContentLoaded", () => {
   testForm?.addEventListener("submit", async event => {
     event.preventDefault();
     const submit = event.submitter || testForm.querySelector('button[type="submit"]'), errorBox = testForm.querySelector("[data-area-email-test-error]");
-    if (submit) submit.disabled = true; errorBox.hidden = true;
+    const originalLabel = submit?.textContent;
+    if (submit) { submit.disabled = true; submit.classList.add("is-loading"); submit.textContent = "Đang gửi…"; }
+    errorBox.hidden = true;
     try {
       const response = await fetch(testForm.action, {method: "POST", body: new FormData(testForm), credentials: "same-origin", headers: {Accept: "application/json"}});
       const data = await readJson(response);
       if (!response.ok || !data.ok) throw new Error(data.error || "Không thể gửi thử.");
       testDialog.close(); window.campaignToast?.(data.message, "success");
     } catch (error) { errorBox.textContent = error.message; errorBox.hidden = false; }
-    finally { if (submit) submit.disabled = false; }
+    finally { if (submit) { submit.disabled = false; submit.classList.remove("is-loading"); submit.textContent = originalLabel; } }
   });
 });

@@ -3,75 +3,42 @@ from datetime import date, timedelta
 from django import forms
 from django.db.models import Q
 
-from django.core.exceptions import ValidationError
-from django.core.validators import validate_email
-
-from app_document_campaigns.models import Campaign, CampaignAreaEmailConfig, CampaignEmailConfig, CampaignType, CampaignErrorBooking, CampaignResponseOption, ResponseGuidanceTemplate, RiskErrorCode, ShopResponseOption, ShopResponse
-from app_document_campaigns.services.email_templates import EmailTemplateError, validate_area_templates, validate_templates
+from app_document_campaigns.models import Campaign, CampaignAreaEmailConfig, CampaignEmailConfig, CampaignType, CampaignErrorBooking, CampaignResponseOption, EmailTemplateMaster, ResponseGuidanceTemplate, RiskErrorCode, ShopResponseOption, ShopResponse
+from app_document_campaigns.services.email_templates import ALLOWED_VARIABLES, AREA_ALLOWED_VARIABLES, EmailTemplateError, validate_area_templates, validate_recipient_template, validate_templates
 from app_document_campaigns.services.email_html import sanitize_email_template
 
 
-def _email_list(value):
-    values = []
-    seen = set()
-    for item in (value or "").replace(";", ",").replace("\n", ",").split(","):
-        email = item.strip()
-        if not email:
-            continue
-        try:
-            validate_email(email)
-        except ValidationError as exc:
-            raise forms.ValidationError(f"Email không hợp lệ: {email}") from exc
-        if email.lower() not in seen:
-            seen.add(email.lower())
-            values.append(email)
-    if len(values) > 20:
-        raise forms.ValidationError("Mỗi danh sách chỉ được tối đa 20 email.")
-    return values
-
-
 class CampaignEmailConfigForm(forms.ModelForm):
-    cc_emails_text = forms.CharField(label="CC bổ sung (nhiều email)", required=False, widget=forms.Textarea(attrs={"rows": 2, "placeholder": "email1@f88.vn, email2@f88.vn"}))
-    bcc_emails_text = forms.CharField(label="BCC nội bộ (nhiều email)", required=False, widget=forms.Textarea(attrs={"rows": 2, "placeholder": "audit@f88.vn, control@f88.vn"}))
-
     class Meta:
         model = CampaignEmailConfig
-        fields = ("from_name", "subject_template", "body_template", "cc_area_manager", "support_email")
+        fields = ("from_name", "subject_template", "body_template", "cc_template", "bcc_template", "support_email")
         labels = {
             "from_name": "Tên hiển thị người gửi",
             "subject_template": "Subject",
             "body_template": "Nội dung email",
-            "cc_area_manager": "Tự động CC Quản lý khu vực",
+            "cc_template": "CC (email hoặc tham số)",
+            "bcc_template": "BCC (email hoặc tham số)",
             "support_email": "Email hỗ trợ",
         }
         widgets = {
             "body_template": forms.Textarea(attrs={"rows": 11}),
+            "cc_template": forms.Textarea(attrs={"rows": 2, "placeholder": "{{area_manager_email}}, {{shop_manager_email}}"}),
+            "bcc_template": forms.Textarea(attrs={"rows": 2, "placeholder": "audit@f88.vn"}),
         }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["cc_emails_text"].initial = ", ".join(self.instance.cc_emails or [])
-        self.fields["bcc_emails_text"].initial = ", ".join(self.instance.bcc_emails or [])
-
-    def clean_cc_emails_text(self):
-        return _email_list(self.cleaned_data.get("cc_emails_text"))
-
-    def clean_bcc_emails_text(self):
-        return _email_list(self.cleaned_data.get("bcc_emails_text"))
 
     def clean(self):
         cleaned = super().clean()
         cleaned["body_template"] = sanitize_email_template(cleaned.get("body_template"))
         try:
             validate_templates(cleaned.get("subject_template"), cleaned.get("body_template"))
+            validate_recipient_template(cleaned.get("cc_template"), ALLOWED_VARIABLES)
+            validate_recipient_template(cleaned.get("bcc_template"), ALLOWED_VARIABLES)
         except EmailTemplateError as exc:
             raise forms.ValidationError(str(exc)) from exc
         return cleaned
 
     def save(self, commit=True, *, updated_by=None):
         config = super().save(commit=False)
-        config.cc_emails = self.cleaned_data["cc_emails_text"]
-        config.bcc_emails = self.cleaned_data["bcc_emails_text"]
         if self.changed_data and config.pk:
             config.template_version += 1
         config.updated_by = updated_by
@@ -81,19 +48,21 @@ class CampaignEmailConfigForm(forms.ModelForm):
 
 
 class CampaignAreaEmailConfigForm(forms.ModelForm):
-    cc_emails_text = forms.CharField(label="CC bổ sung (nhiều email)", required=False, widget=forms.Textarea(attrs={"rows": 2, "placeholder": "email1@f88.vn, email2@f88.vn"}))
-    bcc_emails_text = forms.CharField(label="BCC nội bộ (nhiều email)", required=False, widget=forms.Textarea(attrs={"rows": 2, "placeholder": "audit@f88.vn, control@f88.vn"}))
-
     class Meta:
         model = CampaignAreaEmailConfig
         fields = (
-            "from_name", "monitoring_subject_template", "monitoring_body_template",
-            "confirmation_subject_template", "confirmation_body_template", "support_email",
+            "from_name", "monitoring_subject_template", "monitoring_body_template", "monitoring_cc_template", "monitoring_bcc_template",
+            "monitoring_report_url", "monitoring_guide_url",
+            "confirmation_guide_url", "confirmation_subject_template",
+            "confirmation_body_template", "confirmation_cc_template", "confirmation_bcc_template", "support_email",
         )
         labels = {
             "from_name": "Tên hiển thị người gửi",
             "monitoring_subject_template": "Subject theo dõi PGD",
             "monitoring_body_template": "Nội dung theo dõi PGD",
+            "monitoring_report_url": "Link báo cáo lỗi Power BI",
+            "monitoring_guide_url": "Link hướng dẫn xem báo cáo",
+            "confirmation_guide_url": "Link hướng dẫn QLKV phản hồi",
             "confirmation_subject_template": "Subject xác nhận lỗi",
             "confirmation_body_template": "Nội dung xác nhận lỗi",
             "support_email": "Email hỗ trợ",
@@ -101,18 +70,11 @@ class CampaignAreaEmailConfigForm(forms.ModelForm):
         widgets = {
             "monitoring_body_template": forms.Textarea(attrs={"rows": 8}),
             "confirmation_body_template": forms.Textarea(attrs={"rows": 8}),
+            "monitoring_cc_template": forms.Textarea(attrs={"rows": 2}),
+            "monitoring_bcc_template": forms.Textarea(attrs={"rows": 2}),
+            "confirmation_cc_template": forms.Textarea(attrs={"rows": 2}),
+            "confirmation_bcc_template": forms.Textarea(attrs={"rows": 2}),
         }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["cc_emails_text"].initial = ", ".join(self.instance.cc_emails or [])
-        self.fields["bcc_emails_text"].initial = ", ".join(self.instance.bcc_emails or [])
-
-    def clean_cc_emails_text(self):
-        return _email_list(self.cleaned_data.get("cc_emails_text"))
-
-    def clean_bcc_emails_text(self):
-        return _email_list(self.cleaned_data.get("bcc_emails_text"))
 
     def clean(self):
         cleaned = super().clean()
@@ -123,14 +85,14 @@ class CampaignAreaEmailConfigForm(forms.ModelForm):
                 cleaned.get("monitoring_subject_template"), cleaned.get("monitoring_body_template"),
                 cleaned.get("confirmation_subject_template"), cleaned.get("confirmation_body_template"),
             )
+            for field in ("monitoring_cc_template", "monitoring_bcc_template", "confirmation_cc_template", "confirmation_bcc_template"):
+                validate_recipient_template(cleaned.get(field), AREA_ALLOWED_VARIABLES)
         except EmailTemplateError as exc:
             raise forms.ValidationError(str(exc)) from exc
         return cleaned
 
     def save(self, commit=True, *, updated_by=None):
         config = super().save(commit=False)
-        config.cc_emails = self.cleaned_data["cc_emails_text"]
-        config.bcc_emails = self.cleaned_data["bcc_emails_text"]
         if self.changed_data and config.pk:
             config.template_version += 1
         config.updated_by = updated_by
@@ -262,7 +224,40 @@ class CampaignTypeSelect(forms.Select):
         return option
 
 
-class CampaignCreateForm(CampaignRiskCodesMixin, CampaignResponseChoicesMixin, CampaignAreaChoicesMixin, forms.ModelForm):
+class CampaignEmailTemplateMappingMixin:
+    template_fields = {
+        "pgd_email_template": EmailTemplateMaster.EmailType.PGD_RESPONSE,
+        "area_monitoring_email_template": EmailTemplateMaster.EmailType.AREA_MONITORING,
+        "area_confirmation_email_template": EmailTemplateMaster.EmailType.AREA_CONFIRMATION,
+    }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name, email_type in self.template_fields.items():
+            field = self.fields[field_name]
+            available = Q(email_type=email_type, is_active=True)
+            current_id = getattr(self.instance, f"{field_name}_id", None)
+            if current_id:
+                # An inactive master stays selectable on campaigns that already
+                # use its snapshot, so unrelated settings can still be saved.
+                available |= Q(pk=current_id, email_type=email_type)
+            field.queryset = EmailTemplateMaster.objects.filter(available).order_by("name")
+            field.empty_label = "Chọn template email"
+            if not self.instance.pk and not self.is_bound:
+                default = field.queryset.filter(is_default=True).first()
+                if default:
+                    self.initial[field_name] = default.pk
+
+    def clean(self):
+        cleaned = super().clean()
+        for field_name, email_type in self.template_fields.items():
+            template = cleaned.get(field_name)
+            if template and template.email_type != email_type:
+                self.add_error(field_name, "Template không đúng bước gửi email.")
+        return cleaned
+
+
+class CampaignCreateForm(CampaignEmailTemplateMappingMixin, CampaignRiskCodesMixin, CampaignResponseChoicesMixin, CampaignAreaChoicesMixin, forms.ModelForm):
     report_month = forms.CharField(
         label="Tháng chứng từ",
         widget=forms.TextInput(
@@ -304,17 +299,27 @@ class CampaignCreateForm(CampaignRiskCodesMixin, CampaignResponseChoicesMixin, C
 
     class Meta:
         model = Campaign
-        fields = ("campaign_type", "name", "report_month", "response_deadline", "area_response_deadline", "shop_instructions", "area_manager_instructions")
+        fields = (
+            "campaign_type", "name", "report_month", "carryover_source", "response_deadline", "area_response_deadline",
+            "pgd_email_template", "area_monitoring_email_template", "area_confirmation_email_template",
+            "shop_instructions", "area_monitoring_instructions", "area_manager_instructions",
+        )
         labels = {
             "campaign_type": "Loại book lỗi",
+            "carryover_source": "Nhận lỗi treo từ kỳ trước (tùy chọn)",
             "name": "Tên chiến dịch",
-            "area_manager_instructions": "Hướng dẫn QLKV",
+            "area_monitoring_instructions": "Hướng dẫn Step 3 · QLKV theo dõi (chỉ xem)",
+            "area_manager_instructions": "Hướng dẫn Step 5 · QLKV xác nhận",
+            "pgd_email_template": "Template Step 2 · Email PGD",
+            "area_monitoring_email_template": "Template Step 3 · QLKV theo dõi",
+            "area_confirmation_email_template": "Template Step 5 · QLKV xác nhận",
         }
         widgets = {
             "campaign_type": CampaignTypeSelect(),
             "name": forms.TextInput(),
             "shop_instructions": forms.Textarea(attrs={"rows": 5, "placeholder": "Nhập hướng dẫn phản hồi cho PGD…"}),
-            "area_manager_instructions": forms.Textarea(attrs={"rows": 5, "placeholder": "Nhập hướng dẫn hiển thị trên link xác nhận của QLKV…"}),
+            "area_monitoring_instructions": forms.Textarea(attrs={"rows": 5, "placeholder": "Hướng dẫn QLKV theo dõi và đôn đốc PGD…"}),
+            "area_manager_instructions": forms.Textarea(attrs={"rows": 5, "placeholder": "Hướng dẫn QLKV xác nhận lỗi sau Team review…"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -328,6 +333,18 @@ class CampaignCreateForm(CampaignRiskCodesMixin, CampaignResponseChoicesMixin, C
             )
         self.fields["campaign_type"].queryset = CampaignType.objects.filter(is_active=True)
         self.fields["campaign_type"].empty_label = "Chọn loại book lỗi"
+        self.fields["carryover_source"].queryset = Campaign.objects.order_by("-report_month")
+        self.fields["carryover_source"].empty_label = "Không nhận lỗi treo"
+        self.fields["carryover_source"].help_text = "Chọn kỳ trước cùng loại book lỗi; có thể bỏ qua kỳ không book được và chọn kỳ cũ hơn. Dữ liệu sẽ được nhận khi xác nhận version chính thức."
+
+    def clean(self):
+        cleaned = super().clean()
+        source = cleaned.get("carryover_source")
+        campaign_type = cleaned.get("campaign_type")
+        report_month = cleaned.get("report_month")
+        if source and campaign_type and report_month and (source.campaign_type_id != campaign_type.pk or source.report_month >= report_month):
+            self.add_error("carryover_source", "Chọn kỳ cũ hơn và cùng loại book lỗi.")
+        return cleaned
 
     def clean_report_month(self):
         value = self.cleaned_data["report_month"]
@@ -385,7 +402,7 @@ class CampaignDeadlineForm(forms.ModelForm):
         return campaign
 
 
-class CampaignSettingsForm(CampaignRiskCodesMixin, CampaignResponseChoicesMixin, CampaignAreaChoicesMixin, CampaignDeadlineForm):
+class CampaignSettingsForm(CampaignEmailTemplateMappingMixin, CampaignRiskCodesMixin, CampaignResponseChoicesMixin, CampaignAreaChoicesMixin, CampaignDeadlineForm):
     area_response_deadline = forms.DateTimeField(
         label="Hạn cuối QLKV xác nhận",
         required=False,
@@ -415,15 +432,24 @@ class CampaignSettingsForm(CampaignRiskCodesMixin, CampaignResponseChoicesMixin,
 
     class Meta:
         model = Campaign
-        fields = ("name", "response_deadline", "area_response_deadline", "shop_instructions", "area_manager_instructions")
+        fields = (
+            "name", "response_deadline", "area_response_deadline",
+            "pgd_email_template", "area_monitoring_email_template", "area_confirmation_email_template",
+            "shop_instructions", "area_monitoring_instructions", "area_manager_instructions",
+        )
         labels = {
             "name": "Tên chiến dịch",
-            "area_manager_instructions": "Hướng dẫn QLKV",
+            "area_monitoring_instructions": "Hướng dẫn Step 3 · QLKV theo dõi (chỉ xem)",
+            "area_manager_instructions": "Hướng dẫn Step 5 · QLKV xác nhận",
+            "pgd_email_template": "Template Step 2 · Email PGD",
+            "area_monitoring_email_template": "Template Step 3 · QLKV theo dõi",
+            "area_confirmation_email_template": "Template Step 5 · QLKV xác nhận",
         }
         widgets = {
             "name": forms.TextInput(attrs={"class": "dec-settings-input"}),
             "shop_instructions": forms.Textarea(attrs={"class": "dec-settings-input", "rows": 5, "placeholder": "Nhập hướng dẫn phản hồi cho PGD…"}),
-            "area_manager_instructions": forms.Textarea(attrs={"class": "dec-settings-input", "rows": 5, "placeholder": "Nhập hướng dẫn hiển thị trên link xác nhận của QLKV…"}),
+            "area_monitoring_instructions": forms.Textarea(attrs={"class": "dec-settings-input", "rows": 5, "placeholder": "Hướng dẫn QLKV theo dõi và đôn đốc PGD…"}),
+            "area_manager_instructions": forms.Textarea(attrs={"class": "dec-settings-input", "rows": 5, "placeholder": "Hướng dẫn QLKV xác nhận lỗi sau Team review…"}),
         }
 
     def save(self, commit=True):
@@ -431,7 +457,11 @@ class CampaignSettingsForm(CampaignRiskCodesMixin, CampaignResponseChoicesMixin,
         campaign.link_expires_at = campaign.response_deadline + timedelta(days=31) if "response_deadline" in self.changed_data else self.original_expiry
         if commit:
             campaign.save(
-                update_fields=["name", "response_deadline", "area_response_deadline", "shop_instructions", "area_manager_instructions", "link_expires_at", "updated_at"]
+                update_fields=[
+                    "name", "response_deadline", "area_response_deadline",
+                    "pgd_email_template", "area_monitoring_email_template", "area_confirmation_email_template",
+                    "shop_instructions", "area_monitoring_instructions", "area_manager_instructions", "link_expires_at", "updated_at",
+                ]
             )
             self.save_response_options()
             self.save_risk_error_codes()

@@ -134,7 +134,13 @@ def send_campaign_shop_link(link_id, url, delivery_id=None):
             delivery.update(status="skipped", message="Link không còn nhận phản hồi.", finished_at=timezone.now())
             return {"status": "skipped", "delivery_id": delivery_id}
         config = campaign_email_config(link.campaign)
-        rendered = render_campaign_email(config, link.campaign, link.shop, url)
+        rendered = render_campaign_email(
+            config,
+            link.campaign,
+            link.shop,
+            url,
+            response_deadline=link.response_deadline,
+        )
         delivery.update(
             to_email=rendered.to[0],
             cc_emails=rendered.cc,
@@ -293,49 +299,10 @@ def process_area_confirmation_excel(job_id):
         return {"status": "failed"}
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=120)
-def process_shop_submission(self, submission_id):
-    """Send post-submit notifications outside the HTTP transaction.
-
-    Snapshot and aggregate metric generation intentionally stays in DEC-10;
-    creating a snapshot for every Shop submit would make that data too noisy.
-    """
-    try:
-        submission = ShopSubmission.objects.select_related("campaign", "shop").get(
-            pk=submission_id
-        )
-    except ShopSubmission.DoesNotExist:
-        return {"status": "missing", "submission_id": submission_id}
-
-    try:
-        recipient = ShopAccessLink.objects.values_list("allowed_email", flat=True).get(
-            campaign=submission.campaign,
-            shop=submission.shop,
-        )
-        from html import escape
-        from app_document_campaigns.services.microsoft_graph_email import send_message
-
-        send_message({
-            "to": [recipient],
-            "cc": [],
-            "bcc": [],
-            "subject": f"Đã nhận phản hồi {submission.campaign.code}",
-            "body": {
-                "content_type": "html",
-                "content": (
-                    "<p>Hệ thống đã nhận "
-                    f"<strong>{submission.response_count}</strong> phản hồi của "
-                    f"{escape(submission.shop.shop_name)} lúc "
-                    f"{submission.submitted_at:%d/%m/%Y %H:%M}.</p>"
-                ),
-            },
-        })
-    except ShopAccessLink.DoesNotExist:
-        return {"status": "missing_access_link", "submission_id": submission_id}
-    except Exception as exc:
-        raise self.retry(exc=exc)
-
-    return {"status": "sent", "submission_id": submission_id, "recipient": recipient}
+@shared_task
+def process_shop_submission(submission_id):
+    """Discard legacy queued confirmation tasks after PGD submits a response."""
+    return {"status": "email_disabled", "submission_id": submission_id}
 
 
 @shared_task(soft_time_limit=900, time_limit=960)

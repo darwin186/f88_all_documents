@@ -83,6 +83,8 @@ def campaign_create(request):
             campaign.save()
             form.save_response_options()
             form.save_risk_error_codes()
+            from app_document_campaigns.services.email_template_mapping import apply_campaign_email_templates
+            apply_campaign_email_templates(campaign)
             messages.success(request, "Đã tạo chiến dịch. Hãy tạo version nháp để chạy dữ liệu SQL.")
             return redirect("document_campaigns:campaign_detail", campaign_id=campaign.pk)
     else:
@@ -161,6 +163,31 @@ def campaign_detail(request, campaign_id):
     prepared_files = [job for job in prepared_files if job.summary.get("export_kind") != "reviewed" or (excel_source and job.summary.get("source_checksum") == excel_source.source_checksum)]
     busy = bool(latest_job and latest_job.status in (CampaignImportJob.Status.QUEUED, CampaignImportJob.Status.RUNNING))
     data_locked = campaign.status in (Campaign.Status.ACTIVE, Campaign.Status.CLOSED, Campaign.Status.CANCELLED) or bool(selected_version and selected_version.status == CampaignVersion.Status.PUBLISHED)
+    from app_document_campaigns.models import CampaignAreaEmailConfig, CampaignEmailConfig
+    pgd_email_config = CampaignEmailConfig.objects.filter(campaign=campaign).first()
+    area_email_config = CampaignAreaEmailConfig.objects.filter(campaign=campaign).first()
+    email_template_differences = []
+    if campaign.pgd_email_template_id and pgd_email_config and (
+        pgd_email_config.subject_template != campaign.pgd_email_template.subject_template
+        or pgd_email_config.body_template != campaign.pgd_email_template.body_template
+        or pgd_email_config.cc_template != campaign.pgd_email_template.cc_template
+        or pgd_email_config.bcc_template != campaign.pgd_email_template.bcc_template
+    ):
+        email_template_differences.append("PGD")
+    if campaign.area_monitoring_email_template_id and area_email_config and (
+        area_email_config.monitoring_subject_template != campaign.area_monitoring_email_template.subject_template
+        or area_email_config.monitoring_body_template != campaign.area_monitoring_email_template.body_template
+        or area_email_config.monitoring_cc_template != campaign.area_monitoring_email_template.cc_template
+        or area_email_config.monitoring_bcc_template != campaign.area_monitoring_email_template.bcc_template
+    ):
+        email_template_differences.append("QLKV theo dõi")
+    if campaign.area_confirmation_email_template_id and area_email_config and (
+        area_email_config.confirmation_subject_template != campaign.area_confirmation_email_template.subject_template
+        or area_email_config.confirmation_body_template != campaign.area_confirmation_email_template.body_template
+        or area_email_config.confirmation_cc_template != campaign.area_confirmation_email_template.cc_template
+        or area_email_config.confirmation_bcc_template != campaign.area_confirmation_email_template.bcc_template
+    ):
+        email_template_differences.append("QLKV xác nhận")
     return render(
         request,
         "app_document_campaigns/campaign_detail.html",
@@ -175,7 +202,7 @@ def campaign_detail(request, campaign_id):
             "workflow_step": workflow_step,
             "workflow_progress": workflow_progress,
             "prepared_files": prepared_files,
-            "sql_source_options": sql_source_options(),
+            "sql_source_options": sql_source_options(campaign),
             "data_locked": data_locked,
             "job_busy": busy,
             "has_requested_data": bool(sources) or bool(selected_version and selected_version.import_jobs.filter(job_type=CampaignImportJob.JobType.SQL_STAGE).exists()),
@@ -186,6 +213,7 @@ def campaign_detail(request, campaign_id):
             "latest_cleaned_upload_job": latest_cleaned_upload_job,
             "can_manage_shop_links": can_manage_shop_links,
             "settings_form": CampaignSettingsForm(instance=campaign),
+            "email_template_differences": email_template_differences,
             "open_settings": request.GET.get("settings") == "1",
         },
     )
@@ -255,6 +283,11 @@ def update_campaign_settings(request, campaign_id):
             f"{reverse('document_campaigns:campaign_detail', kwargs={'campaign_id': campaign.pk})}?settings=1"
         )
     campaign = form.save()
+    from app_document_campaigns.services.email_template_mapping import apply_campaign_email_templates
+    apply_campaign_email_templates(
+        campaign,
+        None if request.POST.get("reapply_email_templates") == "on" else form.changed_data,
+    )
     if "response_deadline" in form.changed_data:
         campaign.shop_links.filter(has_deadline_extension=False).update(
             response_deadline=campaign.response_deadline,
@@ -546,8 +579,9 @@ def shop_response_monitor_detail(request, campaign_id, shop_id):
 @require_POST
 @campaign_admin_required
 def create_campaign_version(request, campaign_id):
+    campaign = get_object_or_404(Campaign, pk=campaign_id)
     try:
-        selected_sources = _selected_sql_sources(request) if request.POST.get("start_sql") == "1" else None
+        selected_sources = _selected_sql_sources(request, campaign) if request.POST.get("start_sql") == "1" else None
     except CampaignImportError as exc:
         return HttpResponse(str(exc), status=400)
     with transaction.atomic():
@@ -580,7 +614,7 @@ def stage_sql_version(request, version_id):
     if version.status == CampaignVersion.Status.PUBLISHED or version.campaign.status in (Campaign.Status.ACTIVE, Campaign.Status.CLOSED, Campaign.Status.CANCELLED):
         return HttpResponse("Dữ liệu đã phát hành hoặc kỳ đã khóa; không thể truy xuất lại.", status=409)
     try:
-        selected_sources = _selected_sql_sources(request)
+        selected_sources = _selected_sql_sources(request, version.campaign)
     except CampaignImportError as exc:
         return HttpResponse(str(exc), status=400)
     try:
@@ -607,9 +641,9 @@ def stage_sql_version(request, version_id):
     )
 
 
-def _selected_sql_sources(request):
+def _selected_sql_sources(request, campaign=None):
     from app_document_campaigns.services.sql_sources import sql_source_options
-    allowed = [name for name, _ in sql_source_options()]
+    allowed = [name for name, _ in sql_source_options(campaign)]
     selected = request.POST.getlist("sources") if request.POST.get("select_sources") == "1" else allowed
     if not selected or set(selected) - set(allowed):
         raise CampaignImportError("Hãy chọn ít nhất một nguồn dữ liệu hợp lệ.")

@@ -8,7 +8,7 @@
 {% block extra_head %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/monthSelect/style.css">
-<link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_form.css' %}?v=20261001-2">
+<link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_form.css' %}?v=20261008-2">
 <link rel="stylesheet" href="{% static 'app_document_campaigns/css/datetime_picker.css' %}?v=20261002-2">
 <link rel="stylesheet" href="{% static 'app_document_campaigns/css/response_guidance_config.css' %}">
 {% endblock %}
@@ -25,7 +25,7 @@
       <div class="dcf-fields">
         {% for field in form %}
           {% if field.name not in form.response_guidance_field_names %}
-          <div class="dcf-field {% if field.name == 'campaign_type' or field.name == 'name' or field.name == 'response_deadline' or field.name == 'area_response_deadline' or field.name == 'shop_instructions' or field.name == 'area_manager_instructions' or field.name == 'response_options' or field.name == 'risk_error_codes' %}is-wide{% endif %}">
+          <div class="dcf-field {% if field.name == 'campaign_type' or field.name == 'carryover_source' or field.name == 'name' or field.name == 'response_deadline' or field.name == 'area_response_deadline' or field.name == 'shop_instructions' or field.name == 'area_monitoring_instructions' or field.name == 'area_manager_instructions' or field.name == 'response_options' or field.name == 'risk_error_codes' or 'email_template' in field.name %}is-wide{% endif %}">
             <label for="{{ field.id_for_label }}" class="dcf-label">{{ field.label }}</label>
             {% if field.name == 'response_deadline' or field.name == 'area_response_deadline' %}{% include "app_document_campaigns/components/datetime_picker.html" with field=field %}{% else %}{{ field }}{% endif %}
             {% if field.help_text %}<p class="dcf-help">{{ field.help_text }}</p>{% endif %}
@@ -45,7 +45,7 @@
     <aside class="dcf-note">
       <h2>Sau khi tạo chiến dịch</h2>
       <ol><li>Truy xuất dữ liệu lỗi từ hệ thống.</li><li>Làm sạch và xác nhận file.</li><li>Phát hành link phản hồi tới PGD.</li><li>Tổng hợp để QLKV và QLV xác nhận.</li></ol>
-      <div class="dcf-expiry">Mã chiến dịch được tự sinh theo loại và kỳ, ví dụ <strong>DEC-HC-202609</strong>. Link PGD chuyển sang chỉ đọc khi hết deadline và tự hết hạn sau thêm 31 ngày.</div>
+      <div class="dcf-expiry">Mã chiến dịch được tự sinh theo loại và kỳ, ví dụ <strong>DEC-HC-202609</strong>. Step 3: PGD sửa phản hồi đến hạn chung, QLKV chỉ xem để đôn đốc. Step 5: QLKV xác nhận đến hạn riêng. Link PGD chuyển sang chỉ đọc khi hết hạn phản hồi và tự hết hiệu lực sau thêm 31 ngày.</div>
     </aside>
   </div>
 </div>

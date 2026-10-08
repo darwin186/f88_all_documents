@@ -5,21 +5,33 @@
     <div class="crm-email-compose-layout"><div class="crm-email-form-grid">
       <label>Tên hiển thị người gửi{{ area_email_config_form.from_name }}</label>
       <label>Địa chỉ gửi do hệ thống cấu hình<input value="{{ email_from_address }}" disabled></label>
-      <label>{{ area_email_config_form.cc_emails_text.label }}{{ area_email_config_form.cc_emails_text }}</label>
-      <label>{{ area_email_config_form.bcc_emails_text.label }}{{ area_email_config_form.bcc_emails_text }}</label>
       <label>Email hỗ trợ{{ area_email_config_form.support_email }}</label>
       {% if confirmation_stage %}
       {{ area_email_config_form.monitoring_subject_template.as_hidden }}
       {{ area_email_config_form.monitoring_body_template.as_hidden }}
+      {{ area_email_config_form.monitoring_cc_template.as_hidden }}
+      {{ area_email_config_form.monitoring_bcc_template.as_hidden }}
+      {{ area_email_config_form.monitoring_report_url.as_hidden }}
+      {{ area_email_config_form.monitoring_guide_url.as_hidden }}
       <fieldset class="is-wide"><legend>Step 5 · QLKV xác nhận lỗi</legend>
+        <label>Link hướng dẫn QLKV phản hồi{{ area_email_config_form.confirmation_guide_url }}</label>
         <label>Subject{{ area_email_config_form.confirmation_subject_template }}</label>
+        <label>CC (email hoặc tham số){{ area_email_config_form.confirmation_cc_template }}</label>
+        <label>BCC (email hoặc tham số){{ area_email_config_form.confirmation_bcc_template }}</label>
         {% include "app_document_campaigns/components/rich_email_editor.html" with field=area_email_config_form.confirmation_body_template label="Nội dung email" %}
       </fieldset>
       {% else %}
       {{ area_email_config_form.confirmation_subject_template.as_hidden }}
       {{ area_email_config_form.confirmation_body_template.as_hidden }}
+      {{ area_email_config_form.confirmation_cc_template.as_hidden }}
+      {{ area_email_config_form.confirmation_bcc_template.as_hidden }}
+      {{ area_email_config_form.confirmation_guide_url.as_hidden }}
       <fieldset class="is-wide"><legend>Step 3 · QLKV theo dõi PGD</legend>
+        <label>Link báo cáo lỗi Power BI{{ area_email_config_form.monitoring_report_url }}</label>
+        <label>Link hướng dẫn xem báo cáo{{ area_email_config_form.monitoring_guide_url }}</label>
         <label>Subject{{ area_email_config_form.monitoring_subject_template }}</label>
+        <label>CC (email hoặc tham số){{ area_email_config_form.monitoring_cc_template }}</label>
+        <label>BCC (email hoặc tham số){{ area_email_config_form.monitoring_bcc_template }}</label>
         {% include "app_document_campaigns/components/rich_email_editor.html" with field=area_email_config_form.monitoring_body_template label="Nội dung email" %}
       </fieldset>
       {% endif %}
@@ -31,7 +43,7 @@
       <p data-area-live-preview-error hidden></p>
     </aside></div>
     <p class="crm-dialog-error" data-area-email-config-error hidden></p>
-    <div class="crm-dialog-actions"><button type="button" class="crm-mini-btn" data-close-area-email>Hủy</button><button class="crm-btn">Lưu cấu hình</button></div>
+    <div class="crm-dialog-actions"><button type="button" class="crm-mini-btn" data-close-area-email>Hủy</button><button type="submit" class="crm-btn">Lưu cấu hình</button></div>
   </form>
 </dialog>
 

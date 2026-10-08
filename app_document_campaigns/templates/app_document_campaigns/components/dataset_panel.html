@@ -34,7 +34,7 @@
   <form method="post" data-dataset-sources action="{% if selected_version %}{% url 'document_campaigns:stage_sql_version' selected_version.id %}{% else %}{% url 'document_campaigns:create_campaign_version' campaign.id %}{% endif %}">
     {% csrf_token %}<input type="hidden" name="prepare_excel" value="1"><input type="hidden" name="start_sql" value="1"><input type="hidden" name="select_sources" value="1">
     <label class="dec-source-choice dec-select-all"><input type="checkbox" data-sources-all checked> Chọn tất cả nguồn</label>
-    {% for key,label in sql_source_options %}<label class="dec-source-choice"><input type="checkbox" name="sources" value="{{ key }}" checked><span>{{ label }}</span></label>{% endfor %}
+    {% for key,label in sql_source_options %}<label class="dec-source-choice"><input type="checkbox" name="sources" value="{{ key }}" checked><span>{% if key == 'folder-fail-sql' %}Lỗi quyển chứng từ auto · {{ campaign.report_month|date:"m/Y" }}{% elif key == 'document-fail-sql' %}Lỗi chứng từ · {{ campaign.report_month|date:"m/Y" }}{% elif key == 'suspended-carryover' %}Lỗi treo kỳ book lỗi {{ campaign.carryover_source.report_month|date:"m/Y" }} · {{ campaign.carryover_source.code }}{% else %}{{ label }}{% endif %}</span></label>{% endfor %}
     <p class="dec-dialog-hint">Sau khi truy xuất, hệ thống tự chuẩn bị file Excel từ bộ dữ liệu tổng hợp. Excel review cũ cần đối chiếu lại.</p>
     <p data-sources-error class="dec-dialog-error" role="alert" hidden>Vui lòng chọn ít nhất một nguồn.</p>
     <div class="dec-dialog-foot"><button type="button" class="dec-btn dec-btn-secondary" data-dataset-close>Hủy</button><button class="dec-btn dec-btn-primary">Truy xuất &amp; chuẩn bị Excel</button></div>

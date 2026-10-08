@@ -13,6 +13,8 @@
 .dcf-label { display: block; margin-bottom: 6px; color: #344139; font-size: 12px; font-weight: 750; }
 .dcf-form input, .dcf-form select { width: 100%; min-height: 42px; box-sizing: border-box; border: 1px solid #cfd9d3; border-radius: 10px; background: #fff; padding: 9px 11px; color: #17201c; font-size: 13px; outline: none; }
 .dcf-form input:focus, .dcf-form select:focus { border-color: #00844a; box-shadow: 0 0 0 3px rgba(0, 132, 74, .11); }
+.dcf-form select[id$="_email_template"] { border-radius: 9px; padding: 9px 10px; font: 12px/1.45 "Segoe UI", Arial, sans-serif; }
+.dcf-form select[id$="_email_template"] option { font: 12px/1.45 "Segoe UI", Arial, sans-serif; }
 .dcf-help { margin: 6px 0 0; color: #77837c; font-size: 11px; line-height: 1.45; }
 .dcf-code-preview { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: -5px; border: 1px dashed #b8dcc8; border-radius: 10px; background: #f3fbf6; padding: 9px 11px; }
 .dcf-code-preview span { color: #66736c; font-size: 11px; }

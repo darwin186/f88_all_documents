@@ -138,3 +138,20 @@
 .dec-cleaned-file{display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:9px;margin:10px 0;padding:9px;border:1px solid #cfe3d7;border-radius:9px;background:#f6fbf8;color:#244333;text-decoration:none}.dec-cleaned-file:hover{border-color:#00844a;background:#eff9f3}.dec-cleaned-file .dec-action-icon{width:34px;height:34px}.dec-cleaned-file span{min-width:0}.dec-cleaned-file strong,.dec-cleaned-file small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dec-cleaned-file strong{font-size:10px}.dec-cleaned-file small{margin-top:2px;color:#79877f;font-size:9px}.dec-cleaned-file b{color:#00844a;font-size:16px}
 @media (max-width: 950px) { .dec-steps { grid-template-columns: 1fr 1fr; } .dec-workspace { grid-template-columns: 1fr; } }
 @media (max-width: 620px) { .dec-page { width: min(100% - 20px, 1440px); } .dec-header, .dec-link-panel-head, .dec-release-banner { align-items: flex-start; flex-direction: column; } .dec-header-actions, .dec-deadline-form, .dec-release-actions { width: 100%; } .dec-header-actions, .dec-release-actions { align-items: stretch; flex-direction: column; } .dec-settings-trigger { width: 100%; } .dec-deadline-form { grid-template-columns: 1fr; } .dec-deadline-form label { grid-column: auto; } .dec-steps, .dec-settings-readonly, .dec-settings-deadlines, .dec-settings-area-options { grid-template-columns: 1fr; } .dec-settings-area-options__head { grid-column: auto; } .dec-settings-dialog { width: calc(100vw - 16px); height: 96dvh; border-radius: 14px; } .dec-settings-head { padding: 16px; } .dec-settings-body { padding: 16px 14px 22px; } .dec-settings-actions { padding: 12px 14px 14px; } }
+
+/* Match the email template picker to the response-guidance controls. */
+.dec-email-template-choices .dec-settings-field label { color: #3c4c43; font-size: 11px; font-weight: 700; }
+.dec-email-template-choices .dec-settings-field select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #cfd9d3;
+  border-radius: 9px;
+  background: #fff;
+  padding: 9px 10px;
+  color: #17201c;
+  font: 12px/1.45 "Segoe UI", Arial, sans-serif;
+  outline: none;
+}
+.dec-email-template-choices .dec-settings-field select:focus { border-color: #00844a; box-shadow: 0 0 0 3px rgba(0, 132, 74, .1); }
+.dec-email-template-choices .dec-settings-field select option { font: 12px/1.45 "Segoe UI", Arial, sans-serif; }

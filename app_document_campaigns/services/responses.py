@@ -1,4 +1,3 @@
-import logging
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -16,7 +15,6 @@ from app_document_campaigns.models import (
 
 
 MAX_AUTOSAVE_BATCH_SIZE = 50
-logger = logging.getLogger(__name__)
 
 
 class ResponseError(Exception):
@@ -243,23 +241,4 @@ def submit_shop_responses(*, link, idempotency_key):
         response_count=len(responses),
         submitted_at=now,
     )
-    submission_id = submission.pk
-
-    def enqueue_post_submit():
-        # Import lazily so the response service does not depend on Celery while
-        # Django is loading models. The task only receives an internal ID; the
-        # public access token must never be written to the broker.
-        from app_document_campaigns.tasks import process_shop_submission
-
-        try:
-            process_shop_submission.delay(submission_id)
-        except Exception:
-            # The PGD submission is the primary business transaction. A broker
-            # outage must not turn a committed submission into an HTTP 500.
-            logger.exception(
-                "Could not enqueue post-submit notification for submission_id=%s",
-                submission_id,
-            )
-
-    transaction.on_commit(enqueue_post_submit)
     return submission, False

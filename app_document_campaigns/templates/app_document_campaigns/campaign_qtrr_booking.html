@@ -58,9 +58,9 @@
     </div>
     <form class="qtrr-upload-form" method="post" enctype="multipart/form-data" action="{% url 'document_campaigns:import_qtrr_mapping_excel' campaign.id %}" data-qtrr-upload-form hidden>{% csrf_token %}<input type="file" name="file" accept=".xlsx" data-qtrr-upload-file></form>
     <form data-qtrr-map-form>
-      <label><span>Mã lỗi QTRR</span><select name="risk_code_id" required><option value="">Chọn mã lỗi QTRR</option>{% for code in risk_codes %}<option value="{{ code.id }}">{{ code.code }} · {{ code.name }} · {{ code.source }}</option>{% endfor %}</select></label>
+      <label><span>Mã lỗi QTRR / xử lý lỗi</span><select name="risk_code_id" required><option value="">Chọn mã lỗi QTRR hoặc treo lỗi</option><option value="__suspend__">Treo lỗi sang kỳ sau</option>{% for code in risk_codes %}<option value="{{ code.id }}">{{ code.code }} · {{ code.name }} · {{ code.source }}</option>{% endfor %}</select></label>
       <label><span>Ghi chú mapping</span><input name="note" maxlength="2000" placeholder="Nhập ghi chú nếu cần"></label>
-      <button type="submit">Gán mã cho dòng đã chọn</button>
+      <button type="submit">Áp dụng cho dòng đã chọn</button>
       <span class="qtrr-map-feedback" data-map-feedback role="status"></span>
     </form>
   </section>

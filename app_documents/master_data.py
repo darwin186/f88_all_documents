@@ -89,6 +89,9 @@ def serialize(shop):
     return {
         "shop_id": shop.pk, "shop_code": shop.shop_code, "shop_name": shop.shop_name,
         "shop_email": shop.shop_email or "", "is_shop_active": shop.is_shop_active,
+        "shop_manager_name": shop.shop_manager_name or "",
+        "shop_manager_employee_code": shop.shop_manager_employee_code or "",
+        "shop_manager_email": shop.shop_manager_email or "",
         "shop_closed_date": shop.shop_closed_date.isoformat() if shop.shop_closed_date else None,
         "manager_id": manager.pk,
         "orgchart": {
@@ -104,7 +107,10 @@ def filtered(request):
     queryset = shop_queryset()
     query = request.GET.get("q", "").strip()
     if query:
-        condition = Q(shop_name__icontains=query) | Q(shop_email__icontains=query)
+        condition = (Q(shop_name__icontains=query) | Q(shop_email__icontains=query)
+                     | Q(shop_manager_name__icontains=query)
+                     | Q(shop_manager_employee_code__icontains=query)
+                     | Q(shop_manager_email__icontains=query))
         if query.isdigit():
             condition |= Q(shop_code=int(query))
         queryset = queryset.filter(condition)
@@ -143,8 +149,9 @@ def shop_api(request, shop_id):
         return JsonResponse(serialize(get_object_or_404(shop_queryset(), pk=shop_id)))
     try:
         data = json.loads(request.body)
-        if not isinstance(data, dict) or not data or set(data) - {"shop_email", "is_shop_active", "manager_id"}:
-            raise ValueError("Chỉ cho phép shop_email, is_shop_active, manager_id.")
+        allowed = {"shop_email", "is_shop_active", "manager_id", "shop_manager_name", "shop_manager_employee_code", "shop_manager_email"}
+        if not isinstance(data, dict) or not data or set(data) - allowed:
+            raise ValueError("Trường cập nhật PGD không hợp lệ.")
         if "shop_email" in data:
             if not isinstance(data["shop_email"], str):
                 raise ValueError("Email phải là chuỗi; dùng chuỗi trống để xóa email.")
@@ -166,7 +173,18 @@ def shop_api(request, shop_id):
     except (ValueError, ValidationError, UnicodeDecodeError) as exc:
         return JsonResponse({"error": str(exc)}, status=400)
     with transaction.atomic():
+        from app_documents.shop_manager import validate_shop_manager_contact
+
         shop = get_object_or_404(Shop.objects.select_for_update(), pk=shop_id)
+        contact_fields = ("shop_manager_name", "shop_manager_employee_code", "shop_manager_email")
+        if any(field in data for field in contact_fields):
+            try:
+                contact = validate_shop_manager_contact(*(data.get(field, getattr(shop, field) or "") for field in contact_fields))
+            except ValueError as exc:
+                return JsonResponse({"error": str(exc)}, status=400)
+            for field, value in zip(contact_fields, contact):
+                if field in data:
+                    data[field] = value
         before = {key: getattr(shop, key) if key != "manager_id" else shop.manager_id_id for key in data}
         if "shop_email" in data:
             shop.shop_email = data["shop_email"]
@@ -176,6 +194,9 @@ def shop_api(request, shop_id):
             shop.is_shop_active = data["is_shop_active"]
         if manager:
             shop.manager_id = manager
+        for field in contact_fields:
+            if field in data:
+                setattr(shop, field, data[field])
         shop.save(update_fields=[("manager_id" if key == "manager_id" else key) for key in data] + (["shop_closed_date"] if "is_shop_active" in data else []))
         LogEntry.objects.log_action(user_id=request.user.pk, content_type_id=ContentType.objects.get_for_model(Shop).pk, object_id=shop.pk, object_repr=str(shop), action_flag=CHANGE, change_message=json.dumps({"source": "master_data", "token_id": getattr(getattr(request, "master_data_token", None), "pk", None), "before": before, "after": data}, ensure_ascii=False))
     return JsonResponse(serialize(shop_queryset().get(pk=shop_id)))
@@ -276,6 +297,143 @@ def response_guidance_page(request):
         {**get_user_context(request.user), "form": form, "editing": instance, "guidance_templates": templates},
         status=400 if request.method == "POST" else 200,
     )
+
+
+@admin_only
+@require_http_methods(["GET", "POST"])
+def email_templates_page(request):
+    from app_document_campaigns.models import EmailTemplateMaster
+    from app_document_campaigns.services.email_html import sanitize_email_template
+    from app_document_campaigns.services.email_templates import (
+        ALLOWED_VARIABLES,
+        AREA_ALLOWED_VARIABLES,
+        EmailTemplateError,
+        validate_recipient_template,
+        validate_template_for_type,
+    )
+
+    class TemplateForm(forms.ModelForm):
+        class Meta:
+            model = EmailTemplateMaster
+            fields = ["name", "email_type", "subject_template", "body_template", "cc_template", "bcc_template", "is_default", "is_active"]
+            labels = {
+                "name": "Tên template", "email_type": "Bước gửi email",
+                "subject_template": "Tiêu đề email", "body_template": "Nội dung email",
+                "cc_template": "CC", "bcc_template": "BCC",
+                "is_default": "Template mặc định", "is_active": "Đang sử dụng",
+            }
+            widgets = {"body_template": forms.Textarea(attrs={"rows": 15}), "cc_template": forms.Textarea(attrs={"rows": 2}), "bcc_template": forms.Textarea(attrs={"rows": 2})}
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            # A template's type determines which campaign step may use it.
+            # Keep that contract stable after creation for existing mappings.
+            if self.instance.pk:
+                self.fields["email_type"].disabled = True
+
+        def clean(self):
+            cleaned = super().clean()
+            cleaned["body_template"] = sanitize_email_template(cleaned.get("body_template"))
+            try:
+                validate_template_for_type(
+                    cleaned.get("email_type"), cleaned.get("subject_template"), cleaned.get("body_template")
+                )
+                allowed = ALLOWED_VARIABLES if cleaned.get("email_type") == EmailTemplateMaster.EmailType.PGD_RESPONSE else AREA_ALLOWED_VARIABLES
+                validate_recipient_template(cleaned.get("cc_template"), allowed)
+                validate_recipient_template(cleaned.get("bcc_template"), allowed)
+            except EmailTemplateError as exc:
+                raise forms.ValidationError(str(exc)) from exc
+            return cleaned
+
+    selected_id = request.POST.get("template_id") if request.method == "POST" else request.GET.get("edit")
+    if selected_id and not str(selected_id).isdigit():
+        return HttpResponseForbidden("Mã template email không hợp lệ.")
+    instance = get_object_or_404(EmailTemplateMaster, pk=selected_id) if selected_id else None
+    form = TemplateForm(request.POST if request.method == "POST" else None, instance=instance)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            template = form.save(commit=False)
+            template.created_by = template.created_by or request.user
+            template.updated_by = request.user
+            if template.pk and form.changed_data:
+                template.version += 1
+            if template.is_default:
+                EmailTemplateMaster.objects.filter(
+                    email_type=template.email_type, is_default=True,
+                ).exclude(pk=template.pk).update(is_default=False)
+            template.save()
+        messages.success(request, "Đã lưu template email. Các kỳ đã mapping trước đó giữ nguyên nội dung snapshot.")
+        return redirect("master_data_email_templates")
+    sample_parameters = {
+        "campaign_code": "DEC-HC-202610", "campaign_name": "Book lỗi tháng 10/2026",
+        "report_month": "10/2026", "shop_code": "1001", "shop_name": "PGD mẫu",
+        "error_count": 12, "document_error_count": 12, "response_start_date": "08/10/2026", "response_end_date": "15/10/2026",
+        "response_deadline": "17:00 15/10/2026", "link_expires_at": "17:00 15/11/2026",
+        "response_url": "https://example.invalid/pgd/", "area_manager_code": "QLKV01",
+        "area_manager_name": "Nguyễn Văn A", "area_manager_email": "qlkv@example.com", "shop_email": "pgd@example.com", "shop_manager_email": "truong-pgd@example.com", "manager_url": "https://example.invalid/qlkv/",
+        "report_url": "https://example.invalid/power-bi/", "report_guide_url": "https://example.invalid/guide/",
+        "confirmation_guide_url": "https://example.invalid/confirmation-guide/",
+        "area_response_end_date": "20/10/2026", "support_email": "hotro@example.com",
+    }
+    return render(request, "app_documents/master_data_email_templates.html", {
+        **get_user_context(request.user), "form": form, "editing": instance,
+        "templates": EmailTemplateMaster.objects.select_related("updated_by"),
+        "editor_open": bool(instance or request.method == "POST" or request.GET.get("new")),
+        "sample_parameters": sample_parameters,
+        "pgd_email_variables": ALLOWED_VARIABLES,
+        "area_email_variables": AREA_ALLOWED_VARIABLES,
+    }, status=400 if request.method == "POST" else 200)
+
+
+@admin_only
+@require_http_methods(["POST"])
+def test_email_template(request, template_id):
+    from email.utils import formataddr
+    from app_document_campaigns.models import EmailTemplateMaster
+    from app_document_campaigns.services.email_templates import RenderedCampaignEmail, TOKEN_PATTERN, _render, validate_template_for_type
+    from app_document_campaigns.services.microsoft_graph_email import send_rendered_email
+
+    template = get_object_or_404(EmailTemplateMaster, pk=template_id, is_active=True)
+    tester_email = (request.POST.get("tester_email") or "").strip()
+    try:
+        validate_email(tester_email)
+        parameters = json.loads(request.POST.get("parameters") or "null")
+        if parameters is None:
+            parameters = {
+                "campaign_code": "DEC-HC-202610", "campaign_name": "Book lỗi tháng 10/2026",
+                "report_month": "10/2026", "shop_code": "1001", "shop_name": "PGD mẫu",
+                "error_count": 12, "document_error_count": 12, "response_start_date": "08/10/2026", "response_end_date": "15/10/2026",
+                "response_deadline": "17:00 15/10/2026", "link_expires_at": "17:00 15/11/2026",
+                "response_url": "https://example.invalid/pgd/", "area_manager_code": "QLKV01",
+                "area_manager_name": "Nguyễn Văn A", "area_manager_email": "qlkv@example.com", "shop_email": "pgd@example.com", "shop_manager_email": "truong-pgd@example.com", "manager_url": "https://example.invalid/qlkv/",
+                "report_url": "https://example.invalid/power-bi/", "report_guide_url": "https://example.invalid/guide/",
+                "confirmation_guide_url": "https://example.invalid/confirmation-guide/",
+                "area_response_end_date": "20/10/2026", "support_email": "hotro@example.com",
+            }
+        if not isinstance(parameters, dict):
+            raise ValueError("Tham số phải là JSON object.")
+        required_parameters = set(TOKEN_PATTERN.findall(template.subject_template + template.body_template + template.cc_template + template.bcc_template))
+        missing = sorted(required_parameters - set(parameters))
+        if missing:
+            raise ValueError(f"Thiếu tham số test: {', '.join(missing)}")
+        validate_template_for_type(template.email_type, template.subject_template, template.body_template)
+        from app_document_campaigns.services.email_templates import ALLOWED_VARIABLES, AREA_ALLOWED_VARIABLES, validate_recipient_template
+        allowed = ALLOWED_VARIABLES if template.email_type == EmailTemplateMaster.EmailType.PGD_RESPONSE else AREA_ALLOWED_VARIABLES
+        validate_recipient_template(template.cc_template, allowed)
+        validate_recipient_template(template.bcc_template, allowed)
+        subject = _render(template.subject_template, parameters).strip()
+        body = _render(template.body_template, parameters)
+        from_address = settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER
+        rendered = RenderedCampaignEmail(
+            subject=f"[TEST TEMPLATE] {subject}", body=body, to=[tester_email], cc=[], bcc=[],
+            from_email=formataddr(("Hệ thống chứng từ", from_address)), area_email="", area_manager_id=None,
+        )
+        send_rendered_email(rendered)
+    except Exception as exc:
+        messages.error(request, f"Không gửi được email test: {str(exc)[:500]}")
+    else:
+        messages.success(request, f"Đã gửi thử template '{template.name}' tới {tester_email}.")
+    return redirect("master_data_email_templates")
 
 
 @admin_only

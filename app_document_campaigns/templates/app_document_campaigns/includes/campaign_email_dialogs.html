@@ -6,10 +6,10 @@
       <div class="crm-email-form-grid">
         <label>Tên hiển thị người gửi{{ email_config_form.from_name }}</label>
         <label>Địa chỉ gửi do hệ thống cấu hình<input type="email" value="{{ email_from_address }}" data-email-from-address disabled></label>
-        <label>{{ email_config_form.cc_emails_text.label }}{{ email_config_form.cc_emails_text }}</label>
-        <label>{{ email_config_form.bcc_emails_text.label }}{{ email_config_form.bcc_emails_text }}</label>
+        <label>{{ email_config_form.cc_template.label }}{{ email_config_form.cc_template }}</label>
+        <label>{{ email_config_form.bcc_template.label }}{{ email_config_form.bcc_template }}</label>
         <label>Email hỗ trợ{{ email_config_form.support_email }}</label>
-        <label class="crm-email-check">{{ email_config_form.cc_area_manager }}<span>Tự động CC Quản lý khu vực hiện tại</span></label>
+        <p class="is-wide">Có thể nhập nhiều email, ngăn bằng dấu phẩy; hoặc chèn biến như <code>{% verbatim %}{{area_manager_email}}{% endverbatim %}</code> và <code>{% verbatim %}{{shop_manager_email}}{% endverbatim %}</code>.</p>
         <label class="is-wide">Subject{{ email_config_form.subject_template }}</label>
         {% include "app_document_campaigns/components/rich_email_editor.html" with field=email_config_form.body_template label="Nội dung email" %}
         <div class="is-wide crm-email-variables"><span>Chèn tham số vào ô đang chọn</span><div>{% for key, label in email_variables.items %}<button type="button" data-email-variable="{{ key }}" title="{{ label }}">{{ key }}</button>{% endfor %}</div></div>
@@ -28,7 +28,7 @@
       </aside>
     </div>
     <p class="crm-dialog-error" data-email-config-error hidden></p>
-    <div class="crm-dialog-actions"><button type="button" class="crm-mini-btn" data-close-email-dialog>Hủy</button><button class="crm-btn">Lưu cấu hình</button></div>
+    <div class="crm-dialog-actions"><button type="button" class="crm-mini-btn" data-close-email-dialog>Hủy</button><button type="submit" class="crm-btn">Lưu cấu hình</button></div>
   </form>
 </dialog>
 

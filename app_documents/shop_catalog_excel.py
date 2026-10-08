@@ -15,9 +15,11 @@ from openpyxl.styles import Font, PatternFill
 
 from .models import Manager, Shop, ShopCatalogJob
 from .master_data import local_today, serialize, shop_queryset
+from .shop_manager import validate_shop_manager_contact
 from documents import excel_snapshot
 
-HEADERS = ["shop_id", "shop_code", "shop_name", "shop_email", "is_shop_active", "manager_id", "shop_closed_date", "area_manager_name", "area_manager_email", "region_manager_name", "region_manager_email", "_snapshot"]
+LEGACY_HEADERS = ["shop_id", "shop_code", "shop_name", "shop_email", "is_shop_active", "manager_id", "shop_closed_date", "area_manager_name", "area_manager_email", "region_manager_name", "region_manager_email", "_snapshot"]
+HEADERS = LEGACY_HEADERS[:4] + ["shop_manager_name", "shop_manager_employee_code", "shop_manager_email"] + LEGACY_HEADERS[4:]
 SALT = "shop-catalog-v1"
 
 
@@ -26,7 +28,7 @@ def update(job, **fields):
 
 
 def snapshot(shop):
-    return {"shop_id": shop.pk, "shop_code": shop.shop_code, "shop_name": shop.shop_name, "shop_email": shop.shop_email or "", "is_shop_active": shop.is_shop_active, "manager_id": shop.manager_id_id, "shop_closed_date": str(shop.shop_closed_date) if shop.shop_closed_date else None}
+    return {"shop_id": shop.pk, "shop_code": shop.shop_code, "shop_name": shop.shop_name, "shop_email": shop.shop_email or "", "shop_manager_name": shop.shop_manager_name or "", "shop_manager_employee_code": shop.shop_manager_employee_code or "", "shop_manager_email": shop.shop_manager_email or "", "is_shop_active": shop.is_shop_active, "manager_id": shop.manager_id_id, "shop_closed_date": str(shop.shop_closed_date) if shop.shop_closed_date else None}
 
 
 def write_row(sheet, values):
@@ -50,7 +52,7 @@ def export_catalog(job):
     sheet.title = "PGD"
     write_row(sheet, HEADERS)
     sheet.freeze_panes = "D2"
-    sheet.auto_filter.ref = "A1:L1"
+    sheet.auto_filter.ref = f"A1:O1"
     for cell in sheet[1]:
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = PatternFill("solid", fgColor="00854A")
@@ -58,15 +60,15 @@ def export_catalog(job):
         data = serialize(shop)
         original = snapshot(shop)
         org = data["orgchart"]
-        write_row(sheet, [shop.pk, shop.shop_code, shop.shop_name, shop.shop_email or "", shop.is_shop_active, shop.manager_id_id, data["shop_closed_date"], org["area_manager"]["name"], org["area_manager"]["email"], org["region_manager"]["name"], org["region_manager"]["email"], excel_snapshot.dumps(original, salt=SALT)])
+        write_row(sheet, [shop.pk, shop.shop_code, shop.shop_name, shop.shop_email or "", shop.shop_manager_name or "", shop.shop_manager_employee_code or "", shop.shop_manager_email or "", shop.is_shop_active, shop.manager_id_id, data["shop_closed_date"], org["area_manager"]["name"], org["area_manager"]["email"], org["region_manager"]["name"], org["region_manager"]["email"], excel_snapshot.dumps(original, salt=SALT)])
         if index % 100 == 0:
             update(job, message=f"Đã xuất {index} PGD", progress=50)
     sheet.auto_filter.ref = sheet.dimensions
-    for column, width in {"A":12,"B":14,"C":40,"D":38,"E":20,"F":18,"G":20,"H":30,"I":38,"J":30,"K":38}.items():
+    for column, width in {"A":12,"B":14,"C":40,"D":38,"E":30,"F":22,"G":38,"H":20,"I":18,"J":20,"K":30,"L":38,"M":30,"N":38}.items():
         sheet.column_dimensions[column].width = width
-    sheet.column_dimensions["L"].hidden = True
+    sheet.column_dimensions["O"].hidden = True
     instructions = workbook.create_sheet("Huong dan")
-    for text in ["Chỉ chỉnh shop_email, is_shop_active (TRUE/FALSE), manager_id.", "Các trường khác chỉ để đối chiếu. Không sửa/xóa cột _snapshot.", "Có thể chỉ giữ các dòng cần sửa; xóa dòng KHÔNG xóa PGD.", "Import không tạo PGD mới. Toàn bộ file được kiểm tra trước khi cập nhật.", "Nếu dữ liệu PGD đã thay đổi sau khi xuất, tải file mới và thực hiện lại.", "Tắt PGD tự ghi ngày đóng cửa; bật lại xóa ngày đóng cửa."]:
+    for text in ["Chỉ chỉnh shop_email, shop_manager_name, shop_manager_employee_code, shop_manager_email, is_shop_active (TRUE/FALSE), manager_id.", "Các trường khác chỉ để đối chiếu. Không sửa/xóa cột _snapshot.", "Có thể chỉ giữ các dòng cần sửa; xóa dòng KHÔNG xóa PGD.", "Import không tạo PGD mới. Toàn bộ file được kiểm tra trước khi cập nhật.", "Nếu dữ liệu PGD đã thay đổi sau khi xuất, tải file mới và thực hiện lại.", "Tắt PGD tự ghi ngày đóng cửa; bật lại xóa ngày đóng cửa."]:
         instructions.append([text])
     instructions.column_dimensions["A"].width = 110
     managers = workbook.create_sheet("Manager")
@@ -106,7 +108,8 @@ def import_catalog(job):
             if "PGD" not in workbook.sheetnames:
                 raise ValueError("Thiếu sheet PGD. Hãy dùng file xuất từ Master Data.")
             rows = workbook["PGD"].iter_rows(values_only=True)
-            if list(next(rows, [])) != HEADERS:
+            headers = list(next(rows, []))
+            if headers not in (HEADERS, LEGACY_HEADERS):
                 raise ValueError("Cấu trúc cột không đúng file danh mục PGD đã xuất.")
             for line, values in enumerate(rows, 2):
                 if line > 10001:
@@ -114,7 +117,9 @@ def import_catalog(job):
                 if all(value is None for value in values):
                     continue
                 try:
-                    data = dict(zip(HEADERS, values))
+                    if len(values) != len(headers):
+                        raise ValueError("Dòng dữ liệu sai số cột.")
+                    data = dict(zip(headers, values))
                     pk = integer(data["shop_id"], "shop_id")
                     if pk in seen:
                         raise ValueError("PGD trùng trong file.")
@@ -133,7 +138,13 @@ def import_catalog(job):
                             raise ValueError("Email PGD mới không đúng định dạng. Vui lòng kiểm tra lại.") from None
                     active = parse_boolean(data["is_shop_active"])
                     manager_id = integer(data["manager_id"], "manager_id")
-                    changes.append((line, original, {"shop_email": email, "is_shop_active": active, "manager_id": manager_id}))
+                    new_values = {"shop_email": email, "is_shop_active": active, "manager_id": manager_id}
+                    if headers == HEADERS:
+                        contact = validate_shop_manager_contact(
+                            data["shop_manager_name"] or "", data["shop_manager_employee_code"] or "", data["shop_manager_email"] or "",
+                        )
+                        new_values.update(zip(("shop_manager_name", "shop_manager_employee_code", "shop_manager_email"), contact))
+                    changes.append((line, original, new_values))
                 except SoftTimeLimitExceeded:
                     raise
                 except Exception as exc:
@@ -150,7 +161,7 @@ def import_catalog(job):
         today = local_today()
         for line, original, data in changes:
             shop = locked.get(original["shop_id"])
-            if not shop or snapshot(shop) != original:
+            if not shop or any(snapshot(shop).get(key) != value for key, value in original.items()):
                 errors.append({"row": line, "error": "PGD không tồn tại hoặc đã thay đổi sau khi xuất. Hãy xuất lại file mới."})
             if data["manager_id"] != original["manager_id"]:
                 manager = managers.get(data["manager_id"])
@@ -166,9 +177,12 @@ def import_catalog(job):
                 if shop.is_shop_active != data["is_shop_active"]:
                     shop.shop_closed_date = None if data["is_shop_active"] else today
                 shop.shop_email = data["shop_email"]
+                for field in ("shop_manager_name", "shop_manager_employee_code", "shop_manager_email"):
+                    if field in data:
+                        setattr(shop, field, data[field])
                 shop.is_shop_active = data["is_shop_active"]
                 shop.manager_id_id = data["manager_id"]
-                shop.save(update_fields=["shop_email", "is_shop_active", "shop_closed_date", "manager_id"])
+                shop.save(update_fields=["shop_email", "is_shop_active", "shop_closed_date", "manager_id", *[field for field in ("shop_manager_name", "shop_manager_employee_code", "shop_manager_email") if field in data]])
                 LogEntry.objects.log_action(user_id=job.requested_by_id, content_type_id=content_type.pk, object_id=shop.pk, object_repr=str(shop), action_flag=CHANGE, change_message=json.dumps({"source": "master_data_excel", "job_id": job.pk, "before": original, "after": data}, ensure_ascii=False))
                 updated += 1
             update(job, status="succeeded", progress=100, message=f"Đã cập nhật {updated}/{len(changes)} PGD", summary={"rows": len(changes), "updated": updated})

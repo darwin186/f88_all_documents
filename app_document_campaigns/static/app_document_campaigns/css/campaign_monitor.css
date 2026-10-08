@@ -181,3 +181,4 @@ main.crm-monitor-main{overflow:visible}
   outline: none !important;
   box-shadow: none !important;
 }
+.crm-preflight-metrics{grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}

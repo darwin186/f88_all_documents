@@ -6,7 +6,7 @@
 {% block title %}{{ campaign.code }}{% endblock %}
 {% block top_nav %}{% include "app_documents/components/top_nav_v2.html" %}{% endblock %}
 {% block main_extra_class %}pt-20{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_workflow.css' %}?v=20260930-5"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/datetime_picker.css' %}?v=20261002-2"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/response_guidance_config.css' %}?v=20260930-5"><script src="https://cdn.jsdelivr.net/npm/flatpickr"></script><script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/vn.js"></script><script src="{% static 'app_document_campaigns/js/datetime_picker.js' %}?v=20261002-2" defer></script><script src="{% static 'app_document_campaigns/js/campaign_workflow.js' %}" defer></script><script src="{% static 'app_document_campaigns/js/campaign_settings.js' %}" defer></script><script src="{% static 'app_document_campaigns/js/response_guidance_config.js' %}" defer></script>{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_workflow.css' %}?v=20261008-2"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/datetime_picker.css' %}?v=20261002-2"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/response_guidance_config.css' %}?v=20260930-5"><script src="https://cdn.jsdelivr.net/npm/flatpickr"></script><script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/vn.js"></script><script src="{% static 'app_document_campaigns/js/datetime_picker.js' %}?v=20261002-2" defer></script><script src="{% static 'app_document_campaigns/js/campaign_workflow.js' %}" defer></script><script src="{% static 'app_document_campaigns/js/campaign_settings.js' %}" defer></script><script src="{% static 'app_document_campaigns/js/response_guidance_config.js' %}" defer></script>{% endblock %}
 
 {% block content %}
 {% campaign_workflow 2 %}
@@ -48,9 +48,9 @@
           <p class="dec-settings-note">Các thông tin định danh được khóa vì chiến dịch đã liên kết với dữ liệu SQL/Excel.</p>
           <div class="dec-settings-deadlines">
             <div class="dec-settings-field">
-              <label for="{{ settings_form.response_deadline.id_for_label }}">Hạn cuối PGD phản hồi</label>
+              <label for="{{ settings_form.response_deadline.id_for_label }}">Hạn cuối PGD phản hồi · QLKV theo dõi Step 3</label>
               {% include "app_document_campaigns/components/datetime_picker.html" with field=settings_form.response_deadline %}
-              <small>Link PGD chuyển sang chỉ đọc sau hạn này và hết hiệu lực sau thêm 31 ngày.</small>
+              <small>Đây là hạn sửa phản hồi của PGD. QLKV chỉ xem để đôn đốc, dùng cùng mốc thời gian này. Link PGD hết hiệu lực sau thêm 31 ngày.</small>
               {% for error in settings_form.response_deadline.errors %}<p class="dcf-error">{{ error }}</p>{% endfor %}
             </div>
             <div class="dec-settings-field">
@@ -71,6 +71,16 @@
             {{ settings_form.response_options }}
             <small>{{ settings_form.response_options.help_text }}</small>
           </div>
+          <div class="dec-settings-deadlines dec-email-template-choices">
+            <div class="dec-settings-field"><label>{{ settings_form.pgd_email_template.label }}</label>{{ settings_form.pgd_email_template }}</div>
+            <div class="dec-settings-field"><label>{{ settings_form.area_monitoring_email_template.label }}</label>{{ settings_form.area_monitoring_email_template }}</div>
+            <div class="dec-settings-field"><label>{{ settings_form.area_confirmation_email_template.label }}</label>{{ settings_form.area_confirmation_email_template }}</div>
+          </div>
+          <div class="dec-settings-field">
+            <label><input type="checkbox" name="reapply_email_templates" value="on"> Áp dụng lại nội dung từ các template đã chọn</label>
+            {% if email_template_differences %}<small style="color:#a05a00">Nội dung kỳ đang khác template Master Data: {{ email_template_differences|join:", " }}.</small>{% endif %}
+            <small>Chọn khi template Master Data vừa được sửa. Tiêu đề và nội dung email riêng của kỳ sẽ được thay bằng bản mới; cấu hình To/CC/BCC giữ nguyên.</small>
+          </div>
           {% include "app_document_campaigns/components/response_guidance_fields.html" with form=settings_form %}
           <div class="dec-settings-field">
             <label for="{{ settings_form.shop_instructions.id_for_label }}">{{ settings_form.shop_instructions.label }}</label>
@@ -78,9 +88,14 @@
             <small>Hiển thị trên cùng màn hình phản hồi của PGD. Để trống nếu không có hướng dẫn.</small>
           </div>
           <div class="dec-settings-field">
+            <label for="{{ settings_form.area_monitoring_instructions.id_for_label }}">{{ settings_form.area_monitoring_instructions.label }}</label>
+            {{ settings_form.area_monitoring_instructions }}
+            <small>Hiển thị trên link QLKV xem tiến độ PGD ở Step 3.</small>
+          </div>
+          <div class="dec-settings-field">
             <label for="{{ settings_form.area_manager_instructions.id_for_label }}">{{ settings_form.area_manager_instructions.label }}</label>
             {{ settings_form.area_manager_instructions }}
-            <small>Hiển thị phía trên dữ liệu trên link theo dõi và link xác nhận của QLKV.</small>
+            <small>Hiển thị trên link QLKV xác nhận lỗi ở Step 5.</small>
           </div>
           <div class="dec-settings-field">
             <label for="{{ settings_form.name.id_for_label }}">{{ settings_form.name.label }}</label>

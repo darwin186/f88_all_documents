@@ -32,6 +32,7 @@ from app_document_campaigns.services.excel_exports import build_cleaning_workboo
 from app_document_campaigns.services.excel_imports import EXCEL_SOURCE_NAME, import_cleaning_workbook
 from app_document_campaigns.services.sql_sources import (
     BUSINESS_TYPES,
+    CARRYOVER_SOURCE_NAME,
     DOCUMENT_SOURCE_NAME,
     FOLDER_SOURCE_NAME,
     fetch_document_error_rows,
@@ -487,6 +488,98 @@ class CampaignImportStagingTests(TestCase):
         self.assertEqual(summary["applied_added"], 1)
         self.assertEqual(summary["applied_excluded"], 1)
 
+    def test_publish_optionally_carries_suspended_errors_from_selected_prior_period(self):
+        prior = Campaign.objects.create(
+            code="CT-HOLD-2026-08", name="Kỳ trước", campaign_type=self.campaign_type,
+            report_month=date(2026, 8, 1), created_by=self.user,
+        )
+        prior_version = CampaignVersion.objects.create(
+            campaign=prior, version_number=1, source_type=CampaignVersion.SourceType.EXCEL,
+            status=CampaignVersion.Status.PUBLISHED, created_by=self.user,
+        )
+        held = CampaignError.objects.create(
+            campaign=prior, version=prior_version, source_key="folder:held",
+            source_object_id=1003, error_type=CampaignError.ErrorType.FOLDER,
+            shop=self.shop, checking_issue="Lỗi treo từ kỳ trước",
+            status=CampaignError.Status.SUSPENDED,
+        )
+        self.campaign.carryover_source = prior
+        self.campaign.save(update_fields=["carryover_source"])
+        stage_import_rows(source=self.source, rows=[self._valid_row("folder:1001")])
+        stage_monthly_sql_sources(
+            version=self.version, created_by=self.user,
+            source_names=[CARRYOVER_SOURCE_NAME],
+        )
+        self.assertEqual(self.version.import_sources.get(name=CARRYOVER_SOURCE_NAME).row_count, 1)
+        workbook = load_workbook(build_cleaning_workbook(self.version))
+        self.assertEqual(workbook["Lỗi chứng từ"].max_row, 3)
+        content = BytesIO()
+        workbook.save(content)
+        import_cleaning_workbook(
+            version=self.version, created_by=self.user,
+            uploaded_file=SimpleUploadedFile("confirmed.xlsx", content.getvalue()),
+        )
+        summary = publish_excel_version(version=self.version, confirmed_by=self.user)
+        carried = CampaignError.objects.get(campaign=self.campaign, carried_from=held)
+        self.assertEqual(carried.status, CampaignError.Status.READY)
+        self.assertEqual(carried.version, self.version)
+        self.assertEqual(carried.checking_issue, held.checking_issue)
+        self.assertEqual(summary["applied_carried"], 1)
+
+    def test_unselected_carryover_is_not_published(self):
+        prior = Campaign.objects.create(
+            code="CT-HOLD-2026-08", name="Kỳ trước", campaign_type=self.campaign_type,
+            report_month=date(2026, 8, 1), created_by=self.user,
+        )
+        prior_version = CampaignVersion.objects.create(
+            campaign=prior, version_number=1, source_type=CampaignVersion.SourceType.EXCEL,
+            status=CampaignVersion.Status.PUBLISHED, created_by=self.user,
+        )
+        CampaignError.objects.create(
+            campaign=prior, version=prior_version, source_key="folder:held",
+            source_object_id=1003, error_type=CampaignError.ErrorType.FOLDER,
+            shop=self.shop, checking_issue="Lỗi treo từ kỳ trước",
+            status=CampaignError.Status.SUSPENDED,
+        )
+        self.campaign.carryover_source = prior
+        self.campaign.save(update_fields=["carryover_source"])
+        stage_import_rows(source=self.source, rows=[self._valid_row("folder:1001")])
+        workbook = load_workbook(build_cleaning_workbook(self.version))
+        content = BytesIO()
+        workbook.save(content)
+        import_cleaning_workbook(
+            version=self.version, created_by=self.user,
+            uploaded_file=SimpleUploadedFile("confirmed.xlsx", content.getvalue()),
+        )
+        summary = publish_excel_version(version=self.version, confirmed_by=self.user)
+        self.assertEqual(summary["applied_carried"], 0)
+        self.assertFalse(CampaignError.objects.filter(campaign=self.campaign, carried_from__isnull=False).exists())
+
+    @override_settings(FILE_JOBS_RUN_ON_WEB=False)
+    @patch("app_document_campaigns.views.run_campaign_sql_import.delay")
+    def test_source_dialog_labels_and_queues_selected_carryover(self, delay):
+        delay.return_value.id = "carryover-source-job"
+        prior = Campaign.objects.create(
+            code="CT-HOLD-2026-08", name="Kỳ trước", campaign_type=self.campaign_type,
+            report_month=date(2026, 8, 1), created_by=self.user,
+        )
+        self.campaign.carryover_source = prior
+        self.campaign.save(update_fields=["carryover_source"])
+        self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
+        self.client.force_login(self.user)
+        page = self.client.get(reverse("document_campaigns:campaign_detail", kwargs={"campaign_id": self.campaign.pk}))
+        self.assertContains(page, "Lỗi quyển chứng từ auto · 09/2026")
+        self.assertContains(page, "Lỗi chứng từ · 09/2026")
+        self.assertContains(page, "Lỗi treo kỳ book lỗi 08/2026 · CT-HOLD-2026-08")
+        self.assertNotContains(page, "sẽ xuất hiện trong Excel review")
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                reverse("document_campaigns:stage_sql_version", kwargs={"version_id": self.version.pk}),
+                {"select_sources": "1", "sources": [CARRYOVER_SOURCE_NAME], "prepare_excel": "1"},
+            )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.version.import_jobs.get().summary["source_names"], [CARRYOVER_SOURCE_NAME])
+
     def test_campaign_data_preparation_ui_is_available(self):
         self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
         stage_import_rows(source=self.source, rows=[self._valid_row()])
@@ -566,6 +659,36 @@ class CampaignImportStagingTests(TestCase):
         error.refresh_from_db()
         self.assertEqual(error.status, "shop_submitted")
         self.assertEqual(self.client.get(reverse("document_campaigns:campaign_review", kwargs={"campaign_id": self.campaign.pk}), {"decision": "pending"}).context["page"].paginator.count, 0)
+
+    def test_team_review_suspended_row_releases_without_area_confirmation(self):
+        import json
+        from app_document_campaigns.models import ShopSubmission, TeamReview
+
+        self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
+        self.client.force_login(self.user)
+        self.campaign.status = Campaign.Status.ACTIVE
+        self.campaign.save(update_fields=["status"])
+        error = CampaignError.objects.create(
+            campaign=self.campaign, version=self.version, source_key="folder:hold-review",
+            source_object_id=3001, error_type=CampaignError.ErrorType.FOLDER,
+            shop=self.shop, checking_issue="Chờ bổ sung", status=CampaignError.Status.SHOP_SUBMITTED,
+        )
+        ShopSubmission.objects.create(campaign=self.campaign, shop=self.shop, response_count=1)
+        # Folder receipt annotation has a separate SQLite correlation limitation.
+        with patch("app_document_campaigns.review_views.with_folder_receipt", side_effect=lambda rows: rows):
+            response = self.client.post(
+                reverse("document_campaigns:save_team_review", kwargs={"campaign_id": self.campaign.pk, "error_id": error.pk}),
+                data=json.dumps({"decision": "suspended", "note": "Sang kỳ sau", "expected_review_id": None}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["stats"]["suspended"], 1)
+        self.assertEqual(TeamReview.objects.get(error=error).decision, TeamReview.Decision.SUSPENDED)
+        with patch("app_document_campaigns.review_views.with_folder_receipt", side_effect=lambda rows: rows):
+            release = self.client.post(reverse("document_campaigns:release_team_review_to_area", kwargs={"campaign_id": self.campaign.pk}))
+        self.assertEqual(release.status_code, 302)
+        error.refresh_from_db()
+        self.assertEqual(error.status, CampaignError.Status.SUSPENDED)
 
     def test_team_review_waits_for_submission_or_deadline_and_is_admin_only(self):
         import json
@@ -653,10 +776,12 @@ class CampaignImportStagingTests(TestCase):
         self.assertContains(self.client.get(reverse("master_data")), "Danh mục phòng giao dịch")
         self.assertContains(self.client.get(reverse("master_data_api_docs")), "X-CSRFToken")
         self.assertContains(self.client.get(reverse("home")), reverse("master_data"))
-        response = self.client.patch(url, data=json.dumps({"shop_email": "pgd@example.com", "is_shop_active": False}), content_type="application/json")
+        response = self.client.patch(url, data=json.dumps({"shop_email": "pgd@example.com", "shop_manager_name": "Nguyễn Văn A", "shop_manager_employee_code": "f12345", "shop_manager_email": "truong.pgd@example.com", "is_shop_active": False}), content_type="application/json")
         self.assertEqual(response.status_code, 200)
         shop.refresh_from_db()
         self.assertEqual(shop.shop_email, "pgd@example.com")
+        self.assertEqual(shop.shop_manager_employee_code, "F12345")
+        self.assertEqual(response.json()["shop_manager_email"], "truong.pgd@example.com")
         self.assertFalse(shop.is_shop_active)
         self.assertIsNotNone(shop.shop_closed_date)
         self.assertIn("region_manager", response.json()["orgchart"])
@@ -665,7 +790,7 @@ class CampaignImportStagingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         shop.refresh_from_db()
         self.assertIsNone(shop.shop_closed_date)
-        for payload in [{"shop_email": "not-an-email"}, {"is_shop_active": "false"}, {"manager_id": -1}, {"shop_name": "Unauthorized"}, []]:
+        for payload in [{"shop_email": "not-an-email"}, {"shop_manager_email": "not-an-email"}, {"shop_manager_employee_code": "12345"}, {"is_shop_active": "false"}, {"manager_id": -1}, {"shop_name": "Unauthorized"}, []]:
             self.assertEqual(self.client.patch(url, data=json.dumps(payload), content_type="application/json").status_code, 400)
         self.assertEqual(self.client.get(reverse("master_data_shops_api"), {"q": "9101", "active": "true"}).json()["count"], 1)
 
@@ -677,6 +802,18 @@ class CampaignImportStagingTests(TestCase):
         shop = self.shop
         response = client.patch(reverse("master_data_shop_api", kwargs={"shop_id": shop.pk}), data='{"is_shop_active": false}', content_type="application/json")
         self.assertEqual(response.status_code, 403)
+
+    def test_shop_manager_contact_is_validated_in_admin_forms(self):
+        from django.core.exceptions import ValidationError
+
+        self.shop.shop_manager_email = "manager@example.com"
+        with self.assertRaises(ValidationError):
+            self.shop.full_clean()
+
+        self.shop.shop_manager_name = "Trưởng PGD"
+        self.shop.shop_manager_employee_code = "f12345"
+        self.shop.full_clean()
+        self.assertEqual(self.shop.shop_manager_employee_code, "F12345")
 
     def test_master_data_tokens_scopes_revocation_and_audit(self):
         import hashlib
@@ -763,6 +900,7 @@ class CampaignImportStagingTests(TestCase):
             self.assertContains(response, "logo-f88-primary.svg")
             self.assertNotContains(response, "Nhận chứng từ")
             if name == "master_data":
+                self.assertContains(response, 'id="shop-manager-name"')
                 self.assertContains(response, 'id="open-import"')
                 self.assertContains(response, 'id="import-dialog" aria-labelledby="import-title"')
                 self.assertNotContains(response, 'id="job-history"')
@@ -793,7 +931,10 @@ class CampaignImportStagingTests(TestCase):
         with TemporaryDirectory() as directory, override_settings(MEDIA_ROOT=directory):
             def edit(sheet):
                 sheet["D2"] = "excel@example.com"
-                sheet["E2"] = False
+                sheet["E2"] = "Trần Thị B"
+                sheet["F2"] = "F67890"
+                sheet["G2"] = "manager@example.com"
+                sheet["H2"] = False
             job = self._catalog_excel_job(directory, edit)
             process_job(job.pk)
             job.refresh_from_db()
@@ -801,11 +942,44 @@ class CampaignImportStagingTests(TestCase):
             self.assertEqual(job.summary["updated"], 1)
             self.shop.refresh_from_db()
             self.assertEqual(self.shop.shop_email, "excel@example.com")
+            self.assertEqual(self.shop.shop_manager_name, "Trần Thị B")
+            self.assertEqual(self.shop.shop_manager_employee_code, "F67890")
+            self.assertEqual(self.shop.shop_manager_email, "manager@example.com")
             self.assertFalse(self.shop.is_shop_active)
             self.assertIsNotNone(self.shop.shop_closed_date)
             self.assertIn("master_data_excel", LogEntry.objects.latest("action_time").change_message)
             process_job(job.pk)
             self.assertEqual(LogEntry.objects.count(), 1)
+
+    def test_catalog_excel_accepts_legacy_export_without_shop_manager_columns(self):
+        from django.core.files.base import ContentFile
+        from app_documents.models import ShopCatalogJob
+        from app_documents.shop_catalog_excel import process_job, SALT
+        from documents import excel_snapshot
+
+        self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
+        with TemporaryDirectory() as directory, override_settings(MEDIA_ROOT=directory):
+            export = ShopCatalogJob.objects.create(kind="export", requested_by=self.user)
+            process_job(export.pk)
+            export.refresh_from_db()
+            with export.output_file.open("rb") as source:
+                workbook = load_workbook(source)
+            sheet = workbook["PGD"]
+            original = excel_snapshot.loads(sheet["O2"].value, salt=SALT)
+            for field in ("shop_manager_name", "shop_manager_employee_code", "shop_manager_email"):
+                original.pop(field)
+            sheet.delete_cols(5, 3)
+            sheet["D2"] = "legacy@example.com"
+            sheet["L2"] = excel_snapshot.dumps(original, salt=SALT)
+            stream = BytesIO()
+            workbook.save(stream)
+            job = ShopCatalogJob.objects.create(kind="import", requested_by=self.user)
+            job.input_file.save("legacy.xlsx", ContentFile(stream.getvalue()))
+            process_job(job.pk)
+            job.refresh_from_db()
+            self.assertEqual(job.status, "succeeded", job.message)
+            self.shop.refresh_from_db()
+            self.assertEqual(self.shop.shop_email, "legacy@example.com")
 
     def test_catalog_excel_invalid_file_and_concurrent_changes_are_atomic(self):
         from app_documents.shop_catalog_excel import process_job
@@ -850,7 +1024,7 @@ class CampaignImportStagingTests(TestCase):
         self.shop.shop_email = "legacy-invalid-email"
         self.shop.save()
         with TemporaryDirectory() as directory, override_settings(MEDIA_ROOT=directory):
-            job = self._catalog_excel_job(directory, lambda sheet: setattr(sheet["E2"], "value", False))
+            job = self._catalog_excel_job(directory, lambda sheet: setattr(sheet["H2"], "value", False))
             process_job(job.pk)
             job.refresh_from_db()
             self.assertEqual(job.status, "succeeded", job.message)

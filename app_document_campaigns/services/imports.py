@@ -1,5 +1,6 @@
 import hashlib
 import json
+import uuid
 from collections import Counter
 from datetime import datetime, time
 
@@ -271,15 +272,40 @@ def publish_excel_version(*, version, confirmed_by):
     if len(selected_keys) != len(rows):
         raise CampaignImportError("File Excel còn source_key trùng.")
 
+    carryover_uids = []
+    for key in selected_keys:
+        if key.startswith("carryover:"):
+            try:
+                carryover_uids.append(uuid.UUID(key.removeprefix("carryover:")))
+            except ValueError as exc:
+                raise CampaignImportError("ID lỗi treo trong Excel không hợp lệ.") from exc
+    origin_by_key = {
+        f"carryover:{error.error_uid.hex}": error
+        for error in CampaignError.objects.filter(error_uid__in=carryover_uids).select_related("carried_from")
+    }
+    if carryover_uids and not campaign.carryover_source_id:
+        raise CampaignImportError("Chiến dịch chưa cấu hình kỳ nguồn lỗi treo.")
+    for key in selected_keys:
+        if not key.startswith("carryover:"):
+            continue
+        origin = origin_by_key.get(key)
+        if not origin or origin.campaign_id != campaign.carryover_source_id or origin.status != CampaignError.Status.SUSPENDED:
+            raise CampaignImportError("Lỗi treo không còn hợp lệ ở kỳ nguồn; hãy lấy lại dữ liệu.")
+        original_key = origin.carried_from.source_key if origin.carried_from_id else origin.source_key
+        if original_key in selected_keys:
+            raise CampaignImportError("Lỗi treo trùng lỗi mới cùng kỳ; hãy giữ một dòng trong Excel review.")
+
     existing_by_key = {
         error.source_key: error
         for error in CampaignError.objects.select_for_update().filter(campaign=campaign)
     }
     added = 0
     updated = 0
+    carried = 0
     now = timezone.now()
     for row in rows:
         payload = row.normalized_payload
+        origin = origin_by_key.get(row.source_key)
         defaults = {
             "version": version,
             "error_type": payload["error_type"],
@@ -300,6 +326,9 @@ def publish_excel_version(*, version, confirmed_by):
             "checklist_template_id": campaign.campaign_type.shop_checklist_template_id,
             "source_created_at": _source_datetime(payload.get("source_created_at")),
             "status": CampaignError.Status.READY,
+            "carried_from_id": origin.pk if origin else None,
+            "folder_id": origin.folder_id if origin else None,
+            "document_id": origin.document_id if origin else None,
         }
         error = existing_by_key.get(row.source_key)
         if error is None:
@@ -310,6 +339,8 @@ def publish_excel_version(*, version, confirmed_by):
                 setattr(error, field, value)
             error.save(update_fields=[*defaults.keys(), "updated_at"])
             updated += 1
+        if origin:
+            carried += 1
 
     excluded = CampaignError.objects.filter(campaign=campaign).exclude(
         source_key__in=selected_keys
@@ -330,6 +361,7 @@ def publish_excel_version(*, version, confirmed_by):
         "applied_added": added,
         "applied_updated": updated,
         "applied_excluded": excluded,
+        "applied_carried": carried,
     }
     version.save(
         update_fields=["source_type", "status", "published_at", "import_summary"]

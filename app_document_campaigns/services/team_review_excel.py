@@ -21,8 +21,8 @@ HEADERS = ["ID dòng lỗi", "Mã PGD", "Tên phòng giao dịch", "Mã hợp đ
 LEGACY_HEADERS = list(HEADERS)
 RECEIPT_HEADERS = HEADERS[:12] + ["Trạng thái nhận quyển", "Ngày nhận quyển"] + HEADERS[12:]
 HEADERS = RECEIPT_HEADERS[:14] + ["Loại quyển hiện tại", "Trạng thái quyển hiện tại"] + RECEIPT_HEADERS[14:]
-DECISIONS = {"Giữ lỗi": "approved", "Gỡ lỗi": "excluded", "Loại lỗi": "excluded"}
-EXPORT_DECISIONS = {"approved": "Giữ lỗi", "excluded": "Gỡ lỗi"}
+DECISIONS = {"Giữ lỗi": "approved", "Gỡ lỗi": "excluded", "Loại lỗi": "excluded", "Treo lỗi": "suspended"}
+EXPORT_DECISIONS = {"approved": "Giữ lỗi", "excluded": "Gỡ lỗi", "suspended": "Treo lỗi"}
 SALT = "campaign-team-review-excel-v1"
 MAX_ROWS = 100000
 MAX_FILE_SIZE = 50 * 1024 * 1024
@@ -96,12 +96,12 @@ def build_workbook(campaign, progress=None):
             sheet.cell(row_number, col).protection = Protection(locked=False)
         if progress and index % 1000 == 0:
             progress(round(index * 80 / max(total, 1)))
-    dropdown = DataValidation(type="list", formula1='"Giữ lỗi,Gỡ lỗi"', allow_blank=True)
+    dropdown = DataValidation(type="list", formula1='"Giữ lỗi,Gỡ lỗi,Treo lỗi"', allow_blank=True)
     dropdown.showDropDown = False
     dropdown.showErrorMessage = True
     dropdown.errorStyle = "stop"
     dropdown.errorTitle = "Kết luận không hợp lệ"
-    dropdown.error = "Chọn Giữ lỗi hoặc Gỡ lỗi trong danh sách."
+    dropdown.error = "Chọn Giữ lỗi, Gỡ lỗi hoặc Treo lỗi trong danh sách."
     sheet.add_data_validation(dropdown)
     decision_column = get_column_letter(len(HEADERS) - 2)
     dropdown.add(f"{decision_column}2:{decision_column}{max(total + 1, 2)}")
@@ -180,7 +180,7 @@ def import_workbook(campaign_id, actor, content, progress=None):
                 if editable_unchanged:
                     continue
                 if decision not in DECISIONS:
-                    raise ValueError("Chọn Giữ lỗi hoặc Gỡ lỗi; không được xóa xác nhận đã có.")
+                    raise ValueError("Chọn Giữ lỗi, Gỡ lỗi hoặc Treo lỗi; không được xóa xác nhận đã có.")
                 if len(note) > 2000 or note.startswith("="):
                     raise ValueError("Nhận xét tối đa 2.000 ký tự và không dùng công thức.")
                 changes.append((line, uid, DECISIONS[decision], note, snapshot))

@@ -485,9 +485,9 @@ admin.site.register(UserProfile, UserProfileAdmin)
 
 # ShopAdmin
 class ShopAdmin(admin.ModelAdmin):
-    list_display = ('shop_code', 'shop_name', 'default_gddb_identity', 'shop_email', 'is_shop_active', 'created_date', 'region_id', 'for_borrow_only')
+    list_display = ('shop_code', 'shop_name', 'shop_manager_name', 'shop_manager_employee_code', 'shop_manager_email', 'default_gddb_identity', 'shop_email', 'is_shop_active', 'created_date', 'region_id', 'for_borrow_only')
     list_filter = ('is_shop_active', 'region_id', 'created_date', 'default_gddb_identity')
-    search_fields = ('shop_code', 'shop_name', 'default_gddb_identity__external_code')
+    search_fields = ('shop_code', 'shop_name', 'shop_manager_name', 'shop_manager_employee_code', 'shop_manager_email', 'default_gddb_identity__external_code')
 admin.site.register(Shop, ShopAdmin)
 
 # FolderTypeAdmin

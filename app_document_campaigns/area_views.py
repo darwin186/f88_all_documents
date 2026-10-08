@@ -378,7 +378,13 @@ def public_area_manager_view(request, raw_token):
         return response
     confirmation_mode = link.stage == AreaManagerAccessLink.Stage.CONFIRMATION
     context = _area_detail_context(link.campaign, link.area_manager, _base_errors(link.campaign), request, confirmation_mode=confirmation_mode)
-    context.update(public_view=True, link=link, raw_token=raw_token)
+    context.update(
+        public_view=True, link=link, raw_token=raw_token,
+        area_confirmation_editable=bool(
+            confirmation_mode and link.campaign.area_response_deadline
+            and timezone.now() < link.campaign.area_response_deadline
+        ),
+    )
     response = render(request, "app_document_campaigns/area_manager_readonly.html", context)
     response["Cache-Control"] = "no-store"
     return response
@@ -636,6 +642,9 @@ def area_email_preview(request, campaign_id):
                 expires_at=preview_expires_at,
             ),
             "support_email": config.support_email or "",
+            "report_url": config.monitoring_report_url or "Chưa cấu hình",
+            "report_guide_url": config.monitoring_guide_url or "Chưa cấu hình",
+            "confirmation_guide_url": config.confirmation_guide_url or "Chưa cấu hình",
         },
     })
 
@@ -712,10 +721,16 @@ def issue_area_manager_link(request, campaign_id, area_id):
         if confirmation_mode
         else AreaManagerAccessLink.Stage.MONITORING
     )
-    expires_at = campaign.area_response_deadline if confirmation_mode else campaign.link_expires_at
     if confirmation_mode and not campaign.area_response_deadline:
         return JsonResponse({"ok": False, "error": "Hãy cấu hình hạn cuối QLKV xác nhận trước khi tạo link Step 5."}, status=409)
-    if not expires_at or expires_at <= timezone.now():
+    now = timezone.now()
+    previous = AreaManagerAccessLink.objects.filter(
+        campaign=campaign, area_manager=area, stage=link_stage,
+    ).first()
+    # The Step 5 deadline controls editing, while the link expiry controls access.
+    # Keep an explicitly adjusted expiry when replacing an active link.
+    expires_at = previous.expires_at if previous and previous.expires_at > now else campaign.link_expires_at
+    if not expires_at or expires_at <= now:
         return JsonResponse({"ok": False, "error": "Hạn link chung đã hết; hãy điều chỉnh deadline trước."}, status=409)
     link, token = issue_area_manager_access_link(
         campaign=campaign,

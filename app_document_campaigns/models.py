@@ -103,8 +103,16 @@ class Campaign(models.Model):
         on_delete=models.PROTECT,
     )
     report_month = models.DateField(help_text="Ngày đầu tiên của tháng chiến dịch")
+    carryover_source = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="carryover_campaigns", verbose_name="Nguồn lỗi treo",
+    )
     shop_instructions = models.TextField(blank=True, default="", verbose_name="Hướng Dẫn", max_length=10000)
     area_manager_instructions = models.TextField(blank=True, default="", verbose_name="Hướng dẫn Quản lý khu vực", max_length=10000)
+    area_monitoring_instructions = models.TextField(
+        blank=True, default="", max_length=10000,
+        verbose_name="Hướng dẫn QLKV theo dõi PGD",
+    )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT, db_index=True)
     response_opens_at = models.DateTimeField(null=True, blank=True)
     response_deadline = models.DateTimeField(null=True, blank=True)
@@ -112,6 +120,18 @@ class Campaign(models.Model):
         null=True,
         blank=True,
         help_text="Hạn cuối QLKV xác nhận kết quả sau Team review.",
+    )
+    pgd_email_template = models.ForeignKey(
+        "EmailTemplateMaster", related_name="pgd_campaigns", on_delete=models.PROTECT,
+        null=True, blank=True,
+    )
+    area_monitoring_email_template = models.ForeignKey(
+        "EmailTemplateMaster", related_name="area_monitoring_campaigns", on_delete=models.PROTECT,
+        null=True, blank=True,
+    )
+    area_confirmation_email_template = models.ForeignKey(
+        "EmailTemplateMaster", related_name="area_confirmation_campaigns", on_delete=models.PROTECT,
+        null=True, blank=True,
     )
     risk_error_codes = models.ManyToManyField(
         "RiskErrorCode",
@@ -170,6 +190,47 @@ class Campaign(models.Model):
 
     def __str__(self):
         return f"{self.code} - {self.name}"
+
+
+class EmailTemplateMaster(models.Model):
+    class EmailType(models.TextChoices):
+        PGD_RESPONSE = "pgd_response", "Step 2 · PGD phản hồi lỗi"
+        AREA_MONITORING = "area_monitoring", "Step 3 · QLKV theo dõi PGD"
+        AREA_CONFIRMATION = "area_confirmation", "Step 5 · QLKV xác nhận lỗi"
+
+    name = models.CharField(max_length=200)
+    email_type = models.CharField(max_length=30, choices=EmailType.choices, db_index=True)
+    subject_template = models.CharField(max_length=500)
+    body_template = models.TextField()
+    cc_template = models.TextField(blank=True, default="")
+    bcc_template = models.TextField(blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    is_default = models.BooleanField(default=False)
+    version = models.PositiveIntegerField(default=1)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, related_name="email_templates_created",
+        on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, related_name="email_templates_updated",
+        on_delete=models.SET_NULL, null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "dec_email_template_master"
+        ordering = ["email_type", "name", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["email_type", "name"], name="dec_uq_email_template_type_name"),
+            models.UniqueConstraint(
+                fields=["email_type"], condition=Q(is_default=True),
+                name="dec_uq_default_email_template_type",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.get_email_type_display()} · {self.name}"
 
 
 class CampaignVersion(models.Model):
@@ -253,6 +314,7 @@ class CampaignImportSource(models.Model):
         return {
             "folder-fail-sql": "Lỗi quyển chứng từ",
             "document-fail-sql": "Lỗi chứng từ",
+            "suspended-carryover": "Lỗi treo từ kỳ trước",
             "team-cleaning-excel": "Dữ liệu Excel team đã làm sạch",
         }.get(self.name, self.name)
 
@@ -400,11 +462,16 @@ class CampaignError(models.Model):
         AREA_CONFIRMED = "area_confirmed", "Area đã xác nhận"
         CLOSED = "closed", "Đã chốt"
         EXCLUDED = "excluded", "Loại khỏi chiến dịch"
+        SUSPENDED = "suspended", "Treo lỗi sang kỳ sau"
         CANCELLED = "cancelled", "Đã hủy"
 
     error_uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     campaign = models.ForeignKey(Campaign, related_name="errors", on_delete=models.CASCADE)
     version = models.ForeignKey(CampaignVersion, related_name="errors", on_delete=models.PROTECT)
+    carried_from = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="carried_errors", verbose_name="Lỗi treo từ kỳ trước",
+    )
     source_key = models.CharField(max_length=255)
     error_type = models.CharField(max_length=20, choices=ErrorType.choices)
     source_object_id = models.BigIntegerField(null=True, blank=True)
@@ -544,26 +611,35 @@ class ShopEmailDelivery(models.Model):
         db_table = "dec_shop_email_delivery"
 
 
+DEFAULT_SHOP_EMAIL_SUBJECT = (
+    "BÁO CÁO LỖI chứng từ bản cứng_Tháng {{report_month}}_ {{shop_name}}"
+)
+DEFAULT_SHOP_EMAIL_BODY = (
+    "<p>Kính gửi Anh/Chị PGD <strong>{{shop_name}}</strong>,</p>"
+    "<p>PVH gửi báo cáo lỗi chứng từ bản cứng tháng {{report_month}}.</p>"
+    "<p>1. Số lượng lỗi cần phản hồi của PGD: <strong>{{error_count}}</strong><br>"
+    "2. Link danh sách lỗi chi tiết: <a href=\"{{response_url}}\">{{response_url}}</a><br>"
+    "Hướng dẫn điền thông tin phản hồi lỗi, chi tiết trong link Danh sách lỗi.<br>"
+    "4. Thời hạn phản hồi: từ {{response_start_date}} - {{response_end_date}}</p>"
+    "<p>PGD vui lòng kiểm tra và hoàn tất phản hồi trước 17h ngày {{response_end_date}}. "
+    "Trường hợp PGD không thực hiện phản hồi, hệ thống sẽ tự động ghi nhận lỗi và "
+    "không thực hiện điều chỉnh (nếu có).</p>"
+    "<p>Trân trọng,</p>"
+)
+
+
 class CampaignEmailConfig(models.Model):
     campaign = models.OneToOneField(Campaign, related_name="email_config", on_delete=models.CASCADE)
     subject_template = models.CharField(
         max_length=500,
-        default="{{campaign_code}} · {{campaign_name}}",
+        default=DEFAULT_SHOP_EMAIL_SUBJECT,
     )
     body_template = models.TextField(
-        default=(
-            "Kính gửi PGD {{shop_name}},\n\n"
-            "Phòng giao dịch vui lòng kiểm tra và phản hồi chiến dịch {{campaign_name}}.\n"
-            "Hạn phản hồi: {{response_deadline}}\n"
-            "Link hết hạn: {{link_expires_at}}\n\n"
-            "Link phản hồi: {{response_url}}\n\n"
-            "Trân trọng."
-        )
+        default=DEFAULT_SHOP_EMAIL_BODY,
     )
+    cc_template = models.TextField(blank=True, default="")
+    bcc_template = models.TextField(blank=True, default="")
     from_name = models.CharField(max_length=200, blank=True, default="")
-    cc_area_manager = models.BooleanField(default=True)
-    cc_emails = models.JSONField(default=list, blank=True)
-    bcc_emails = models.JSONField(default=list, blank=True)
     support_email = models.EmailField(blank=True, default="")
     template_version = models.PositiveIntegerField(default=1)
     updated_by = models.ForeignKey(
@@ -583,35 +659,75 @@ class CampaignEmailConfig(models.Model):
         return f"Email · {self.campaign.code} · v{self.template_version}"
 
 
+DEFAULT_AREA_MONITORING_SUBJECT = (
+    "Báo cáo lỗi chứng từ bản cứng _ Tháng {{report_month}}_Theo Khu vực"
+)
+DEFAULT_AREA_MONITORING_BODY = (
+    "<p>Kính gửi Anh/Chị <strong>{{area_manager_name}}</strong>,</p>"
+    "<p>PVH gửi Anh/Chị báo cáo lỗi chứng từ bản cứng tháng {{report_month}}.</p>"
+    "<p>1. Báo cáo lỗi chứng từ: <a href=\"{{report_url}}\">{{report_url}}</a><br>"
+    "2. Hướng dẫn cách xem báo cáo: <a href=\"{{report_guide_url}}\">{{report_guide_url}}</a><br>"
+    "Trong đó, Power BI là 01 trang báo cáo tổng hợp của PVH về các lỗi chứng từ "
+    "của PGD theo khu vực QLKV đang quản lý.<br>"
+    "02 nội dung QLKV cần lưu ý và nhắc nhở PGD trong thời gian phản hồi lỗi:<br>"
+    "(a) Tỷ lệ phản hồi lỗi của PGD về các lỗi đang được ghi nhận (theo Báo cáo Power BI)<br>"
+    "(b) Chi tiết lỗi chứng từ bản cứng theo từng PGD mà QLKV quản lý.<br>"
+    "3. Danh sách lỗi chi tiết: <a href=\"{{manager_url}}\">{{manager_url}}</a></p>"
+    "<p>Anh/Chị vui lòng theo dõi tỷ lệ phản hồi của PGD thuộc khu vực quản lý, "
+    "đảm bảo 100% PGD hoàn tất phản hồi trước 17h ngày {{response_end_date}}.</p>"
+    "<p>Mọi thắc mắc vui lòng liên hệ đầu mối Gapo:<br>"
+    "- Trần Thị Lan Hương VH<br>"
+    "- Lương Hồng Uyên VH<br>"
+    "- Nguyễn Thị Hà VH</p>"
+    "<p>Trân trọng,</p>"
+)
+DEFAULT_AREA_CONFIRMATION_SUBJECT = (
+    "Chốt Báo cáo ghi nhận lỗi chứng từ bản cứng _ Tháng {{report_month}}"
+)
+DEFAULT_AREA_CONFIRMATION_BODY = (
+    "<p>Kính gửi Anh/Chị <strong>{{area_manager_name}}</strong>,</p>"
+    "<p>Sau thời gian nhận phản hồi và kiểm tra thông tin phản hồi của PGD, "
+    "PVH gửi Anh/Chị báo cáo kết quả ghi nhận lỗi như sau:</p>"
+    "<p>1. Danh sách chi tiết: <a href=\"{{manager_url}}\">{{manager_url}}</a><br>"
+    "Anh/Chị QLKV thực hiện kiểm tra xác nhận lỗi với PGD và phản hồi theo link "
+    "để PVH xử lý bước tiếp theo.<br>"
+    "2. Hướng dẫn QLKV phản hồi: "
+    "<a href=\"{{confirmation_guide_url}}\">{{confirmation_guide_url}}</a></p>"
+    "<p>Thời hạn phản hồi: Đến hết 17h ngày {{area_response_end_date}}.</p>"
+    "<p>Nhờ QLKV lưu ý việc phản hồi tại link danh sách gửi lỗi được đính kèm "
+    "trong thời gian quy định. Các thông tin sau thời gian quy định sẽ không được "
+    "ghi nhận và gỡ lỗi bởi bộ phận PVH/RRHĐ/Nhân sự.</p>"
+    "<p>Mọi thắc mắc cần hỗ trợ, Anh/Chị vui lòng liên hệ theo đầu mối Gapo sau:<br>"
+    "- Trần Thị Lan Hương VH<br>"
+    "- Nguyễn Thị Hà VH</p>"
+    "<p>Trân trọng,</p>"
+)
+
+
 class CampaignAreaEmailConfig(models.Model):
     campaign = models.OneToOneField(Campaign, related_name="area_email_config", on_delete=models.CASCADE)
     monitoring_subject_template = models.CharField(
         max_length=500,
-        default="{{campaign_code}} · Theo dõi phản hồi PGD",
+        default=DEFAULT_AREA_MONITORING_SUBJECT,
     )
     monitoring_body_template = models.TextField(
-        default=(
-            "Kính gửi {{area_manager_name}},\n\n"
-            "Anh/chị vui lòng theo dõi phản hồi của các PGD thuộc khu vực trong kỳ {{report_month}}.\n"
-            "Link theo dõi: {{manager_url}}\n"
-            "Link hết hạn: {{link_expires_at}}\n\nTrân trọng."
-        ),
+        default=DEFAULT_AREA_MONITORING_BODY,
     )
+    monitoring_cc_template = models.TextField(blank=True, default="")
+    monitoring_bcc_template = models.TextField(blank=True, default="")
+    monitoring_report_url = models.URLField(blank=True, default="")
+    monitoring_guide_url = models.URLField(blank=True, default="")
+    confirmation_guide_url = models.URLField(blank=True, default="")
     confirmation_subject_template = models.CharField(
         max_length=500,
-        default="{{campaign_code}} · Xác nhận kết quả book lỗi",
+        default=DEFAULT_AREA_CONFIRMATION_SUBJECT,
     )
     confirmation_body_template = models.TextField(
-        default=(
-            "Kính gửi {{area_manager_name}},\n\n"
-            "Anh/chị vui lòng kiểm tra và xác nhận kết quả Team review cho kỳ {{report_month}}.\n"
-            "Link xác nhận: {{manager_url}}\n"
-            "Link hết hạn: {{link_expires_at}}\n\nTrân trọng."
-        ),
+        default=DEFAULT_AREA_CONFIRMATION_BODY,
     )
+    confirmation_cc_template = models.TextField(blank=True, default="")
+    confirmation_bcc_template = models.TextField(blank=True, default="")
     from_name = models.CharField(max_length=200, blank=True, default="")
-    cc_emails = models.JSONField(default=list, blank=True)
-    bcc_emails = models.JSONField(default=list, blank=True)
     support_email = models.EmailField(blank=True, default="")
     template_version = models.PositiveIntegerField(default=1)
     updated_by = models.ForeignKey(
@@ -871,6 +987,7 @@ class TeamReview(models.Model):
         APPROVED = "approved", "Phê duyệt"
         SUPPLEMENT = "supplement", "Yêu cầu bổ sung"
         EXCLUDED = "excluded", "Loại khỏi chiến dịch"
+        SUSPENDED = "suspended", "Treo lỗi"
 
     error = models.ForeignKey(CampaignError, related_name="team_reviews", on_delete=models.CASCADE)
     decision = models.CharField(max_length=20, choices=Decision.choices)

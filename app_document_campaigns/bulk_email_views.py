@@ -215,8 +215,23 @@ def _build_shop_batch(request, campaign, target_ids, config):
             response_deadline=response_deadline, expires_at=expires_at,
         )
         url = request.build_absolute_uri(reverse("document_campaigns:shop_response", kwargs={"raw_token": token}))
-        rendered = render_campaign_email(config, campaign, shop, url)
-        legacy = ShopEmailDelivery.objects.create(link=link)
+        rendered = render_campaign_email(
+            config,
+            campaign,
+            shop,
+            url,
+            response_deadline=link.response_deadline,
+        )
+        legacy = ShopEmailDelivery.objects.create(
+            link=link,
+            area_manager_id=rendered.area_manager_id,
+            area_email=rendered.area_email,
+            to_email=rendered.to[0],
+            cc_emails=rendered.cc,
+            bcc_emails=rendered.bcc,
+            subject=rendered.subject,
+            template_version=config.template_version,
+        )
         key = f"batch:{batch.pk}:shop:{shop.pk}:template:{config.template_version}"
         delivery = CampaignEmailDelivery.objects.create(
             batch=batch, target_type=CampaignEmailDelivery.TargetType.SHOP, target_id=shop.pk,

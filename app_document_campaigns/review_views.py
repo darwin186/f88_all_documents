@@ -33,7 +33,7 @@ def review_queryset(campaign):
 
 
 def metrics(queryset):
-    return queryset.aggregate(total=Count("id"), reviewed=Count("id", filter=Q(review_id__isnull=False)), kept=Count("id", filter=Q(review_decision="approved")), excluded=Count("id", filter=Q(review_decision="excluded")))
+    return queryset.aggregate(total=Count("id"), reviewed=Count("id", filter=Q(review_id__isnull=False)), kept=Count("id", filter=Q(review_decision="approved")), excluded=Count("id", filter=Q(review_decision="excluded")), suspended=Count("id", filter=Q(review_decision="suspended")))
 
 
 def deadline_passed(campaign):
@@ -43,7 +43,7 @@ def deadline_passed(campaign):
 def team_review_release_state(campaign):
     rows = review_queryset(campaign)
     total = rows.count()
-    pending = rows.filter(Q(review_id__isnull=True) | ~Q(review_decision__in=[TeamReview.Decision.APPROVED, TeamReview.Decision.EXCLUDED])).count()
+    pending = rows.filter(Q(review_id__isnull=True) | ~Q(review_decision__in=[TeamReview.Decision.APPROVED, TeamReview.Decision.EXCLUDED, TeamReview.Decision.SUSPENDED])).count()
     released = rows.filter(status__in=[CampaignError.Status.WAITING_AREA, CampaignError.Status.AREA_RETURNED, CampaignError.Status.AREA_CONFIRMED]).exists()
     return {"total": total, "pending": pending, "ready": bool(total and not pending), "released": released}
 
@@ -58,7 +58,7 @@ def release_team_review_to_area(request, campaign_id):
         if not rows:
             messages.error(request, "Không có dòng lỗi để chuyển QLKV xác nhận.")
             return redirect("document_campaigns:campaign_review", campaign_id=campaign.pk)
-        if any(row.review_decision not in {TeamReview.Decision.APPROVED, TeamReview.Decision.EXCLUDED} for row in rows):
+        if any(row.review_decision not in {TeamReview.Decision.APPROVED, TeamReview.Decision.EXCLUDED, TeamReview.Decision.SUSPENDED} for row in rows):
             messages.error(request, "Chưa thể chuyển bước: vẫn còn dòng chưa có kết luận Team review.")
             return redirect("document_campaigns:campaign_review", campaign_id=campaign.pk)
         if any(row.status in {CampaignError.Status.WAITING_AREA, CampaignError.Status.AREA_RETURNED, CampaignError.Status.AREA_CONFIRMED} for row in rows):
@@ -66,14 +66,16 @@ def release_team_review_to_area(request, campaign_id):
             return redirect(f"{reverse('document_campaigns:campaign_area_monitor', kwargs={'campaign_id': campaign.pk})}?stage=confirmation")
         approved_ids = [row.pk for row in rows if row.review_decision == TeamReview.Decision.APPROVED]
         excluded_ids = [row.pk for row in rows if row.review_decision == TeamReview.Decision.EXCLUDED]
+        suspended_ids = [row.pk for row in rows if row.review_decision == TeamReview.Decision.SUSPENDED]
         CampaignError.objects.filter(pk__in=approved_ids).update(status=CampaignError.Status.WAITING_AREA, updated_at=timezone.now())
         CampaignError.objects.filter(pk__in=excluded_ids).update(status=CampaignError.Status.EXCLUDED, updated_at=timezone.now())
+        CampaignError.objects.filter(pk__in=suspended_ids).update(status=CampaignError.Status.SUSPENDED, updated_at=timezone.now())
         CampaignStatusHistory.objects.bulk_create([
             CampaignStatusHistory(
                 campaign=campaign,
                 error=row,
                 from_status=row.status,
-                to_status=CampaignError.Status.WAITING_AREA if row.pk in approved_ids else CampaignError.Status.EXCLUDED,
+                to_status=CampaignError.Status.WAITING_AREA if row.pk in approved_ids else (CampaignError.Status.SUSPENDED if row.pk in suspended_ids else CampaignError.Status.EXCLUDED),
                 reason="Hoàn tất Team review và chuyển bước QLKV xác nhận.",
                 changed_by=request.user,
             )
@@ -82,9 +84,9 @@ def release_team_review_to_area(request, campaign_id):
         CampaignSnapshot.objects.create(
             campaign=campaign,
             trigger=CampaignSnapshot.Trigger.TEAM_APPROVED,
-            metadata={"approved": len(approved_ids), "excluded": len(excluded_ids)},
+            metadata={"approved": len(approved_ids), "excluded": len(excluded_ids), "suspended": len(suspended_ids)},
         )
-    messages.success(request, f"Đã chuyển {len(approved_ids)} dòng giữ lỗi sang QLKV xác nhận; gỡ {len(excluded_ids)} dòng.")
+    messages.success(request, f"Đã chuyển {len(approved_ids)} dòng giữ lỗi sang QLKV xác nhận; gỡ {len(excluded_ids)} dòng, treo {len(suspended_ids)} dòng.")
     return redirect(f"{reverse('document_campaigns:campaign_area_monitor', kwargs={'campaign_id': campaign.pk})}?stage=confirmation")
 
 
@@ -201,7 +203,7 @@ def campaign_review(request, campaign_id):
         queryset = queryset.filter(shop_response__answer_code=response_filter)
     if decision == "pending":
         queryset = queryset.filter(review_id__isnull=True)
-    elif decision in {"approved", "excluded"}:
+    elif decision in {"approved", "excluded", "suspended"}:
         queryset = queryset.filter(review_decision=decision)
     folder_type_filter = request.GET.get("folder_type", "").strip()
     if folder_type_filter == "__missing__":
@@ -226,7 +228,7 @@ def campaign_review(request, campaign_id):
     for error in page:
         response = getattr(error, "shop_response", None)
         error.response_label = labels.get(response.answer_code, response.answer_code) if response else ""
-        error.can_review = can_manage and campaign.status == Campaign.Status.ACTIVE and error.status not in {CampaignError.Status.WAITING_AREA, CampaignError.Status.AREA_RETURNED, CampaignError.Status.AREA_CONFIRMED} and (error.shop_id in submitted_shops or shop_deadline_passed(campaign, error.shop_id, deadlines))
+        error.can_review = can_manage and campaign.status == Campaign.Status.ACTIVE and error.status not in {CampaignError.Status.WAITING_AREA, CampaignError.Status.AREA_RETURNED, CampaignError.Status.AREA_CONFIRMED, CampaignError.Status.SUSPENDED} and (error.shop_id in submitted_shops or shop_deadline_passed(campaign, error.shop_id, deadlines))
         error.shop_submitted = error.shop_id in submitted_shops
         error.shop_expired = shop_deadline_passed(campaign, error.shop_id, deadlines)
         error.receipt_folder_type, error.receipt_current_status = folder_state_values(error)
@@ -246,7 +248,7 @@ def bulk_team_review(request, campaign_id):
         note = data.get("note", "")
         decision = data.get("decision", "")
         mode = data.get("mode", "append")
-        if not isinstance(rows, list) or not 1 <= len(rows) <= 200 or not isinstance(note, str) or len(note) > 2000 or mode not in {"append", "replace"} or decision not in {"", "approved", "excluded"} or not (note.strip() or decision):
+        if not isinstance(rows, list) or not 1 <= len(rows) <= 200 or not isinstance(note, str) or len(note) > 2000 or mode not in {"append", "replace"} or decision not in {"", "approved", "excluded", "suspended"} or not (note.strip() or decision):
             raise ValueError("Chọn 1–200 dòng và nhập nhận xét hoặc kết luận hợp lệ.")
         ids = []
         for row in rows:
@@ -277,7 +279,7 @@ def bulk_team_review(request, campaign_id):
                 return JsonResponse({"error": "Có dòng đã được người khác sửa. Tải lại trang; chưa cập nhật dòng nào."}, status=409)
             selected = decision or (previous.decision if previous else "")
             combined_note = (previous.note + "\n" + note.strip()).strip() if mode == "append" and previous and note.strip() else (previous.note if mode == "append" and previous else note.strip())
-            if selected not in {"approved", "excluded"} or len(combined_note) > 2000:
+            if selected not in {"approved", "excluded", "suspended"} or len(combined_note) > 2000:
                 return JsonResponse({"error": "Có dòng chưa có kết luận hoặc nhận xét vượt 2.000 ký tự. Chọn kết luận chung; chưa cập nhật dòng nào."}, status=400)
             if not previous or previous.decision != selected or previous.note != combined_note:
                 pending.append(TeamReview(error=error, decision=selected, note=combined_note, reviewed_by=request.user))
@@ -291,8 +293,8 @@ def bulk_team_review(request, campaign_id):
 def save_team_review(request, campaign_id, error_id):
     try:
         data = json.loads(request.body)
-        if not isinstance(data, dict) or data.get("decision") not in {"approved", "excluded"}:
-            raise ValueError("Chọn Giữ lỗi hoặc Loại lỗi.")
+        if not isinstance(data, dict) or data.get("decision") not in {"approved", "excluded", "suspended"}:
+            raise ValueError("Chọn Giữ lỗi, Gỡ lỗi hoặc Treo lỗi.")
         note = data.get("note", "")
         if not isinstance(note, str) or len(note) > 2000:
             raise ValueError("Nhận xét tối đa 2.000 ký tự.")
@@ -303,7 +305,7 @@ def save_team_review(request, campaign_id, error_id):
     with transaction.atomic():
         campaign = get_object_or_404(Campaign.objects.select_for_update(), pk=campaign_id)
         error = get_object_or_404(CampaignError.objects.select_for_update(), campaign=campaign, pk=error_id)
-        if campaign.status != Campaign.Status.ACTIVE or error.status in {CampaignError.Status.CANCELLED, CampaignError.Status.WAITING_AREA, CampaignError.Status.AREA_RETURNED, CampaignError.Status.AREA_CONFIRMED, CampaignError.Status.CLOSED} or (error.status == CampaignError.Status.EXCLUDED and not error.team_reviews.exists()):
+        if campaign.status != Campaign.Status.ACTIVE or error.status in {CampaignError.Status.CANCELLED, CampaignError.Status.WAITING_AREA, CampaignError.Status.AREA_RETURNED, CampaignError.Status.AREA_CONFIRMED, CampaignError.Status.CLOSED, CampaignError.Status.SUSPENDED} or (error.status == CampaignError.Status.EXCLUDED and not error.team_reviews.exists()):
             return JsonResponse({"error": "Dòng dữ liệu không ở giai đoạn review phản hồi PGD."}, status=409)
         if not shop_deadline_passed(campaign, error.shop_id) and not ShopSubmission.objects.filter(campaign=campaign, shop_id=error.shop_id).exists():
             return JsonResponse({"error": "PGD chưa gửi chính thức và chưa hết hạn phản hồi."}, status=409)

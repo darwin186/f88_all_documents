@@ -5,12 +5,13 @@ from datetime import date
 
 from django.db import connections
 
-from app_document_campaigns.models import CampaignImportSource, CampaignVersion
+from app_document_campaigns.models import CampaignError, CampaignImportSource, CampaignVersion
 from app_document_campaigns.services.imports import CampaignImportError, stage_import_rows
 
 
 FOLDER_SOURCE_NAME = "folder-fail-sql"
 DOCUMENT_SOURCE_NAME = "document-fail-sql"
+CARRYOVER_SOURCE_NAME = "suspended-carryover"
 BUSINESS_TYPES = (
     "HĐ quá hạn 180 ngày",
     "Đóng HĐCC nợ xấu chủ động",
@@ -163,8 +164,45 @@ def _rows_checksum(rows):
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def sql_source_options():
-    return [(name, label) for name, label, _ in sql_source_specs()]
+def sql_source_options(campaign=None):
+    options = [(name, label) for name, label, _ in sql_source_specs()]
+    if campaign and campaign.carryover_source_id:
+        options.append((CARRYOVER_SOURCE_NAME, f"Lỗi treo từ kỳ {campaign.carryover_source.code}"))
+    return options
+
+
+def suspended_carryover_rows(campaign):
+    """Snapshot eligible held errors into the same reviewable Excel pipeline as SQL."""
+    if not campaign.carryover_source_id:
+        raise CampaignImportError("Chiến dịch chưa chọn kỳ nguồn lỗi treo.")
+    source = campaign.carryover_source
+    if source.campaign_type_id != campaign.campaign_type_id or source.report_month >= campaign.report_month:
+        raise CampaignImportError("Kỳ nguồn lỗi treo phải cũ hơn và cùng loại book lỗi.")
+    rows = []
+    held = CampaignError.objects.filter(campaign=source, status=CampaignError.Status.SUSPENDED).exclude(
+        carried_errors__campaign__report_month__lt=campaign.report_month
+    ).select_related("shop", "carried_from")
+    for error in held.iterator(chunk_size=500):
+        original_key = error.carried_from.source_key if error.carried_from_id else error.source_key
+        rows.append({
+            "source_key": f"carryover:{error.error_uid.hex}",
+            "error_type": error.error_type,
+            "source_object_id": error.source_object_id or error.folder_id or error.document_id,
+            "code": error.code,
+            "source_created_at": error.source_created_at.isoformat() if error.source_created_at else "",
+            "shop_code": error.shop.shop_code,
+            "contract_code": error.contract_code,
+            "customer_code": error.customer_code,
+            "customer_name": error.customer_name,
+            "employee_code": error.employee_code,
+            "employee_name": error.employee_name,
+            "business_type_name": error.business_type_name,
+            "document_type_name": error.document_type_name,
+            "checking_issue": error.checking_issue,
+            "manager_snapshot": error.manager_snapshot,
+            "_original_source_key": original_key,
+        })
+    return rows
 
 
 def sql_source_specs():
@@ -179,6 +217,8 @@ def stage_monthly_sql_sources(*, version, created_by, using="default", progress_
             "Loại chiến dịch này chưa có bộ truy xuất dữ liệu SQL tương ứng."
         )
     source_specs = tuple((name, fetcher) for name, _, fetcher in sql_source_specs())
+    if version.campaign.carryover_source_id and source_names is not None:
+        source_specs += ((CARRYOVER_SOURCE_NAME, lambda month, using="default": suspended_carryover_rows(version.campaign)),)
     if source_names is not None:
         if not source_names or set(source_names) - {name for name, _ in source_specs}:
             raise CampaignImportError("Nguồn dữ liệu được chọn không hợp lệ.")

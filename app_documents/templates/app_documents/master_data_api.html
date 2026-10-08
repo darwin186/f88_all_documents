@@ -20,15 +20,18 @@ Cookie: sessionid=&lt;session&gt;
 
 {
   "shop_email": "pgd@example.com",
+  "shop_manager_name": "Nguyễn Văn A",
+  "shop_manager_employee_code": "F12345",
+  "shop_manager_email": "truong-pgd@example.com",
   "is_shop_active": false,
   "manager_id": 456
 }</pre>
-<p>Email tối đa 100 ký tự; chuỗi trống để xóa email. Trạng thái phải là boolean. Tắt PGD ghi ngày đóng cửa; bật lại xóa ngày đóng cửa. manager_id phải là bộ quản lý đang hiệu lực trong danh mục Manager. Không sửa trực tiếp thông tin cá nhân quản lý trên endpoint PGD và không hỗ trợ xóa PGD.</p>
+<p>Email PGD tối đa 100 ký tự; email trưởng PGD tối đa 254 ký tự. Chuỗi trống để xóa từng trường. Nếu nhập email trưởng PGD thì cần có tên và mã nhân viên bắt đầu bằng F. Trạng thái phải là boolean. Tắt PGD ghi ngày đóng cửa; bật lại xóa ngày đóng cửa. manager_id là bộ quản lý QLKV/QLV đang hiệu lực, tách biệt với trưởng PGD. Không hỗ trợ xóa PGD.</p>
 <h2>Ví dụ dùng token</h2><pre>curl -X PATCH "https://&lt;host&gt;/api/master-data/v1/shops/123/" \
   -H "Authorization: Bearer &lt;token&gt;" \
   -H "Content-Type: application/json" \
   -d '{"shop_email":"pgd@example.com"}'</pre><p>Token chỉ hiện một lần khi tạo. Thu hồi tại UI sẽ ngừng truy cập API ngay. Khi có Authorization sai, API trả lỗi, không fallback sang session. Nhật ký thay đổi ghi token_id và người tạo token.</p>
-<h2>Kết quả</h2><p>GET danh sách trả <code>count, page, pages, results</code>. GET chi tiết/PATCH trả <code>shop_id, shop_code, shop_name, shop_email, is_shop_active, shop_closed_date, manager_id, orgchart</code>.</p><p>Orgchart có <code>manager_code, is_current, area_manager, region_manager</code>. Mỗi quản lý có <code>name, email, is_active</code>. Ưu tiên AreaManager/RegionManager; nếu chưa có quan hệ, hiển thị snapshot QLKV/QLV và is_active=null. Không dùng UserProfile.region. is_current chỉ cho biết hiệu lực của bộ Manager; kiểm tra thêm is_active của từng quản lý.</p>
+<h2>Kết quả</h2><p>GET danh sách trả <code>count, page, pages, results</code>. GET chi tiết/PATCH trả <code>shop_id, shop_code, shop_name, shop_email, shop_manager_name, shop_manager_employee_code, shop_manager_email, is_shop_active, shop_closed_date, manager_id, orgchart</code>.</p><p>Orgchart có <code>manager_code, is_current, area_manager, region_manager</code>. Mỗi quản lý có <code>name, email, is_active</code>. Ưu tiên AreaManager/RegionManager; nếu chưa có quan hệ, hiển thị snapshot QLKV/QLV và is_active=null. Không dùng UserProfile.region. is_current chỉ cho biết hiệu lực của bộ Manager; kiểm tra thêm is_active của từng quản lý.</p>
 <h2>Mã phản hồi</h2><p>200: thành công · 400: dữ liệu sai/trường không hỗ trợ · 401: chưa đăng nhập · 403: không phải admin hoặc CSRF sai · 404: PGD không tồn tại · 405: method không hỗ trợ. Lỗi CSRF/404 có thể trả HTML mặc định Django. Thay đổi được lưu nhật ký trong Django Admin LogEntry với người thực hiện và giá trị trước/sau.</p>
 
 </div>

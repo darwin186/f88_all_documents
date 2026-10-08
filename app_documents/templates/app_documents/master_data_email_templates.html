@@ -1,0 +1,70 @@
+{% extends "app_documents/base_app_documents_v2.html" %}
+{% load static %}
+{% block title %}Master Data · Template email{% endblock %}
+{% block top_nav %}{% include "app_documents/components/top_nav_v2.html" with master_data_nav=True %}{% endblock %}
+{% block main_extra_class %}pt-20{% endblock %}
+{% block extra_head %}
+  <link rel="stylesheet" href="{% static 'css/master_email_templates.css' %}?v=20261008-1">
+  <script src="{% static 'app_document_campaigns/js/email_rich_editor.js' %}?v=20261002-1" defer></script>
+  <script src="{% static 'js/master_email_templates.js' %}?v=20261008-2" defer></script>
+{% endblock %}
+{% block content %}
+<div class="met-page" data-master-email-templates>
+  {% if messages %}{% for message in messages %}<div class="met-message {% if message.tags == 'error' %}is-error{% endif %}">{{ message }}</div>{% endfor %}{% endif %}
+  <header class="met-page-head"><div><p>MASTER DATA</p><h1>Template email</h1><span>Tạo mẫu dùng chung và mapping vào từng bước của Book lỗi.</span></div><a class="met-new-button" href="?new=1">+ Tạo template</a></header>
+
+  <div class="met-layout">
+    <aside class="met-list-pane">
+      <div class="met-list-head"><strong>Danh sách template</strong><small>{{ templates|length }} mẫu</small></div>
+      <div class="met-list" role="list">
+        {% for item in templates %}
+          <article class="met-template-item {% if editing and item.pk == editing.pk %}is-selected{% endif %}" data-template-item data-template-id="{{ item.pk }}">
+            <button type="button" class="met-template-select" data-template-select aria-expanded="{% if editing and item.pk == editing.pk %}true{% else %}false{% endif %}">
+              <span class="met-template-type">{{ item.get_email_type_display }}</span>
+              <strong>{{ item.name }}</strong>
+              <span class="met-badges">
+                {% if item.is_default %}<span class="met-badge is-default">Mặc định</span>{% endif %}
+                {% if item.is_active %}<span class="met-badge is-active">Đang sử dụng</span>{% else %}<span class="met-badge">Ngừng sử dụng</span>{% endif %}
+                <span class="met-version">v{{ item.version }}</span>
+              </span>
+            </button>
+            <a class="met-edit-link {% if editing and item.pk == editing.pk %}is-visible{% endif %}" data-template-edit href="?edit={{ item.pk }}">Chỉnh sửa</a>
+          </article>
+        {% empty %}<p class="met-empty-list">Chưa có template. Hãy tạo mẫu đầu tiên.</p>{% endfor %}
+      </div>
+    </aside>
+
+    <section class="met-editor-pane">
+      {% if editor_open %}
+        <form method="post" class="met-editor-form" data-master-template-form>{% csrf_token %}
+          {% if editing %}<input type="hidden" name="template_id" value="{{ editing.id }}">{% endif %}
+          <div class="met-editor-head"><div><p>{% if editing %}CHỈNH SỬA TEMPLATE{% else %}TẠO TEMPLATE{% endif %}</p><h2>{% if editing %}{{ editing.name }}{% else %}Template mới{% endif %}</h2></div><a href="{% url 'master_data_email_templates' %}" class="met-close-editor" aria-label="Đóng">×</a></div>
+          <div class="met-compose-layout">
+            <div class="met-fields">
+              <div class="met-field-grid">
+                <label>Tên template{{ form.name }}{% for error in form.name.errors %}<small>{{ error }}</small>{% endfor %}</label>
+                <label>Bước gửi email{{ form.email_type }}{% for error in form.email_type.errors %}<small>{{ error }}</small>{% endfor %}</label>
+              </div>
+              <label class="met-wide-field">Tiêu đề email{{ form.subject_template }}{% for error in form.subject_template.errors %}<small>{{ error }}</small>{% endfor %}</label>
+              <div class="met-field-grid"><label>CC (email hoặc tham số){{ form.cc_template }}{% for error in form.cc_template.errors %}<small>{{ error }}</small>{% endfor %}</label><label>BCC (email hoặc tham số){{ form.bcc_template }}{% for error in form.bcc_template.errors %}<small>{{ error }}</small>{% endfor %}</label></div>
+              {% include "app_document_campaigns/components/rich_email_editor.html" with field=form.body_template label="Nội dung email" %}
+              {% for error in form.body_template.errors %}<small class="met-field-error">{{ error }}</small>{% endfor %}
+              <div class="met-variables" data-master-variables>
+                <span>Chèn tham số tại vị trí con trỏ</span>
+                <div data-variable-group="pgd_response">{% for key, label in pgd_email_variables.items %}<button type="button" data-met-variable="{{ key }}" title="{{ label }}">{{ key }}</button>{% endfor %}</div>
+                <div data-variable-group="area">{% for key, label in area_email_variables.items %}<button type="button" data-met-variable="{{ key }}" title="{{ label }}">{{ key }}</button>{% endfor %}</div>
+              </div>
+              <div class="met-switches"><label>{{ form.is_default }}<span>Template mặc định</span></label><label>{{ form.is_active }}<span>Đang sử dụng</span></label></div>
+              {% for error in form.non_field_errors %}<p class="met-field-error">{{ error }}</p>{% endfor %}
+            </div>
+            <aside class="met-preview" aria-live="polite"><div class="met-preview-head"><span>XEM TRƯỚC</span><strong>Dữ liệu mẫu</strong></div><dl><dt>CC</dt><dd data-master-preview-cc>—</dd><dt>BCC</dt><dd data-master-preview-bcc>—</dd><dt>Tiêu đề</dt><dd data-master-preview-subject>—</dd></dl><div class="met-preview-body" data-master-preview-body>Đang chuẩn bị nội dung…</div></aside>
+          </div>
+          <div class="met-editor-actions"><a href="{% url 'master_data_email_templates' %}" class="met-cancel">Hủy</a><button type="submit" class="met-save-button" data-master-save>Lưu template</button></div>
+        </form>
+        {% if editing %}<form method="post" action="{% url 'master_data_email_template_test' editing.id %}" class="met-test-form" data-master-test-form>{% csrf_token %}<span>Gửi thử bằng dữ liệu mẫu</span><input type="email" name="tester_email" required placeholder="tester@f88.vn" aria-label="Email tester"><button type="submit" class="met-test-button">Gửi thử</button></form>{% endif %}
+      {% else %}<div class="met-editor-empty"><div><span>✉</span><h2>Chọn một template để chỉnh sửa</h2><p>Chọn mẫu ở danh sách bên trái, sau đó bấm “Chỉnh sửa”.</p></div></div>{% endif %}
+    </section>
+  </div>
+</div>
+{{ sample_parameters|json_script:"master-email-sample-parameters" }}
+{% endblock %}

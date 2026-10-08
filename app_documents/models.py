@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.db.models import F
+from django.core.exceptions import ValidationError
 from datetime import timedelta
 import hashlib
 import pytz
@@ -261,6 +262,10 @@ class Shop(models.Model):
 
     shop_email = models.EmailField(max_length= 100, null= True, blank= True, unique= False)
 
+    shop_manager_name = models.CharField(max_length=255, blank=True, default="")
+    shop_manager_employee_code = models.CharField(max_length=100, blank=True, default="")
+    shop_manager_email = models.EmailField(max_length=254, blank=True, default="")
+
     is_shop_active = models.BooleanField(default= True) 
 
     shop_closed_date = models.DateField(auto_now_add=False, null= True, blank= True) 
@@ -286,7 +291,20 @@ class Shop(models.Model):
 
         db_table = 'd_Shops'
 
-        
+    def clean(self):
+        super().clean()
+        from .shop_manager import validate_shop_manager_contact
+
+        try:
+            name, code, email = validate_shop_manager_contact(
+                self.shop_manager_name, self.shop_manager_employee_code, self.shop_manager_email
+            )
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+        self.shop_manager_name = name
+        self.shop_manager_employee_code = code
+        self.shop_manager_email = email
+
 
     def __str__(self):
 

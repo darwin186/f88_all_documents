@@ -40,7 +40,7 @@ def campaign_workflow(context, current=1):
         done.add(1)
         if campaign.current_version_id and campaign.current_version.status == CampaignVersion.Status.PUBLISHED:
             done.add(2)
-        errors, _ = scope_campaign_errors(CampaignError.objects.filter(campaign=campaign).exclude(status__in=["excluded", "cancelled"]), request.user)
+        errors, _ = scope_campaign_errors(CampaignError.objects.filter(campaign=campaign).exclude(status__in=["excluded", "cancelled", "suspended"]), request.user)
         shop_ids = errors.order_by().values("shop_id").distinct()
         total_shops = shop_ids.count()
         from app_document_campaigns.services.response_deadlines import shop_deadlines, shop_deadline_passed
@@ -59,11 +59,11 @@ def campaign_workflow(context, current=1):
         review_done_count = counts["reviewed"]
         review_total_count = counts["total"]
         review_percent = round(counts["reviewed"] * 100 / counts["total"]) if counts["total"] else 0
-        if errors.exists() and not reviewed.exclude(latest_decision__in=["approved", "excluded"]).exists() and not reviewed.filter(latest_decision__isnull=True).exists():
+        if reviewed.exists() and not reviewed.exclude(latest_decision__in=["approved", "excluded", "suspended"]).exists() and not reviewed.filter(latest_decision__isnull=True).exists():
             done.add(4)
         if 4 in done:
             latest_area = AreaConfirmation.objects.filter(error_id=OuterRef("pk")).order_by("-created_at", "-pk")
-            area_rows = reviewed.filter(latest_decision=TeamReview.Decision.APPROVED).annotate(
+            area_rows = reviewed.filter(latest_decision=TeamReview.Decision.APPROVED).exclude(status=CampaignError.Status.SUSPENDED).annotate(
                 latest_area_decision=Subquery(latest_area.values("is_agreed")[:1])
             )
             area_total = area_rows.count()
@@ -114,7 +114,12 @@ def campaign_workflow(context, current=1):
             progress = qtrr_percent
         progress_detail = ""
         if number == 3 and campaign:
-            progress_detail = f"{completed}/{total_shops} PGD đã hoàn tất hoặc hết hạn"
+            progress_detail = f"{completed}/{total_shops} PGD đã hoàn tất hoặc hết hạn · QLKV chỉ xem"
+            if campaign.response_deadline:
+                deadline = campaign.response_deadline
+                if timezone.is_aware(deadline):
+                    deadline = timezone.localtime(deadline)
+                progress_detail += f" · hạn PGD {deadline:%H:%M %d/%m/%Y}"
         elif number == 4 and campaign:
             progress_detail = f"{review_done_count}/{review_total_count} dòng đã review · còn {max(review_total_count - review_done_count, 0)} dòng"
         elif number == 5 and campaign:
