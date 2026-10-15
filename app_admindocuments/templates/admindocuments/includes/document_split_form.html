@@ -13,18 +13,31 @@
     {% for column in split_columns %}
     <div class="flex flex-col gap-4" data-split-column>
       {% for field in column %}
+      {% if field.name != 'attachment_link' %}
       <div>
-        {% if field.field.widget.input_type == 'checkbox' %}
+        {% if field.name == 'attachment' %}
+        <div data-document-attachment>
+          <div class="flex flex-wrap items-center gap-4 mb-2">
+            <label class="inline-flex items-center gap-2 text-sm"><input type="radio" name="attachment_mode" value="text" class="h-4 w-4 text-f88green" {% if not form.files %}checked{% endif %}>Nhập link (text)</label>
+            <label class="inline-flex items-center gap-2 text-sm"><input type="radio" name="attachment_mode" value="file" class="h-4 w-4 text-f88green" {% if form.files %}checked{% endif %}>Tải lên văn bản (file)</label>
+          </div>
+          <div data-attachment-panel="text"><label for="{{ form.attachment_link.id_for_label }}" class="sr-only">Link đính kèm</label>{{ form.attachment_link }}<div class="text-red-700 text-sm">{{ form.attachment_link.errors }}</div></div>
+          <div data-attachment-panel="file">{{ field }}</div>
+        </div>
+        {% elif field.field.widget.input_type == 'checkbox' %}
         <label for="{{ field.id_for_label }}" class="inline-flex items-center gap-2 text-sm font-medium cursor-pointer">
           {{ field }}<span>{{ field.label }}</span>
         </label>
         {% else %}
-        <label for="{{ field.id_for_label }}" class="block text-sm font-medium mb-1">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
-        {{ field }}
+        <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+        {% if field.field.widget.input_type == 'select' %}
+          {% include 'admindocuments/includes/document_select.html' %}
+        {% else %}{{ field }}{% endif %}
         {% endif %}
         <div class="text-red-700 text-sm">{{ field.errors }}</div>
         {% if field.help_text %}<p class="text-gray-500 text-xs mt-1">{{ field.help_text }}</p>{% endif %}
       </div>
+      {% endif %}
       {% endfor %}
     </div>
     {% endfor %}

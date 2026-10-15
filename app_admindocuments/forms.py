@@ -167,8 +167,14 @@ class AdmAdministrativeDocumentSplitForm(AdmAdministrativeDocumentForm):
         for field in self.fields.values():
             if isinstance(field.widget, forms.CheckboxInput):
                 field.widget.attrs["class"] = "h-4 w-4 shrink-0 rounded border-gray-300 text-f88green focus:ring-green-200"
+            elif isinstance(field.widget, forms.FileInput):
+                field.widget.attrs["class"] = "block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-f88green file:text-white"
             elif not field.widget.is_hidden:
-                field.widget.attrs["class"] = "w-full rounded border px-3 py-2"
+                field.widget.attrs["class"] = (
+                    "block w-full rounded-lg border border-gray-300 px-3.5 py-2.5 bg-white "
+                    "focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-f88green"
+                    + (" h-11" if not isinstance(field.widget, forms.Textarea) else "")
+                )
 
 
 class AdmAdministrativeDocumentUpdateForm(forms.ModelForm):

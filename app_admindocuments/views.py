@@ -4744,7 +4744,22 @@ def document_create(request):
         return redirect("admindocuments:admindocuments_list")
     form = AdmAdministrativeDocumentForm(request.POST, request.FILES)
     if not form.is_valid():
-        messages.error(request, "Invalid data. Please check required fields.")
+        errors = form.errors.as_data()
+        logger.warning(
+            "Administrative document create validation failed user_id=%s field_errors=%s",
+            request.user.pk,
+            {name: [error.code for error in field_errors] for name, field_errors in errors.items()},
+        )
+        for name, field_errors in errors.items():
+            label = form.fields[name].label if name in form.fields else "Thông tin văn bản"
+            for error in field_errors:
+                if error.code == "required":
+                    detail = "Vui lòng nhập hoặc chọn trường này."
+                elif name in {"issue_date", "effective_date", "expiry_date"} and error.code == "invalid":
+                    detail = "Ngày không hợp lệ. Vui lòng nhập theo định dạng dd/mm/yyyy."
+                else:
+                    detail = " ".join(str(message) for message in error.messages)
+                messages.error(request, f"{label}: {detail}")
         return redirect("admindocuments:admindocuments_list")
 
     doc = form.save(commit=False)

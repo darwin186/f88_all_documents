@@ -1,9 +1,14 @@
-<dialog id="document-split-dialog" aria-labelledby="document-split-dialog-title" class="w-[calc(100%_-_2rem)] max-w-5xl max-h-[90vh] p-0 border-0 rounded-2xl shadow-2xl backdrop:bg-black/40">
+{% load static %}
+<script src="{% static 'admindocuments/js/document_form_controls.js' %}?v=20261015-1"></script>
+<style>
+  [data-document-select] [hidden], [data-document-attachment] [hidden] { display: none !important; }
+</style>
+<dialog id="document-split-dialog" aria-labelledby="document-split-dialog-title" class="w-[calc(100%_-_2rem)] max-w-4xl max-h-[90vh] m-auto p-0 border-0 rounded-lg shadow-2xl backdrop:bg-black/40">
   <div class="flex items-center justify-between border-b px-5 py-4 sticky top-0 bg-white z-10">
-    <h2 id="document-split-dialog-title" class="font-semibold text-lg">Tạo văn bản tách thửa</h2>
+    <h2 id="document-split-dialog-title" class="font-semibold text-xl text-gray-900">Tạo văn bản tách thửa</h2>
     <button type="button" data-split-close class="rounded-lg px-2 py-1 text-gray-500 hover:bg-gray-100" aria-label="Đóng popup">✕</button>
   </div>
-  <div id="document-split-dialog-content" class="p-5"></div>
+  <div id="document-split-dialog-content" class="p-6"></div>
 </dialog>
 <script>
 (() => {
@@ -27,13 +32,17 @@
     dialog.showModal();
     if (trigger.dataset.splitTemplate) {
       content.replaceChildren(document.getElementById(trigger.dataset.splitTemplate).content.cloneNode(true));
+      window.adminDocumentFormControls?.init(content);
       return;
     }
     try {
       const response = await fetch(trigger.href, {headers: {'X-Requested-With': 'XMLHttpRequest'}, signal});
       if (!response.ok || response.redirected) throw new Error('Không thể mở biểu mẫu. Vui lòng tải lại trang hoặc kiểm tra quyền truy cập.');
       const html = await response.text();
-      if (!signal.aborted) content.innerHTML = html;
+      if (!signal.aborted) {
+        content.innerHTML = html;
+        window.adminDocumentFormControls?.init(content);
+      }
     } catch (error) {
       if (error.name !== 'AbortError') showError(error.message);
     }
@@ -65,6 +74,7 @@
         window.location.assign(result.redirect_url);
       } else {
         content.innerHTML = await response.text();
+        window.adminDocumentFormControls?.init(content);
         content.querySelector('[role=alert]')?.scrollIntoView({block: 'nearest'});
       }
     } catch (error) {

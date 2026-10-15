@@ -186,6 +186,47 @@ class NumberSplittingTests(TestCase):
         self.assertIn("status", response.context["form"].errors)
         self.assertEqual(AdmAdministrativeDocument.objects.filter(number_suffix="A").count(), 0)
 
+    @patch("app_admindocuments.views._create_attachment_version")
+    def test_ordinary_create_accepts_complete_form(self, attachment):
+        self.client.force_login(self.user)
+        data = self.post_data(title="Valid ordinary document")
+        data.update(doc_type=self.doc_type.pk, issuing_company=self.company.pk)
+        response = self.client.post(reverse("admindocuments:admindocuments_create"), data)
+        self.assertEqual(response.status_code, 302)
+        document = AdmAdministrativeDocument.objects.get(title=data["title"])
+        self.assertIn(f"?new={document.pk}", response.url)
+        self.assertEqual(document.status, self.status)
+        attachment.assert_called_once()
+
+    def test_create_reports_missing_fields_and_logs_only_error_codes(self):
+        from django.contrib.messages import get_messages
+        self.client.force_login(self.user)
+        data = self.post_data()
+        data.update(doc_type=self.doc_type.pk, issuing_company=self.company.pk, signer_role="")
+        with self.assertLogs("app_admindocuments.views", level="WARNING") as captured:
+            response = self.client.post(reverse("admindocuments:admindocuments_create"), data)
+        self.assertEqual(response.status_code, 302)
+        notifications = [str(message) for message in get_messages(response.wsgi_request)]
+        self.assertTrue(any("Người ký: Vui lòng nhập hoặc chọn trường này." in message for message in notifications))
+        self.assertIn("'signer_role': ['required']", captured.output[0])
+        self.assertNotIn(data["title"], captured.output[0])
+        self.assertFalse(AdmAdministrativeDocument.objects.filter(title=data["title"]).exists())
+
+    def test_create_reports_invalid_date_and_duplicate_title(self):
+        from django.contrib.messages import get_messages
+        self.client.force_login(self.user)
+        data = self.post_data()
+        data.update(doc_type=self.doc_type.pk, issuing_company=self.company.pk, issue_date="31/02/2026")
+        response = self.client.post(reverse("admindocuments:admindocuments_create"), data)
+        notifications = [str(message) for message in get_messages(response.wsgi_request)]
+        self.assertTrue(any("Ngày ban hành: Ngày không hợp lệ" in message for message in notifications))
+        # Duplicate checks use the current numbering year for ordinary creation.
+        existing = AdmAdministrativeDocument.objects.create(**self.document_fields("Duplicate ordinary title"))
+        data.update(title=existing.title, issue_date="15/10/2026")
+        response = self.client.post(reverse("admindocuments:admindocuments_create"), data)
+        notifications = [str(message) for message in get_messages(response.wsgi_request)]
+        self.assertTrue(any("Tên văn bản:" in message and "Tiêu đề trùng" in message for message in notifications))
+
     def test_popup_get_returns_form_fragment_with_two_vertical_columns(self):
         self.client.force_login(self.user)
         response = self.client.get(reverse("admindocuments:admindocuments_split", args=[self.parent.pk]),
@@ -193,6 +234,11 @@ class NumberSplittingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "<html")
         self.assertContains(response, 'id="split-document-form"')
+        self.assertContains(response, 'data-select-search')
+        self.assertContains(response, 'data-document-attachment')
+        self.assertContains(response, 'value="text"')
+        self.assertContains(response, 'value="file"')
+        self.assertContains(response, 'type="date"', count=3)
         columns = response.context["split_columns"]
         self.assertEqual(len(columns), 2)
         self.assertEqual([field.name for field in columns[0]][:4],
@@ -201,6 +247,13 @@ class NumberSplittingTests(TestCase):
                          ["issue_date", "effective_date", "expiry_date"])
         self.assertCountEqual([field.name for column in columns for field in column],
                               [field.name for field in response.context["form"].visible_fields()])
+
+    def test_direct_split_link_opens_popup_without_second_click(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("admindocuments:admindocuments_split", args=[self.parent.pk]))
+        self.assertContains(response, 'data-split-autoopen')
+        self.assertContains(response, 'id="document-split-dialog"')
+        self.assertContains(response, 'document_form_controls.js')
 
     @patch("app_admindocuments.views._create_attachment_version")
     def test_popup_post_redirect_and_validation(self, attachment):

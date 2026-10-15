@@ -18,7 +18,7 @@
   </table>
 </div>
 {% if suffix %}
-<button type="button" data-document-split data-split-template="split-form-template" {% if form.is_bound %}data-split-autoopen{% endif %} class="px-4 py-2 rounded-lg bg-f88green text-white">Tạo văn bản tách thửa</button>
+<button type="button" data-document-split data-split-template="split-form-template" data-split-autoopen class="px-4 py-2 rounded-lg bg-f88green text-white">Tạo văn bản tách thửa</button>
 <template id="split-form-template">{% include "admindocuments/includes/document_split_form.html" %}</template>
 {% else %}
 <div role="alert" class="rounded border bg-amber-50 text-amber-800 p-4">{{ exhausted_message }}</div>

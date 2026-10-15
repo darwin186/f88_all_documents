@@ -116,6 +116,7 @@ Chưa mở rộng sang tab Giấy tờ hành chính: phần này có allocator v
 - Không bổ sung `split_reason` riêng trong phiên bản này; người dùng có thể nhập lý do vào Ghi chú. Lịch sử tạo ghi năm số hiệu, hậu tố và ID văn bản gốc.
 - Khi có xung đột số dự kiến, giữ nội dung biểu mẫu và cập nhật hậu tố để lưu lại. Tệp tải lên cần chọn lại theo cơ chế bảo mật của trình duyệt; giao diện nhắc rõ điều này.
 - Các số thuộc nhóm đã tách giữ cố định loại văn bản/công ty; phòng ban và người ký vẫn chỉnh độc lập theo biểu mẫu.
+- Popup tách thửa dùng cùng kích thước, kiểu ô nhập và dropdown tìm kiếm như tạo văn bản mới. Người ký, phòng ban, loại nội dung, trạng thái và văn bản tham chiếu có tìm kiếm/bỏ chọn; ngày có lịch; đính kèm có hai chế độ link/file. Khởi tạo lại controls sau GET AJAX hoặc lỗi POST. Link trực tiếp cũng tự mở popup. Cần collectstatic để xuất bản `admindocuments/js/document_form_controls.js` khi deploy.
 - Trạng thái trong popup tách thửa được chọn như form tạo mới: mặc định Nháp, danh sách đầy đủ sắp theo tên. Trạng thái được chọn áp dụng cho văn bản mới, không đổi trạng thái văn bản gốc.
 
 Sau khi PostgreSQL của ứng dụng chạy, áp dụng schema bằng:
