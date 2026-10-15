@@ -124,6 +124,7 @@ urlpatterns = [
     path("documents/", views.document_list, name="admindocuments_list"),
     path("documents/export/", views.document_list_export, name="admindocuments_list_export"),
     path("documents/new/", views.document_create, name="admindocuments_create"),
+    path("documents/<int:doc_id>/split/", views.document_split, name="admindocuments_split"),
     path("documents/<int:doc_id>/", views.document_detail, name="admindocuments_detail"),
     path("documents/<int:doc_id>/update/", views.document_update, name="admindocuments_update"),
     path("documents/<int:doc_id>/field/", views.document_update_field, name="admindocuments_update_field"),

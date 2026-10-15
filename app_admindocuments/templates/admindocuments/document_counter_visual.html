@@ -71,21 +71,7 @@
     </div>
 
     <div class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));">
-      {% for num in numbers %}
-        {% if num in used_numbers %}
-          {% with "num-cell num-used" as cls %}
-          <div class="{{ cls }}">{{ num }}</div>
-          {% endwith %}
-        {% elif num in void_numbers %}
-          {% with "num-cell num-void" as cls %}
-          <div class="{{ cls }}">{{ num }}</div>
-          {% endwith %}
-        {% else %}
-          {% with "num-cell num-free" as cls %}
-          <div class="{{ cls }}">{{ num }}</div>
-          {% endwith %}
-        {% endif %}
-      {% endfor %}
+      {% include "admindocuments/includes/document_number_cells.html" %}
     </div>
   </div>
 {% endif %}

@@ -4,6 +4,7 @@ from .views import CustomPasswordResetView
 from . import views
 from . import intake_api
 from . import master_data
+from . import raw_reports
 
 urlpatterns = [
     path('master-data/', master_data.catalog_page, name='master_data'),
@@ -92,6 +93,7 @@ urlpatterns = [
     path('thong-tin-ca-nhan/', views.user_profile_v2_view, name='user_profile_v2'),
     path('phan-quyen-ui-v2/', views.ui_permission_v2_view, name='ui_permission_v2'),
     path('chi-tieu-chung-tu-v2', views.document_kpi_dashboard_v2, name='document_kpi_v2'),
+    path('chi-tieu-chung-tu-v2/xuat-du-lieu/', raw_reports.report_portal, name='document_raw_export'),
     path('chi-tieu-chung-tu-v2/export-pgd', views.export_kpi_shop_detail, name='document_kpi_shop_export'),
     path('manage-borrow/return-or-report-lost/<int:document_id>/<str:action>/', views.manage_borrow_document, name='manage_borrow_document'),
     path('gapo/schedule/', views.gapo_schedule_view, name='gapo_schedule'),

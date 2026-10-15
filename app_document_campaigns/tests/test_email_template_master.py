@@ -32,6 +32,29 @@ class EmailTemplateMasterTests(TestCase):
     def setUp(self):
         self.client.force_login(self.user)
 
+    def test_manager_template_encoded_link_is_repaired_on_save_and_test_send(self):
+        broken = '<a href="https://chungtu.f88.vn/master-data/email-templates/%7B%7Bmanager_url%7D%7D">Theo dõi PGD</a>'
+        response = self.client.post(reverse("master_data_email_templates"), {
+            "name": "QLKV encoded link", "email_type": EmailTemplateMaster.EmailType.AREA_MONITORING,
+            "subject_template": "Theo dõi {{campaign_code}}", "body_template": broken,
+            "cc_template": "", "bcc_template": "", "is_active": "on",
+        })
+        self.assertEqual(response.status_code, 302)
+        template = EmailTemplateMaster.objects.get(name="QLKV encoded link")
+        self.assertIn('href="{{manager_url}}"', template.body_template)
+        # A previously saved production snapshot must also render without manual edits.
+        template.body_template = broken
+        template.save(update_fields=["body_template"])
+        with patch("app_document_campaigns.services.microsoft_graph_email.send_rendered_email") as sender:
+            response = self.client.post(reverse("master_data_email_template_test", args=[template.pk]), {
+                "tester_email": "tester@example.com",
+                "parameters": json.dumps({"campaign_code": "TEST", "manager_url": "https://chungtu.f88.vn/manager/real-token/"}),
+            })
+        self.assertEqual(response.status_code, 302)
+        sender.assert_called_once()
+        self.assertIn('href="https://chungtu.f88.vn/manager/real-token/"', sender.call_args.args[0].body)
+        self.assertNotIn("%7B", sender.call_args.args[0].body)
+
     def test_admin_creates_named_template_and_sends_parameterized_test(self):
         page = self.client.get(reverse("master_data_email_templates"))
         self.assertEqual(page.status_code, 200)

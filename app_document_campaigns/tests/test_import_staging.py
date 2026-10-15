@@ -1010,12 +1010,19 @@ class CampaignImportStagingTests(TestCase):
         self.client.force_login(self.user)
         self.assertEqual(self.client.post(reverse("master_data_job_create"), {"kind": "export"}).status_code, 403)
         self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
-        with patch("app_documents.tasks.process_shop_catalog_job.delay", side_effect=RuntimeError("broker offline")):
+        with TemporaryDirectory() as directory, override_settings(MEDIA_ROOT=directory, FILE_JOBS_RUN_ON_WEB=False), patch("app_documents.tasks.process_shop_catalog_job.delay", side_effect=RuntimeError("broker offline")):
             response = self.client.post(reverse("master_data_job_create"), {"kind": "export"})
-        self.assertEqual(response.status_code, 202)
-        job = ShopCatalogJob.objects.get(pk=response.json()["id"])
-        self.assertEqual(job.status, "failed")
-        self.assertEqual(self.client.get(reverse("master_data_job_download", kwargs={"job_id": job.pk})).status_code, 409)
+            self.assertEqual(response.status_code, 202)
+            job = ShopCatalogJob.objects.get(pk=response.json()["id"])
+            self.assertEqual(job.status, "succeeded", job.message)
+            download = self.client.get(reverse("master_data_job_download", kwargs={"job_id": job.pk}))
+            self.assertEqual(download.status_code, 200)
+            download.close()
+            upload = SimpleUploadedFile("shops.xlsx", b"test")
+            imported = self.client.post(reverse("master_data_job_create"), {"kind": "import", "file": upload})
+            import_job = ShopCatalogJob.objects.get(pk=imported.json()["id"])
+            self.assertEqual(import_job.status, "failed")
+            self.assertEqual(self.client.get(reverse("master_data_job_download", kwargs={"job_id": import_job.pk})).status_code, 409)
         self.assertEqual(self.client.post(reverse("master_data_job_create"), {"kind": "import"}).status_code, 400)
 
     def test_catalog_excel_unchanged_legacy_email_does_not_block_import(self):
@@ -1037,7 +1044,7 @@ class CampaignImportStagingTests(TestCase):
         self.user.groups.add(Group.objects.get_or_create(name="admin")[0])
         self.client.force_login(self.user)
         url = reverse("master_data_job_create")
-        with TemporaryDirectory() as directory, override_settings(MEDIA_ROOT=directory), patch("app_documents.tasks.process_shop_catalog_job.delay"):
+        with TemporaryDirectory() as directory, override_settings(MEDIA_ROOT=directory, FILE_JOBS_RUN_ON_WEB=False), patch("app_documents.shop_catalog_excel.process_job"), patch("app_documents.tasks.process_shop_catalog_job.delay"):
             first = self.client.post(url, {"kind": "export"})
             self.assertEqual(first.status_code, 202)
             second = self.client.post(url, {"kind": "export"})

@@ -442,9 +442,9 @@ This project now includes a basic Celery setup.
 
 ### File-backed Excel jobs on the web service
 
-- Set `APP_ROLE=web` or `FILE_JOBS_RUN_ON_WEB=true` on the web deployment to execute Master Data and Document Campaign import/export tasks inside the web process. This keeps all file reads/writes on the web-mounted `/app/media` volume; email, GAPO and other tasks remain asynchronous through Celery.
+- Master Data PGD exports always run in the web process and write to its mounted `/app/media` volume. This small catalog export does not depend on a Celery worker. Set `APP_ROLE=web` or `FILE_JOBS_RUN_ON_WEB=true` on the web deployment for Master Data imports and Document Campaign file jobs to run there as well; email, GAPO and other tasks remain asynchronous through Celery.
 - Gunicorn uses `GUNICORN_TIMEOUT=1200` and `GUNICORN_GRACEFUL_TIMEOUT=120` by default. Configure the reverse-proxy/Ingress request timeout to at least the same duration for synchronous Excel requests.
-- Set `FILE_JOBS_RUN_ON_WEB=false` to restore Celery execution after web and worker share one storage backend.
+- Set `FILE_JOBS_RUN_ON_WEB=false` to restore Celery execution for the other file jobs after web and worker share one storage backend; Master Data PGD export remains on web.
 
 ### GAPO scheduled messaging (demo)
 - Model: `GapoScheduledMessage` stores receiver_id, message, schedule_at, status.

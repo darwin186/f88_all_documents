@@ -1,0 +1,25 @@
+  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
+    <nav class="flex flex-wrap items-center gap-2 text-[10px] text-gray-500">
+      <span class="uppercase text-[9px] text-gray-400">Chỉ tiêu</span>
+      <span class="text-gray-300">›</span>
+      {% with active_tab|default:'receive' as tab %}
+      <a href="{% url 'document_kpi_v2' %}?tab=receive{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'receive' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Nhận chứng từ</a>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'document_kpi_v2' %}?tab=quality{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'quality' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Chất lượng chứng từ</a>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'document_kpi_v2' %}?tab=borrow{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'borrow' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Mượn chứng từ</a>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'document_kpi_v2' %}?tab=lost{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'lost' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Thất lạc</a>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'document_kpi_v2' %}?tab=feedback{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'feedback' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Phản hồi lỗi</a>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'document_kpi_v2' %}?tab=productivity{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'productivity' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Productivity</a>
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'document_kpi_v2' %}?tab=config" class="{% if tab == 'config' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Cấu hình KPI</a>
+      {% if is_admin %}
+      <span class="text-gray-300">›</span>
+      <a href="{% url 'document_raw_export' %}" class="{% if tab == 'export' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Xuất dữ liệu</a>
+      {% endif %}
+      {% endwith %}
+    </nav>
+  </div>

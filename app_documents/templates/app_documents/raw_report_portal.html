@@ -1,0 +1,109 @@
+{% extends 'app_documents/base_app_documents_v2.html' %}
+{% load humanize %}
+{% block title %}Chỉ tiêu chứng từ · Xuất dữ liệu{% endblock %}
+{% block top_nav %}{% include 'app_documents/components/top_nav_v2.html' %}{% endblock %}
+{% block main_extra_class %}pt-14{% endblock %}
+{% block content %}
+{% include 'app_documents/components/kpi_styles.html' %}
+<style>
+  .raw-filter-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; min-width: 1140px; }
+  .raw-filter-grid.is-collapsed .raw-filter-cell { grid-column: span 3; }
+  .raw-filter-grid.is-expanded .raw-filter-cell { grid-column: span 2; }
+</style>
+<div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
+  {% include 'app_documents/components/kpi_subnav.html' %}
+  <form method="get" action="{% url 'document_raw_export' %}" id="raw-report-filters" class="space-y-4" x-data="{ expanded: {{ filters_expanded|yesno:'true,false' }} }">
+    <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3 space-y-3">
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="text-[11px] font-semibold text-gray-800">Bộ lọc xuất dữ liệu</h3>
+        <button type="button" @click="expanded=!expanded" :aria-expanded="expanded" aria-controls="raw-filter-grid" class="flex items-center gap-1 text-emerald-700 font-semibold"><span x-text="expanded ? 'Thu gọn bộ lọc' : 'Mở rộng bộ lọc'"></span><span x-text="expanded ? '▴' : '▾'"></span></button>
+      </div>
+      <input x-ref="reportKind" type="hidden" name="report_kind" value="{{ kind }}">
+      <div class="overflow-x-auto pb-1">
+      <div id="raw-filter-grid" class="raw-filter-grid" :class="expanded ? 'is-expanded' : 'is-collapsed'">
+        {% for field in fields %}
+        <div class="raw-filter-cell {% if field.multiple %}relative{% endif %}" {% if not field.primary %}x-cloak x-show="expanded"{% endif %}>
+          <label for="report-{{ field.name }}" class="mb-1 block font-semibold text-gray-600">{{ field.label }}</label>
+          {% if field.multiple %}
+          <div x-data="{ open: false, search: '', count: {{ selected_shop_count }}, popupStyle: '' }" @keydown.escape="open=false">
+            <button id="report-{{ field.name }}" type="button" @click="const rect=$el.getBoundingClientRect(); popupStyle='top:' + (rect.bottom+4) + 'px;left:' + rect.left + 'px;width:' + rect.width + 'px'; open=!open" :aria-expanded="open" class="filter-input w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 text-left">
+              <span x-text="count ? 'Đã chọn ' + count + ' PGD' : 'Tất cả phòng giao dịch'"></span><span class="text-gray-400">▾</span>
+            </button>
+            <div x-cloak x-show="open" @click.outside="open=false" :style="popupStyle" @scroll.window="open=false" @resize.window="open=false" class="fixed z-50 rounded-xl border border-gray-200 bg-white shadow-lg p-2 space-y-2">
+              <input type="search" x-model="search" aria-label="Tìm phòng giao dịch" placeholder="Tìm phòng giao dịch" class="w-full rounded-lg border-gray-200 px-2 py-1">
+              <div class="flex items-center justify-between text-gray-500"><span x-text="count + ' PGD được chọn'"></span><button type="button" class="text-emerald-700" @click="$refs.shops.querySelectorAll('input').forEach(el => el.checked = false); count=0">Bỏ chọn tất cả</button></div>
+              <div x-ref="shops" class="max-h-56 overflow-y-auto divide-y divide-gray-100">
+                {% for key, label in field.choices %}
+                <label x-show="!search || $el.textContent.toLowerCase().includes(search.toLowerCase())" class="flex items-center gap-2 px-2 py-2 cursor-pointer hover:bg-emerald-50">
+                  <input type="checkbox" name="{{ field.name }}" value="{{ key }}" {% if key in field.selected_values %}checked{% endif %} @change="count=$refs.shops.querySelectorAll('input:checked').length" class="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"><span>{{ label }}</span>
+                </label>
+                {% endfor %}
+              </div>
+              <p class="text-gray-400">Không chọn PGD: áp dụng tất cả PGD.</p>
+            </div>
+          </div>
+          {% elif field.choices != None %}
+          <select id="report-{{ field.name }}" name="{{ field.name }}" class="filter-input w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-0 focus:border-emerald-500 focus:ring-0">
+            <option value="">Tất cả</option>{% for key, label in field.choices %}<option value="{{ key }}" {% if key == field.value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+          {% elif field.is_date %}
+          <div class="filter-input flex items-center gap-1 rounded-xl border border-gray-200 bg-gray-50 px-2" data-date-range>
+            <input type="hidden" id="report-{{ field.name }}" name="{{ field.name }}" value="{{ field.value }}">
+            <input type="date" data-from aria-label="{{ field.label }} từ ngày" class="min-w-0 w-1/2 border-0 bg-transparent p-0 focus:ring-0"><span class="text-gray-400">–</span>
+            <input type="date" data-to aria-label="{{ field.label }} đến ngày" class="min-w-0 w-1/2 border-0 bg-transparent p-0 focus:ring-0">
+          </div>
+          {% else %}<input id="report-{{ field.name }}" name="{{ field.name }}" value="{{ field.value }}" class="filter-input w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-0 focus:border-emerald-500 focus:ring-0" placeholder="{{ field.label }}">{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      </div>
+    </div>
+    <section class="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+      <div class="flex gap-5 border-b border-gray-100 bg-gray-50/70 px-4 pt-2" role="tablist" aria-label="Báo cáo xuất dữ liệu">
+        <button id="receiving-report-tab" type="button" @click="$refs.reportKind.value='receiving'; $el.form.requestSubmit($refs.scanButton)" role="tab" aria-controls="raw-report-panel" aria-selected="{% if kind == 'receiving' %}true{% else %}false{% endif %}" class="px-1 py-3 border-b-2 text-[10px] font-semibold transition-colors {% if kind == 'receiving' %}border-emerald-600 text-emerald-700{% else %}border-transparent text-gray-500 hover:text-emerald-700 hover:border-emerald-200{% endif %}">Nhận chứng từ</button>
+        <button id="checking-report-tab" type="button" @click="$refs.reportKind.value='checking'; $el.form.requestSubmit($refs.scanButton)" role="tab" aria-controls="raw-report-panel" aria-selected="{% if kind == 'checking' %}true{% else %}false{% endif %}" class="px-1 py-3 border-b-2 text-[10px] font-semibold transition-colors {% if kind == 'checking' %}border-emerald-600 text-emerald-700{% else %}border-transparent text-gray-500 hover:text-emerald-700 hover:border-emerald-200{% endif %}">Duyệt chứng từ</button>
+      </div>
+      <div id="raw-report-panel" role="tabpanel" aria-labelledby="{% if kind == 'receiving' %}receiving{% else %}checking{% endif %}-report-tab" class="p-4 space-y-4">
+        {% if error %}<div role="alert" class="rounded-xl border border-red-200 bg-red-50 p-3 text-[10px] text-red-700">{{ error }}</div>{% endif %}
+      <div class="flex flex-wrap items-center gap-2 text-[10px]">
+        <button class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700" type="submit" x-ref="scanButton">Quét dữ liệu</button>
+        <button class="px-4 py-2 rounded-lg border border-emerald-200 text-emerald-700 font-semibold hover:bg-emerald-50 disabled:opacity-40" type="submit" name="download" value="1" {% if not can_download %}disabled{% endif %}>Xuất Excel</button>
+        <a href="{% url 'document_raw_export' %}?report_kind={{ kind }}" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50">Xóa</a>
+        <span class="text-gray-500">Chọn ít nhất một điều kiện. Tối đa {{ export_limit|intcomma }} dòng dữ liệu/file.</span>
+      </div>
+  <div class="grid gap-3 md:grid-cols-3">
+    <div class="kpi-card"><div class="kpi-label">{{ report_title }}</div><div class="kpi-value">{{ total|intcomma }}</div><div class="kpi-sub">{% if kind == 'receiving' %}Quyển{% else %}Chứng từ{% endif %} phù hợp bộ lọc</div></div>
+    <div class="kpi-card"><div class="kpi-label">Giới hạn Excel</div><div class="kpi-value">{{ export_limit|intcomma }}</div><div class="kpi-sub">Dòng dữ liệu, đã trừ dòng tiêu đề</div></div>
+    <div class="kpi-card"><div class="kpi-label">Trạng thái xuất</div><div class="text-[11px] font-semibold mt-1 {% if error %}text-red-600{% elif can_download %}text-emerald-700{% else %}text-gray-500{% endif %}">{% if error %}Không thể xuất{% elif can_download %}Sẵn sàng xuất{% else %}Chờ chọn bộ lọc{% endif %}</div><div class="kpi-sub mt-1">File phản ánh dữ liệu mới nhất tại thời điểm xuất</div></div>
+  </div>
+  <section class="border-t border-gray-100 pt-4 space-y-3">
+    <div><h3 class="text-[11px] font-semibold text-gray-800">Dữ liệu xem trước</h3><p class="text-[9px] text-gray-500">Tối đa 25 dòng. File Excel chứa toàn bộ dữ liệu phù hợp bộ lọc.</p></div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full table-xs whitespace-nowrap"><thead><tr>{% for header in headers %}<th>{{ header }}</th>{% endfor %}</tr></thead>
+        <tbody class="divide-y divide-gray-100">{% for row in rows %}<tr class="hover:bg-gray-50">{% for cell in row %}<td>{% if cell.year %}{% if cell.hour != None %}{{ cell|date:'d/m/Y H:i' }}{% else %}{{ cell|date:'d/m/Y' }}{% endif %}{% else %}{{ cell|default_if_none:'' }}{% endif %}</td>{% endfor %}</tr>{% empty %}<tr><td colspan="{{ headers|length }}" class="text-gray-400">{% if error %}Vui lòng kiểm tra lại bộ lọc.{% else %}Chọn bộ lọc và bấm Quét dữ liệu. Không có dòng phù hợp thì file chỉ có tiêu đề.{% endif %}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  </section>
+      </div>
+    </section>
+  </form>
+</div>
+<script>
+  document.querySelectorAll('[data-date-range]').forEach(panel => {
+    const hidden = panel.querySelector('input[type=hidden]');
+    const from = panel.querySelector('[data-from]');
+    const to = panel.querySelector('[data-to]');
+    const parts = hidden.value.split(' to ');
+    from.value = parts[0] || '';
+    to.value = parts[1] || parts[0] || '';
+    const sync = () => {
+      const start = from.value || to.value;
+      const end = to.value || from.value;
+      hidden.value = start ? (start === end ? start : `${start} to ${end}`) : '';
+      to.setCustomValidity(from.value && to.value && from.value > to.value ? 'Đến ngày phải lớn hơn hoặc bằng từ ngày.' : '');
+    };
+    from.addEventListener('change', sync);
+    to.addEventListener('change', sync);
+  });
+</script>
+{% endblock %}

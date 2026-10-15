@@ -167,5 +167,6 @@
         @click="if(sidebarPinned) return; if(!sidebarOpen) return; const sidebar = document.getElementById('sidebar'); if(!sidebar.contains($event.target)){ sidebarOpen = false; }">
     {% block content %}{% endblock %}
   </main>
+  {% include "admindocuments/includes/document_split_modal.html" %}
 </body>
 </html>

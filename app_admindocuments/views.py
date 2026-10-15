@@ -36,6 +36,7 @@ from app_documents.tasks import send_gapo_scheduled_message
 
 from .forms import (
     AdmAdministrativeDocumentForm,
+    AdmAdministrativeDocumentSplitForm,
     AdmAdministrativeDocumentUpdateForm,
     AdmIncomingDispatchForm,
     AdmParcelRecipientImportForm,
@@ -82,12 +83,16 @@ from .models import (
     AdmPaperType,
     AdmSignerRole,
     AdmAdministrativeDocumentHistory,
+    administrative_number_year,
 )
 from .services import (
     NotificationSendError,
     allocate_paper_running_number,
     allocate_running_number,
     send_via_gapo,
+    create_split_document,
+    next_split_suffix,
+    split_number_group,
 )
 from .access import has_admin_docs_access
 
@@ -4353,29 +4358,31 @@ def document_counter_manage(request):
             messages.error(request, "Năm và số tiếp theo phải là số.")
             return redirect("admindocuments:admindocuments_counters")
 
-        if not doc_type_id or not company_id:
+        if not doc_type_id or not company_id or next_number < 1 or not 1 <= year <= 9999:
             messages.error(request, "Vui lòng chọn đủ loại văn bản và công ty.")
             return redirect("admindocuments:admindocuments_counters")
 
-        used_qs = AdmAdministrativeDocument.objects.filter(
-            doc_type_id=doc_type_id,
-            issuing_company_id=company_id,
-            created_at__year=year,
-            is_void=False,
-        )
-        max_used = used_qs.aggregate(mx=Max("running_number"))["mx"] or 0
-        exists_number = used_qs.filter(running_number=next_number).exists()
-        if exists_number:
-            messages.error(
-                request,
-                f"Số {next_number} đã được sử dụng (đã dùng tới {max_used}).",
+        with transaction.atomic():
+            counter, _ = AdmDocumentCounter.objects.select_for_update().get_or_create(
+                doc_type_id=doc_type_id, company_id=company_id, year=year,
+                defaults={"next_number": 1},
             )
-            return redirect("admindocuments:admindocuments_counters")
+            used_qs = AdmAdministrativeDocument.objects.filter(
+                doc_type_id=doc_type_id,
+                issuing_company_id=company_id,
+                number_year=year,
+                number_suffix="",
+                is_void=False,
+            )
+            max_used = used_qs.aggregate(mx=Max("running_number"))["mx"] or 0
+            exists_number = used_qs.filter(running_number=next_number).exists()
+            if exists_number:
+                messages.error(
+                    request,
+                    f"Số {next_number} đã được sử dụng (đã dùng tới {max_used}).",
+                )
+                return redirect("admindocuments:admindocuments_counters")
 
-        counter, _ = AdmDocumentCounter.objects.get_or_create(
-            doc_type_id=doc_type_id, company_id=company_id, year=year, defaults={"next_number": next_number}
-        )
-        if not _:
             counter.next_number = next_number
             counter.save(update_fields=["next_number", "updated_at"])
         dt_name = doc_types.filter(pk=doc_type_id).first()
@@ -4387,13 +4394,14 @@ def document_counter_manage(request):
 
     # prepare tracking
     used_map = {
-        (row["doc_type_id"], row["issuing_company_id"], row["created_year"]): {
+        (row["doc_type_id"], row["issuing_company_id"], row["number_year"]): {
             "used_max": row["used_max"],
             "total": row["total"],
+            "base_total": row["base_total"],
         }
         for row in AdmAdministrativeDocument.objects.filter(is_void=False)
-        .values("doc_type_id", "issuing_company_id", created_year=ExtractYear("created_at"))
-        .annotate(used_max=Max("running_number"), total=Count("id"))
+        .values("doc_type_id", "issuing_company_id", "number_year")
+        .annotate(used_max=Max("running_number"), total=Count("id"), base_total=Count("id", filter=Q(number_suffix="")))
     }
 
     counters = AdmDocumentCounter.objects.select_related("doc_type", "company").order_by(
@@ -4402,7 +4410,7 @@ def document_counter_manage(request):
     counter_rows = []
     for c in counters:
             key = (c.doc_type_id, c.company_id, c.year)
-            used_info = used_map.get(key, {"used_max": 0, "total": 0})
+            used_info = used_map.get(key, {"used_max": 0, "total": 0, "base_total": 0})
             gap_from = (used_info["used_max"] or 0) + 1
             counter_rows.append(
                 {
@@ -4414,6 +4422,7 @@ def document_counter_manage(request):
                 "next_number": c.next_number,
                 "used_max": used_info["used_max"] or 0,
                 "total": used_info["total"] or 0,
+                "base_total": used_info["base_total"] or 0,
                 "gap_from": gap_from,
                 }
             )
@@ -4532,16 +4541,23 @@ def document_counter_visual(request):
     void_numbers = set()
     counter_next = None
     max_number = 0
+    groups = {}
 
     if doc_type_id and company_id:
         docs = AdmAdministrativeDocument.objects.filter(
             doc_type_id=doc_type_id,
             issuing_company_id=company_id,
-            created_at__year=year,
-        ).values_list("running_number", "is_void")
-        for rn, is_void in docs:
+            number_year=year,
+        ).values_list("running_number", "is_void", "id", "number_suffix")
+        for rn, is_void, document_id, suffix in docs:
             if rn is None:
                 continue
+            group = groups.setdefault(rn, {"number": rn, "parent_id": None, "branches": 0})
+            if not suffix:
+                if group["parent_id"] is None or not is_void:
+                    group["parent_id"] = document_id
+            else:
+                group["branches"] += 1
             if is_void:
                 void_numbers.add(rn)
             else:
@@ -4562,7 +4578,7 @@ def document_counter_visual(request):
         AdmDocumentCounter.objects.values_list("year", flat=True).distinct()
     )
     years_set.update(
-        AdmAdministrativeDocument.objects.annotate(y=ExtractYear("created_at")).values_list("y", flat=True).distinct()
+        AdmAdministrativeDocument.objects.values_list("number_year", flat=True).distinct()
     )
     years = sorted({y for y in years_set if y}, reverse=True)
     context = {
@@ -4578,6 +4594,9 @@ def document_counter_visual(request):
         "counter_next": counter_next,
         "years": years,
         "numbers": list(range(1, max_number + 1)) if max_number else [],
+        "number_cells": [dict(groups.get(n, {"number": n, "parent_id": None, "branches": 0}),
+                              state="used" if n in used_numbers else "void" if n in void_numbers else "free")
+                         for n in range(1, max_number + 1)],
     }
     if request.GET.get("partial") == "1":
         return render(request, "admindocuments/document_counter_visual_partial.html", context)
@@ -4754,7 +4773,8 @@ def document_create(request):
         attempts += 1
         try:
             with transaction.atomic():
-                current_year = timezone.now().year
+                current_year = administrative_number_year()
+                doc.number_year = current_year
                 doc.running_number, void_conflicts = allocate_running_number(
                     doc.doc_type_id, doc.issuing_company_id, current_year
                 )
@@ -4795,6 +4815,85 @@ def document_create(request):
     )
     redirect_url = f"{reverse('admindocuments:admindocuments_list')}?new={doc.id}"
     return redirect(redirect_url)
+
+
+@login_required
+@admin_staff_required
+def document_split(request, doc_id):
+    is_popup = request.headers.get("x-requested-with") == "XMLHttpRequest"
+    parent = get_object_or_404(AdmAdministrativeDocument.objects.select_related(
+        "doc_type", "issuing_company"), pk=doc_id, split_parent__isnull=True)
+    if request.method == "POST":
+        try:
+            key = uuid.UUID(request.POST.get("request_key", ""))
+        except (ValueError, TypeError, AttributeError):
+            key = None
+        if key:
+            existing = AdmAdministrativeDocument.objects.filter(
+                split_request_key=key, split_parent=parent, created_by=request.user).first()
+            if existing:
+                if is_popup:
+                    return JsonResponse({"redirect_url": reverse("admindocuments:admindocuments_detail", args=[existing.pk])})
+                return redirect("admindocuments:admindocuments_detail", doc_id=existing.pk)
+    try:
+        suffix = next_split_suffix(parent)
+    except ValueError as exc:
+        suffix = None
+        exhausted_message = str(exc)
+    else:
+        exhausted_message = ""
+    counter = AdmDocumentCounter.objects.filter(
+        doc_type_id=parent.doc_type_id, company_id=parent.issuing_company_id, year=parent.number_year).first()
+    form = AdmAdministrativeDocumentSplitForm(
+        request.POST if request.method == "POST" else None,
+        request.FILES if request.method == "POST" else None,
+        parent=parent, suffix=suffix or "",
+    )
+    if request.method == "POST" and suffix and form.is_valid():
+        doc = form.save(commit=False)
+        doc.attachment = None
+        try:
+            doc, created = create_split_document(
+                parent=parent, document=doc, expected_suffix=form.cleaned_data["expected_suffix"],
+                request_key=form.cleaned_data["request_key"], user=request.user)
+        except ValueError as exc:
+            form.add_error(None, str(exc))
+        except IntegrityError:
+            form.add_error(None, "Số dự kiến vừa được sử dụng. Vui lòng lưu lại.")
+        else:
+            if created:
+                try:
+                    _create_attachment_version(document=doc, user=request.user,
+                        uploaded_file=request.FILES.get("attachment"), link=form.cleaned_data.get("attachment_link"))
+                except Exception:
+                    logger.exception("Attachment upload failed for split document %s", doc.pk)
+                    messages.warning(request, "Văn bản đã tạo nhưng tải file thất bại. Vui lòng tải lại trong chi tiết.")
+                messages.success(request, f"Đã tạo văn bản tách thửa {doc.document_number_full}.")
+            if is_popup:
+                return JsonResponse({"redirect_url": reverse("admindocuments:admindocuments_detail", args=[doc.pk])})
+            return redirect("admindocuments:admindocuments_detail", doc_id=doc.pk)
+        # Refresh the preview while keeping every entered field and the request key.
+        try:
+            suffix = next_split_suffix(parent)
+        except ValueError as exc:
+            suffix = None
+            exhausted_message = str(exc)
+        data = form.data.copy()
+        data["expected_suffix"] = suffix or ""
+        form.data = data
+    column_names = [
+        ["doc_type", "issuing_company", "issuing_department", "signer_role", "content_type", "title", "status", "ticket_code"],
+        ["issue_date", "effective_date", "expiry_date", "reference_number", "reference_document", "is_reference_document", "attachment", "attachment_link", "note"],
+    ]
+    columns = [[form[name] for name in names if name in form.fields] for names in column_names]
+    template = "admindocuments/includes/document_split_form.html" if is_popup else "admindocuments/document_split.html"
+    return render(request, template, {
+        "split_columns": columns,
+        "parent": parent, "form": form, "suffix": suffix, "exhausted_message": exhausted_message,
+        "counter_next": counter.next_number if counter else None,
+        "group_documents": split_number_group(parent).select_related("issuing_department", "signer_role")
+            .order_by("is_void", "number_suffix", "created_at"),
+    })
 
 
 @login_required
@@ -5117,7 +5216,12 @@ def document_delete(request, doc_id: int):
     if request.method != "POST":
         return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
 
+    snapshot = get_object_or_404(AdmAdministrativeDocument, pk=doc_id)
     with transaction.atomic():
+        # Use the same lock order as ordinary allocation and splitting.
+        counter = (AdmDocumentCounter.objects.select_for_update().filter(
+            doc_type_id=snapshot.doc_type_id, company_id=snapshot.issuing_company_id,
+            year=snapshot.number_year).first())
         doc = (
             AdmAdministrativeDocument.objects.select_for_update()
             .select_related("doc_type", "issuing_company")
@@ -5127,13 +5231,7 @@ def document_delete(request, doc_id: int):
             messages.info(request, "Văn bản đã ở trạng thái vô hiệu.")
             return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
 
-        year = doc.created_at.year
-        counter = (
-            AdmDocumentCounter.objects.select_for_update()
-            .filter(doc_type=doc.doc_type, company=doc.issuing_company, year=year)
-            .first()
-        )
-        if counter and doc.running_number == counter.next_number - 1:
+        if counter and not doc.number_suffix and doc.running_number == counter.next_number - 1:
             counter.next_number = doc.running_number
             counter.save(update_fields=["next_number", "updated_at"])
 

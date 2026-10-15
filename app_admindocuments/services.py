@@ -1,6 +1,7 @@
 from typing import Any, Dict
 
 from django.db import transaction
+from django.db.models import Max
 from django.utils import timezone
 
 from app_documents.gapo import (
@@ -10,7 +11,7 @@ from app_documents.gapo import (
     post_gapo_message,
 )
 
-from .models import AdmAdministrativeDocument, AdmDocumentCounter, AdmPaperDocument, AdmPaperCounter
+from .models import AdmAdministrativeDocument, AdmDocumentCounter, AdmPaperDocument, AdmPaperCounter, administrative_number_year
 
 
 class NotificationSendError(Exception):
@@ -56,7 +57,7 @@ def allocate_running_number(
     - Counter luôn tiến lên candidate + 1.
     """
     if year is None:
-        year = timezone.now().year
+        year = administrative_number_year()
     counter, _created = (
         AdmDocumentCounter.objects.select_for_update().get_or_create(
             doc_type_id=doc_type_id,
@@ -69,18 +70,17 @@ def allocate_running_number(
     attempts = 0
     void_conflicts = []
     while True:
-        conflict = AdmAdministrativeDocument.objects.filter(
+        conflicts = AdmAdministrativeDocument.objects.filter(
             doc_type_id=doc_type_id,
             issuing_company_id=company_id,
-            created_at__year=year,
+            number_year=year,
             running_number=candidate,
-        ).first()
-        if conflict is None:
+            number_suffix="",
+        )
+        if not conflicts.exists():
             break
-        is_void = getattr(conflict, "is_void", False)
-        is_void = is_void or str(conflict.document_number_full or "").endswith("-VOID")
-        if is_void:
-            void_conflicts.append(conflict)
+        if not conflicts.filter(is_void=False).exists():
+            void_conflicts.extend(conflicts)
             break  # allow reuse this number
         candidate += 1
         attempts += 1
@@ -90,6 +90,57 @@ def allocate_running_number(
     counter.next_number = candidate + 1
     counter.save(update_fields=["next_number", "updated_at"])
     return candidate, void_conflicts
+
+
+def split_number_group(parent):
+    return AdmAdministrativeDocument.objects.filter(
+        doc_type_id=parent.doc_type_id, issuing_company_id=parent.issuing_company_id,
+        number_year=parent.number_year, running_number=parent.running_number,
+    )
+
+
+def next_split_suffix(parent):
+    used = list(split_number_group(parent).exclude(number_suffix="").values_list("number_suffix", flat=True))
+    ordinal = max((ord(suffix) - ord("A") + 1 for suffix in used), default=0)
+    if ordinal >= 26:
+        raise ValueError("Số này đã dùng hết hậu tố A–Z.")
+    return chr(ord("A") + ordinal)
+
+
+@transaction.atomic
+def create_split_document(*, parent, document, expected_suffix, request_key, user):
+    # Lock the same counter as ordinary allocation, before locking a document.
+    AdmDocumentCounter.objects.select_for_update().get_or_create(
+        doc_type_id=parent.doc_type_id, company_id=parent.issuing_company_id,
+        year=parent.number_year,
+        defaults={"next_number": (AdmAdministrativeDocument.objects.filter(
+            doc_type_id=parent.doc_type_id, issuing_company_id=parent.issuing_company_id,
+            number_year=parent.number_year, number_suffix="",
+        ).aggregate(mx=Max("running_number"))["mx"] or 0) + 1},
+    )
+    existing = AdmAdministrativeDocument.objects.filter(split_request_key=request_key).first()
+    if existing:
+        if existing.split_parent_id != parent.pk or existing.created_by_id != user.pk:
+            raise ValueError("Yêu cầu tạo văn bản không hợp lệ.")
+        return existing, False
+    parent = AdmAdministrativeDocument.objects.select_for_update().get(pk=parent.pk)
+    if parent.split_parent_id:
+        raise ValueError("Hãy chọn số gốc để tạo văn bản tách thửa.")
+    suffix = next_split_suffix(parent)
+    if suffix != expected_suffix:
+        raise ValueError(f"Số dự kiến đã thay đổi. Vui lòng lưu lại với {parent.running_number:03d}{suffix}.")
+    document.doc_type_id = parent.doc_type_id
+    document.issuing_company_id = parent.issuing_company_id
+    document.running_number = parent.running_number
+    document.number_year = parent.number_year
+    document.number_suffix = suffix
+    document.split_parent = parent
+    document.split_request_key = request_key
+    document.created_by = user
+    if document.issuing_department.company_id != parent.issuing_company_id:
+        raise ValueError("Phòng ban phải thuộc công ty đã chọn.")
+    document.save()
+    return document, True
 
 
 @transaction.atomic

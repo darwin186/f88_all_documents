@@ -63,7 +63,7 @@
         {% endif %}
         {% if not gddb_nav and not master_data_nav %}
         {% if 'kpi_v2' in allowed_screens %}
-        <a href="{% url 'document_kpi_v2' %}" class="{% if request.resolver_match.url_name == 'document_kpi_v2' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Chỉ tiêu chứng từ</a>
+        <a href="{% url 'document_kpi_v2' %}" class="{% if request.resolver_match.url_name == 'document_kpi_v2' or request.resolver_match.url_name == 'document_raw_export' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Chỉ tiêu chứng từ</a>
         <span class="text-gray-300">•</span>
         {% endif %}
         {% if 'ctv_accounts' in allowed_screens %}

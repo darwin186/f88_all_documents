@@ -1,4 +1,5 @@
 from datetime import datetime
+import uuid
 
 from django import forms
 from django.utils import timezone
@@ -24,6 +25,7 @@ from .models import (
     AdmDocumentStatus,
     AdmCompany,
     AdmDepartment,
+    administrative_number_year,
 )
 
 
@@ -107,13 +109,13 @@ class AdmAdministrativeDocumentForm(forms.ModelForm):
         doc_type = cleaned.get("doc_type")
         title = cleaned.get("title")
         reference_number = cleaned.get("reference_number")
-        year_now = timezone.now().year
+        year_now = getattr(self, "number_year", None) or self.instance.number_year or administrative_number_year()
 
         if reference_number and doc_type:
             qs = AdmAdministrativeDocument.objects.filter(
                 doc_type=doc_type,
                 reference_number__iexact=reference_number,
-                created_at__year=year_now,
+                number_year=year_now,
             )
             if getattr(self, "instance", None) and self.instance.pk:
                 qs = qs.exclude(pk=self.instance.pk)
@@ -127,7 +129,7 @@ class AdmAdministrativeDocumentForm(forms.ModelForm):
             qs2 = AdmAdministrativeDocument.objects.filter(
                 doc_type=doc_type,
                 title__iexact=title,
-                created_at__year=year_now,
+                number_year=year_now,
             )
             if getattr(self, "instance", None) and self.instance.pk:
                 qs2 = qs2.exclude(pk=self.instance.pk)
@@ -138,6 +140,35 @@ class AdmAdministrativeDocumentForm(forms.ModelForm):
                 )
 
         return cleaned
+
+
+class AdmAdministrativeDocumentSplitForm(AdmAdministrativeDocumentForm):
+    expected_suffix = forms.CharField(widget=forms.HiddenInput, max_length=1)
+    request_key = forms.UUIDField(widget=forms.HiddenInput)
+
+    def __init__(self, *args, parent, suffix, **kwargs):
+        self.number_year = parent.number_year
+        initial = kwargs.pop("initial", {})
+        initial.update(doc_type=parent.doc_type_id, issuing_company=parent.issuing_company_id,
+                       expected_suffix=suffix, request_key=uuid.uuid4())
+        super().__init__(*args, initial=initial, **kwargs)
+        self.fields["doc_type"].disabled = True
+        self.fields["issuing_company"].disabled = True
+        self.fields["issuing_department"].queryset = AdmDepartment.objects.filter(company_id=parent.issuing_company_id)
+        self.fields["status"].queryset = AdmDocumentStatus.objects.all().order_by("name")
+        self.fields["status"].initial = (AdmDocumentStatus.objects.filter(
+            code=AdmDocumentStatus.CODE_DRAFT).first()
+            or self.fields["status"].queryset.first())
+        for name in ("issue_date", "effective_date", "expiry_date"):
+            self.fields[name].widget = forms.DateInput(
+                attrs={"type": "date"}, format="%Y-%m-%d")
+        self.fields["issue_date"].required = True
+        self.fields["issue_date"].help_text = "Nhập ngày ban hành cần backdate. Ngày tạo hệ thống vẫn là thời điểm hiện tại."
+        for field in self.fields.values():
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs["class"] = "h-4 w-4 shrink-0 rounded border-gray-300 text-f88green focus:ring-green-200"
+            elif not field.widget.is_hidden:
+                field.widget.attrs["class"] = "w-full rounded border px-3 py-2"
 
 
 class AdmAdministrativeDocumentUpdateForm(forms.ModelForm):
@@ -162,6 +193,14 @@ class AdmAdministrativeDocumentUpdateForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance.pk and (self.instance.split_parent_id or AdmAdministrativeDocument.objects.filter(
+            doc_type_id=self.instance.doc_type_id, issuing_company_id=self.instance.issuing_company_id,
+            number_year=self.instance.number_year, running_number=self.instance.running_number,
+        ).exclude(number_suffix="").exists()):
+            self.fields["doc_type"].disabled = True
+            self.fields["issuing_company"].disabled = True
+            self.fields["issuing_department"].queryset = AdmDepartment.objects.filter(
+                company_id=self.instance.issuing_company_id)
         qs = AdmAdministrativeDocument.objects.order_by("-created_at")
         if getattr(self, "instance", None) and self.instance.pk:
             qs = qs.exclude(pk=self.instance.pk)
@@ -206,13 +245,13 @@ class AdmAdministrativeDocumentUpdateForm(forms.ModelForm):
         doc_type = cleaned.get("doc_type")
         title = cleaned.get("title")
         reference_number = cleaned.get("reference_number")
-        year_now = timezone.now().year
+        year_now = self.instance.number_year or administrative_number_year()
 
         if reference_number and doc_type:
             qs = AdmAdministrativeDocument.objects.filter(
                 doc_type=doc_type,
                 reference_number__iexact=reference_number,
-                created_at__year=year_now,
+                number_year=year_now,
             )
             if getattr(self, "instance", None) and self.instance.pk:
                 qs = qs.exclude(pk=self.instance.pk)
@@ -226,7 +265,7 @@ class AdmAdministrativeDocumentUpdateForm(forms.ModelForm):
             qs2 = AdmAdministrativeDocument.objects.filter(
                 doc_type=doc_type,
                 title__iexact=title,
-                created_at__year=year_now,
+                number_year=year_now,
             )
             if getattr(self, "instance", None) and self.instance.pk:
                 qs2 = qs2.exclude(pk=self.instance.pk)

@@ -117,7 +117,8 @@ class AdmAdministrativeDocumentAdmin(admin.ModelAdmin):
     )
     list_filter = ("doc_type", "status", "issuing_company")
     search_fields = ("title", "ticket_code", "document_number_full")
-    readonly_fields = ("document_number_full", "running_number", "created_at")
+    readonly_fields = ("document_number_full", "running_number", "number_year", "number_suffix",
+                       "split_parent", "split_request_key", "created_at")
 
 
 @admin.register(AdmDocumentCounter)

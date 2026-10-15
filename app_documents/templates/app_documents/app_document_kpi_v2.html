@@ -7,47 +7,10 @@
 {% block main_extra_class %}pt-14{% endblock %}
 
 {% block content %}
-<style>
-  .kpi-card { border: 1px solid #e5e7eb; border-radius: 14px; padding: 10px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
-  .kpi-label { font-size: 9px; text-transform: uppercase; color: #6b7280; letter-spacing: 0.04em; }
-  .kpi-value { font-size: 16px; font-weight: 700; color: #0f172a; }
-  .kpi-sub { font-size: 8px; color: #6b7280; }
-  .bar-track { background: #f1f5f9; border-radius: 999px; height: 10px; overflow: hidden; }
-  .bar-fill { height: 10px; border-radius: 999px; background: #16a34a; }
-  .table-xs th, .table-xs td { padding: 8px 10px; font-size: 10px; text-align: center; }
-  .table-xs th:first-child, .table-xs td:first-child { text-align: left; }
-  .table-xs thead th { background: #f8fafc; text-transform: uppercase; color: #6b7280; }
-  .filter-bar, .filter-bar * { font-size: 10px !important; }
-  .filter-input { height: 34px; }
-  .filter-bar input:focus,
-  .filter-bar input:focus-visible {
-    outline: none;
-    box-shadow: none;
-  }
-</style>
+{% include 'app_documents/components/kpi_styles.html' %}
 
 <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
-  <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
-    <nav class="flex flex-wrap items-center gap-2 text-[10px] text-gray-500">
-      <span class="uppercase text-[9px] text-gray-400">Chỉ tiêu</span>
-      <span class="text-gray-300">›</span>
-      {% with active_tab|default:'receive' as tab %}
-      <a href="{% url 'document_kpi_v2' %}?tab=receive{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'receive' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Nhận chứng từ</a>
-      <span class="text-gray-300">›</span>
-      <a href="{% url 'document_kpi_v2' %}?tab=quality{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'quality' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Chất lượng chứng từ</a>
-      <span class="text-gray-300">›</span>
-      <a href="{% url 'document_kpi_v2' %}?tab=borrow{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'borrow' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Mượn chứng từ</a>
-      <span class="text-gray-300">›</span>
-      <a href="{% url 'document_kpi_v2' %}?tab=lost{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'lost' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Thất lạc</a>
-      <span class="text-gray-300">›</span>
-      <a href="{% url 'document_kpi_v2' %}?tab=feedback{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'feedback' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Phản hồi lỗi</a>
-      <span class="text-gray-300">›</span>
-      <a href="{% url 'document_kpi_v2' %}?tab=productivity{% if tab_qs %}&{{ tab_qs }}{% endif %}" class="{% if tab == 'productivity' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Productivity</a>
-      <span class="text-gray-300">›</span>
-      <a href="{% url 'document_kpi_v2' %}?tab=config" class="{% if tab == 'config' %}font-semibold text-emerald-700{% else %}hover:text-emerald-700{% endif %}">Cấu hình KPI</a>
-      {% endwith %}
-    </nav>
-  </div>
+  {% include 'app_documents/components/kpi_subnav.html' %}
 
   {% if active_tab == 'config' %}
   <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-4 space-y-4">

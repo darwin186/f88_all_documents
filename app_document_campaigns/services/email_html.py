@@ -3,7 +3,7 @@
 import re
 from html import escape
 from html.parser import HTMLParser
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 
 ALLOWED_TAGS = {
@@ -18,8 +18,29 @@ def is_html_email_template(value):
     return bool(HTML_TAG_PATTERN.search(value or ""))
 
 
-def _safe_href(value):
+URL_TEMPLATE_TOKEN = re.compile(r"{{\s*(response_url|manager_url|report_url|report_guide_url|confirmation_guide_url)\s*}}")
+
+
+def normalize_template_href(value):
+    """Recover URL placeholders encoded/absolutized by the rich-text editor."""
     value = (value or "").strip()
+    decoded = unquote(value)
+    match = URL_TEMPLATE_TOKEN.fullmatch(decoded)
+    if match:
+        return "{{" + match.group(1) + "}}"
+    parsed = urlparse(decoded)
+    prefix, _, tail = parsed.path.rpartition("/")
+    match = URL_TEMPLATE_TOKEN.fullmatch(tail)
+    # Only discard the known editor base path, never an arbitrary URL's prefix/query.
+    if (match and parsed.scheme.lower() in {"", "http", "https"}
+            and prefix.rstrip("/").endswith("/master-data/email-templates")
+            and not parsed.query and not parsed.fragment):
+        return "{{" + match.group(1) + "}}"
+    return value
+
+
+def _safe_href(value):
+    value = normalize_template_href(value)
     if not value:
         return ""
     if "{{" in value and "}}" in value:

@@ -1,0 +1,21 @@
+<style>
+  .document-number-cell { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:48px; width:100%; border:1px solid; border-radius:8px; font-size:11px; font-weight:600; }
+  .document-number-cell.num-used { background:#f3f4f6; border-color:#9ca3af; color:#4b5563; }
+  .document-number-cell.num-void { background:#fffbeb; border-color:#f59e0b; color:#b45309; }
+  .document-number-cell.num-free { background:#ecfdf3; border-color:#34d399; color:#047857; }
+  a.document-number-cell:focus-visible { outline:2px solid #047857; outline-offset:2px; }
+</style>
+{% for cell in number_cells %}
+  {% if cell.parent_id %}
+    <a href="{% url 'admindocuments:admindocuments_split' cell.parent_id %}"
+       data-document-split
+       class="document-number-cell num-{{ cell.state }} p-2 hover:ring-2 hover:ring-green-500"
+       aria-label="Mở số {{ cell.number }} để xem và tạo văn bản tách thửa"
+       title="Xem số {{ cell.number }} và tạo văn bản tách thửa">
+      <span>{{ cell.number }}</span>
+      {% if cell.branches %}<span class="text-[9px]">{{ cell.branches }} nhánh</span>{% endif %}
+    </a>
+  {% else %}
+    <div class="document-number-cell num-{{ cell.state }}">{{ cell.number }}</div>
+  {% endif %}
+{% endfor %}

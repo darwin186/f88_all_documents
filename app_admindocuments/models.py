@@ -9,6 +9,7 @@ from django.contrib.auth.models import User
 from django.db import models
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
+from django.core.exceptions import ValidationError
 from app_documents.models import GapoScheduledMessage, Shop
 
 
@@ -211,11 +212,23 @@ class AdmDepartment(models.Model):
         return f"{self.name} ({self.company.code})"
 
 
+def administrative_number_year():
+    now = timezone.now()
+    return timezone.localtime(now).year if timezone.is_aware(now) else now.year
+
+
 class AdmAdministrativeDocument(models.Model):
     """Main table for managing administrative documents (issued, draft, etc.)"""
 
     doc_type = models.ForeignKey(AdmDocumentType, on_delete=models.PROTECT)
     running_number = models.PositiveIntegerField()
+    number_year = models.PositiveIntegerField(default=administrative_number_year)
+    number_suffix = models.CharField(max_length=1, blank=True, default="")
+    split_parent = models.ForeignKey(
+        "self", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="split_documents",
+    )
+    split_request_key = models.UUIDField(null=True, blank=True, unique=True, editable=False)
     content_type = models.ForeignKey(AdmContentType, on_delete=models.PROTECT)
     reference_number = models.CharField(max_length=200, blank=True, null=True)
     title = models.CharField(max_length=500)
@@ -270,6 +283,18 @@ class AdmAdministrativeDocument(models.Model):
         verbose_name = "Administrative Document"
         verbose_name_plural = "Administrative Documents"
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["doc_type", "issuing_company", "number_year", "running_number", "number_suffix"],
+                condition=~models.Q(number_suffix=""),
+                name="adm_unique_split_number",
+            ),
+            models.CheckConstraint(
+                check=(models.Q(split_parent__isnull=True, number_suffix="") |
+                       models.Q(split_parent__isnull=False, number_suffix__in=list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"))),
+                name="adm_valid_split_suffix",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.title} ({self.document_number_full})"
@@ -284,13 +309,25 @@ class AdmAdministrativeDocument(models.Model):
             except AdmAdministrativeDocument.DoesNotExist:
                 previous = None
 
+        if is_create and self.split_parent_id:
+            parent = self.split_parent
+            if parent.split_parent_id or self.number_suffix not in list("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
+                raise ValidationError("Số tách thửa phải có hậu tố A–Z và chọn văn bản gốc.")
+            if (self.doc_type_id, self.issuing_company_id, self.number_year, self.running_number) != (
+                parent.doc_type_id, parent.issuing_company_id, parent.number_year, parent.running_number
+            ):
+                raise ValidationError("Số tách thửa phải thuộc cùng nhóm số hiệu với văn bản gốc.")
+        elif is_create and self.number_suffix:
+            raise ValidationError("Số tách thửa cần văn bản gốc.")
+
         if is_create and not self.running_number:
-            current_year = date.today().year
+            current_year = self.number_year
             last_doc = (
                 AdmAdministrativeDocument.objects.filter(
                     doc_type=self.doc_type,
                     issuing_company=self.issuing_company,
-                    created_at__year=current_year,
+                    number_year=current_year,
+                    number_suffix="",
                 )
                 .order_by("-running_number")
                 .first()
@@ -298,16 +335,26 @@ class AdmAdministrativeDocument(models.Model):
             self.running_number = last_doc.running_number + 1 if last_doc else 1
 
         if is_create:
-            year_now = date.today().year
+            year_now = self.number_year
             company_code = self.issuing_company.code if self.issuing_company else "UNK"
             signer_code = self.signer_role.code if self.signer_role else "NA"
             doc_type_code = self.doc_type.code if self.doc_type else "NA"
             self.document_number_full = (
-                f"{self.running_number:03d}/{year_now}/{doc_type_code}-{company_code}/{signer_code}"
+                f"{self.running_number:03d}{self.number_suffix}/{year_now}/{doc_type_code}-{company_code}/{signer_code}"
             )
         elif previous:
             # Running number is immutable after first creation.
             self.running_number = previous.running_number
+            self.number_year = previous.number_year
+            self.number_suffix = previous.number_suffix
+            self.split_parent_id = previous.split_parent_id
+            self.split_request_key = previous.split_request_key
+            if previous.split_parent_id or AdmAdministrativeDocument.objects.filter(
+                doc_type_id=previous.doc_type_id, issuing_company_id=previous.issuing_company_id,
+                number_year=previous.number_year, running_number=previous.running_number,
+            ).exclude(number_suffix="").exists():
+                self.doc_type_id = previous.doc_type_id
+                self.issuing_company_id = previous.issuing_company_id
 
             # Number is immutable, except one valid transition to VOID.
             valid_void_transition = (
@@ -345,6 +392,9 @@ class AdmAdministrativeDocument(models.Model):
         return {
             "doc_type": str(self.doc_type) if self.doc_type_id else None,
             "running_number": self.running_number,
+            "number_year": self.number_year,
+            "number_suffix": self.number_suffix,
+            "split_parent": self.split_parent_id,
             "content_type": str(self.content_type) if self.content_type_id else None,
             "reference_number": self.reference_number,
             "title": self.title,

@@ -1,0 +1,7 @@
+{% if doc.split_parent_id %}
+<div class="text-sm bg-green-50 border rounded-lg p-3 mb-4">
+  Văn bản tách thửa từ số nền {{ doc.running_number }}.
+  <a class="text-green-700 underline" href="{% url 'admindocuments:admindocuments_detail' doc.split_parent_id %}">Xem văn bản gốc</a> ·
+  <a class="text-green-700 underline" href="{% url 'admindocuments:admindocuments_split' doc.split_parent_id %}">Xem nhóm số hiệu</a>
+</div>
+{% endif %}

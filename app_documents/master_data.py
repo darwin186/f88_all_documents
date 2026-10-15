@@ -1,8 +1,10 @@
 """Admin-only shop catalog. Uses the existing shop and manager master tables."""
 import json
 import hashlib
+import logging
 import secrets
 import uuid
+from datetime import timedelta
 from django import forms
 from functools import wraps
 
@@ -120,10 +122,23 @@ def filtered(request):
     return queryset
 
 
+CATALOG_JOB_STALE_SECONDS = 900
+
+
+def fail_stale_catalog_jobs():
+    # Job chạy trong request web có thể bị cắt (timeout/OOM/restart) mà không ghi trạng thái cuối.
+    cutoff = timezone.now() - timedelta(seconds=CATALOG_JOB_STALE_SECONDS)
+    ShopCatalogJob.objects.filter(status__in=["queued", "running"], updated_at__lt=cutoff).update(
+        status="failed", progress=100, updated_at=timezone.now(),
+        message="Job bị gián đoạn (timeout hoặc web service khởi động lại). Vui lòng thử lại.",
+    )
+
+
 @admin_only
 @require_http_methods(["GET"])
 def catalog_page(request):
-    page = Paginator(filtered(request), 30).get_page(request.GET.get("page"))
+    fail_stale_catalog_jobs()
+    page =Paginator(filtered(request), 30).get_page(request.GET.get("page"))
     today = local_today()
     managers = Manager.objects.filter(is_valid=True).filter(Q(valid_from__isnull=True) | Q(valid_from__lte=today)).filter(Q(valid_to__isnull=True) | Q(valid_to__gte=today)).select_related("areaManager", "regionManager").order_by("manager_code")
     return render(request, "app_documents/master_data.html", {
@@ -462,6 +477,7 @@ def queue_catalog_job(request):
     upload = request.FILES.get("file")
     if kind == "import" and (not upload or not upload.name.lower().endswith(".xlsx") or upload.size > 10 * 1024 * 1024):
         return JsonResponse({"error": "Chọn file .xlsx, tối đa 10 MB."}, status=400)
+    fail_stale_catalog_jobs()
     try:
         with transaction.atomic():
             job = ShopCatalogJob.objects.create(kind=kind, requested_by=request.user, message="Đang chờ xử lý")
@@ -473,13 +489,18 @@ def queue_catalog_job(request):
     try:
         if kind == "import":
             job.input_file.save(f"pgd-import-{job.pk}.xlsx", upload)
-        from .tasks import process_shop_catalog_job
-        if settings.FILE_JOBS_RUN_ON_WEB:
-            process_shop_catalog_job.apply(args=[job.pk], throw=False)
+        if kind == "export" or settings.FILE_JOBS_RUN_ON_WEB:
+            # The PGD catalog is small and is stored on this service's media
+            # volume. Export here so it cannot remain queued on an unavailable
+            # Celery worker, even when other file jobs use the broker.
+            from .shop_catalog_excel import process_job
+            process_job(job.pk)
         else:
+            from .tasks import process_shop_catalog_job
             process_shop_catalog_job.delay(job.pk)
         job.refresh_from_db()
     except Exception:
+        logging.getLogger(__name__).exception("SHOP_CATALOG_JOB_START_FAILED job_id=%s kind=%s", job.pk, kind)
         job.status = "failed"
         job.message = "Không thể xử lý file trên web service. Kiểm tra log web và thử lại."
         job.save(update_fields=["status", "message", "updated_at"])
@@ -489,7 +510,8 @@ def queue_catalog_job(request):
 @admin_only
 @require_http_methods(["GET"])
 def catalog_job_status(request, job_id):
-    job = get_object_or_404(ShopCatalogJob, pk=job_id)
+    fail_stale_catalog_jobs()
+    job =get_object_or_404(ShopCatalogJob, pk=job_id)
     now = timezone.now()
     stalled = job.status in {"queued", "running"} and (now - job.updated_at).total_seconds() > 1200
     response = JsonResponse({"id": job.pk, "kind": job.kind, "status": job.status, "progress": job.progress, "message": job.message, "summary": job.summary, "stalled": stalled, "download_url": f"/master-data/jobs/{job.pk}/download/" if job.output_file else None})

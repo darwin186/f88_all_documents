@@ -1,8 +1,27 @@
 document.addEventListener("DOMContentLoaded", () => {
   const allowedTags = new Set(["P", "BR", "DIV", "STRONG", "B", "EM", "I", "U", "S", "UL", "OL", "LI", "BLOCKQUOTE", "H2", "H3", "A"]);
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
-  const safeHref = value => {
+  const normalizeHref = value => {
     const href = (value || "").trim();
+    let decoded;
+    try { decoded = decodeURIComponent(href); } catch (_) { return href; }
+    const tokenPattern = /^{{\s*(response_url|manager_url|report_url|report_guide_url|confirmation_guide_url)\s*}}$/;
+    let match = decoded.match(tokenPattern);
+    if (match) return `{{${match[1]}}}`;
+    try {
+      const url = new URL(decoded, window.location.href);
+      // URL.pathname may encode braces again, so inspect the decoded path.
+      const path = decodeURIComponent(url.pathname);
+      const lastSlash = path.lastIndexOf("/");
+      match = path.slice(lastSlash + 1).match(tokenPattern);
+      if (match && ["http:", "https:"].includes(url.protocol)
+          && path.slice(0, lastSlash).replace(/\/$/, "").endsWith("/master-data/email-templates")
+          && !url.search && !url.hash) return `{{${match[1]}}}`;
+    } catch (_) { /* Keep other links unchanged; safeHref validates their protocol. */ }
+    return href;
+  };
+  const safeHref = value => {
+    const href = normalizeHref(value);
     if (/\{\{[^{}]+}}/.test(href)) return href;
     try { return ["http:", "https:", "mailto:"].includes(new URL(href).protocol) ? href : ""; }
     catch (_) { return ""; }
@@ -34,7 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const initialHtml = value => /<\/?[a-z][^>]*>/i.test(value || "")
     ? sanitize(value)
     : escapeHtml(value || "").replace(/\r\n?|\n/g, "<br>");
-  const render = (template, context) => sanitize((template || "").replace(/{{\s*([a-z_]+)\s*}}/g, (token, key) => Object.hasOwn(context, key) ? escapeHtml(context[key]) : token));
+  const render = (template, context) => sanitize(sanitize(template || "").replace(/{{\s*([a-z_]+)\s*}}/g, (token, key) => Object.hasOwn(context, key) ? escapeHtml(context[key]) : token));
 
   document.querySelectorAll("[data-rich-email-field]").forEach(wrapper => {
     const source = wrapper.querySelector("textarea");
@@ -58,6 +77,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const selection = window.getSelection();
       selection.removeAllRanges(); selection.addRange(savedRange);
     };
+    editor.addEventListener("click", event => {
+      if (event.target.closest("a")) event.preventDefault();
+    });
     editor.addEventListener("input", () => { rememberSelection(); sync(); });
     editor.addEventListener("keyup", rememberSelection);
     editor.addEventListener("mouseup", rememberSelection);
@@ -71,7 +93,19 @@ document.addEventListener("DOMContentLoaded", () => {
           const href = window.prompt("Nhập URL hoặc tham số link, ví dụ {{response_url}}:", "https://");
           if (!href) return;
           if (!safeHref(href)) { window.campaignToast?.("Liên kết không hợp lệ.", "error"); return; }
-          document.execCommand("createLink", false, href);
+          const normalized = safeHref(href);
+          const selection = window.getSelection();
+          if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) return;
+          const range = selection.getRangeAt(0);
+          const link = document.createElement("a");
+          link.setAttribute("href", normalized);
+          link.setAttribute("target", "_blank");
+          link.setAttribute("rel", "noopener noreferrer");
+          if (range.collapsed) link.textContent = normalized;
+          else link.append(range.extractContents());
+          range.insertNode(link);
+          range.setStartAfter(link); range.collapse(true);
+          selection.removeAllRanges(); selection.addRange(range);
         } else {
           document.execCommand(command, false, null);
         }

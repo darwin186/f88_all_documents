@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.utils import timezone
 from .utils import assign_group_to_folders, check_on_time
 from datetime import datetime ,timedelta 
 from calendar import monthrange
@@ -31,6 +32,7 @@ from .models import (
     ExternalDocumentIntakeBatch,
     ExternalDocumentIntakeChunk,
     ExternalDocumentIntakeRejection,
+    ShopCatalogJob,
 )
 # Register your models here.
 admin.site.site_header = "Chứng từ F88"  
@@ -679,3 +681,18 @@ class ExternalDocumentIntakeRejectionAdmin(admin.ModelAdmin):
     list_filter = ("error_code", "created_at")
     search_fields = ("batch__batch_key", "source_record_id", "message")
     readonly_fields = ("batch", "chunk", "row_no", "source_record_id", "error_code", "message", "raw_record", "created_at")
+
+
+@admin.register(ShopCatalogJob)
+class ShopCatalogJobAdmin(admin.ModelAdmin):
+    list_display = ("id", "kind", "status", "progress", "message", "requested_by", "created_at", "updated_at")
+    list_filter = ("kind", "status")
+    readonly_fields = ("kind", "requested_by", "input_file", "output_file", "summary", "created_at", "updated_at")
+    actions = ["cancel_active_jobs"]
+
+    @admin.action(description="Hủy job đang chờ/đang chạy (đánh dấu thất bại)")
+    def cancel_active_jobs(self, request, queryset):
+        count = queryset.filter(status__in=["queued", "running"]).update(
+            status="failed", progress=100, message="Đã hủy thủ công bởi admin.", updated_at=timezone.now(),
+        )
+        self.message_user(request, f"Đã hủy {count} job.")

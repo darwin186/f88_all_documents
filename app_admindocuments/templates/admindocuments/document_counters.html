@@ -89,7 +89,7 @@
           <td class="px-3 py-2 font-mono">{{ row.used_max }}</td>
           <td class="px-3 py-2 font-mono">{{ row.next_number }}</td>
           <td class="px-3 py-2 font-mono">{{ row.gap_from }}</td>
-          <td class="px-3 py-2">{{ row.total }}</td>
+          <td class="px-3 py-2">{{ row.total }} <span class="text-xs text-gray-500">({{ row.base_total }} số gốc)</span></td>
           <td class="px-3 py-2">
             <form method="post" class="flex items-center gap-2">
               {% csrf_token %}
@@ -190,7 +190,8 @@
   document.addEventListener('DOMContentLoaded', () => {
     const rows = document.querySelectorAll('.counter-row');
     rows.forEach((row) => {
-      row.addEventListener('click', () => {
+      row.addEventListener('click', (event) => {
+        if (event.target.closest("form, a, button, input, select")) return;
         const dt = row.dataset.docType;
         const c = row.dataset.company;
         const y = row.dataset.year;
@@ -219,7 +220,8 @@
 
     const paperRows = document.querySelectorAll('.paper-counter-row');
     paperRows.forEach((row) => {
-      row.addEventListener('click', () => {
+      row.addEventListener('click', (event) => {
+        if (event.target.closest("form, a, button, input, select")) return;
         const pt = row.dataset.paperType;
         const y = row.dataset.year;
         const vizId = `viz-paper-${pt}-${y}`;

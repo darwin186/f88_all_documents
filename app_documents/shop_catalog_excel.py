@@ -1,5 +1,6 @@
 """Round-trip shop catalog workbooks; validate and commit imports atomically."""
 import json
+import logging
 from io import BytesIO
 from celery.exceptions import SoftTimeLimitExceeded
 
@@ -212,4 +213,5 @@ def process_job(job_id):
         else:
             import_catalog(job)
     except Exception as exc:
+        logging.getLogger(__name__).exception("SHOP_CATALOG_JOB_FAILED job_id=%s kind=%s", job.pk, job.kind)
         update(job, status="failed", message=f"Không hoàn tất: {exc}")

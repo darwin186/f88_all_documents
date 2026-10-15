@@ -1,0 +1,26 @@
+{% extends "admindocuments/base.html" %}
+{% block title %}Tách thửa số {{ parent.running_number }}{% endblock %}
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+  <h1 class="text-2xl font-semibold">Tách thửa số {{ parent.running_number }}</h1>
+  <a class="text-green-700 underline" href="{% url 'admindocuments:admindocuments_counters_visual' %}?doc_type={{ parent.doc_type_id }}&company={{ parent.issuing_company_id }}&year={{ parent.number_year }}">← Quản lý số hiệu</a>
+</div>
+<div class="bg-white rounded-lg border p-4 mb-6 overflow-x-auto">
+  <h2 class="font-semibold mb-3">Các văn bản cùng số nền</h2>
+  <table class="w-full text-sm">
+    <thead><tr class="text-left"><th class="p-2">Số hiệu</th><th class="p-2">Tên văn bản</th><th class="p-2">Phòng ban</th><th class="p-2">Ngày ban hành</th><th class="p-2">Trạng thái</th></tr></thead>
+    <tbody>{% for item in group_documents %}<tr class="border-t">
+      <td class="p-2"><a class="text-green-700 underline" href="{% url 'admindocuments:admindocuments_detail' item.id %}">{{ item.document_number_full }}</a></td>
+      <td class="p-2">{{ item.title }}</td><td class="p-2">{{ item.issuing_department }}</td>
+      <td class="p-2">{{ item.issue_date|date:"d/m/Y"|default:"—" }}</td>
+      <td class="p-2">{% if item.is_void %}VOID{% else %}{{ item.status }}{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table>
+</div>
+{% if suffix %}
+<button type="button" data-document-split data-split-template="split-form-template" {% if form.is_bound %}data-split-autoopen{% endif %} class="px-4 py-2 rounded-lg bg-f88green text-white">Tạo văn bản tách thửa</button>
+<template id="split-form-template">{% include "admindocuments/includes/document_split_form.html" %}</template>
+{% else %}
+<div role="alert" class="rounded border bg-amber-50 text-amber-800 p-4">{{ exhausted_message }}</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,39 @@
+{% if suffix %}
+<div class="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 text-sm">
+  Số dự kiến: <strong>{{ parent.running_number|stringformat:"03d" }}{{ suffix }}/{{ parent.number_year }}</strong>.
+  {% if counter_next %}Số tiếp theo của dãy chính: <strong>{{ counter_next }}</strong>.{% endif %}
+  <p class="mt-1 text-gray-600">Chọn thông tin văn bản mới và ngày ban hành cần backdate.</p>
+</div>
+<form action="{% url 'admindocuments:admindocuments_split' parent.pk %}" method="post" enctype="multipart/form-data" id="split-document-form">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div role="alert" class="text-red-700 bg-red-50 rounded-lg p-3 mb-4">{{ form.non_field_errors }}</div>{% endif %}
+  {% if form.is_bound %}<p class="text-sm text-gray-600 mb-4">Nếu đã chọn tệp trước đó, hãy chọn lại tệp đính kèm trước khi lưu.</p>{% endif %}
+  {% for field in form.hidden_fields %}{{ field }}{{ field.errors }}{% endfor %}
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+    {% for column in split_columns %}
+    <div class="flex flex-col gap-4" data-split-column>
+      {% for field in column %}
+      <div>
+        {% if field.field.widget.input_type == 'checkbox' %}
+        <label for="{{ field.id_for_label }}" class="inline-flex items-center gap-2 text-sm font-medium cursor-pointer">
+          {{ field }}<span>{{ field.label }}</span>
+        </label>
+        {% else %}
+        <label for="{{ field.id_for_label }}" class="block text-sm font-medium mb-1">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+        {{ field }}
+        {% endif %}
+        <div class="text-red-700 text-sm">{{ field.errors }}</div>
+        {% if field.help_text %}<p class="text-gray-500 text-xs mt-1">{{ field.help_text }}</p>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  <div class="flex justify-end gap-2 mt-6 border-t pt-4">
+    <button type="button" data-split-close class="px-4 py-2 rounded-lg border text-gray-600">Hủy</button>
+    <button type="submit" class="px-4 py-2 rounded-lg bg-f88green text-white">Tạo văn bản tách thửa</button>
+  </div>
+</form>
+{% else %}
+<div role="alert" class="rounded border bg-amber-50 text-amber-800 p-4">{{ exhausted_message }}</div>
+{% endif %}

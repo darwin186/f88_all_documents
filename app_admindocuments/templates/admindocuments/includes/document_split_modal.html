@@ -1,0 +1,89 @@
+<dialog id="document-split-dialog" aria-labelledby="document-split-dialog-title" class="w-[calc(100%_-_2rem)] max-w-5xl max-h-[90vh] p-0 border-0 rounded-2xl shadow-2xl backdrop:bg-black/40">
+  <div class="flex items-center justify-between border-b px-5 py-4 sticky top-0 bg-white z-10">
+    <h2 id="document-split-dialog-title" class="font-semibold text-lg">Tạo văn bản tách thửa</h2>
+    <button type="button" data-split-close class="rounded-lg px-2 py-1 text-gray-500 hover:bg-gray-100" aria-label="Đóng popup">✕</button>
+  </div>
+  <div id="document-split-dialog-content" class="p-5"></div>
+</dialog>
+<script>
+(() => {
+  const dialog = document.getElementById('document-split-dialog');
+  const content = document.getElementById('document-split-dialog-content');
+  let activeRequest, opener, submitting = false;
+  const showError = message => {
+    content.replaceChildren();
+    const error = document.createElement('p');
+    error.className = 'text-red-700';
+    error.setAttribute('role', 'alert');
+    error.textContent = message;
+    content.append(error);
+  };
+  const open = async trigger => {
+    opener = trigger;
+    activeRequest?.abort();
+    activeRequest = new AbortController();
+    const signal = activeRequest.signal;
+    content.textContent = 'Đang tải biểu mẫu…';
+    dialog.showModal();
+    if (trigger.dataset.splitTemplate) {
+      content.replaceChildren(document.getElementById(trigger.dataset.splitTemplate).content.cloneNode(true));
+      return;
+    }
+    try {
+      const response = await fetch(trigger.href, {headers: {'X-Requested-With': 'XMLHttpRequest'}, signal});
+      if (!response.ok || response.redirected) throw new Error('Không thể mở biểu mẫu. Vui lòng tải lại trang hoặc kiểm tra quyền truy cập.');
+      const html = await response.text();
+      if (!signal.aborted) content.innerHTML = html;
+    } catch (error) {
+      if (error.name !== 'AbortError') showError(error.message);
+    }
+  };
+  document.addEventListener('click', event => {
+    const trigger = event.target.closest('[data-document-split]');
+    if (trigger && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && event.button === 0) {
+      event.preventDefault();
+      open(trigger);
+    }
+    if (event.target.closest('[data-split-close]') && !submitting) dialog.close();
+  });
+  dialog.addEventListener('cancel', event => { if (submitting) event.preventDefault(); });
+  dialog.addEventListener('close', () => { activeRequest?.abort(); opener?.focus(); });
+  document.addEventListener('submit', async event => {
+    const form = event.target;
+    if (form.id !== 'split-document-form' || !dialog.contains(form)) return;
+    event.preventDefault();
+    if (submitting) return;
+    submitting = true;
+    const button = form.querySelector('button[type=submit]');
+    button.disabled = true;
+    button.textContent = 'Đang tạo…';
+    try {
+      const response = await fetch(form.action, {method: 'POST', body: new FormData(form), headers: {'X-Requested-With': 'XMLHttpRequest'}});
+      if (!response.ok || response.redirected) throw new Error('Không thể lưu biểu mẫu. Vui lòng thử lại.');
+      if (response.headers.get('Content-Type')?.includes('application/json')) {
+        const result = await response.json();
+        window.location.assign(result.redirect_url);
+      } else {
+        content.innerHTML = await response.text();
+        content.querySelector('[role=alert]')?.scrollIntoView({block: 'nearest'});
+      }
+    } catch (error) {
+      let alert = form.querySelector('[data-submit-error]');
+      if (!alert) {
+        alert = document.createElement('p');
+        alert.dataset.submitError = '';
+        alert.className = 'text-red-700 mt-3';
+        alert.setAttribute('role', 'alert');
+        form.prepend(alert);
+      }
+      alert.textContent = error.message;
+    } finally {
+      submitting = false;
+      button.disabled = false;
+      button.textContent = 'Tạo văn bản tách thửa';
+    }
+  });
+  const boundTrigger = document.querySelector('[data-split-autoopen]');
+  if (boundTrigger) open(boundTrigger);
+})();
+</script>

@@ -9,7 +9,7 @@ from django.core.validators import validate_email
 from django.utils import timezone
 
 from app_document_campaigns.models import CampaignAreaEmailConfig, CampaignEmailConfig, CampaignError
-from app_document_campaigns.services.email_html import is_html_email_template
+from app_document_campaigns.services.email_html import is_html_email_template, sanitize_email_template
 
 
 TOKEN_PATTERN = re.compile(r"{{\s*([a-z_]+)\s*}}")
@@ -78,7 +78,7 @@ def campaign_area_email_config(campaign):
 
 def validate_templates(subject, body):
     subject = subject or ""
-    body = body or ""
+    body = sanitize_email_template(body or "")
     unknown = sorted((set(TOKEN_PATTERN.findall(subject)) | set(TOKEN_PATTERN.findall(body))) - set(ALLOWED_VARIABLES))
     if unknown:
         raise EmailTemplateError(f"Tham số không được hỗ trợ: {', '.join(unknown)}")
@@ -96,7 +96,7 @@ def validate_templates(subject, body):
 
 
 def _validate_area_pair(subject, body, label):
-    subject, body = subject or "", body or ""
+    subject, body = subject or "", sanitize_email_template(body or "")
     unknown = sorted((set(TOKEN_PATTERN.findall(subject)) | set(TOKEN_PATTERN.findall(body))) - set(AREA_ALLOWED_VARIABLES))
     if unknown:
         raise EmailTemplateError(f"{label}: tham số không được hỗ trợ: {', '.join(unknown)}")
@@ -236,6 +236,8 @@ def template_context(campaign, shop, response_url, *, response_deadline=None):
 
 def _render(template, context):
     html_mode = is_html_email_template(template)
+    if html_mode:
+        template = sanitize_email_template(template)
     return TOKEN_PATTERN.sub(
         lambda match: escape(str(context.get(match.group(1), "")), quote=True)
         if html_mode else str(context.get(match.group(1), "")),
