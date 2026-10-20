@@ -48,13 +48,6 @@
   .flatpickr-months .flatpickr-month { height: 32px; }
   .flatpickr-months .flatpickr-current-month { font-size: 12px; }
   .flatpickr-weekdays { font-size: 10px; }
-  .toast-container { position: fixed; top: 76px; right: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
-  .toast { min-width: 220px; max-width: 320px; padding: 10px 12px; border-radius: 12px; border: 1px solid #e5e7eb; background: #ffffff; box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08); font-size: 10px; color: #111827; display: flex; align-items: flex-start; gap: 8px; }
-  .toast-dot { width: 8px; height: 8px; border-radius: 9999px; margin-top: 4px; }
-  .toast-success .toast-dot { background: #10b981; }
-  .toast-error .toast-dot { background: #ef4444; }
-  .toast-warning .toast-dot { background: #f59e0b; }
-  .toast-info .toast-dot { background: #3b82f6; }
   .panel { border: 1px solid #e5e7eb; background: #fff; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04); }
   .panel-header { border-bottom: 1px solid #eef2f7; }
   .field-label { display: block; margin-bottom: 5px; font-size: 9px; font-weight: 700; color: #6b7280; text-transform: uppercase; }
@@ -66,17 +59,7 @@
 </style>
 
 <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
-  {% if messages %}
-  <script>
-    window.SERVER_TOASTS = [
-      {% for message in messages %}
-      { text: "{{ message|escapejs }}", level: "{{ message.tags }}" }{% if not forloop.last %},{% endif %}
-      {% endfor %}
-    ];
-  </script>
-  {% endif %}
 
-  <div id="toast-container" class="toast-container"></div>
 
   <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
     <nav class="flex flex-wrap items-center gap-2 text-[10px] text-gray-500">
@@ -197,7 +180,7 @@
       </div>
       <div class="lg:col-span-2 flex items-center justify-between border-t border-gray-100 pt-3">
         <div class="text-[10px] text-gray-500">Phiếu sau khi tạo sẽ chuyển sang bước gán chứng từ.</div>
-        <button type="submit" class="rounded-lg bg-emerald-600 px-4 py-2 text-[10px] font-bold text-white hover:bg-emerald-700">Tạo yêu cầu</button>
+        <button type="submit" class="ui-btn ui-btn-primary">Tạo yêu cầu</button>
       </div>
     </form>
   </div>
@@ -208,7 +191,7 @@
         <div class="text-[12px] font-bold text-gray-900">Danh sách yêu cầu</div>
         <div class="text-[9px] text-gray-500">Theo dõi các phiếu trước khi bàn giao chứng từ.</div>
       </div>
-      <a href="{% url 'borrow_management_v2' %}" class="rounded-lg border border-gray-200 px-3 py-2 text-[10px] font-bold text-gray-700 hover:bg-gray-50">Xem phiếu đã bàn giao</a>
+      <a href="{% url 'borrow_management_v2' %}" class="ui-btn ui-btn-secondary">Xem phiếu đã bàn giao</a>
     </div>
     <form id="filter-form" method="get" action="{% url 'borrow_request_management_v2' %}" class="grid lg:grid-cols-[2fr,1fr,1fr,1fr,auto] gap-3 items-center">
       {% with filters.borrower|default_if_none:'' as borrower_value %}
@@ -291,8 +274,8 @@
         <input id="filter-needed-date" name="needed_date" value="{{ filters.needed_date }}" placeholder="Ngày mượn (từ - đến)" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" readonly />
       </div>
       <div class="flex items-center gap-2">
-        <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Lọc</button>
-        <a href="{% url 'borrow_request_management_v2' %}" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50">Xóa</a>
+        <button type="submit" class="ui-btn ui-btn-primary">Lọc</button>
+        <a href="{% url 'borrow_request_management_v2' %}" class="ui-btn ui-btn-secondary">Xóa</a>
       </div>
     </form>
   </div>
@@ -390,26 +373,7 @@
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 <script>
   document.addEventListener('DOMContentLoaded', function () {
-    const toastContainer = document.getElementById('toast-container');
-    const showToast = (message, type = 'success') => {
-      if (!toastContainer || !message) return;
-      const toast = document.createElement('div');
-      toast.className = `toast toast-${type}`;
-      toast.innerHTML = `<span class="toast-dot"></span><div>${message}</div>`;
-      toastContainer.appendChild(toast);
-      setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateY(-4px)';
-      }, 2400);
-      setTimeout(() => toast.remove(), 3000);
-    };
-    if (Array.isArray(window.SERVER_TOASTS)) {
-      window.SERVER_TOASTS.forEach((item) => {
-        const tag = (item.level || '').toLowerCase();
-        const type = tag.includes('error') ? 'error' : tag.includes('warning') ? 'warning' : tag.includes('success') ? 'success' : 'info';
-        showToast(item.text, type);
-      });
-    }
+    const showToast = (message, type = 'success') => window.uiToast({type, message});
 
     const neededInput = document.getElementById('filter-needed-date');
     if (neededInput && typeof flatpickr !== 'undefined') {

@@ -1,27 +1,16 @@
 {% extends "admindocuments/base.html" %}
 {% block title %}Master data văn bản{% endblock %}
 
-{% block content %}
+{% block admin_content %}
 <div class="flex items-center justify-between mb-6">
   <div>
     <h1 class="text-2xl font-semibold text-gray-700">Master data văn bản</h1>
     <p class="text-sm text-gray-500 mt-1">Tạo nhanh danh mục phục vụ văn bản hành chính, phòng ban và giấy tờ.</p>
   </div>
-  <a href="{% url 'admindocuments:admindocuments_dashboard' %}" class="text-sm text-gray-600 hover:underline">← Về dashboard</a>
+  <a href="{% url 'admindocuments:workflow_hub' %}" class="text-sm text-gray-600 hover:underline">← Chọn nghiệp vụ</a>
 </div>
 
-{% if messages %}
-  <div class="space-y-2 mb-4">
-    {% for message in messages %}
-      <div class="px-4 py-3 rounded-lg text-sm
-        {% if message.tags == 'error' %}bg-red-50 text-red-700 border border-red-200
-        {% elif message.tags == 'warning' %}bg-amber-50 text-amber-700 border border-amber-200
-        {% else %}bg-emerald-50 text-emerald-700 border border-emerald-200{% endif %}">
-        {{ message }}
-      </div>
-    {% endfor %}
-  </div>
-{% endif %}
+
 
 <div class="grid xl:grid-cols-2 gap-5">
   <div id="doc_type" class="bg-white shadow-sm rounded-lg p-4">
@@ -194,13 +183,23 @@
           <div class="max-h-64 overflow-y-auto">
             <table class="min-w-full text-sm">
               <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
-                <tr><th class="px-3 py-2 text-left">Mã</th><th class="px-3 py-2 text-left">Tên</th><th class="px-3 py-2 text-left">Trạng thái</th></tr>
+                <tr><th class="px-3 py-2 text-left">Mã</th><th class="px-3 py-2 text-left">Tên</th><th class="px-3 py-2 text-left">Màu hiển thị</th><th class="px-3 py-2 text-left">Trạng thái</th></tr>
               </thead>
               <tbody class="divide-y">
                 {% for item in statuses %}
                 <tr>
                   <td class="px-3 py-2 font-mono text-xs">{{ item.code }}</td>
-                  <td class="px-3 py-2">{{ item.name }}</td>
+                  <td class="px-3 py-2"><span class="inline-flex rounded px-2 py-1 text-xs" style="color:{{ item.badge_text_color }};background-color:{{ item.badge_bg_color }};">{{ item.name }}</span></td>
+                  <td class="px-3 py-2">
+                    {% if perms.app_admindocuments.change_admdocumentstatus %}
+                    <form method="post" class="flex items-center gap-2">
+                      {% csrf_token %}<input type="hidden" name="form_name" value="status_colors"><input type="hidden" name="status_id" value="{{ item.pk }}">
+                      <label class="text-xs">Chữ<input type="color" name="badge_text_color" value="{{ item.badge_text_color }}" class="block h-7 w-9 cursor-pointer rounded border border-gray-200 p-0" aria-label="Màu chữ {{ item.name }}"></label>
+                      <label class="text-xs">Nền<input type="color" name="badge_bg_color" value="{{ item.badge_bg_color }}" class="block h-7 w-9 cursor-pointer rounded border border-gray-200 p-0" aria-label="Màu nền {{ item.name }}"></label>
+                      <button type="submit" class="self-end rounded border border-green-200 px-2 py-1 text-xs text-f88green hover:bg-green-50">Lưu màu</button>
+                    </form>
+                    {% else %}<span class="text-xs text-gray-500">{{ item.badge_text_color }} / {{ item.badge_bg_color }}</span>{% endif %}
+                  </td>
                   <td class="px-3 py-2">
                     <span class="px-2 py-1 text-xs rounded {% if item.is_active %}bg-emerald-50 text-emerald-700{% else %}bg-gray-100 text-gray-600{% endif %}">
                       {% if item.is_active %}Đang dùng{% else %}Tạm ngưng{% endif %}
@@ -208,7 +207,7 @@
                   </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="3" class="px-3 py-3 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+                <tr><td colspan="4" class="px-3 py-3 text-center text-gray-500">Chưa có dữ liệu</td></tr>
                 {% endfor %}
               </tbody>
             </table>

@@ -23,20 +23,20 @@
   <div class="crm-info-actions">
     {% if active_monitor_tab == 'areas' %}
       {% if can_manage_area_links %}
-      <button type="button" class="crm-mini-btn" data-open-area-email-config>Cấu hình email QLKV</button>
-      <button type="button" class="crm-mini-btn" data-open-area-email-test>Gửi email QLKV thử</button>
-      <button type="button" class="crm-mini-btn" data-open-bulk-email data-bulk-email-kind="area_monitoring" data-bulk-email-title="Gửi email theo dõi hàng loạt tới QLKV">Gửi email hàng loạt</button>
+      <button type="button" class="ui-btn ui-btn-secondary ui-btn-block" data-open-area-email-config>Cấu hình email QLKV</button>
+      <button type="button" class="ui-btn ui-btn-secondary ui-btn-block" data-open-area-email-test>Gửi email QLKV thử</button>
+      <button type="button" class="ui-btn ui-btn-secondary ui-btn-block" data-open-bulk-email data-bulk-email-kind="area_monitoring" data-bulk-email-title="Gửi email theo dõi hàng loạt tới QLKV">Gửi email hàng loạt</button>
       {% endif %}
     {% else %}
     {% if can_manage_shop_links %}
-    <form method="post" action="{% url 'document_campaigns:publish_campaign_to_shops' campaign.id %}" data-publish-shop-links data-has-links="{% if issued_shop_link_count %}true{% else %}false{% endif %}">{% csrf_token %}<button class="crm-mini-btn" {% if not can_publish_shop_links %}disabled{% endif %}>{% if issued_shop_link_count %}Tạo lại toàn bộ link{% else %}Phát hành tới PGD{% endif %}</button></form>
-    <button class="crm-mini-btn" data-copy-all-links hidden>Copy toàn bộ link</button>
-    <button type="button" class="crm-mini-btn" data-open-common-deadline>Điều chỉnh deadline PGD phản hồi</button>
+    <form method="post" action="{% url 'document_campaigns:publish_campaign_to_shops' campaign.id %}" data-publish-shop-links data-has-links="{% if issued_shop_link_count %}true{% else %}false{% endif %}">{% csrf_token %}<button class="ui-btn ui-btn-secondary ui-btn-block" {% if not can_publish_shop_links %}disabled{% endif %}>{% if issued_shop_link_count %}Tạo lại toàn bộ link{% else %}Phát hành tới PGD{% endif %}</button></form>
+    <button class="ui-btn ui-btn-secondary ui-btn-block" data-copy-all-links hidden>Copy toàn bộ link</button>
+    <button type="button" class="ui-btn ui-btn-secondary ui-btn-block" data-open-common-deadline>Điều chỉnh deadline PGD phản hồi</button>
     <span class="crm-action-divider" aria-hidden="true"></span>
-    <button type="button" class="crm-mini-btn" data-open-email-config>Cấu hình email</button>
-    <button type="button" class="crm-mini-btn" data-open-email-preflight>Kiểm tra người nhận</button>
-    <button type="button" class="crm-mini-btn" data-open-email-test>Gửi email thử</button>
-    <button type="button" class="crm-mini-btn" data-open-bulk-email data-bulk-email-kind="pgd_response" data-bulk-email-title="Gửi email hàng loạt tới PGD">Gửi email hàng loạt</button>
+    <button type="button" class="ui-btn ui-btn-secondary ui-btn-block" data-open-email-config>Cấu hình email</button>
+    <button type="button" class="ui-btn ui-btn-secondary ui-btn-block" data-open-email-preflight>Kiểm tra người nhận</button>
+    <button type="button" class="ui-btn ui-btn-secondary ui-btn-block" data-open-email-test>Gửi email thử</button>
+    <button type="button" class="ui-btn ui-btn-secondary ui-btn-block" data-open-bulk-email data-bulk-email-kind="pgd_response" data-bulk-email-title="Gửi email hàng loạt tới PGD">Gửi email hàng loạt</button>
     {% endif %}
     {% endif %}
   </div>

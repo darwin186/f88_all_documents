@@ -1,0 +1,17 @@
+<div data-preview-attachments data-document-id="{{ doc.pk }}" data-document-number="{{ doc.document_number_full }}" data-refresh-url="{% url 'admindocuments:admindocuments_detail' doc.pk %}?drawer=1" class="adm-attachment-versions">
+  <div class="adm-attachment-upload-bar"><div><h3>Đính kèm</h3><p>Thêm tệp hoặc link để tạo phiên bản mới.</p></div><button type="button" class="ui-btn ui-btn-primary" data-document-attach data-document-id="{{ doc.pk }}" data-document-number="{{ doc.document_number_full }}" data-upload-url="{% url 'admindocuments:admindocuments_attachment_upload' doc.pk %}">＋ Đính kèm</button></div>
+  <h4 class="adm-attachment-versions-title">Các phiên bản đã đính kèm</h4>
+  {% for att in doc.attachments.all %}
+  <article class="adm-attachment-card{% if att.is_deleted %} is-deleted{% endif %}">
+    <div class="adm-attachment-heading"><strong>v{{ att.version }}</strong><span class="adm-attachment-state{% if att.is_latest and not att.is_deleted %} is-latest{% endif %}">{% if att.is_deleted %}Đã đánh dấu xóa{% elif att.is_latest %}Mới nhất{% else %}Cũ{% endif %}</span></div>
+    <p class="adm-attachment-name">{% if att.file %}{{ att.original_name|default:att.file.name }}{% else %}{{ att.link|default:'—' }}{% endif %}</p>
+    <dl class="adm-attachment-meta"><div><dt>Người thêm</dt><dd>{{ att.created_by.get_full_name|default:att.created_by.username|default:'Hệ thống' }}</dd></div><div><dt>Thời gian</dt><dd>{{ att.created_at|date:'d/m/Y H:i' }}</dd></div></dl>
+    {% if att.note %}<p class="adm-attachment-note">{{ att.note }}</p>{% endif %}
+    {% if att.is_deleted %}<p class="adm-attachment-note">Đánh dấu xóa bởi {{ att.deleted_by.get_full_name|default:att.deleted_by.username|default:'Hệ thống' }} · {{ att.deleted_at|date:'d/m/Y H:i' }}</p>
+    {% else %}<div class="adm-attachment-actions">
+      {% if att.file %}<a href="{{ att.file.url }}" target="_blank" rel="noopener">Xem tệp</a><a href="{{ att.file.url }}" download>Tải xuống</a>{% elif att.link %}<a href="{{ att.link }}" target="_blank" rel="noopener">Mở link</a>{% endif %}
+      <form method="post" data-preview-attachment-delete action="{% url 'admindocuments:admindocuments_attachment_delete' doc.pk att.pk %}">{% csrf_token %}<button type="submit">Đánh dấu xóa</button></form>
+    </div>{% endif %}
+  </article>
+  {% empty %}<p class="adm-attachment-empty">{% if doc.attachment %}<a href="{{ doc.attachment.url }}" download>Tải tệp hiện có</a>{% else %}Chưa có tệp hoặc link đính kèm.{% endif %}</p>{% endfor %}
+</div>

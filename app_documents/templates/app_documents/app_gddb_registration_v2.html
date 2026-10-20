@@ -28,9 +28,6 @@
   .case-mine { box-shadow: inset 3px 0 0 #10b981; }
   .case-other-owner { box-shadow: inset 3px 0 0 #ef4444; }
   .next-step-card { border-radius: 9px; border: 1px solid #e5e7eb; background: #f9fafb; padding: 8px 10px; }
-  .toast { position: fixed; top: 76px; right: 16px; z-index: 60; min-width: 240px; max-width: 360px; border-radius: 12px; border: 1px solid #e5e7eb; background: #fff; box-shadow: 0 12px 24px rgba(15,23,42,.12); padding: 12px; font-size: 10px; }
-  .toast-success { border-color: #bbf7d0; color: #166534; }
-  .toast-error { border-color: #fecaca; color: #991b1b; }
   .code-block { overflow-x: auto; border-radius: 10px; border: 1px solid #e5e7eb; background: #111827; color: #f9fafb; padding: 12px; font-size: 10px; line-height: 1.6; }
   .doc-table th, .doc-table td { border-bottom: 1px solid #f3f4f6; padding: 8px 10px; text-align: left; vertical-align: top; }
   .drawer-backdrop { position: fixed; inset: 0; z-index: 70; background: rgba(15, 23, 42, .35); }
@@ -49,14 +46,6 @@
 </style>
 
 <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
-  <div id="gddb-toast" class="toast hidden"></div>
-  {% if messages %}
-  <div class="space-y-2">
-    {% for message in messages %}
-    <div class="rounded-lg border px-3 py-2 text-[10px] {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-800{% elif message.tags == 'success' %}border-emerald-200 bg-emerald-50 text-emerald-800{% else %}border-gray-200 bg-white text-gray-700{% endif %}">{{ message }}</div>
-    {% endfor %}
-  </div>
-  {% endif %}
 
   {% if active_tab == 'list' %}
   <section class="panel overflow-hidden rounded-xl">
@@ -229,7 +218,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         </select>
         <input name="reason_text" required maxlength="255" class="field w-full" placeholder="Nhập nội dung lý do">
         <input name="sort_order" type="number" min="0" value="0" class="field w-full" placeholder="Thứ tự">
-        <button class="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700">Thêm lý do</button>
+        <button class="ui-btn ui-btn-primary">Thêm lý do</button>
       </form>
     </div>
     <div class="max-h-[360px] overflow-auto">
@@ -246,7 +235,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
                 <input type="hidden" name="reason_id" value="{{ reason.reason_id }}">
                 <input name="sort_order" type="number" min="0" value="{{ reason.sort_order }}" class="field w-full">
                 <label class="flex items-center gap-2 font-semibold text-gray-600"><input type="checkbox" name="is_active" value="1" {% if reason.is_active %}checked{% endif %} class="h-4 w-4 accent-emerald-600"> Bật</label>
-                <button class="justify-self-end rounded-lg border border-gray-200 bg-white px-3 py-2 font-bold text-gray-700 hover:border-emerald-300 hover:text-emerald-700">Lưu</button>
+                <button class="ui-btn ui-btn-secondary justify-self-end">Lưu</button>
               </form>
             </td>
           </tr>
@@ -266,7 +255,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           {% csrf_token %}
           <input name="external_code" required maxlength="100" class="field w-full" placeholder="Định danh external">
           <input name="display_name" maxlength="255" class="field w-full" placeholder="Tên hiển thị (không bắt buộc)">
-          <button class="w-full rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white">Thêm định danh</button>
+          <button class="ui-btn ui-btn-primary w-full">Thêm định danh</button>
         </form>
       </div>
       <div class="panel rounded-xl p-4">
@@ -286,7 +275,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         <a href="{% url 'gddb_shop_mapping_export' %}" class="mt-3 flex w-full items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 font-bold text-emerald-700">Tải file Excel</a>
         <form method="post" action="{% url 'gddb_shop_mapping_import' %}" enctype="multipart/form-data" class="mt-3 space-y-2">
           {% csrf_token %}
-          <input type="file" name="mapping_file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required class="block w-full rounded-lg border border-gray-200 bg-gray-50 p-2 text-[9px] file:mr-2 file:rounded-md file:border-0 file:bg-gray-200 file:px-2 file:py-1 file:font-semibold">
+          <div class="ui-file" data-ui-file data-max-mb="10"><input type="file" name="mapping_file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required></div>
           <button class="w-full rounded-lg bg-gray-900 px-3 py-2 font-bold text-white">Upload và cập nhật</button>
         </form>
       </div>
@@ -300,8 +289,8 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
     <form method="get" action="{% url 'gddb_registration_v2' %}" class="panel flex items-center gap-2 rounded-xl p-3">
       <input type="hidden" name="tab" value="configuration">
       <input name="pgd_q" value="{{ pgd_query }}" class="field min-w-0 flex-1" placeholder="Tìm theo tên hoặc mã PGD">
-      <button class="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white">Tìm PGD</button>
-      {% if pgd_query %}<a href="{% url 'gddb_registration_v2' %}?tab=configuration" class="rounded-lg border border-gray-200 px-3 py-2 font-bold text-gray-600">Xóa lọc</a>{% endif %}
+      <button class="ui-btn ui-btn-primary">Tìm PGD</button>
+      {% if pgd_query %}<a href="{% url 'gddb_registration_v2' %}?tab=configuration" class="ui-btn ui-btn-secondary">Xóa lọc</a>{% endif %}
     </form>
     <form method="post" action="{% url 'gddb_configuration_save' %}" class="panel overflow-hidden rounded-xl">
       {% csrf_token %}
@@ -350,8 +339,8 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         </select>
         <input type="date" name="batch_date_from" value="{{ batch_filters.date_from }}" class="field text-[10px]" title="Nhận từ ngày">
         <input type="date" name="batch_date_to" value="{{ batch_filters.date_to }}" class="field text-[10px]" title="Nhận đến ngày">
-        <button type="submit" class="rounded-lg bg-emerald-600 px-4 py-2.5 text-[10px] font-bold text-white hover:bg-emerald-700">Lọc batch</button>
-        {% if batch_filters.q or batch_filters.source or batch_filters.date_from or batch_filters.date_to %}<a href="{% url 'gddb_registration_v2' %}?tab=batches" class="rounded-lg border border-gray-200 px-4 py-2.5 text-[10px] font-bold text-gray-600 hover:bg-gray-50">Xóa lọc</a>{% endif %}
+        <button type="submit" class="ui-btn ui-btn-primary">Lọc batch</button>
+        {% if batch_filters.q or batch_filters.source or batch_filters.date_from or batch_filters.date_to %}<a href="{% url 'gddb_registration_v2' %}?tab=batches" class="ui-btn ui-btn-secondary">Xóa lọc</a>{% endif %}
       </form>
     </div>
 
@@ -445,7 +434,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           <div>Không tiêu đề: hỗ trợ 10 cột chuẩn, hoặc 11 cột nếu cột đầu là STT/ID external.</div>
           <details class="mt-1"><summary class="cursor-pointer font-semibold text-emerald-700">Xem thứ tự 10 cột chuẩn</summary><div class="mt-1 max-w-4xl leading-5">Mã hợp đồng · Biển số xe · Số khung · Số máy · Trạng thái GDĐB · Trạng thái hợp đồng · Ngày tạo · Ngày giải ngân · Cửa hàng · Nguồn giải ngân. Cũng nhận 14 cột theo file đối soát.</div></details>
         </div>
-        <button type="button" data-manual-preview class="shrink-0 rounded-lg bg-emerald-600 px-4 py-2 text-[10px] font-bold text-white hover:bg-emerald-700">Xem mapping</button>
+        <button type="button" data-manual-preview class="ui-btn ui-btn-primary shrink-0">Xem mapping</button>
       </div>
     </form>
 
@@ -465,8 +454,8 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           <div class="mt-2 text-[9px] text-gray-500">Hiển thị tối đa 5 dòng đầu. Dữ liệu chỉ được import sau khi bấm “Xác nhận submit”.</div>
         </div>
         <div class="flex flex-col-reverse gap-2 border-t border-gray-100 p-4 sm:flex-row sm:justify-end">
-          <button type="button" data-manual-preview-close class="rounded-lg border border-gray-200 px-4 py-2 font-bold text-gray-700">Quay lại chỉnh sửa</button>
-          <button type="button" data-manual-submit-confirm class="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700">Xác nhận submit</button>
+          <button type="button" data-manual-preview-close class="ui-btn ui-btn-secondary">Quay lại chỉnh sửa</button>
+          <button type="button" data-manual-submit-confirm class="ui-btn ui-btn-primary">Xác nhận submit</button>
         </div>
       </div>
     </div>
@@ -481,7 +470,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         {% if can_process_gddb and queue_scope != 'mine' %}
         <div data-bulk-claim-toolbar data-bulk-claim-url="{% url 'api_gddb_bulk_claim' %}" class="flex shrink-0 items-center">
           <span data-bulk-selection-label class="hidden">Chọn một case để khóa nhóm batch và nguồn vay.</span>
-          <button type="button" data-bulk-claim-submit disabled class="inline-flex h-9 cursor-not-allowed items-center gap-1.5 rounded-lg bg-gray-300 px-3 text-[10px] font-bold text-white" title="Chỉ nhận các case Checker đã tick chọn">
+          <button type="button" data-bulk-claim-submit disabled class="ui-btn" title="Chỉ nhận các case Checker đã tick chọn">
             <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v11"></path><path d="m8 10 4 4 4-4"></path><path d="M5 14v5h14v-5"></path></svg>
             <span data-bulk-claim-submit-label>Nhận đã chọn</span>
           </button>
@@ -511,8 +500,8 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
               {% endfor %}
             </div>
             <div class="mt-2 flex gap-2 border-t border-gray-100 pt-2">
-              <button type="button" data-loan-source-clear class="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-[9px] font-bold text-gray-600 hover:bg-gray-50">Tất cả</button>
-              <button type="button" data-loan-source-apply class="flex-1 rounded-lg bg-emerald-600 px-2 py-2 text-[9px] font-bold text-white hover:bg-emerald-700">Áp dụng</button>
+              <button type="button" data-loan-source-clear class="ui-btn ui-btn-secondary flex-1">Tất cả</button>
+              <button type="button" data-loan-source-apply class="ui-btn ui-btn-primary flex-1">Áp dụng</button>
             </div>
           </div>
         </div>
@@ -538,8 +527,8 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
             </div>
             <div class="mt-2 hidden text-[8px] text-gray-400" data-batch-filter-hint>09:00→13:00 · 13:00→16:00 · 16:00→19:00 · 19:00→09:00 hôm sau.</div>
             <div class="mt-3 flex items-center justify-end gap-2 border-t border-gray-100 pt-3">
-              <button type="button" data-date-range-clear class="rounded-lg border border-gray-200 px-3 py-2 text-[9px] font-bold text-gray-600 hover:bg-gray-50">Xóa lọc batch</button>
-              <button type="button" data-date-range-apply class="rounded-lg bg-emerald-600 px-3 py-2 text-[9px] font-bold text-white hover:bg-emerald-700">Áp dụng</button>
+              <button type="button" data-date-range-clear class="ui-btn ui-btn-secondary">Xóa lọc batch</button>
+              <button type="button" data-date-range-apply class="ui-btn ui-btn-primary">Áp dụng</button>
             </div>
           </div>
         </div>
@@ -572,12 +561,12 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
               <input type="checkbox" name="status" value="not_registered" class="h-3 w-3 accent-emerald-600" {% if 'not_registered' in filters.statuses %}checked{% endif %}>
             </label>
             <div class="border-t border-gray-100 p-2">
-              <button type="submit" class="w-full rounded-md bg-emerald-600 px-3 py-2 text-[10px] font-bold text-white hover:bg-emerald-700">Áp dụng</button>
+              <button type="submit" class="ui-btn ui-btn-primary w-full">Áp dụng</button>
             </div>
           </div>
         </div>
-        <button class="rounded-lg bg-emerald-600 px-4 py-2 text-[10px] font-bold text-white hover:bg-emerald-700" type="submit">Lọc</button>
-        <a href="{% url 'gddb_registration_v2' %}?queue={{ queue_scope }}{% if queue_scope == 'mine' %}&mine_step={{ mine_step }}{% endif %}" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-[10px] font-bold text-gray-600 hover:bg-gray-50">Xóa lọc</a>
+        <button class="ui-btn ui-btn-primary" type="submit">Lọc</button>
+        <a href="{% url 'gddb_registration_v2' %}?queue={{ queue_scope }}{% if queue_scope == 'mine' %}&mine_step={{ mine_step }}{% endif %}" class="ui-btn ui-btn-secondary">Xóa lọc</a>
       </form>
     </div>
     <div class="gddb-data-scroll" data-gddb-list-scroll>
@@ -656,7 +645,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
               <div class="flex flex-wrap justify-end gap-2">
                 {% if can_process_gddb %}
                   {% if item.can_edit_registration %}
-                  <button type="button" data-register-open data-registration-id="{{ item.registration_id }}" data-update-url="{% url 'api_gddb_update' item.registration_id %}" data-contract-code="{{ item.contract_code }}" data-shop-name="{{ item.shop_name|default:'' }}" data-suggested-identity-id="{{ item.suggested_identity.identity_id|default:'' }}" data-current-identity-id="{{ item.registered_identity_id|default:'' }}" data-current-status="{{ item.gddb_status }}" data-current-reason="{{ item.reason|default:'' }}" data-current-postmini="{{ item.postmini_updated|default:'Chưa cập nhật' }}" data-current-note="{{ item.note|default:''|escape }}" class="rounded-lg px-3 py-2 font-bold {% if item.gddb_status == 'pending' %}bg-emerald-600 text-white hover:bg-emerald-700{% else %}border border-gray-200 bg-white text-gray-600 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700{% endif %}" title="{% if item.gddb_status == 'pending' %}Cập nhật đăng ký{% else %}Chỉnh sửa đăng ký{% endif %}" aria-label="{% if item.gddb_status == 'pending' %}Cập nhật đăng ký{% else %}Chỉnh sửa đăng ký{% endif %}">
+                  <button type="button" data-register-open data-registration-id="{{ item.registration_id }}" data-update-url="{% url 'api_gddb_update' item.registration_id %}" data-contract-code="{{ item.contract_code }}" data-shop-name="{{ item.shop_name|default:'' }}" data-suggested-identity-id="{{ item.suggested_identity.identity_id|default:'' }}" data-current-identity-id="{{ item.registered_identity_id|default:'' }}" data-current-status="{{ item.gddb_status }}" data-current-reason="{{ item.reason|default:'' }}" data-current-postmini="{{ item.postmini_updated|default:'Chưa cập nhật' }}" data-current-note="{{ item.note|default:''|escape }}" class="ui-btn {% if item.gddb_status == 'pending' %}ui-btn-primary{% else %}ui-btn-secondary ui-btn-icon{% endif %}" title="{% if item.gddb_status == 'pending' %}Cập nhật đăng ký{% else %}Chỉnh sửa đăng ký{% endif %}" aria-label="{% if item.gddb_status == 'pending' %}Cập nhật đăng ký{% else %}Chỉnh sửa đăng ký{% endif %}">
                     {% if item.gddb_status == 'pending' %}
                     Cập nhật đăng ký
                     {% else %}
@@ -664,14 +653,14 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
                     {% endif %}
                   </button>
                   {% elif item.can_claim_case %}
-                  <button type="button" data-claim-case data-registration-id="{{ item.registration_id }}" data-claim-url="{% url 'api_gddb_case_claim' item.registration_id %}" class="rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white hover:bg-emerald-700">{% if item.claim_is_mine %}Nhận lại case{% elif item.gddb_status == 'pending' %}Nhận xử lý{% else %}Nhận chỉnh sửa{% endif %}</button>
+                  <button type="button" data-claim-case data-registration-id="{{ item.registration_id }}" data-claim-url="{% url 'api_gddb_case_claim' item.registration_id %}" class="ui-btn ui-btn-primary">{% if item.claim_is_mine %}Nhận lại case{% elif item.gddb_status == 'pending' %}Nhận xử lý{% else %}Nhận chỉnh sửa{% endif %}</button>
                   {% elif item.gddb_status == 'pending' and item.claim_is_active %}
-                  <button type="button" disabled class="cursor-not-allowed rounded-lg bg-gray-200 px-3 py-2 font-bold text-gray-500">Đang được xử lý</button>
+                  <button type="button" disabled class="ui-btn">Đang được xử lý</button>
                   {% endif %}
                 {% endif %}
-                {% if item.can_mutate_case %}<button type="button" data-postmini-open data-registration-id="{{ item.registration_id }}" data-update-url="{% url 'api_gddb_postmini_update' item.registration_id %}" data-current-postmini="{{ item.postmini_updated|default:'Chưa cập nhật' }}" data-current-note="{{ item.note|default:''|escape }}" data-contract-code="{{ item.contract_code }}" class="rounded-lg px-3 py-2 font-bold {% if item.gddb_status != 'registered' %}cursor-not-allowed bg-gray-300 text-white{% elif not item.postmini_updated or item.postmini_updated == 'Chưa cập nhật' %}bg-amber-500 text-white ring-2 ring-amber-200 hover:bg-amber-600{% else %}border border-gray-200 bg-white text-gray-700 hover:bg-gray-50{% endif %}" {% if item.gddb_status != 'registered' %}disabled{% endif %}>{% if item.postmini_updated == 'Đã cập nhật' or item.postmini_updated == 'Đã cập nhật 1 dòng' %}Cập nhật lại PosMini{% else %}Cập nhật PosMini{% endif %}</button>{% endif %}
-                {% if item.gddb_status == 'pending' and item.claim_is_active and item.can_edit_case %}<button type="button" data-release-case data-claim-url="{% url 'api_gddb_case_claim' item.registration_id %}" class="rounded-lg border border-gray-200 px-3 py-2 font-bold text-gray-600 hover:bg-gray-50">{% if is_admin or is_super_admin %}Thu hồi{% else %}Trả case{% endif %}</button>{% endif %}
-                <button type="button" data-drawer-open="{{ item.registration_id }}" class="rounded-lg border border-gray-200 px-3 py-2 font-bold text-gray-700 hover:bg-gray-50">Chi tiết</button>
+                {% if item.can_mutate_case %}<button type="button" data-postmini-open data-registration-id="{{ item.registration_id }}" data-update-url="{% url 'api_gddb_postmini_update' item.registration_id %}" data-current-postmini="{{ item.postmini_updated|default:'Chưa cập nhật' }}" data-current-note="{{ item.note|default:''|escape }}" data-contract-code="{{ item.contract_code }}" class="ui-btn {% if item.gddb_status == 'registered' %}{% if not item.postmini_updated or item.postmini_updated == 'Chưa cập nhật' %}ui-btn-warning{% else %}ui-btn-secondary{% endif %}{% endif %}" {% if item.gddb_status != 'registered' %}disabled{% endif %}>{% if item.postmini_updated == 'Đã cập nhật' or item.postmini_updated == 'Đã cập nhật 1 dòng' %}Cập nhật lại PosMini{% else %}Cập nhật PosMini{% endif %}</button>{% endif %}
+                {% if item.gddb_status == 'pending' and item.claim_is_active and item.can_edit_case %}<button type="button" data-release-case data-claim-url="{% url 'api_gddb_case_claim' item.registration_id %}" class="ui-btn ui-btn-secondary">{% if is_admin or is_super_admin %}Thu hồi{% else %}Trả case{% endif %}</button>{% endif %}
+                <button type="button" data-drawer-open="{{ item.registration_id }}" class="ui-btn ui-btn-secondary">Chi tiết</button>
               </div>
             </td>
           </tr>
@@ -683,7 +672,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
               <div class="font-semibold text-gray-700">Bạn chưa có case đã hoàn tất.</div>
               {% else %}
               <div class="font-semibold text-gray-700">Bạn chưa có case đang phụ trách.</div>
-              <a href="?{{ queue_query_prefix }}queue=unassigned" class="mt-2 inline-flex rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white hover:bg-emerald-700">Xem case chưa ai nhận</a>
+              <a href="?{{ queue_query_prefix }}queue=unassigned" class="ui-btn ui-btn-primary mt-2">Xem case chưa ai nhận</a>
               {% endif %}
               {% else %}
               Không có case trong phạm vi hàng đợi này.
@@ -857,8 +846,8 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           </div>
         </div>
         <div class="flex flex-col-reverse gap-2 border-t border-gray-100 p-4 sm:flex-row sm:justify-end">
-          <button type="button" data-register-close class="rounded-lg border border-gray-200 px-4 py-2 font-bold text-gray-700">Hủy</button>
-          <button type="button" data-register-confirm class="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700">Xác nhận</button>
+          <button type="button" data-register-close class="ui-btn ui-btn-secondary">Hủy</button>
+          <button type="button" data-register-confirm class="ui-btn ui-btn-primary">Xác nhận</button>
         </div>
       </div>
     </div>
@@ -880,8 +869,8 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           </label>
         </div>
         <div class="flex flex-col-reverse gap-2 border-t border-gray-100 p-4 sm:flex-row sm:justify-end">
-          <button type="button" data-postmini-close class="rounded-lg border border-gray-200 px-4 py-2 font-bold text-gray-700">Hủy</button>
-          <button type="button" data-postmini-confirm class="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700">Xác nhận cập nhật</button>
+          <button type="button" data-postmini-close class="ui-btn ui-btn-secondary">Hủy</button>
+          <button type="button" data-postmini-confirm class="ui-btn ui-btn-primary">Xác nhận cập nhật</button>
         </div>
       </div>
     </div>
@@ -902,8 +891,8 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           <p id="gddb-gapo-status" class="mt-2 min-h-[14px] text-[9px] text-gray-500"></p>
         </div>
         <div class="flex flex-col-reverse gap-2 border-t border-gray-100 p-4 sm:flex-row sm:justify-end">
-          <button type="button" data-gddb-gapo-close class="rounded-lg border border-gray-200 px-4 py-2 font-bold text-gray-700">Hủy</button>
-          <button type="button" id="gddb-gapo-send" class="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700 disabled:opacity-50">Gửi thông báo</button>
+          <button type="button" data-gddb-gapo-close class="ui-btn ui-btn-secondary">Hủy</button>
+          <button type="button" id="gddb-gapo-send" class="ui-btn ui-btn-primary">Gửi thông báo</button>
         </div>
       </div>
     </div>
@@ -937,8 +926,8 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
           </label>
         </div>
         <div class="flex flex-col-reverse gap-2 border-t border-gray-100 p-4 sm:flex-row sm:justify-end">
-          <button type="button" data-export-close class="rounded-lg border border-gray-200 px-4 py-2 font-bold text-gray-700">Hủy</button>
-          <button class="rounded-lg bg-emerald-600 px-4 py-2 font-bold text-white hover:bg-emerald-700">Xuất Excel</button>
+          <button type="button" data-export-close class="ui-btn ui-btn-secondary">Hủy</button>
+          <button class="ui-btn ui-btn-primary">Xuất Excel</button>
         </div>
       </form>
     </div>
@@ -1240,10 +1229,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
   }
 
   function showGddbToast(message, ok) {
-    const toast = document.getElementById('gddb-toast');
-    toast.textContent = message;
-    toast.className = 'toast ' + (ok ? 'toast-success' : 'toast-error');
-    setTimeout(() => toast.classList.add('hidden'), 2400);
+    window.uiToast({type: ok ? 'success' : 'error', message});
   }
 
   const gddbGapoModal = document.getElementById('gddb-gapo-modal');
@@ -1300,9 +1286,15 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
     if (operator) operator.textContent = username;
   }
 
+  function setPostminiButtonState(button, state) {
+    button.className = state === 'todo' ? 'ui-btn ui-btn-warning' : state === 'done' ? 'ui-btn ui-btn-secondary' : 'ui-btn';
+    if (state === 'todo') button.textContent = 'Cập nhật PosMini';
+    else if (state === 'done') button.textContent = 'Cập nhật lại PosMini';
+  }
+
   function setRegisterButtonAsEdit(button) {
     button.innerHTML = '<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.08A1.7 1.7 0 0 0 8.97 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3v-4h.08A1.7 1.7 0 0 0 4.6 8.94a1.7 1.7 0 0 0-.34-1.88L4.2 7l2.83-2.83.06.06a1.7 1.7 0 0 0 1.88.34A1.7 1.7 0 0 0 10 3.01V3h4v.08a1.7 1.7 0 0 0 1.03 1.52 1.7 1.7 0 0 0 1.88-.34l.06-.06L19.8 7l-.06.06a1.7 1.7 0 0 0-.34 1.88A1.7 1.7 0 0 0 20.96 10H21v4h-.08A1.7 1.7 0 0 0 19.4 15Z"></path></svg>';
-    button.className = 'rounded-lg border border-gray-200 bg-white px-3 py-2 font-bold text-gray-600 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700';
+    button.className = 'ui-btn ui-btn-secondary ui-btn-icon';
     button.title = 'Chỉnh sửa đăng ký';
     button.setAttribute('aria-label', 'Chỉnh sửa đăng ký');
   }
@@ -1470,8 +1462,8 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
       bulkSelectAll.indeterminate = Boolean(selected.length && !bulkSelectAll.checked);
       bulkSubmit.disabled = selected.length === 0;
       bulkSubmit.className = selected.length
-        ? 'inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-3 text-[10px] font-bold text-white hover:bg-emerald-700'
-        : 'inline-flex h-9 cursor-not-allowed items-center gap-1.5 rounded-lg bg-gray-300 px-3 text-[10px] font-bold text-white';
+        ? 'ui-btn ui-btn-primary'
+        : 'ui-btn';
       bulkSubmitLabel.textContent = selected.length
         ? `Nhận ${selected.length} case`
         : 'Nhận đã chọn';
@@ -1789,15 +1781,12 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
             postminiButton.disabled = false;
             postminiButton.dataset.currentPostmini = data.postmini_updated || 'Chưa cập nhật';
             postminiButton.dataset.currentNote = data.note || '';
-            postminiButton.className = postminiIsDone
-              ? 'rounded-lg border border-gray-200 bg-white px-3 py-2 font-bold text-gray-700 hover:bg-gray-50'
-              : 'rounded-lg bg-amber-500 px-3 py-2 font-bold text-white ring-2 ring-amber-200 hover:bg-amber-600';
-            postminiButton.textContent = postminiIsDone ? 'Cập nhật lại PosMini' : 'Cập nhật PosMini';
+            setPostminiButtonState(postminiButton, postminiIsDone ? 'done' : 'todo');
           }
         } else {
           if (postminiButton) {
             postminiButton.disabled = true;
-            postminiButton.className = 'cursor-not-allowed rounded-lg bg-gray-300 px-3 py-2 font-bold text-white';
+            setPostminiButtonState(postminiButton, 'locked');
           }
         }
         setGddbModalOpen(registerModal, false);
@@ -1897,15 +1886,7 @@ X-GDDB-Token: &lt;GDDB_INTAKE_TOKEN&gt;</pre>
         const actionButton = row.querySelector('[data-postmini-open]');
         actionButton.dataset.currentPostmini = data.postmini_updated;
         actionButton.dataset.currentNote = data.note || '';
-        actionButton.classList.remove('bg-amber-500', 'ring-2', 'ring-amber-200', 'hover:bg-amber-600', 'border', 'border-gray-200', 'bg-white', 'text-gray-700', 'hover:bg-gray-50');
-        if (data.process_done) {
-          actionButton.classList.remove('text-white');
-          actionButton.classList.add('border', 'border-gray-200', 'bg-white', 'text-gray-700', 'hover:bg-gray-50');
-          actionButton.textContent = 'Cập nhật lại PosMini';
-        } else {
-          actionButton.classList.add('bg-amber-500', 'text-white', 'ring-2', 'ring-amber-200', 'hover:bg-amber-600');
-          actionButton.textContent = 'Cập nhật PosMini';
-        }
+        setPostminiButtonState(actionButton, data.process_done ? 'done' : 'todo');
         const drawerPostmini = document.querySelector(`[data-gddb-drawer="${postminiModal.dataset.registrationId}"] [data-drawer-postmini]`);
         if (drawerPostmini) {
           drawerPostmini.textContent = data.postmini_updated;

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phương án form tải tệp (demo)</title>
+<!-- Mở trực tiếp bằng trình duyệt. Chỉ là bản phác để chọn kiểu, chưa phải component chính thức. -->
+<link rel="stylesheet" href="../../../static/css/ui-kit.css">
+<style>
+  body { margin: 0; padding: 24px; background: #f5f6f8; color: #1f2937; font: 400 11px/1.5 Inter, "SF Pro Text", Arial, sans-serif; }
+  h1 { margin: 0 0 4px; font-size: 16px; } .lead { margin: 0 0 20px; color: #6b7280; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; align-items: start; }
+  .opt { border: 1px solid #e5e7eb; border-radius: 14px; background: #fff; overflow: hidden; }
+  .opt > header { padding: 12px 16px; border-bottom: 1px solid #e5e7eb; background: #fafafa; }
+  .opt > header b { display: block; font-size: 12px; } .opt > header span { color: #6b7280; font-size: 10px; }
+  .body { padding: 16px; display: grid; gap: 12px; }
+  label.f { display: block; margin-bottom: 4px; font-size: 10px; font-weight: 500; color: #374151; }
+  .req { color: #dc2626; }
+  .note { margin: 4px 0 0; color: #6b7280; font-size: 10px; }
+  .foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid #e5e7eb; }
+  .pros { padding: 10px 16px 14px; color: #6b7280; font-size: 10px; border-top: 1px dashed #e5e7eb; }
+  .pros b { color: #374151; }
+
+  /* A. Đính kèm tệp / Link (chuyển chế độ) */
+  .seg { display: inline-flex; padding: 3px; border-radius: 10px; background: #f3f4f6; gap: 2px; }
+  .seg label { padding: 6px 14px; border-radius: 8px; font-size: 10px; font-weight: 600; color: #6b7280; cursor: pointer; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg input:checked + span { color: #047857; }
+  .seg label:has(input:checked) { background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.08); color: #047857; }
+  .input { display: block; width: 100%; box-sizing: border-box; min-height: 34px; padding: 6px 10px; border: 1px solid #e5e7eb; border-radius: 10px; font-size: 11px; background: #fff; }
+
+  /* B. Ô chọn tệp gọn */
+  .filebox { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 3px 3px 3px 10px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; }
+  .filebox .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #6b7280; }
+  .filebox .name.has { color: #1f2937; font-weight: 500; }
+  .filebox .x { border: 0; background: none; color: #9ca3af; cursor: pointer; font-size: 13px; padding: 0 6px; }
+
+  /* C. Vùng kéo thả + danh sách tệp */
+  .drop { display: grid; justify-items: center; gap: 4px; padding: 22px 12px; border: 1.5px dashed #a7f3d0; border-radius: 12px; background: #f0fdf9; text-align: center; cursor: pointer; }
+  .drop.is-over { background: #d1fae5; border-color: #00844a; }
+  .drop .ic { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #d1fae5; color: #047857; font-size: 16px; }
+  .drop b { font-size: 11px; } .drop b u { color: #047857; text-decoration: none; }
+  .drop small { color: #6b7280; font-size: 10px; }
+  .files { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .files li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 10px; }
+  .files .ext { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: #ecfdf5; color: #047857; font-size: 9px; font-weight: 700; }
+  .files .ext.img { background: #eff6ff; color: #2563eb; } .files .ext.pdf { background: #fef2f2; color: #dc2626; }
+  .files .meta { flex: 1; min-width: 0; } .files .meta b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+  .files .meta span { color: #6b7280; font-size: 10px; }
+  .bar { height: 4px; margin-top: 4px; border-radius: 99px; background: #e5e7eb; overflow: hidden; } .bar i { display: block; height: 100%; width: 62%; background: #00844a; }
+  .files .rm { border: 0; background: none; color: #9ca3af; cursor: pointer; font-size: 14px; }
+  .err { color: #dc2626; font-size: 10px; }
+</style>
+</head>
+<body>
+<h1>Form tải tệp — 3 phương án</h1>
+<p class="lead">Tương tác được (chọn tệp, kéo thả, đổi chế độ). Cho biết bạn thích kiểu nào để làm thành component <code>ui-file</code> dùng chung.</p>
+
+<div class="grid">
+
+  <!-- A -->
+  <section class="opt">
+    <header><b>A. Đính kèm tệp / Link</b><span>Hộp thoại hiện có của văn bản hành chính, làm gọn lại</span></header>
+    <div class="body">
+      <div class="seg" role="radiogroup" aria-label="Loại đính kèm">
+        <label><input type="radio" name="mode" value="file" checked><span>Tải tệp</span></label>
+        <label><input type="radio" name="mode" value="link"><span>Nhập link</span></label>
+      </div>
+      <div data-panel="file">
+        <label class="f" for="a-file">Tệp đính kèm <span class="req">*</span></label>
+        <div class="filebox">
+          <span class="name" data-name>Chưa chọn tệp</span>
+          <input id="a-file" type="file" hidden data-file>
+          <button type="button" class="ui-btn ui-btn-secondary ui-btn-sm" data-pick>Chọn tệp</button>
+        </div>
+        <p class="note">Chọn tệp từ máy tính. Tệp được lưu thành một phiên bản mới.</p>
+      </div>
+      <div data-panel="link" hidden>
+        <label class="f" for="a-link">Link đính kèm <span class="req">*</span></label>
+        <input id="a-link" class="input" type="url" placeholder="https://...">
+        <p class="note">Nhập đường dẫn tới tài liệu trên Drive, SharePoint...</p>
+      </div>
+    </div>
+    <div class="foot"><button class="ui-btn ui-btn-secondary">Hủy</button><button class="ui-btn ui-btn-primary">Thêm đính kèm</button></div>
+    <div class="pros"><b>Hợp khi:</b> chọn <i>một</i> tệp hoặc một link; form nhỏ trong hộp thoại.</div>
+  </section>
+
+  <!-- B -->
+  <section class="opt">
+    <header><b>B. Ô chọn tệp gọn</b><span>Thay cho ô &lt;input type="file"&gt; trơn đang dùng ở nhiều form</span></header>
+    <div class="body">
+      <div>
+        <label class="f">Tệp Excel (.xlsx) <span class="req">*</span></label>
+        <div class="filebox">
+          <span class="name has" data-name>nhan-chung-tu-2026-10.xlsx · 48 KB</span>
+          <input type="file" hidden data-file accept=".xlsx">
+          <button type="button" class="x" title="Bỏ tệp" data-clear>✕</button>
+          <button type="button" class="ui-btn ui-btn-secondary ui-btn-sm" data-pick>Đổi tệp</button>
+        </div>
+        <p class="note">Chỉ nhận .xlsx, tối đa 10 MB.</p>
+      </div>
+      <div>
+        <label class="f">Tệp lỗi mẫu</label>
+        <div class="filebox">
+          <span class="name" data-name>Chưa chọn tệp</span>
+          <input type="file" hidden data-file>
+          <button type="button" class="ui-btn ui-btn-secondary ui-btn-sm" data-pick>Chọn tệp</button>
+        </div>
+        <p class="err" hidden data-err>Tệp vượt quá 10 MB.</p>
+      </div>
+    </div>
+    <div class="pros"><b>Hợp khi:</b> import Excel, ảnh đại diện, mọi chỗ chỉ cần <i>một</i> tệp và không cần giải thích dài. Dễ thay nhất.</div>
+  </section>
+
+  <!-- C -->
+  <section class="opt">
+    <header><b>C. Vùng kéo thả + danh sách tệp</b><span>Tải nhiều tệp/ảnh (bưu kiện, công văn đến, dữ liệu campaign)</span></header>
+    <div class="body">
+      <label class="drop" data-drop>
+        <span class="ic">↑</span>
+        <b>Kéo thả tệp vào đây hoặc <u>chọn từ máy</u></b>
+        <small>Ảnh, PDF, Word, Excel · tối đa 10 MB mỗi tệp</small>
+        <input type="file" multiple hidden data-multi>
+      </label>
+      <ul class="files" data-list>
+        <li><span class="ext img">JPG</span><div class="meta"><b>phieu-nhan-001.jpg</b><span>1,2 MB</span></div><button class="rm" title="Bỏ tệp">✕</button></li>
+        <li><span class="ext pdf">PDF</span><div class="meta"><b>cong-van-den-0987.pdf</b><span>Đang tải lên… 62%</span><div class="bar"><i></i></div></div><button class="rm" title="Hủy">✕</button></li>
+      </ul>
+    </div>
+    <div class="foot"><button class="ui-btn ui-btn-secondary">Hủy</button><button class="ui-btn ui-btn-primary">Lưu</button></div>
+    <div class="pros"><b>Hợp khi:</b> nhiều tệp một lần, cần xem trạng thái từng tệp. Phức tạp hơn, tốn công hơn.</div>
+  </section>
+</div>
+
+<script>
+  document.querySelectorAll('.filebox').forEach(box => {
+    const input = box.querySelector('[data-file]'), name = box.querySelector('[data-name]');
+    box.querySelector('[data-pick]').addEventListener('click', () => input.click());
+    input.addEventListener('change', () => { const f = input.files[0]; name.textContent = f ? `${f.name} · ${Math.max(1, Math.round(f.size / 1024))} KB` : 'Chưa chọn tệp'; name.classList.toggle('has', Boolean(f)); });
+    box.querySelector('[data-clear]')?.addEventListener('click', () => { input.value = ''; name.textContent = 'Chưa chọn tệp'; name.classList.remove('has'); });
+  });
+  document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', () => document.querySelectorAll('[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== document.querySelector('input[name=mode]:checked').value; })));
+  const drop = document.querySelector('[data-drop]'), list = document.querySelector('[data-list]'), multi = document.querySelector('[data-multi]');
+  const add = files => [...files].forEach(f => { const ext = (f.name.split('.').pop() || '').toUpperCase().slice(0, 4); const li = document.createElement('li'); li.innerHTML = `<span class="ext">${ext}</span><div class="meta"><b></b><span>${Math.max(1, Math.round(f.size / 1024))} KB</span></div><button class="rm" title="Bỏ tệp">✕</button>`; li.querySelector('b').textContent = f.name; list.append(li); });
+  multi.addEventListener('change', () => add(multi.files));
+  ['dragenter', 'dragover'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('is-over'); }));
+  ['dragleave', 'drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('is-over'); }));
+  drop.addEventListener('drop', ev => add(ev.dataTransfer.files));
+  list.addEventListener('click', ev => ev.target.closest('.rm')?.closest('li').remove());
+</script>
+</body>
+</html>

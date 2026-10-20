@@ -68,8 +68,8 @@ class CampaignImportStagingTests(TestCase):
         html = render_to_string("app_document_campaigns/components/toasts.html", {
             "messages": [Message(constants.SUCCESS, "Đã lưu kỳ"), Message(constants.ERROR, '<script>alert("x")</script>')],
         })
-        self.assertIn('data-toast-level="success"', html)
-        self.assertIn('data-toast-level="error"', html)
+        self.assertIn('data-ui-toast-seed data-level="success"', html)
+        self.assertIn('data-ui-toast-seed data-level="error"', html)
         self.assertIn("Đã lưu kỳ", html)
         self.assertIn("&lt;script&gt;", html)
         self.assertNotIn('<script>alert("x")</script>', html)
@@ -79,7 +79,6 @@ class CampaignImportStagingTests(TestCase):
         self.client.force_login(self.user)
         CampaignError.objects.create(campaign=self.campaign, version=self.version, source_key="folder:workflow", source_object_id=998, error_type="folder", shop=self.shop, checking_issue="Thiếu chứng từ")
         pages = [
-            ("campaign_list", {}, 1),
             ("campaign_create", {}, 1),
             ("campaign_detail", {"campaign_id": self.campaign.pk}, 2),
             ("campaign_response_monitor", {"campaign_id": self.campaign.pk}, 3),
@@ -88,11 +87,13 @@ class CampaignImportStagingTests(TestCase):
         ]
         for route, kwargs, current in pages:
             with self.subTest(route=route):
-                response = self.client.get(reverse(f"document_campaigns:{route}", kwargs=kwargs))
+                response = self.client.get(reverse(f"document_campaigns:{route}", kwargs=kwargs),
+                                           {"workflow_type": "hard_copy"} if route == "campaign_create" else {})
                 self.assertEqual(response.status_code, 200)
                 self.assertTemplateUsed(response, "app_document_campaigns/components/workflow_nav.html")
                 self.assertTemplateUsed(response, "app_document_campaigns/components/toasts.html")
-                self.assertContains(response, 'data-campaign-toasts', count=1)
+                self.assertContains(response, 'js/ui-toast.js', count=1)
+                self.assertContains(response, 'campaign_toasts.js', count=1)
                 self.assertContains(response, 'data-workflow-step=', count=6)
                 self.assertNotContains(response, '<span class="flow-description">')
                 self.assertNotContains(response, '<span class="flow-state">')
@@ -101,10 +102,6 @@ class CampaignImportStagingTests(TestCase):
                 self.assertContains(response, "Book lỗi gửi QTRR")
                 self.assertContains(response, "Chưa triển khai", count=2)
                 self.assertContains(response, 'campaign-heading-1')
-                if route == "campaign_list":
-                    self.assertNotContains(response, "Quy trình book lỗi chứng từ · Chọn kỳ để theo dõi tiến trình")
-                    self.assertNotContains(response, "Vận hành · Chứng từ")
-                    self.assertContains(response, "Tạo kỳ gửi lỗi để chuẩn bị dữ liệu lỗi theo từng tháng.")
                 if route == "campaign_detail":
                     self.assertContains(response, 'data-preparation-progress', count=2)
                     self.assertContains(response, 'class="dec-preparation-row"', count=1)
@@ -592,10 +589,10 @@ class CampaignImportStagingTests(TestCase):
 
         self.assertEqual(listing.status_code, 200)
         self.assertContains(listing, "Tạo chiến dịch")
-        self.assertContains(listing, "Khởi tạo kỳ book lỗi chứng từ.")
-        self.assertContains(listing, "Tạo kỳ gửi lỗi để chuẩn bị dữ liệu lỗi theo từng tháng.")
-        self.assertContains(listing, "Chiến dịch lỗi")
-        self.assertContains(listing, "Danh sách kỳ")
+        self.assertNotContains(listing, "Khởi tạo kỳ book lỗi chứng từ.")
+        self.assertNotContains(listing, "Tạo kỳ gửi lỗi để chuẩn bị dữ liệu lỗi theo từng tháng.")
+        self.assertNotContains(listing, "Chiến dịch lỗi")
+        self.assertContains(listing, "Quản lý chiến dịch")
         self.assertContains(listing, self.campaign.code)
         self.assertEqual(detail.status_code, 200)
         self.assertContains(detail, "Lấy lại dữ liệu")
@@ -1076,6 +1073,7 @@ class CampaignImportStagingTests(TestCase):
         response = self.client.post(
             reverse("document_campaigns:campaign_create"),
             {
+                "workflow_type": "hard_copy",
                 "name": "Chiến dịch tháng 10/2026",
                 "shop_instructions": "PGD chọn phản hồi cho từng hợp đồng.",
                 "response_options": list(ShopResponseOption.objects.filter(is_active=True).values_list("pk", flat=True)),

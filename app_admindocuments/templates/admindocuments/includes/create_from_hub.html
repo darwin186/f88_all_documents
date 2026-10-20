@@ -1,0 +1,12 @@
+{% if request.method == 'GET' and request.GET.create == '1' %}
+<script>
+  window.addEventListener('load', () => {
+    const trigger = document.querySelector('[data-modal-target="{{ modal_id|escapejs }}"]');
+    if (!trigger) return;
+    trigger.click();
+    const url = new URL(window.location.href);
+    url.searchParams.delete('create');
+    history.replaceState(null, '', url);
+  }, {once: true});
+</script>
+{% endif %}

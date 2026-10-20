@@ -11,6 +11,7 @@ from functools import wraps
 from django.contrib.admin.models import CHANGE, LogEntry
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.contrib.auth.decorators import login_required
 from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -72,6 +73,108 @@ def admin_only(view):
             return HttpResponseForbidden("Chỉ admin được truy cập Master Data.")
         return view(request, *args, **kwargs)
     return wrapped
+
+
+
+@login_required
+def gapo_directory_page(request):
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("Chỉ super admin mới có quyền truy cập danh bạ Gapo.")
+
+    from app_admindocuments.forms import AdmParcelRecipientImportForm
+    from app_admindocuments.models import AdmParcelRecipientCatalog, AdmParcelRecipientImportBatch
+    from app_admindocuments.views import _activate_parcel_recipient_batch, _import_parcel_recipient_batch
+
+    form = AdmParcelRecipientImportForm()
+
+    if request.method == "POST":
+        action = (request.POST.get("action") or "upload").strip()
+        if action == "upload":
+            form = AdmParcelRecipientImportForm(request.POST, request.FILES)
+            if form.is_valid():
+                upload = form.cleaned_data["file"]
+                checksum = hashlib.sha256(upload.read()).hexdigest()
+                upload.seek(0)
+                batch = AdmParcelRecipientImportBatch.objects.create(
+                    original_name=upload.name,
+                    file=upload,
+                    checksum=checksum,
+                    imported_by=request.user,
+                )
+                try:
+                    _import_parcel_recipient_batch(batch)
+                except Exception as exc:
+                    batch.has_errors = True
+                    batch.summary = {"error": str(exc)}
+                    batch.save(update_fields=["has_errors", "summary", "updated_at"])
+                    messages.error(request, f"Import file thất bại: {exc}")
+                else:
+                    messages.success(
+                        request,
+                        f"Đã nhập {batch.imported_rows} người nhận từ file {batch.original_name}.",
+                    )
+                    return redirect("master_data_gapo_directory")
+            else:
+                messages.error(request, "File upload không hợp lệ.")
+        elif action == "activate":
+            batch_id = request.POST.get("batch_id")
+            batch = get_object_or_404(AdmParcelRecipientImportBatch, pk=batch_id)
+            _activate_parcel_recipient_batch(batch)
+            messages.success(request, f"Đã kích hoạt dữ liệu từ file {batch.original_name}.")
+            return redirect("master_data_gapo_directory")
+        elif action == "reimport":
+            batch_id = request.POST.get("batch_id")
+            batch = get_object_or_404(AdmParcelRecipientImportBatch, pk=batch_id)
+            try:
+                _import_parcel_recipient_batch(batch)
+            except Exception as exc:
+                batch.has_errors = True
+                batch.summary = {"error": str(exc)}
+                batch.save(update_fields=["has_errors", "summary", "updated_at"])
+                messages.error(request, f"Làm mới dữ liệu thất bại: {exc}")
+            else:
+                messages.success(request, f"Đã làm mới dữ liệu từ file {batch.original_name}.")
+                return redirect("master_data_gapo_directory")
+
+    query = (request.GET.get("q") or "").strip()
+    current_batch = (
+        AdmParcelRecipientImportBatch.objects.filter(is_current=True)
+        .order_by("-created_at")
+        .first()
+    )
+    recipients_qs = AdmParcelRecipientCatalog.objects.none()
+    if current_batch:
+        recipients_qs = current_batch.recipients.all()
+        if query:
+            recipients_qs = recipients_qs.filter(
+                Q(full_name__icontains=query)
+                | Q(employee_code__icontains=query)
+                | Q(gapo_user_id__icontains=query)
+                | Q(department_name__icontains=query)
+            )
+    recipients_qs = recipients_qs.order_by("department_name", "full_name", "employee_code")
+    recipient_preview = recipients_qs[:50]
+    departments = []
+    if current_batch:
+        departments = list(
+            current_batch.recipients.exclude(department_name__exact="")
+            .values_list("department_name", flat=True)
+            .distinct()
+            .order_by("department_name")[:20]
+        )
+
+    context = {
+        "form": form,
+        "current_batch": current_batch,
+        "recipient_preview": recipient_preview,
+        "recipient_total": recipients_qs.count() if current_batch else 0,
+        "query": query,
+        "departments": departments,
+        "recent_batches": AdmParcelRecipientImportBatch.objects.all()[:8],
+        "is_super_admin": True,
+    }
+    return render(request, "app_documents/master_data_gapo_directory.html", context)
+
 
 
 def local_today():

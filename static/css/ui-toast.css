@@ -1,0 +1,74 @@
+/* F88 UI Kit — Toast (thông báo). Xem docs/ui-kit/components/toast.md.
+   Độc lập với ui-kit.css (có giá trị mặc định) để trang không dùng kit vẫn hiển thị đúng. */
+.ui-toasts {
+  position: fixed; inset: 76px 16px auto auto; z-index: 100000;
+  width: min(384px, calc(100vw - 32px)); max-height: calc(100dvh - 92px);
+  margin: 0; padding: 6px; border: 0; background: transparent; overflow: visible;
+  display: none; flex-direction: column; gap: 10px; pointer-events: none;
+  font-family: inherit; color: #111827;
+}
+.ui-toasts:popover-open, .ui-toasts:not([popover]):not(:empty) { display: flex; }
+.ui-toasts[popover]:not(:popover-open) { display: none; }
+
+.ui-toast {
+  --ui-toast-color: #00844a; --ui-toast-soft: #e7f6ef; --ui-toast-ink: #047857;
+  position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 12px; align-items: start;
+  padding: 14px 16px 14px 14px; border-radius: 20px; background: #fff; pointer-events: auto;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, .05), 0 12px 32px rgba(15, 23, 42, .14);
+  animation: ui-toast-in .28s cubic-bezier(.2, .8, .2, 1) both;
+}
+.ui-toast.has-ring { grid-template-columns: 44px minmax(0, 1fr) 52px; }
+.ui-toast.is-leaving { animation: ui-toast-out .2s ease-in both; }
+.ui-toast[data-type="success"] { --ui-toast-color: #00844a; --ui-toast-soft: #e7f6ef; --ui-toast-ink: #047857; }
+.ui-toast[data-type="error"] { --ui-toast-color: #ef4444; --ui-toast-soft: #fef2f2; --ui-toast-ink: #b91c1c; }
+.ui-toast[data-type="warning"] { --ui-toast-color: #f59e0b; --ui-toast-soft: #fffbeb; --ui-toast-ink: #b45309; }
+.ui-toast[data-type="info"] { --ui-toast-color: #0ea5e9; --ui-toast-soft: #e0f2fe; --ui-toast-ink: #0369a1; }
+.ui-toast[data-type="neutral"] { --ui-toast-color: #475569; --ui-toast-soft: #f1f5f9; --ui-toast-ink: #334155; }
+.ui-toast[data-type="accent"] { --ui-toast-color: #8b5cf6; --ui-toast-soft: #f3e8ff; --ui-toast-ink: #6d28d9; }
+
+.ui-toast-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 13px; background: var(--ui-toast-color); color: #fff; }
+.ui-toast-icon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ui-toast-main { min-width: 0; }
+.ui-toast-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.ui-toast-title { margin: 1px 0 0; font-size: 13px; font-weight: 700; line-height: 1.4; color: #111827; overflow-wrap: anywhere; }
+.ui-toast-side { position: relative; flex: none; min-width: 34px; height: 18px; text-align: right; }
+.ui-toast-time { font-size: 11px; line-height: 18px; color: #9ca3af; white-space: nowrap; transition: opacity .12s; }
+.ui-toast-close {
+  position: absolute; top: -4px; right: -6px; display: grid; place-items: center; width: 24px; height: 24px; padding: 0;
+  border: 0; border-radius: 8px; background: transparent; color: #6b7280; font-size: 17px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity .12s;
+}
+.ui-toast-close:hover { background: #f3f4f6; color: #111827; }
+.ui-toast-close:focus-visible { outline: 2px solid var(--ui-toast-color); outline-offset: 1px; opacity: 1; }
+.ui-toast:hover .ui-toast-close, .ui-toast:focus-within .ui-toast-close { opacity: 1; }
+.ui-toast:hover .ui-toast-time, .ui-toast:focus-within .ui-toast-time { opacity: 0; }
+@media (hover: none) { .ui-toast-close { opacity: 1; } .ui-toast-time { opacity: 0; } }
+.ui-toast-text { margin: 3px 0 0; font-size: 12px; line-height: 1.55; color: #4b5563; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ui-toast-text:empty { display: none; }
+
+.ui-toast-action {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 9px; padding: 6px 12px; border: 0; border-radius: 10px;
+  background: var(--ui-toast-soft); color: var(--ui-toast-ink); font: inherit; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer;
+}
+.ui-toast-action:hover { filter: brightness(.96); }
+.ui-toast-action:focus-visible { outline: 2px solid var(--ui-toast-color); outline-offset: 2px; }
+.ui-toast-action svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.ui-toast-bar { height: 8px; margin-top: 11px; border-radius: 99px; background: var(--ui-toast-soft); overflow: hidden; }
+.ui-toast-bar > i { display: block; height: 100%; width: var(--ui-toast-progress, 0%); border-radius: inherit; background: var(--ui-toast-color); transition: width .3s ease; }
+
+.ui-toast-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 9px; font-size: 11px; color: #6b7280; }
+.ui-toast-meta > span { display: inline-flex; align-items: center; gap: 5px; }
+.ui-toast-meta > span + span::before { content: ""; width: 4px; height: 4px; margin-right: 7px; border-radius: 1px; background: #d1d5db; }
+.ui-toast-meta svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; color: #4b5563; }
+
+.ui-toast-ring {
+  --p: 0; align-self: center; position: relative; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%;
+  background: conic-gradient(var(--ui-toast-color) calc(var(--p) * 1%), var(--ui-toast-soft) 0);
+}
+.ui-toast-ring::before { content: ""; position: absolute; inset: 5px; border-radius: 50%; background: #fff; }
+.ui-toast-ring span { position: relative; font-size: 11px; font-weight: 700; color: #111827; }
+
+@keyframes ui-toast-in { from { opacity: 0; transform: translateX(24px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes ui-toast-out { to { opacity: 0; transform: translateX(24px) scale(.97); } }
+@media (prefers-reduced-motion: reduce) { .ui-toast, .ui-toast.is-leaving { animation: none; } .ui-toast-bar > i { transition: none; } }
+@media (max-width: 480px) { .ui-toasts { inset: 68px 8px auto 8px; width: auto; } }

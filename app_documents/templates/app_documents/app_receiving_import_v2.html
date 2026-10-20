@@ -9,17 +9,6 @@
 <style>
   body { font-family: "Inter", "SF Pro Text", "Helvetica Neue", Arial, sans-serif; font-size:10px; }
   .import-card, .import-card * { font-size: 10px; }
-  .import-card input[type="file"]::file-selector-button {
-    font-size: 10px;
-    padding: 6px 12px;
-    margin-right: 8px;
-    border-radius: 8px;
-    border: 0;
-    background: #10b981;
-    color: white;
-    cursor: pointer;
-  }
-  .import-card input[type="file"]::file-selector-button:hover { background: #059669; }
 </style>
 
 <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 mt-5 space-y-4">
@@ -51,7 +40,7 @@
         <div class="rounded-lg border border-gray-200 bg-gray-50 p-2">
           <div class="flex items-center justify-between">
             <div class="text-[9px] font-semibold text-gray-700">Template header (copy vào Excel)</div>
-            <button id="copy-template-header" type="button" class="px-2 py-1 rounded-md bg-emerald-600 text-white text-[9px] font-semibold hover:bg-emerald-700">
+            <button id="copy-template-header" type="button" class="ui-btn ui-btn-primary ui-btn-sm">
               Copy
             </button>
           </div>
@@ -96,13 +85,13 @@
       <div class="rounded-xl border border-gray-100 p-3 space-y-2">
         <div>
           <label class="block text-[9px] text-gray-500 mb-1">Upload file Excel</label>
-          <input id="receiving-import-file" type="file" class="block w-full text-[9px] text-gray-700 leading-tight file:mr-2 file:px-2 file:py-1.5 file:text-[9px]" accept=".xlsx,.xls">
+          <div class="ui-file" data-ui-file data-max-mb="10"><input id="receiving-import-file" type="file" accept=".xlsx,.xls"></div>
           <p id="receiving-import-file-name" class="text-[9px] text-gray-500 mt-1 truncate">Chưa chọn file.</p>
           <p class="text-[9px] text-gray-400 mt-1">Dung lượng tối đa 30MB.</p>
         </div>
         <div class="flex flex-wrap gap-2">
           <button id="receiving-import-validate" type="button" class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-[9px] font-semibold hover:bg-indigo-700">Kiểm tra file</button>
-          <button id="receiving-import-save" type="button" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[9px] font-semibold hover:bg-emerald-700">Lưu dữ liệu</button>
+          <button id="receiving-import-save" type="button" class="ui-btn ui-btn-primary">Lưu dữ liệu</button>
           <span id="receiving-import-message" class="text-[9px] text-gray-600"></span>
         </div>
       </div>

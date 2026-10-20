@@ -1,0 +1,59 @@
+{% extends 'app_documents/base_app_documents_v2.html' %}
+{% block title %}Tạo chiến dịch · Chọn loại{% endblock %}
+{% block top_nav %}{% include 'app_documents/components/top_nav_v2.html' %}{% endblock %}
+{% block main_extra_class %}pt-20{% endblock %}
+{% block content %}
+<style>
+  .campaign-kind-page{max-width:950px;margin:20px auto;padding:0 12px;color:#25382e}
+  .campaign-kind-card{background:#fff;border:1px solid #e4eae6;border-radius:14px;overflow:hidden}
+  .campaign-kind-head{padding:24px 26px 20px;border-bottom:1px solid #edf0ee}
+  .campaign-kind-head small{font-size:9px;font-weight:700;letter-spacing:1px;color:#00844a}
+  .campaign-kind-head h1{font-size:19px;font-weight:650;margin:5px 0}
+  .campaign-kind-head p{font-size:11px;color:#849087;margin:5px 0 0}
+  .campaign-kind-body{padding:24px 26px}
+  .campaign-kind-body>label{display:block;font-size:11px;font-weight:600;margin-bottom:12px}
+  .campaign-kind-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .campaign-kind-option{position:relative;display:block;padding:22px;border:1px solid #dfe7e1;border-radius:11px;cursor:pointer;transition:background .15s,border-color .15s}
+  .campaign-kind-option:hover{background:#fafdfb;border-color:#9acaae}
+  .campaign-kind-option:has(input:checked){background:#f2faf5;border-color:#00844a;box-shadow:0 0 0 1px #00844a}
+  .campaign-kind-option input{position:absolute;right:18px;top:22px;width:16px;height:16px;accent-color:#00844a;color:#00844a}
+  .campaign-kind-option:has(input:focus-visible){outline:2px solid #9bd4b4;outline-offset:3px}
+  .campaign-kind-icon{width:39px;height:39px;display:flex;align-items:center;justify-content:center;background:#f0f6f2;border-radius:9px;color:#00844a;margin-bottom:15px}
+  .campaign-kind-option h2{font-size:14px;font-weight:650;margin:0 0 7px}
+  .campaign-kind-option p{font-size:10px;color:#819086;line-height:1.8;margin:0;min-height:54px}
+  .campaign-kind-option ul{padding:14px 0 0;margin:14px 0 0;list-style:none;border-top:1px solid #e8efe9;font-size:10px;line-height:2;color:#617b6a}
+  .campaign-kind-option li:before{content:'✓';color:#00844a;margin-right:7px}
+  .campaign-kind-tag{display:inline-block;margin-top:14px;font-size:9px;border-radius:4px;background:#fff7e6;color:#96752f;padding:3px 7px}
+  .campaign-kind-footer{display:flex;align-items:center;justify-content:space-between;border-top:1px solid #edf0ee;background:#fcfdfc;padding:17px 26px;gap:16px}
+  .campaign-kind-footer span{font-size:10px;color:#94a097}
+  .campaign-kind-footer div{display:flex;gap:8px;align-items:center;font-size:11px}
+  .campaign-kind-footer a{padding:8px 13px;color:#718478;text-decoration:none}
+  .campaign-kind-footer button{border:1px solid #00844a;border-radius:7px;background:#00844a;color:white;padding:8px 17px;font-size:11px;font-weight:600;cursor:pointer}
+  @media(max-width:600px){.campaign-kind-grid{grid-template-columns:1fr}.campaign-kind-footer{align-items:flex-end}.campaign-kind-head,.campaign-kind-body{padding:20px}}
+</style>
+<div class="campaign-kind-page">
+  <a href="{% url 'document_campaigns:campaign_list' %}" class="text-[10px] text-gray-500 hover:text-emerald-700">← Danh sách chiến dịch</a>
+  <form method="get" action="{% url 'document_campaigns:campaign_create' %}" class="campaign-kind-card mt-4">
+    <div class="campaign-kind-head"><small>TẠO CHIẾN DỊCH</small><h1>Anh muốn tạo loại chiến dịch nào?</h1><p>Mỗi loại có biểu mẫu cấu hình và tiến trình xử lý riêng.</p></div>
+    <div class="campaign-kind-body">
+      {% if kind_error %}<p role="alert" class="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-[11px] text-red-700">{{ kind_error }}</p>{% endif %}
+      <label>Loại chiến dịch <span class="text-red-500">*</span></label>
+      <div class="campaign-kind-grid" role="radiogroup" aria-label="Loại chiến dịch">
+        <label class="campaign-kind-option">
+          <input type="radio" name="workflow_type" value="hard_copy" required aria-label="Chứng từ bản cứng">
+          <span class="campaign-kind-icon"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg></span>
+          <h2>Chứng từ bản cứng</h2><p>Book lỗi chứng từ theo kỳ, nhận phản hồi từ PGD và thực hiện các bước kiểm duyệt hiện tại.</p>
+          <ul><li>Truy xuất và làm sạch dữ liệu chứng từ</li><li>Phản hồi PGD, Team review, QLKV xác nhận</li><li>Chốt và tổng hợp kết quả book lỗi</li></ul>
+        </label>
+        <label class="campaign-kind-option">
+          <input type="radio" name="workflow_type" value="mail_merge" required aria-label="Mail Merge">
+          <span class="campaign-kind-icon"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m3 7 9 6 9-6M8 16h3M15 16h2"/></svg></span>
+          <h2>Mail Merge</h2><p>Đưa file dữ liệu lên, thiết kế bảng phản hồi và gửi link riêng theo từng phòng giao dịch.</p>
+          <ul><li>Ẩn/chọn cột, thêm trường nhập và droplist</li><li>Mapping PGD, email và theo dõi link</li><li>Thu thập phản hồi, chốt và xuất báo cáo</li></ul><span class="campaign-kind-tag">Đang xem thử giao diện</span>
+        </label>
+      </div>
+    </div>
+    <div class="campaign-kind-footer"><span>Chọn một loại để tiếp tục cấu hình chiến dịch.</span><div><a href="{% url 'document_campaigns:campaign_list' %}">Hủy</a><button type="submit">Tiếp tục →</button></div></div>
+  </form>
+</div>
+{% endblock %}

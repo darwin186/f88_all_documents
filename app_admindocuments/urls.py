@@ -1,18 +1,24 @@
 from django.urls import path
+from django.views.generic.base import RedirectView
 
 from . import views
 
 app_name = "admindocuments"
 
 urlpatterns = [
-    path("", views.dashboard, name="admindocuments_dashboard"),
-    path("dashboard/export/", views.dashboard_export, name="admindocuments_dashboard_export"),
+    path("workflows/", views.workflow_hub, name="workflow_hub"),
+    path("", RedirectView.as_view(pattern_name="admindocuments:workflow_hub", permanent=False), name="admindocuments_home"),
     path("incoming-documents/", views.incoming_document_list, name="incoming_document_list"),
     path("parcel-receipts/", views.parcel_receipt_list, name="parcel_receipt_list"),
     path(
         "parcel-receipts/completed/",
         views.parcel_receipt_completed_list,
         name="parcel_receipt_completed_list",
+    ),
+    path(
+        "parcel-receipts/completed/export/",
+        views.parcel_receipt_completed_export,
+        name="parcel_receipt_completed_export",
     ),
     path(
         "parcel-recipients/search/",
@@ -136,7 +142,9 @@ urlpatterns = [
     path("counters/visual/", views.document_counter_visual, name="admindocuments_counters_visual"),
     path("counters/paper/visual/", views.paper_counter_visual, name="paper_counters_visual"),
     path("paper-documents/", views.paper_document_list, name="paper_document_list"),
+    path("paper-documents/export/", views.paper_document_export, name="paper_document_export"),
     path("paper-documents/<int:doc_id>/", views.paper_document_detail, name="paper_document_detail"),
+    path("paper-documents/<int:doc_id>/field/", views.paper_document_update_field, name="paper_document_update_field"),
     path("paper-documents/<int:doc_id>/hide/", views.paper_document_hide, name="paper_document_hide"),
     path("paper-documents/template/", views.paper_document_template, name="paper_document_template"),
     path("paper-documents/import/", views.paper_document_import, name="paper_document_import"),

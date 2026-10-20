@@ -1,9 +1,9 @@
 {% extends "admindocuments/base.html" %}
 {% block title %}{{ page_title }}{% endblock %}
 
-{% block content %}
+{% block admin_content %}
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@600;700&display=swap');
+
 
   .parcel-app {
     font-family: 'Manrope', sans-serif;
@@ -134,18 +134,7 @@
   }
 </style>
 
-{% if messages %}
-<div class="parcel-mobile-toast fixed bottom-5 right-5 z-50 space-y-2 sm:max-w-sm">
-  {% for message in messages %}
-  <div class="rounded-2xl border px-4 py-3 text-xs shadow-lg backdrop-blur
-    {% if message.tags == 'error' %}border-red-200 bg-red-50/95 text-red-700
-    {% elif message.tags == 'warning' %}border-amber-200 bg-amber-50/95 text-amber-700
-    {% else %}border-emerald-200 bg-emerald-50/95 text-emerald-700{% endif %}">
-    {{ message }}
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
+
 
 <div class="parcel-app" x-data="parcelReceiptApp({
     initialPane: 'receive',
@@ -409,13 +398,8 @@
 
             <form method="get" class="mt-5 space-y-3">
               <input type="hidden" name="pane" value="list">
-              <input type="hidden" name="recipient" value="{{ selected_recipient }}">
-              <input type="hidden" name="department" value="{{ selected_department }}">
-              <input type="hidden" name="start_date" value="{{ selected_start_date }}">
-              <input type="hidden" name="end_date" value="{{ selected_end_date }}">
               <input type="hidden" name="unnotified" value="{% if selected_unnotified %}1{% else %}0{% endif %}">
               <input type="hidden" name="unassigned" value="{% if selected_unassigned %}1{% else %}0{% endif %}">
-              <input type="hidden" name="receive_location" value="{{ selected_receive_location }}">
               <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 <input type="hidden" name="split_by_day" value="{% if split_by_day %}1{% else %}0{% endif %}">
                 <div class="inline-flex w-full rounded-full border border-slate-200 bg-slate-50 p-1 shadow-sm sm:w-fit">
@@ -437,11 +421,6 @@
                 </svg>
                 <input type="text" name="q" value="{{ q }}" placeholder="Tìm tên người nhận, mã nhân viên, mã vận đơn..."
                        class="w-full min-w-0 border-0 bg-transparent text-[13px] text-slate-700 placeholder:text-[11px] placeholder:text-slate-400 focus:outline-none focus:ring-0">
-                <button type="submit" class="inline-flex w-full items-center justify-center rounded-full bg-slate-900 px-3 py-2 text-white sm:w-10 sm:px-0" aria-label="Tìm kiếm">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z"/>
-                  </svg>
-                </button>
               </div>
 
               <details class="rounded-3xl border border-slate-200 bg-white/80 px-4 py-3 shadow-sm">
@@ -481,6 +460,7 @@
             </form>
           </div>
 
+          <div class="flex justify-end mb-3">{% include 'admindocuments/includes/pagination.html' with page=page_obj %}</div>
           <div id="parcel-recipient-groups" class="space-y-3">
             {% for group in recipient_groups %}
             {% include "admindocuments/includes/parcel_recipient_group_card.html" with group=group grouping_mode=grouping_mode %}
@@ -491,19 +471,6 @@
             {% endfor %}
           </div>
 
-          {% if is_paginated %}
-          <div class="flex flex-wrap items-center justify-between gap-3 px-1 text-[12px] text-slate-500">
-            <div>Trang {{ page_obj.number }} / {{ paginator.num_pages }}</div>
-            <div class="flex items-center gap-2">
-              {% if page_obj.has_previous %}
-              <a href="?pane=list&q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&recipient={{ selected_recipient }}&start_date={{ selected_start_date }}&end_date={{ selected_end_date }}&unnotified={% if selected_unnotified %}1{% else %}0{% endif %}&unassigned={% if selected_unassigned %}1{% else %}0{% endif %}&split_by_day={% if split_by_day %}1{% else %}0{% endif %}&page={{ page_obj.previous_page_number }}" class="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-600">Trước</a>
-              {% endif %}
-              {% if page_obj.has_next %}
-              <a href="?pane=list&q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&recipient={{ selected_recipient }}&start_date={{ selected_start_date }}&end_date={{ selected_end_date }}&unnotified={% if selected_unnotified %}1{% else %}0{% endif %}&unassigned={% if selected_unassigned %}1{% else %}0{% endif %}&split_by_day={% if split_by_day %}1{% else %}0{% endif %}&page={{ page_obj.next_page_number }}" class="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-600">Sau</a>
-              {% endif %}
-            </div>
-          </div>
-          {% endif %}
 
         </div>
       </section>

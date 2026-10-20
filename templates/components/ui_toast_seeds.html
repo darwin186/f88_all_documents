@@ -1,0 +1,2 @@
+{# Đẩy tin nhắn Django (messages) vào toast. Đặt một lần trong trang; ui-toast.js sẽ đọc và hiển thị. #}
+{% if messages %}<div hidden data-ui-toast-seeds>{% for message in messages %}<span data-ui-toast-seed data-level="{{ message.tags }}">{{ message }}</span>{% endfor %}</div>{% endif %}

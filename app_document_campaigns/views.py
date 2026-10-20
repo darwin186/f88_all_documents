@@ -74,6 +74,17 @@ def campaign_list(request):
 def campaign_create(request):
     if not _is_campaign_admin(request.user):
         return HttpResponse("Chỉ admin được tạo chiến dịch.", status=403)
+    workflow_type = (request.POST if request.method == "POST" else request.GET).get("workflow_type", "")
+    if workflow_type and workflow_type not in {"hard_copy", "mail_merge"}:
+        return HttpResponse("Loại chiến dịch không hợp lệ.", status=400)
+    if workflow_type == "mail_merge":
+        if request.method != "GET":
+            return HttpResponse("Mail Merge hiện là bản xem thử UI, chưa tạo chiến dịch thật.", status=400)
+        return redirect(f"{reverse('document_campaigns:mail_merge_preview')}?step=1&mode=create")
+    if not workflow_type:
+        return render(request, "app_document_campaigns/campaign_kind.html", {
+            "kind_error": "Vui lòng chọn loại chiến dịch trước khi tiếp tục." if request.method == "POST" else "",
+        }, status=400 if request.method == "POST" else 200)
     if request.method == "POST":
         form = CampaignCreateForm(request.POST)
         if form.is_valid():

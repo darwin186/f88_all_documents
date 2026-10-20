@@ -52,8 +52,8 @@ document.addEventListener("DOMContentLoaded", () => {
           }
           const issueButton = issueForm.querySelector("button");
           issueButton.textContent = "Đổi link";
-          issueButton.classList.remove("dec-btn-primary");
-          issueButton.classList.add("dec-btn-secondary");
+          issueButton.classList.remove("ui-btn-primary");
+          issueButton.classList.add("ui-btn-secondary");
         });
         allForms.forEach((item) => {
           item.dataset.hasLinks = "true";
@@ -142,8 +142,8 @@ document.addEventListener("DOMContentLoaded", () => {
         status.innerHTML = `<span class="dec-link-status is-issued">Đã phát hành</span><small>${payload.created_at}</small>`;
         form.dataset.hasLink = "true";
         button.textContent = "Đổi link";
-        button.classList.remove("dec-btn-primary");
-        button.classList.add("dec-btn-secondary");
+        button.classList.remove("ui-btn-primary");
+        button.classList.add("ui-btn-secondary");
       } catch (error) {
         window.campaignToast?.(error.message, "error");
         feedback.textContent = error.message;

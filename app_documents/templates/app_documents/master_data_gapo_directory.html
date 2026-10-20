@@ -1,27 +1,18 @@
 {% extends "admindocuments/base.html" %}
-{% block title %}Danh bạ người nhận bưu phẩm{% endblock %}
+{% block title %}Master Data · Danh bạ Gapo{% endblock %}
+{% block top_nav %}{% include 'app_documents/components/top_nav_v2.html' with master_data_nav=True %}{% endblock %}
+{% block admin_overlays %}{% endblock %}
 
-{% block content %}
+{% block admin_content %}
 <div class="mb-6 flex items-start justify-between gap-4">
   <div>
-    <h1 class="text-2xl font-semibold text-gray-700">Danh bạ người nhận bưu phẩm</h1>
+    <h1 class="text-2xl font-semibold text-gray-700">Danh bạ Gapo</h1>
     <p class="mt-1 text-sm text-gray-500">Tải file Excel từ IT, chuẩn hóa dữ liệu người nhận và dùng trực tiếp cho màn tiếp nhận bưu phẩm.</p>
   </div>
-  <a href="{% url 'admindocuments:parcel_receipt_list' %}" class="text-sm text-gray-600 hover:underline">← Về màn bưu phẩm</a>
+  <a href="{% url 'master_data' %}" class="text-sm text-gray-600 hover:underline">← Master Data</a>
 </div>
 
-{% if messages %}
-<div class="mb-4 space-y-2">
-  {% for message in messages %}
-  <div class="rounded-lg border px-4 py-3 text-sm
-    {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-700
-    {% elif message.tags == 'warning' %}border-amber-200 bg-amber-50 text-amber-700
-    {% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
-    {{ message }}
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
+
 
 <div class="grid gap-5 xl:grid-cols-[380px,minmax(0,1fr)]">
   <div class="space-y-5">

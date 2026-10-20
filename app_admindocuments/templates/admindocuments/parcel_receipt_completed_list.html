@@ -1,16 +1,8 @@
 {% extends "admindocuments/base.html" %}
 {% block title %}{{ page_title }}{% endblock %}
 
-{% block content %}
-{% if messages %}
-<div class="fixed bottom-4 right-4 z-50 space-y-2">
-  {% for message in messages %}
-  <div class="rounded-lg border px-4 py-3 text-xs shadow {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-700{% elif message.tags == 'warning' %}border-amber-200 bg-amber-50 text-amber-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
-    {{ message }}
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
+{% block admin_content %}
+
 
 <div class="space-y-4 text-[13px]">
   <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -18,51 +10,51 @@
       <h1 class="text-xl font-semibold text-gray-700">{{ page_title }}</h1>
       <p class="text-xs text-gray-500">{{ page_description }}</p>
     </div>
-    <a href="{% url 'admindocuments:parcel_receipt_list' %}" class="inline-flex w-fit items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 shadow-sm transition hover:border-emerald-200 hover:text-emerald-700">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+    <a href="{% url 'admindocuments:parcel_receipt_list' %}" class="ui-btn ui-btn-secondary ui-btn-sm w-fit">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
       </svg>
       Quay lại danh sách chưa nhận
     </a>
   </div>
 
-  <form method="get" class="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
-    <div class="grid gap-3 lg:grid-cols-[1.35fr_1fr_1fr_0.95fr_0.95fr]">
-      <input type="text"
-             name="q"
-             value="{{ q }}"
-             placeholder="Mã vận đơn, đơn vị gửi, nội dung..."
-             class="min-h-[42px] rounded-xl border border-gray-200 bg-gray-50 px-3 text-[11px] placeholder:text-[10px] focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100">
-      <input type="text"
-             name="recipient"
-             value="{{ recipient }}"
-             placeholder="Người nhận hoặc người nhận thực tế"
-             class="min-h-[42px] rounded-xl border border-gray-200 bg-gray-50 px-3 text-[11px] placeholder:text-[10px] focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100">
-      <input type="text"
-             name="department"
-             value="{{ department }}"
-             placeholder="Phòng ban"
-             class="min-h-[42px] rounded-xl border border-gray-200 bg-gray-50 px-3 text-[11px] placeholder:text-[10px] focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100">
-      <input type="date"
-             name="start_date"
-             value="{{ start_date }}"
-             class="min-h-[42px] rounded-xl border border-gray-200 bg-gray-50 px-3 text-[11px] focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100">
-      <div class="flex gap-2">
-        <input type="date"
-               name="end_date"
-               value="{{ end_date }}"
-               class="min-h-[42px] min-w-0 flex-1 rounded-xl border border-gray-200 bg-gray-50 px-3 text-[11px] focus:border-emerald-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100">
-        <button type="submit" class="inline-flex min-h-[42px] items-center justify-center rounded-xl bg-f88green px-4 text-xs font-semibold text-white shadow-sm transition hover:bg-f88dark">
-          Lọc
-        </button>
-      </div>
+  <form method="get">
+    <div class="adm-shared-filter-grid">
+      <div class="adm-field"><label for="pc-q">Tìm kiếm</label><input id="pc-q" type="search" name="q" value="{{ q }}" placeholder="Mã vận đơn, đơn vị gửi, nội dung..."></div>
+      <div class="adm-field"><label for="pc-recipient">Người nhận</label><input id="pc-recipient" type="text" name="recipient" value="{{ recipient }}" placeholder="Người nhận hoặc người nhận thực tế"></div>
+      <div class="adm-field"><label for="pc-employee-code">Mã nhân viên</label><input id="pc-employee-code" type="text" name="employee_code" value="{{ employee_code }}" placeholder="Mã NV người nhận" autocomplete="off"></div>
+      <div class="adm-field"><label for="pc-department">Phòng ban</label><input id="pc-department" type="text" name="department" value="{{ department }}" placeholder="Phòng ban"></div>
+      <div class="adm-field"><label for="pc-company">Công ty</label>
+        <div class="ui-select" data-ui-select><select id="pc-company" name="company">
+          <option value="">Tất cả công ty</option>
+          {% for item in company_options %}<option value="{{ item.code }}" {% if company == item.code %}selected{% endif %}>{{ item.name }}</option>{% endfor %}
+        </select></div></div>
+      <div class="adm-field"><label for="pc-type">Loại</label>
+        <div class="ui-select" data-ui-select data-search="off"><select id="pc-type" name="parcel_type">
+          <option value="">Tất cả loại</option>
+          {% for item in type_options %}<option value="{{ item.code }}" {% if parcel_type == item.code %}selected{% endif %}>{{ item.name }}</option>{% endfor %}
+        </select></div></div>
+      <div class="adm-field"><label for="pc-status">Trạng thái</label>
+        <div class="ui-select" data-ui-select><select id="pc-status" name="status">
+          <option value="">Tất cả trạng thái</option>
+          {% for item in status_options %}<option value="{{ item.code }}" {% if status == item.code %}selected{% endif %}>{{ item.name }}</option>{% endfor %}
+        </select></div></div>
+      <div class="adm-field"><label for="pc-start">Ngày tiếp nhận</label><input id="pc-start" type="date" name="start_date" value="{{ start_date }}"></div>
+      <div class="adm-field"><label for="pc-end">Đến ngày</label><input id="pc-end" type="date" name="end_date" value="{{ end_date }}"></div>
     </div>
   </form>
 
   <div class="rounded-2xl border border-gray-100 bg-white shadow-sm overflow-hidden">
-    <div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-2.5">
       <div class="text-sm font-semibold text-gray-700">Bảng tra cứu đã nhận</div>
-      <div class="text-[11px] text-gray-500">{{ paginator.count }} bản ghi</div>
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="adm-count">{{ paginator.count }} bản ghi</span>
+        <a href="{% url 'admindocuments:parcel_receipt_completed_export' %}{% if export_query %}?{{ export_query }}{% endif %}" class="ui-btn ui-btn-secondary ui-btn-sm" data-export-excel title="Xuất các bản ghi theo bộ lọc đang áp dụng ({{ paginator.count }} bản ghi)">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14" /></svg>
+          Xuất Excel
+        </a>
+        {% include 'admindocuments/includes/pagination.html' with page=page_obj compact=True %}
+      </div>
     </div>
     <div class="overflow-x-auto">
       <table class="min-w-full divide-y divide-gray-100 text-[12px]">
@@ -130,16 +122,6 @@
     </div>
   </div>
 
-  {% if is_paginated %}
-  <div class="flex items-center justify-end gap-2 text-xs">
-    {% if page_obj.has_previous %}
-    <a href="?page={{ page_obj.previous_page_number }}&q={{ q|urlencode }}&recipient={{ recipient|urlencode }}&department={{ department|urlencode }}&start_date={{ start_date|urlencode }}&end_date={{ end_date|urlencode }}" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-600 transition hover:border-emerald-200 hover:text-emerald-700">Trước</a>
-    {% endif %}
-    <span class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-500">Trang {{ page_obj.number }}/{{ paginator.num_pages }}</span>
-    {% if page_obj.has_next %}
-    <a href="?page={{ page_obj.next_page_number }}&q={{ q|urlencode }}&recipient={{ recipient|urlencode }}&department={{ department|urlencode }}&start_date={{ start_date|urlencode }}&end_date={{ end_date|urlencode }}" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-gray-600 transition hover:border-emerald-200 hover:text-emerald-700">Sau</a>
-    {% endif %}
-  </div>
-  {% endif %}
+
 </div>
 {% endblock %}

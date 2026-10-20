@@ -1,0 +1,17 @@
+<div class="adm-edit-summary"><div><span>Số hiệu giấy hành chính</span><div class="adm-doc-identifier"><strong>{{ doc.document_number_full }}</strong>{% include 'admindocuments/includes/document_copy_number.html' %}</div></div><span class="adm-status">{{ doc.status|default:'—' }}</span></div>
+<p class="adm-live-hint">Nhấn vào giá trị để sửa. Enter/Lưu để cập nhật; danh sách tự lưu khi chọn.</p>
+<form id="document-edit-form" data-live-url="{% url 'admindocuments:paper_document_update_field' doc.pk %}" method="post">
+  {% csrf_token %}
+  {% if form.errors %}<div role="alert" class="adm-edit-error">{% for field in form %}{% for error in field.errors %}<p>{{ field.label }}: {{ error }}</p>{% endfor %}{% endfor %}{{ form.non_field_errors }}</div>{% endif %}
+  <div class="adm-form-columns">{% for column in edit_columns %}<div class="adm-form-column" data-edit-column>
+    <h3 class="adm-column-title">{% if forloop.first %}Thông tin giấy hành chính{% else %}Nội dung & vận chuyển{% endif %}</h3>
+    {% for field in column %}<div class="adm-edit-field" data-live-field="{{ field.name }}">
+      <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}<span class="text-red-500"> *</span>{% endif %}</label>
+      <button type="button" data-live-display class="adm-live-display" aria-label="Chỉnh sửa {{ field.label }}"><span data-live-label>—</span><span aria-hidden="true">✎</span></button>
+      <div data-live-editor hidden>{% if field.field.widget.input_type == 'select' %}{% include 'admindocuments/includes/document_select.html' %}{% else %}{{ field }}{% endif %}
+        <div class="adm-live-controls"><button type="button" data-live-save>Lưu</button><button type="button" data-live-cancel>Hủy</button></div><p data-live-error role="alert" class="adm-edit-field-error" hidden></p>
+      </div><span data-live-status role="status"></span>
+    </div>{% endfor %}
+  </div>{% endfor %}</div>
+</form>
+<div class="adm-form-footer adm-edit-footer"><button type="button" data-edit-close class="ui-btn ui-btn-primary">Đóng</button></div>

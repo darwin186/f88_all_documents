@@ -1,9 +1,14 @@
-<nav class="fixed top-0 inset-x-0 z-30 px-2 lg:px-4 bg-white/95 backdrop-blur border-b border-gray-200 shadow-sm">
-  <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
-    <div class="flex items-center gap-3">
+<nav class="fixed top-0 inset-x-0 z-30 px-2 lg:px-4 bg-white/95 backdrop-blur border-b border-gray-200 shadow-sm{% if admin_docs_nav %} adm-top-nav{% endif %}">
+  <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto rounded-2xl px-4 py-3 flex items-center justify-between gap-3{% if admin_docs_nav %} adm-top-nav-inner{% endif %}">
+    <div class="flex items-center gap-3{% if admin_docs_nav %} adm-top-nav-left{% endif %}">
       <a href="{% url 'home' %}" class="flex items-center gap-2">
         <img src="https://f88.vn/images/root/logo-f88-primary.svg" alt="F88" class="h-8">
       </a>
+      {% if admin_docs_home %}
+      <a href="{% url 'admindocuments:workflow_hub' %}" class="text-xs font-semibold text-gray-800">Văn bản hành chính</a>
+      {% elif admin_docs_nav %}
+      {% include 'admindocuments/includes/subnav_v2.html' %}
+      {% else %}
       <div class="hidden md:flex items-center gap-2 text-[10px] text-gray-600">
         {% if not gddb_nav and not master_data_nav %}
         {% if 'receiving_v2' in allowed_screens %}
@@ -36,6 +41,10 @@
         {% endif %}
         {% if master_data_nav and is_admin or master_data_nav and is_super_admin %}
         <a href="{% url 'master_data' %}" class="{% if request.resolver_match.url_name == 'master_data' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Danh mục PGD</a>
+        {% if request.user.is_superuser %}
+        <span class="text-gray-300">•</span>
+        <a href="{% url 'master_data_gapo_directory' %}" class="{% if request.resolver_match.url_name == 'master_data_gapo_directory' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}" {% if request.resolver_match.url_name == 'master_data_gapo_directory' %}aria-current="page"{% endif %}>Danh bạ Gapo</a>
+        {% endif %}
         <span class="text-gray-300">•</span>
         <div class="group relative inline-flex items-center">
           <a href="{% url 'master_data_response_options' %}" class="inline-flex items-center gap-1 {% if request.resolver_match.url_name == 'master_data_response_options' or request.resolver_match.url_name == 'master_data_response_guidance' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Book lỗi chứng từ <span class="text-[8px]">⌄</span></a>
@@ -81,18 +90,6 @@
         {% if 'workshift_register' in allowed_screens or 'workshift_tasks' in allowed_screens %}
         <a href="{% url 'workshift_register' %}" class="{% if request.resolver_match.url_name == 'workshift_register' or request.resolver_match.url_name == 'workshift_tasks' or request.resolver_match.url_name == 'workshift_policy' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Lịch làm việc</a>
         {% endif %}
-        {% if request.resolver_match.namespace == 'document_campaigns' %}
-        <span class="text-gray-300">•</span>
-        <div class="group relative inline-flex items-center">
-          <a href="{% url 'document_campaigns:campaign_list' %}" class="inline-flex items-center gap-1 {% if request.resolver_match.namespace == 'document_campaigns' %}font-semibold text-f88green{% else %}hover:text-f88green{% endif %}">Chiến dịch lỗi <span class="text-[8px]">⌄</span></a>
-          <div class="absolute left-0 top-full z-50 hidden min-w-[210px] pt-2 group-hover:block group-focus-within:block">
-            <div class="overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
-              {% if campaign %}<a href="{% url 'document_campaigns:campaign_review' campaign.id %}" class="block px-3 py-2 text-[9px] text-gray-700 hover:bg-gray-50 hover:text-f88green">Review phản hồi PGD</a>{% endif %}
-              {% if can_manage_campaigns or can_manage_shop_links or is_admin or is_super_admin %}<a href="{% url 'document_campaigns:campaign_create' %}" class="block border-t border-gray-100 px-3 py-2 text-[9px] {% if request.resolver_match.url_name == 'campaign_create' %}bg-green-50 font-semibold text-f88green{% else %}text-gray-700 hover:bg-gray-50 hover:text-f88green{% endif %}">Tạo chiến dịch mới</a>{% endif %}
-            </div>
-          </div>
-        </div>
-        {% endif %}
         {% if 'receiving_import_v2' in allowed_screens or is_admin or is_super_admin %}
         <span class="text-gray-300">•</span>
         <div class="relative group inline-flex items-center">
@@ -120,8 +117,9 @@
         {% endif %}
         {% endif %}
       </div>
+      {% endif %}
     </div>
-    {% if request.resolver_match.namespace == 'document_campaigns' %}<a href="{% url 'document_campaigns:campaign_list' %}" class="mr-auto whitespace-nowrap rounded-lg px-3 py-2 text-[11px] hover:bg-green-50 {% if request.resolver_match.url_name == 'campaign_list' %}bg-green-50 font-semibold text-f88green{% else %}text-gray-600 hover:text-f88green{% endif %}" {% if request.resolver_match.url_name == 'campaign_list' %}aria-current="page"{% endif %}>Danh sách kỳ</a>{% endif %}
+    {% if request.resolver_match.namespace == 'document_campaigns' %}<a href="{% url 'document_campaigns:campaign_list' %}" class="mr-auto whitespace-nowrap rounded-lg px-3 py-2 text-[11px] hover:bg-green-50 {% if request.resolver_match.url_name == 'campaign_list' %}bg-green-50 font-semibold text-f88green{% else %}text-gray-600 hover:text-f88green{% endif %}" {% if request.resolver_match.url_name == 'campaign_list' %}aria-current="page"{% endif %}>Quản lý chiến dịch</a>{% endif %}
     <div class="relative text-[9px] text-gray-700" data-user-menu>
       <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50" data-user-toggle aria-expanded="false">
         <div class="hidden sm:flex flex-col leading-tight text-right">

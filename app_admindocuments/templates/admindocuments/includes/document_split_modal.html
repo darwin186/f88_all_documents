@@ -1,5 +1,4 @@
 {% load static %}
-<script src="{% static 'admindocuments/js/document_form_controls.js' %}?v=20261015-1"></script>
 <style>
   [data-document-select] [hidden], [data-document-attachment] [hidden] { display: none !important; }
 </style>
@@ -22,12 +21,14 @@
     error.setAttribute('role', 'alert');
     error.textContent = message;
     content.append(error);
+    window.adminDocumentNotify?.({type: 'error', title: 'Không mở được form tách thửa', message});
   };
   const open = async trigger => {
     opener = trigger;
     activeRequest?.abort();
     activeRequest = new AbortController();
     const signal = activeRequest.signal;
+    window.adminDocumentFormControls?.destroy(content);
     content.textContent = 'Đang tải biểu mẫu…';
     dialog.showModal();
     if (trigger.dataset.splitTemplate) {
@@ -73,9 +74,13 @@
         const result = await response.json();
         window.location.assign(result.redirect_url);
       } else {
-        content.innerHTML = await response.text();
+        const html = await response.text();
+        window.adminDocumentFormControls?.destroy(content);
+        content.innerHTML = html;
         window.adminDocumentFormControls?.init(content);
         content.querySelector('[role=alert]')?.scrollIntoView({block: 'nearest'});
+        const details = [...content.querySelectorAll('.errorlist')].map(item => `${item.closest('[data-split-column] > div')?.querySelector('label')?.textContent.trim() || 'Thông tin văn bản'}: ${item.textContent.trim()}`);
+        window.adminDocumentNotify?.({type: 'error', title: 'Chưa tạo được văn bản tách thửa', message: details.join('\n') || content.querySelector('[role=alert]')?.textContent.trim() || 'Vui lòng kiểm tra lại thông tin biểu mẫu.'});
       }
     } catch (error) {
       let alert = form.querySelector('[data-submit-error]');
@@ -87,6 +92,7 @@
         form.prepend(alert);
       }
       alert.textContent = error.message;
+      window.adminDocumentNotify?.({type: 'error', title: 'Không thể tạo văn bản tách thửa', message: error.message});
     } finally {
       submitting = false;
       button.disabled = false;
@@ -94,6 +100,9 @@
     }
   });
   const boundTrigger = document.querySelector('[data-split-autoopen]');
-  if (boundTrigger) open(boundTrigger);
+  if (boundTrigger) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(() => open(boundTrigger), 0), {once: true});
+    else open(boundTrigger);
+  }
 })();
 </script>

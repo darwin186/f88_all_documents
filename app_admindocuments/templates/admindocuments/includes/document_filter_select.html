@@ -1,0 +1,4 @@
+<div class="adm-field" data-filter-select>
+  <label for="{{ filter_id }}">{{ label }}</label>
+  <select id="{{ filter_id }}" name="{{ name }}"><option value="">{{ placeholder }}</option>{% for item in options %}<option value="{{ item.pk }}" {% if selected == item.pk|stringformat:'s' %}selected{% endif %}>{% if show_code %}{{ item.code }} · {% endif %}{{ item.name }}</option>{% endfor %}</select>
+</div>

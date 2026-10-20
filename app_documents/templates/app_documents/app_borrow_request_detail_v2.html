@@ -15,13 +15,6 @@
   .receipt-meta { color: #6b7280; font-size: 9px; }
   .receipt-title { font-size: 11px; font-weight: 600; color: #111827; }
   .receipt-badge { font-size: 9px; padding: 4px 8px; border-radius: 9999px; border: 1px solid #e5e7eb; background: #f9fafb; color: #374151; }
-  .toast-container { position: fixed; top: 76px; right: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
-  .toast { min-width: 220px; max-width: 320px; padding: 10px 12px; border-radius: 12px; border: 1px solid #e5e7eb; background: #ffffff; box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08); font-size: 10px; color: #111827; display: flex; align-items: flex-start; gap: 8px; }
-  .toast-dot { width: 8px; height: 8px; border-radius: 9999px; margin-top: 4px; }
-  .toast-success .toast-dot { background: #10b981; }
-  .toast-error .toast-dot { background: #ef4444; }
-  .toast-warning .toast-dot { background: #f59e0b; }
-  .toast-info .toast-dot { background: #3b82f6; }
   .stepper { position: relative; }
   .stepper::before { content: ""; position: absolute; left: 14px; top: 10px; bottom: 10px; width: 2px; background: linear-gradient(180deg, #d1fae5 0%, #e5e7eb 100%); }
   .step { position: relative; padding-left: 40px; }
@@ -40,17 +33,7 @@
 </style>
 
 <div class="max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 lg:px-3 space-y-4 mt-5">
-  {% if messages %}
-  <script>
-    window.SERVER_TOASTS = [
-      {% for message in messages %}
-      { text: "{{ message|escapejs }}", level: "{{ message.tags }}" }{% if not forloop.last %},{% endif %}
-      {% endfor %}
-    ];
-  </script>
-  {% endif %}
 
-  <div id="toast-container" class="toast-container"></div>
 
   <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-3">
     <nav class="flex flex-wrap items-center gap-2 text-[10px] text-gray-500">
@@ -78,19 +61,19 @@
             {% csrf_token %}
             <input type="hidden" name="action" value="handover">
             {% if has_handover_items %}
-            <button type="submit" class="px-3 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Bàn giao</button>
+            <button type="submit" class="ui-btn ui-btn-primary">Bàn giao</button>
             {% else %}
             <button type="submit" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed" title="Chưa có chứng từ để bàn giao." disabled>Bàn giao</button>
             {% endif %}
           </form>
-          <a href="{% url 'borrow_request_management_v2' %}" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50">Quay lại</a>
+          <a href="{% url 'borrow_request_management_v2' %}" class="ui-btn ui-btn-secondary">Quay lại</a>
           <form method="post" action="{% url 'borrow_request_detail_v2' borrow_request.request_id %}">
             {% csrf_token %}
             <input type="hidden" name="action" value="cancel_request">
             {% if has_assigned_items %}
             <button type="submit" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed" title="Phiếu đã có chứng từ, không thể hủy." disabled>Hủy yêu cầu</button>
             {% else %}
-            <button type="submit" class="px-3 py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">Hủy yêu cầu</button>
+            <button type="submit" class="ui-btn ui-btn-danger">Hủy yêu cầu</button>
             {% endif %}
           </form>
         </div>
@@ -177,7 +160,7 @@
                     <input type="hidden" name="action" value="update_item_appointment">
                     <input type="hidden" name="item_id" value="{{ item.item_id }}">
                     <input type="date" name="appointment_date" value="{{ item.appointment_date|date:'Y-m-d' }}" class="w-28 rounded-lg border border-gray-200 bg-gray-50 px-2 py-1 text-[9px] focus:border-emerald-500 focus:outline-none">
-                    <button type="submit" class="px-2 py-1 rounded-lg border border-gray-200 text-gray-700 text-[9px] hover:bg-gray-50">Lưu</button>
+                    <button type="submit" class="ui-btn ui-btn-secondary ui-btn-sm">Lưu</button>
                   </form>
                   {% else %}
                   {{ item.appointment_date|date:"Y-m-d" }}
@@ -192,13 +175,13 @@
                       {% csrf_token %}
                       <input type="hidden" name="action" value="return_item">
                       <input type="hidden" name="item_id" value="{{ item.item_id }}">
-                      <button type="submit" class="px-3 py-1 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50">Hoàn trả</button>
+                      <button type="submit" class="ui-btn ui-btn-secondary ui-btn-sm">Hoàn trả</button>
                     </form>
                     <form method="post" action="{% url 'borrow_request_detail_v2' borrow_request.request_id %}">
                       {% csrf_token %}
                       <input type="hidden" name="action" value="lost_item">
                       <input type="hidden" name="item_id" value="{{ item.item_id }}">
-                      <button type="submit" class="px-3 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50">Báo mất</button>
+                      <button type="submit" class="ui-btn ui-btn-danger ui-btn-sm">Báo mất</button>
                     </form>
                   </div>
                   {% else %}
@@ -270,7 +253,7 @@
           <span class="text-[9px] text-gray-500">Nội dung mượn</span>
           <textarea name="note" rows="3" class="mt-1 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[10px] focus:border-emerald-500 focus:outline-none" {% if not can_update_request %}disabled{% endif %}>{{ borrow_request.note|default:'' }}</textarea>
         </label>
-        <button type="submit" class="w-full px-4 py-2 rounded-lg {% if can_update_request %}bg-emerald-600 text-white hover:bg-emerald-700{% else %}border border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed{% endif %} font-semibold" {% if not can_update_request %}disabled{% endif %}>Lưu cập nhật</button>
+        <button type="submit" class="ui-btn ui-btn-primary ui-btn-block" {% if not can_update_request %}disabled{% endif %}>Lưu cập nhật</button>
       </form>
     </div>
   </div>
@@ -281,8 +264,8 @@
     </div>
     <form method="get" action="{% url 'borrow_request_detail_v2' borrow_request.request_id %}" class="flex flex-wrap items-center gap-2">
       <input name="preview_key" value="{{ preview_key }}" placeholder="Nhập contract_code hoặc loan_code" class="flex-1 min-w-[240px] rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[10px] focus:border-emerald-500 focus:outline-none">
-      <button type="submit" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50">Tìm</button>
-      <a href="{% url 'borrow_request_detail_v2' borrow_request.request_id %}" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50">Xóa</a>
+      <button type="submit" class="ui-btn ui-btn-secondary">Tìm</button>
+      <a href="{% url 'borrow_request_detail_v2' borrow_request.request_id %}" class="ui-btn ui-btn-secondary">Xóa</a>
     </form>
     <div class="text-[9px] text-gray-500">Nhập contract_code hoặc loan_code để xem danh sách chứng từ trước khi gán.</div>
 
@@ -340,7 +323,7 @@
         </table>
       </div>
       <div class="flex justify-end">
-        <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700">Gán đã chọn</button>
+        <button type="submit" class="ui-btn ui-btn-primary">Gán đã chọn</button>
       </div>
     </form>
     {% endif %}
@@ -390,26 +373,7 @@
 
 <script>
   document.addEventListener('DOMContentLoaded', function () {
-    const toastContainer = document.getElementById('toast-container');
-    const showToast = (message, type = 'success') => {
-      if (!toastContainer || !message) return;
-      const toast = document.createElement('div');
-      toast.className = `toast toast-${type}`;
-      toast.innerHTML = `<span class="toast-dot"></span><div>${message}</div>`;
-      toastContainer.appendChild(toast);
-      setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateY(-4px)';
-      }, 2400);
-      setTimeout(() => toast.remove(), 3000);
-    };
-    if (Array.isArray(window.SERVER_TOASTS)) {
-      window.SERVER_TOASTS.forEach((item) => {
-        const tag = (item.level || '').toLowerCase();
-        const type = tag.includes('error') ? 'error' : tag.includes('warning') ? 'warning' : tag.includes('success') ? 'success' : 'info';
-        showToast(item.text, type);
-      });
-    }
+    const showToast = (message, type = 'success') => window.uiToast({type, message});
 
     const renderContactResults = (root, results) => {
       const container = root.querySelector('[data-borrow-contact-results]');

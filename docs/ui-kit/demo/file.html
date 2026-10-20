@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI Kit — File (demo)</title>
+<!-- Mở trực tiếp bằng trình duyệt. -->
+<link rel="stylesheet" href="../../../static/css/ui-kit.css">
+<style>
+  body { margin: 0; padding: 24px; background: #f5f6f8; color: #1f2937; font: 400 11px/1.5 Inter, "SF Pro Text", Arial, sans-serif; }
+  h1 { margin: 0 0 4px; font-size: 16px; } p.lead { margin: 0 0 20px; color: #6b7280; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; align-items: start; }
+  .card { padding: 14px; border: 1px solid #e5e7eb; border-radius: 12px; background: #fff; }
+  .card h2 { margin: 0 0 2px; font-size: 11px; } .card small { display: block; margin-bottom: 8px; color: #6b7280; font-size: 10px; }
+  label.f { display: block; margin-bottom: 4px; font-size: 10px; font-weight: 500; color: #374151; }
+</style>
+</head>
+<body>
+<h1>File — ô chọn tệp gọn</h1>
+<p class="lead">Bọc một <code>&lt;input type="file"&gt;</code> trong <code>.ui-file[data-ui-file]</code>. Nút mũi tên mở hộp chọn tệp; có thể kéo thả tệp vào ô.</p>
+<form class="grid" id="demo-form">
+  <div class="card"><h2>1. Mặc định</h2><small>Hiện tên tệp + dung lượng; nút ✕ để bỏ tệp.</small>
+    <label class="f" for="f1">Tệp đính kèm</label>
+    <div class="ui-file" data-ui-file><input id="f1" type="file" name="f1"></div></div>
+
+  <div class="card"><h2>2. Giới hạn dung lượng + định dạng</h2><small><code>data-max-mb="1"</code>, <code>accept=".xlsx"</code>. Vượt giới hạn thì tự bỏ tệp và báo lỗi.</small>
+    <label class="f" for="f2">Tệp Excel <span style="color:#dc2626">*</span></label>
+    <div class="ui-file" data-ui-file data-max-mb="1"><input id="f2" type="file" name="f2" accept=".xlsx" required></div></div>
+
+  <div class="card"><h2>3. Nhiều tệp</h2><small>Thuộc tính <code>multiple</code>: hiện "Đã chọn N tệp".</small>
+    <label class="f" for="f3">Ảnh / tài liệu</label>
+    <div class="ui-file" data-ui-file><input id="f3" type="file" name="f3" multiple></div></div>
+
+  <div class="card"><h2>4. Cỡ nhỏ</h2><small><code>data-size="sm"</code></small>
+    <div class="ui-file" data-ui-file data-size="sm"><input type="file" aria-label="Tệp" name="f4"></div></div>
+
+  <div class="card"><h2>5. Vô hiệu hóa</h2><small>Thuộc tính <code>disabled</code>.</small>
+    <div class="ui-file" data-ui-file><input type="file" aria-label="Tệp" name="f5" disabled></div></div>
+
+  <div class="card"><h2>6. Thông báo lỗi tùy chỉnh</h2><small><code>data-required-text</code> khi bắt buộc mà chưa chọn (bấm Gửi để thử).</small>
+    <label class="f" for="f6">Tệp mapping <span style="color:#dc2626">*</span></label>
+    <div class="ui-file" data-ui-file data-required-text="Chọn tệp mapping trước khi gửi."><input id="f6" type="file" name="f6" required></div>
+    <p style="margin:10px 0 0"><button type="submit" class="ui-btn ui-btn-primary">Gửi</button> <button type="reset" class="ui-btn ui-btn-secondary">Đặt lại</button></p></div>
+</form>
+<script src="../../../static/js/ui-file.js"></script>
+</body>
+</html>

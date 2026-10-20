@@ -1,0 +1,11 @@
+<dialog id="document-attachment-dialog" class="adm-edit-dialog adm-attachment-dialog" aria-labelledby="document-attachment-title">
+  <header class="adm-edit-header"><h2 id="document-attachment-title">Đính kèm tệp / Link</h2><button type="button" data-attachment-close aria-label="Đóng đính kèm">✕</button></header>
+  <form data-document-attachment-form method="post" enctype="multipart/form-data" class="adm-edit-content">
+    {% csrf_token %}
+    <p class="adm-attachment-document" data-attachment-document></p>
+    <fieldset class="adm-attachment-modes"><legend class="sr-only">Loại đính kèm</legend><label><input type="radio" name="attachment_mode" value="file" checked> Tải tệp</label><label><input type="radio" name="attachment_mode" value="link"> Nhập link</label></fieldset>
+    <div data-attachment-input="file" class="adm-edit-field"><label for="adm-attachment-file">Tệp đính kèm <span class="text-red-500">*</span></label><div class="ui-file" data-ui-file data-max-mb="25"><input id="adm-attachment-file" type="file" name="attachment" required></div><p class="adm-attachment-note">Chọn tệp từ máy tính. Tệp được lưu thành một phiên bản mới.</p></div>
+    <div data-attachment-input="link" class="adm-edit-field" hidden><label for="adm-attachment-link">Link đính kèm <span class="text-red-500">*</span></label><input id="adm-attachment-link" name="attachment_link" type="url" placeholder="https://..." autocomplete="off" required disabled class="block w-full rounded-lg border border-gray-200"><p class="adm-attachment-note">Nhập đường dẫn đầy đủ tới tài liệu hoặc thư mục lưu trữ.</p></div>
+    <div class="adm-form-footer"><button type="button" data-attachment-close class="ui-btn ui-btn-secondary">Hủy</button><button type="submit" class="ui-btn ui-btn-primary" data-attachment-submit>Thêm đính kèm</button></div>
+  </form>
+</dialog>

@@ -449,7 +449,7 @@ This project now includes a basic Celery setup.
 ### GAPO scheduled messaging (demo)
 - Model: `GapoScheduledMessage` stores receiver_id, message, schedule_at, status.
 - Task: `app_documents.tasks.send_gapo_scheduled_message` enqueues via Celery; it will send at `schedule_at` and update status/log errors.
-- UI: Admin menu → “Thông tin khác” → “Gửi tin GAPO hẹn giờ” to create schedule (receiver_id, message, time) and view recent tasks.
+- UI: màn hình “Gửi tin GAPO hẹn giờ” và AI soạn tin (Gemini) đã được gỡ (2026-10-19); model/task vẫn được dùng bởi Văn bản hành chính và Giao dịch đảm bảo.
 - Broker required: Celery + Redis must be running; GAPO env vars (`GAPO_API_URL`, `BOT_API_KEY`, `BOT_ID`) must be set.
 - Gửi GAPO nhóm Giao dịch đảm bảo: cấu hình `GDDB_GAPO_COLLAB_ID` bằng ID nhóm/collab nhận tin. Nút gửi chỉ hiện cho Admin và sẽ khóa nếu chưa cấu hình biến này.
 
@@ -473,6 +473,6 @@ This project now includes a basic Celery setup.
 
 ## Change log (manual)
 - 2025-02-03: Administrative docs numbering theo công ty + định dạng mới `NNN/YYYY/TYPE-COMPANY/SIGNER`; bắt buộc các trường chính khi tạo; thông báo và highlight record mới tạo.
-- 2025-02-03: GAPO scheduler: thêm AI hỗ trợ soạn tin (Gemini), layout rộng hơn, bảng lịch sử có cuộn; thêm endpoint `gapo/schedule/ai-draft/`.
+- 2025-02-03: GAPO scheduler: thêm AI hỗ trợ soạn tin (Gemini), layout rộng hơn, bảng lịch sử có cuộn; thêm endpoint `gapo/schedule/ai-draft/`. (Đã gỡ ngày 2026-10-19.)
 - 2025-02-03: Administrative docs list: thêm cột STT lên đầu, “Số hiệu” đứng thứ 2.
 - 2025-02-03: Paper documents list: thêm ô tìm kiếm theo số hiệu/mã vận đơn, thêm cột STT.

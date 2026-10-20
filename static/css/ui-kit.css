@@ -1,0 +1,148 @@
+/* F88 Documents UI Kit — xem docs/ui-kit/README.md. Sửa file này thì sửa docs/ui-kit/components/*.md cùng commit. */
+:root {
+  --ui-primary: #00844a;
+  --ui-primary-hover: #006837;
+  --ui-text: #1f2937;
+  --ui-text-muted: #6b7280;
+  --ui-surface: #ffffff;
+  --ui-surface-muted: #f9fafb;
+  --ui-surface-subtle: #f3f4f6;
+  --ui-border-strong: #d1d5db;
+  --ui-danger-text: #dc2626;
+  --ui-danger-soft: #fef2f2;
+  --ui-danger-border: #fecaca;
+  --ui-info-strong: #1769aa;
+  --ui-info-strong-hover: #125a92;
+  --ui-warning-strong: #d97706;
+  --ui-warning-strong-hover: #b45309;
+  --ui-disabled: #f3f4f6;
+  --ui-disabled-text: #9ca3af;
+  --ui-focus-ring: #a7f3d0;
+  --ui-radius-button: 8px;
+}
+
+/* ---- Button ---- */
+.ui-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 34px; padding: 7px 12px;
+  border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius-button);
+  background: var(--ui-surface); color: var(--ui-text);
+  font-size: 10px; font-weight: 600; line-height: 1.4; white-space: nowrap;
+  text-decoration: none; cursor: pointer; box-shadow: none;
+}
+.ui-btn:hover { background: var(--ui-surface-muted); color: var(--ui-text); }
+.ui-btn:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 2px; }
+.ui-btn svg { width: 14px; height: 14px; flex: none; }
+
+.ui-btn-primary { background: var(--ui-primary); border-color: var(--ui-primary); color: #fff; }
+.ui-btn-primary:hover { background: var(--ui-primary-hover); border-color: var(--ui-primary-hover); color: #fff; }
+.ui-btn-secondary { background: var(--ui-surface); border-color: var(--ui-border-strong); color: var(--ui-text); }
+.ui-btn-danger { background: var(--ui-danger-soft); border-color: var(--ui-danger-border); color: var(--ui-danger-text); }
+.ui-btn-danger:hover { background: #fee2e2; color: var(--ui-danger-text); }
+.ui-btn-info { background: var(--ui-info-strong); border-color: var(--ui-info-strong); color: #fff; }
+.ui-btn-info:hover { background: var(--ui-info-strong-hover); border-color: var(--ui-info-strong-hover); color: #fff; }
+.ui-btn-warning { background: var(--ui-warning-strong); border-color: var(--ui-warning-strong); color: #fff; }
+.ui-btn-warning:hover { background: var(--ui-warning-strong-hover); border-color: var(--ui-warning-strong-hover); color: #fff; }
+.ui-btn-ghost { background: transparent; border-color: transparent; color: var(--ui-text-muted); }
+.ui-btn-ghost:hover { background: var(--ui-surface-subtle); color: var(--ui-text); }
+
+.ui-btn-sm { min-height: 28px; padding: 4px 10px; }
+.ui-btn-lg { min-height: 40px; padding: 9px 18px; font-size: 12px; }
+.ui-btn-block { display: flex; width: 100%; }
+.ui-btn-icon { min-width: 28px; padding-left: 6px; padding-right: 6px; }
+
+.ui-btn[hidden] { display: none; }
+.ui-btn:disabled:not(.is-loading), .ui-btn[aria-disabled="true"] {
+  background: var(--ui-disabled); border-color: var(--ui-disabled); color: var(--ui-disabled-text);
+  cursor: not-allowed; pointer-events: none;
+}
+.ui-btn.is-loading { cursor: wait; pointer-events: none; opacity: .88; }
+.ui-btn.is-loading::before {
+  content: ""; width: 13px; height: 13px; box-sizing: border-box; flex: none;
+  border: 2px solid rgba(107, 114, 128, .35); border-top-color: currentColor; border-radius: 50%;
+  animation: ui-btn-spin .7s linear infinite;
+}
+
+.ui-btn-primary.is-loading::before, .ui-btn-info.is-loading::before, .ui-btn-warning.is-loading::before {
+  border-color: rgba(255, 255, 255, .5); border-top-color: #fff;
+}
+@keyframes ui-btn-spin { to { transform: rotate(360deg); } }
+
+.ui-btn-group { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+
+/* ---- Select (droplist có tìm kiếm; 1 hoặc nhiều lựa chọn) — xem docs/ui-kit/components/select.md ---- */
+:root {
+  --ui-border: #e5e7eb;
+  --ui-link: #2563eb;
+  --ui-primary-soft: #ecfdf5;
+  --ui-primary-text: #047857;
+  --ui-radius-input: 10px;
+  --ui-radius-menu: 12px;
+}
+.ui-select { position: relative; width: 100%; min-width: 0; }
+.ui-select [hidden] { display: none !important; }
+.ui-select-native { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; }
+.ui-select-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; min-height: 34px; padding: 6px 10px;
+  border: 1px solid var(--ui-border); border-radius: var(--ui-radius-input);
+  background: var(--ui-surface); color: var(--ui-text);
+  font-size: 11px; line-height: 1.4; text-align: left; cursor: pointer;
+}
+.ui-select-toggle:hover { border-color: var(--ui-border-strong); }
+.ui-select.is-open .ui-select-toggle, .ui-select-toggle:focus-visible {
+  border-color: var(--ui-primary); outline: 2px solid var(--ui-focus-ring); outline-offset: 0;
+}
+.ui-select-toggle:disabled { background: var(--ui-surface-muted); color: var(--ui-text-muted); cursor: not-allowed; }
+.ui-select-toggle.is-invalid { border-color: var(--ui-danger-text); }
+.ui-select-value { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.ui-select-value.is-placeholder { color: var(--ui-disabled-text); }
+.ui-select-arrow { flex: none; width: 6px; height: 6px; margin: -3px 2px 0 0; border: solid var(--ui-text-muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); transition: transform .12s; }
+.ui-select.is-open .ui-select-arrow { transform: rotate(-135deg); margin-top: 3px; }
+.ui-select-chip { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; padding: 2px 7px; border-radius: 6px; background: var(--ui-primary-soft); color: var(--ui-primary-text); font-size: 10px; font-weight: 600; }
+.ui-select-chip.is-more { background: var(--ui-surface-subtle); color: var(--ui-text-muted); }
+
+.ui-select-menu {
+  position: absolute; z-index: 60; top: calc(100% + 5px); left: 0; width: 100%; min-width: 190px;
+  padding: 6px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-menu);
+  background: var(--ui-surface); box-shadow: 0 12px 32px rgba(17, 24, 39, .13); font-size: 11px;
+}
+.ui-select.is-up .ui-select-menu { top: auto; bottom: calc(100% + 5px); }
+.ui-select-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 6px 6px; min-height: 22px; }
+.ui-select-count { color: var(--ui-text-muted); font-size: 10px; }
+.ui-select-actions { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.ui-select-link { padding: 0; border: 0; background: none; color: var(--ui-link); font-size: 10px; font-weight: 600; cursor: pointer; }
+.ui-select-link:hover { text-decoration: underline; }
+.ui-select-search { display: block; width: 100%; height: 32px; margin: 0 0 6px; padding: 6px 10px; border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); font-size: 11px; }
+.ui-select-search:focus { outline: 2px solid var(--ui-focus-ring); outline-offset: 0; border-color: var(--ui-primary); }
+.ui-select-options { max-height: 224px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.ui-select-option { display: flex; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 7px; color: var(--ui-text); cursor: pointer; }
+.ui-select-option:hover, .ui-select-option:focus { background: var(--ui-surface-subtle); outline: none; }
+.ui-select-option[aria-selected="true"] { background: var(--ui-primary-soft); color: var(--ui-primary); font-weight: 600; }
+.ui-select-option[aria-disabled="true"] { color: var(--ui-disabled-text); cursor: not-allowed; background: none; }
+.ui-select-option-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-select:not(.is-multiple) .ui-select-option[aria-selected="true"]::after { content: "✓"; flex: none; }
+.ui-select-box { flex: none; position: relative; width: 14px; height: 14px; border: 1px solid var(--ui-border-strong); border-radius: 4px; background: var(--ui-surface); }
+.ui-select-option[aria-selected="true"] .ui-select-box { border-color: var(--ui-primary); background: var(--ui-primary); }
+.ui-select-option[aria-selected="true"] .ui-select-box::after { content: ""; position: absolute; left: 4px; top: 1px; width: 3px; height: 7px; border: solid #fff; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+.ui-select-group { padding: 8px 10px 4px; color: var(--ui-text-muted); font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.ui-select-empty, .ui-select-note { margin: 0; padding: 8px 10px; color: var(--ui-disabled-text); font-size: 10px; }
+.ui-select-sm .ui-select-toggle { min-height: 28px; padding-top: 3px; padding-bottom: 3px; }
+
+/* ---- File (ô chọn tệp gọn) — xem docs/ui-kit/components/file.md ---- */
+.ui-file { box-sizing: border-box; position: relative; display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; min-height: 34px; padding: 3px 3px 3px 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-input); background: var(--ui-surface); font-size: 11px; }
+.ui-file [hidden], .ui-file-error[hidden] { display: none !important; }
+.ui-file:hover { border-color: var(--ui-border-strong); }
+.ui-file:focus-within { border-color: var(--ui-primary); outline: 2px solid var(--ui-focus-ring); outline-offset: 0; }
+.ui-file.is-over { border-color: var(--ui-primary); background: var(--ui-primary-soft); }
+.ui-file.is-invalid { border-color: var(--ui-danger-text); }
+.ui-file.is-disabled { background: var(--ui-surface-muted); }
+.ui-file-native { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; opacity: 0 !important; pointer-events: none !important; }
+.ui-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ui-disabled-text); }
+.ui-file.has-file .ui-file-name { color: var(--ui-text); font-weight: 500; }
+.ui-file-size { flex: none; color: var(--ui-text-muted); font-size: 10px; }
+.ui-file-clear { flex: none; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--ui-disabled-text); cursor: pointer; font-size: 13px; line-height: 1; }
+.ui-file-clear:hover { background: var(--ui-surface-subtle); color: var(--ui-text); }
+.ui-file-pick svg { width: 15px; height: 15px; }
+.ui-file-error { margin: 4px 0 0; color: var(--ui-danger-text); font-size: 10px; }
+.ui-file-sm { min-height: 28px; }

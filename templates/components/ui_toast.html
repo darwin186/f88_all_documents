@@ -1,0 +1,4 @@
+{# UI Kit — Toast: nạp CSS + JS (an toàn khi nạp nhiều lần). Xem docs/ui-kit/components/toast.md #}
+{% load static %}<link rel="stylesheet" href="{% static 'css/ui-toast.css' %}?v=20261020-1">
+<script>window.uiToast=window.uiToast||function(){(window.__uiToastQ=window.__uiToastQ||[]).push(arguments)};</script>
+<script src="{% static 'js/ui-toast.js' %}?v=20261020-1" defer></script>

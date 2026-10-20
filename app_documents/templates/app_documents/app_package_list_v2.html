@@ -559,7 +559,7 @@
                           setSaving(false);
                         }
                       }}
-                      className="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700 disabled:opacity-60"
+                      className="ui-btn ui-btn-primary"
                       disabled={saving}
                     >
                       {saving ? 'Đang lưu...' : 'Lưu'}
@@ -773,7 +773,7 @@
             <button
               type="button"
               disabled
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 font-semibold text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+              className="ui-btn ui-btn-secondary"
             >
               {Warehouse ? <Warehouse size={16} /> : null}
               In nhãn thùng (sắp có)
@@ -827,7 +827,7 @@
               ) : null}
               {transferMsg ? <p className={`${transferPreview?.eligible ? 'text-emerald-700' : 'text-red-700'}`}>{transferMsg}</p> : null}
               <div className="flex justify-end gap-2">
-                <button type="button" disabled={transferBusy} onClick={() => setTransferOpen(false)} className="rounded-lg border border-gray-200 px-3 py-2 font-semibold text-gray-600 disabled:opacity-50">Hủy</button>
+                <button type="button" disabled={transferBusy} onClick={() => setTransferOpen(false)} className="ui-btn ui-btn-secondary">Hủy</button>
                 <button type="button" disabled={transferBusy || !transferTarget.trim() || !transferReason.trim()} onClick={() => submitTransfer(false)} className="rounded-lg border border-emerald-300 bg-white px-3 py-2 font-semibold text-emerald-700 disabled:opacity-50">{transferBusy ? 'Đang kiểm tra...' : 'Kiểm tra'}</button>
                 {transferPreview?.eligible ? <button type="button" disabled={transferBusy} onClick={() => submitTransfer(true)} className="rounded-lg bg-amber-600 px-3 py-2 font-semibold text-white hover:bg-amber-700 disabled:opacity-50">Xác nhận chuyển</button> : null}
               </div>
@@ -1002,7 +1002,7 @@
               ) : null}
             </label>
             <div className="flex justify-start">
-              <button type="submit" className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[10px] font-semibold hover:bg-emerald-700">Lọc</button>
+              <button type="submit" className="ui-btn ui-btn-primary">Lọc</button>
             </div>
             <div className="flex items-center justify-end gap-2">
               <button
@@ -1040,7 +1040,7 @@
               </div>
               {filtered.length > visiblePackages.length ? (
                 <div className="flex justify-center">
-                  <button onClick={handleLoadMore} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700">
+                  <button onClick={handleLoadMore} className="ui-btn ui-btn-primary ui-btn-sm">
                     Xem thêm thùng
                   </button>
                 </div>
@@ -1089,7 +1089,7 @@
               </table>
               {filtered.length > visiblePackages.length ? (
                 <div className="flex justify-center py-3">
-                  <button onClick={handleLoadMore} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700">
+                  <button onClick={handleLoadMore} className="ui-btn ui-btn-primary ui-btn-sm">
                     Xem thêm thùng
                   </button>
                 </div>
@@ -1188,7 +1188,7 @@
         </div>
         <div>
           <label class="block text-[10px] font-semibold text-gray-700 mb-1">Chọn file</label>
-          <input type="file" class="block w-full text-[9px] text-gray-700 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-emerald-600 file:text-[10px] file:text-white hover:file:bg-emerald-700 cursor-pointer" accept=".xlsx,.xls">
+          <div class="ui-file" data-ui-file data-max-mb="10"><input type="file" accept=".xlsx,.xls"></div>
         </div>
         <div class="text-[9px] text-gray-500">
           Ghi chú: tối ưu file < 5MB, mẫu cột sẽ cung cấp sau.
@@ -1209,7 +1209,7 @@
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <button type="button" id="export-packages-btn" class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-[9px] font-semibold text-white hover:bg-emerald-700">
+          <button type="button" id="export-packages-btn" class="ui-btn ui-btn-primary">
             Tải file Excel
           </button>
           <span id="export-packages-msg" class="text-[9px] text-gray-600"></span>
@@ -1230,7 +1230,7 @@
         </div>
         <div class="grid gap-4">
           <div class="flex flex-col gap-2">
-            <button id="download-bulk-template" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-[9px] font-semibold text-white hover:bg-emerald-700 w-fit">
+            <button id="download-bulk-template" type="button" class="ui-btn ui-btn-primary w-fit">
               Tải template (.xlsx)
             </button>
             <p class="text-[9px] text-gray-600">
@@ -1239,7 +1239,7 @@
           </div>
           <div>
             <label class="block text-[10px] font-semibold text-gray-700 mb-1">Upload file đã điền</label>
-            <input id="bulk-package-file" type="file" class="block w-full text-[9px] text-gray-700 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-emerald-600 file:text-[10px] file:text-white hover:file:bg-emerald-700 cursor-pointer" accept=".xlsx,.xls">
+            <div class="ui-file" data-ui-file data-max-mb="10"><input id="bulk-package-file" type="file" accept=".xlsx,.xls"></div>
             <p class="text-[9px] text-gray-500 mt-2">Hỗ trợ file nhỏ hơn 30MB (~30720 KB). Sau khi tải template và điền, upload lại để tạo nhiều thùng.</p>
           </div>
           <div class="text-[9px] text-gray-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
@@ -1249,7 +1249,7 @@
             <button id="bulk-validate-btn" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-[9px] font-semibold text-white hover:bg-indigo-700">
               Kiểm tra
             </button>
-            <button id="bulk-save-btn" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-[9px] font-semibold text-white hover:bg-emerald-700">
+            <button id="bulk-save-btn" type="button" class="ui-btn ui-btn-primary">
               Lưu (nếu file sạch)
             </button>
             <span id="bulk-result-message" class="text-[9px] text-gray-700"></span>
@@ -1258,8 +1258,8 @@
       </div>
     </div>
     <div class="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200">
-      <button type="button" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-[9px] font-semibold hover:bg-gray-50" data-modal-hide="createPackageModal">Hủy</button>
-      <button type="button" id="create-package-submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[9px] font-semibold hover:bg-emerald-700">Tạo thùng</button>
+      <button type="button" class="ui-btn ui-btn-secondary" data-modal-hide="createPackageModal">Hủy</button>
+      <button type="button" id="create-package-submit" class="ui-btn ui-btn-primary">Tạo thùng</button>
     </div>
   </div>
 </div>

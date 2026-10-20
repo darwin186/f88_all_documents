@@ -1,0 +1,18 @@
+<form method="get" class="adm-panel adm-filter-panel" data-adm-filters>
+  <div class="adm-filter-grid">
+    <div class="adm-field"><label for="adm-search">Tìm kiếm văn bản</label><div class="adm-search-field"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input id="adm-search" name="q" value="{{ q }}" placeholder="Nhập số hiệu hoặc tên văn bản…"></div></div>
+    {% include 'admindocuments/includes/document_filter_select.html' with filter_id='adm-company' name='company' label='Công ty ban hành' placeholder='Tất cả công ty' options=companies selected=active_company_id show_code=True %}
+    {% include 'admindocuments/includes/document_filter_select.html' with filter_id='adm-doc-type' name='dtype' label='Loại văn bản' placeholder='Tất cả loại văn bản' options=doc_types selected=active_doc_type_id %}
+    {% include 'admindocuments/includes/document_filter_select.html' with filter_id='adm-content-type' name='ctype' label='Loại nội dung' placeholder='Tất cả loại nội dung' options=content_types selected=active_content_type_id %}
+    <div class="adm-field"><label for="adm-created-range">Ngày tạo văn bản</label><div class="adm-filter-calendar"><input id="adm-created-range" data-filter-created-range type="text" autocomplete="off" placeholder="Chọn khoảng ngày" readonly><button type="button" data-filter-calendar="adm-created-range" aria-label="Chọn khoảng ngày tạo">{% include 'admindocuments/includes/calendar_icon.html' %}</button></div><input type="hidden" id="adm-start-date" name="start_date" value="{{ start_date }}"><input type="hidden" id="adm-end-date" name="end_date" value="{{ end_date }}"><input type="hidden" name="created_all" value="{{ created_all }}"></div>
+    <div class="adm-field"><label for="adm-issue-date">Ngày ban hành</label><div class="adm-filter-calendar"><input id="adm-issue-date" name="issue_date" value="{{ issue_date }}" data-filter-issue-date type="text" autocomplete="off" placeholder="dd/mm/yyyy"><button type="button" data-filter-calendar="adm-issue-date" aria-label="Chọn ngày ban hành">{% include 'admindocuments/includes/calendar_icon.html' %}</button></div></div>
+  </div>
+  <input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}">
+  <div class="adm-filter-footer adm-filter-footer-with-chips">
+    {% include 'admindocuments/includes/filter_chips.html' %}
+    <div class="adm-actions">
+    <button type="button" data-modal-target="docModal" data-modal-toggle="docModal" class="ui-btn ui-btn-primary"><span aria-hidden="true">＋</span>Tạo văn bản</button>
+    <button type="submit" class="ui-btn ui-btn-primary">Áp dụng bộ lọc</button>
+    <a href="{% url 'admindocuments:admindocuments_list' %}?created_all=1" class="ui-btn ui-btn-secondary">Xóa bộ lọc</a>
+  </div></div>
+</form>

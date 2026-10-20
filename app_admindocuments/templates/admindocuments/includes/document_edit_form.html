@@ -1,0 +1,32 @@
+<div class="adm-edit-summary"><div><span>Số hiệu văn bản</span><div class="adm-doc-identifier"><strong>{{ doc.document_number_full }}</strong>{% include "admindocuments/includes/document_copy_number.html" %}</div></div><span class="adm-status" style="color:{{ doc.status.badge_text_color }};background-color:{{ doc.status.badge_bg_color }};">{{ doc.status.name }}</span></div>
+{% if doc.split_parent_id %}<p class="adm-edit-origin">Văn bản tách thửa · <a href="{% url 'admindocuments:admindocuments_detail' doc.split_parent_id %}" data-document-edit>Xem văn bản gốc</a></p>{% endif %}
+<p class="adm-live-hint">Nhấn vào giá trị để sửa. Enter/Lưu để cập nhật; ngày và danh sách tự lưu khi chọn.</p>
+<form id="document-edit-form" data-live-url="{% url 'admindocuments:admindocuments_update_field' doc.pk %}" data-document-id="{{ doc.pk }}" action="{% url 'admindocuments:admindocuments_update' doc.pk %}" method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  {% if form.errors %}<div role="alert" class="adm-edit-error">Vui lòng kiểm tra các trường được đánh dấu bên dưới.{{ form.non_field_errors }}</div>{% endif %}
+  {% if form.is_bound %}<p class="mb-3 text-xs text-gray-500">Nếu đã chọn tệp, vui lòng chọn lại trước khi lưu.</p>{% endif %}
+  <div class="adm-form-columns">
+    {% for column in edit_columns %}<div class="adm-form-column" data-edit-column>
+      <h3 class="adm-column-title">{% if forloop.first %}Thông tin văn bản{% else %}Thời gian & tài liệu{% endif %}</h3>
+      {% for field in column %}
+      {% if field.name != 'attachment' and field.name != 'attachment_link' %}
+      <div class="adm-edit-field" {% if not field.field.disabled %}data-live-field="{{ field.name }}"{% endif %}>
+        <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}<span class="text-red-500"> *</span>{% endif %}</label>
+        {% if not field.field.disabled %}<button type="button" data-live-display class="adm-live-display" aria-label="Chỉnh sửa {{ field.label }}"><span data-live-label>—</span><span aria-hidden="true">✎</span></button><div data-live-editor hidden>{% endif %}
+        {% if field.field.widget.input_type == 'checkbox' %}<label class="inline-flex items-center gap-2">{{ field }}<span>{{ field.label }}</span></label>
+        {% elif field.field.widget.input_type == 'select' %}{% include 'components/ui_select.html' with field=field %}
+        {% elif field.name == 'issue_date' or field.name == 'effective_date' or field.name == 'expiry_date' %}<div class="adm-edit-date">{{ field }}<span aria-hidden="true">{% include 'admindocuments/includes/calendar_icon.html' %}</span></div>
+        {% else %}{{ field }}{% endif %}
+        {% if not field.field.disabled %}
+        <div class="adm-live-controls"><button type="button" data-live-save>Lưu</button><button type="button" data-live-cancel>Hủy</button></div>
+        <p data-live-error role="alert" class="adm-edit-field-error" hidden></p></div><span data-live-status role="status"></span>{% endif %}
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>{% endfor %}
+  </div>
+</form>
+<div class="adm-edit-section"><button type="button" class="ui-btn ui-btn-secondary" data-document-attach data-document-id="{{ doc.pk }}" data-document-number="{{ doc.document_number_full }}" data-upload-url="{% url 'admindocuments:admindocuments_attachment_upload' doc.pk %}">Đính kèm tệp / Link</button></div>
+<div class="adm-form-footer adm-edit-footer">
+  <div class="adm-actions"><button type="button" data-edit-close class="ui-btn ui-btn-primary">Đóng</button></div>
+</div>

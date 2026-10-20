@@ -213,15 +213,6 @@
   </div>
   {% endif %}
 
-  {% if messages %}
-  <div class="space-y-2">
-    {% for message in messages %}
-      <div class="rounded-xl border p-3 text-[9px] {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
-        {{ message }}
-      </div>
-    {% endfor %}
-  </div>
-  {% endif %}
 
   {% if task_tab == 'assign' %}
   <div class="rounded-2xl border border-gray-200 bg-white p-4 space-y-3">

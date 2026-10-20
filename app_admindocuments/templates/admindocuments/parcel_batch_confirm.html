@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -40,8 +41,9 @@
       box-shadow: 0 10px 24px rgba(16, 185, 129, 0.12);
     }
   </style>
+<link rel="stylesheet" href="{% static 'admindocuments/css/admin_ui.css' %}?v=20261017-1">
 </head>
-<body class="min-h-screen px-4 py-6 sm:px-6 sm:py-10">
+<body class="adm-public-page min-h-screen px-4 py-6 sm:px-6 sm:py-10">
   <div class="mx-auto max-w-4xl">
     <div class="confirm-panel rounded-[30px] border border-white/70 p-5 text-[11px] text-slate-600 sm:p-7">
       <div class="flex items-start justify-between gap-4">
@@ -56,15 +58,7 @@
         </div>
       </div>
 
-      {% if messages %}
-      <div class="mt-5 space-y-2">
-        {% for message in messages %}
-        <div class="rounded-2xl border px-4 py-3 text-[11px] {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">
-          {{ message }}
-        </div>
-        {% endfor %}
-      </div>
-      {% endif %}
+
 
       <div class="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.2fr),minmax(300px,0.9fr)]">
         <section class="space-y-4">
@@ -177,6 +171,9 @@
       </div>
     </div>
   </div>
+{% include 'components/ui_toast.html' %}
+{% include 'components/ui_toast_seeds.html' %}
+{% include 'admindocuments/includes/notifications.html' %}
 </body>
 <script>
   (function () {

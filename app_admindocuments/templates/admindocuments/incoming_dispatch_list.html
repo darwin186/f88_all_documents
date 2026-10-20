@@ -1,127 +1,24 @@
 {% extends "admindocuments/base.html" %}
 {% block title %}{{ page_title }}{% endblock %}
+{% block main_extra_class %}adm-main adm-workspace-main{% endblock %}
 
-{% block content %}
-{% if messages %}
-<div class="fixed bottom-4 right-4 space-y-2 z-50">
-  {% for message in messages %}
-    <div class="px-4 py-3 rounded-lg shadow text-xs
-      {% if message.tags == 'error' %}bg-red-50 text-red-700 border border-red-200
-      {% elif message.tags == 'warning' %}bg-amber-50 text-amber-700 border border-amber-200
-      {% else %}bg-emerald-50 text-emerald-700 border border-emerald-200{% endif %}">
-      {{ message }}
-    </div>
-  {% endfor %}
-</div>
-{% endif %}
+{% block admin_content %}
 
-<div class="text-[13px]">
-<div class="flex justify-between items-center mb-5">
-  <div>
-    <h1 class="text-xl font-semibold text-gray-700">{{ page_title }}</h1>
-    <p class="text-xs text-gray-500">{{ page_description }}</p>
-  </div>
-  {% if can_create %}
-  <div class="flex items-center gap-2">
-    <div class="relative z-40" x-data="{open:false}">
-      <button type="button" @click="open = !open"
-              class="bg-f88green hover:bg-f88dark text-white px-3 py-1.5 rounded-lg shadow text-xs">
-        {{ create_button_label }}
-      </button>
-      <div x-show="open" @click.outside="open=false" x-transition
-           class="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
-        <div class="px-3 py-2 border-b border-gray-100 text-[11px] text-gray-500">Chọn công ty nhận</div>
-        <ul class="max-h-64 overflow-y-auto py-1">
-          {% for company in companies %}
-          <li>
-            <button type="button"
-                    class="w-full text-left px-3 py-2 hover:bg-gray-50 text-xs"
-                    @click="open=false; openIncomingDispatchModal('{{ company.code }}', '{{ company.code }} - {{ company.name|escapejs }}')">
-              {{ company.code }} - {{ company.name }}
-            </button>
-          </li>
-          {% empty %}
-          <li class="px-3 py-2 text-xs text-gray-500">Chưa có công ty hoạt động.</li>
-          {% endfor %}
-        </ul>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-</div>
 
-<form id="incomingDispatchFilterForm" method="get" class="mb-4 sticky top-2 z-20 rounded-2xl border border-gray-100 bg-white/92 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80 p-2.5">
-  <input type="hidden" name="company" value="{{ selected_company }}">
-  <input type="hidden" name="status" value="{{ selected_status }}">
-  <div class="grid gap-2 xl:grid-cols-[1.05fr_1.45fr_1.15fr_0.95fr] items-stretch">
-    <div class="rounded-2xl border border-gray-200 bg-gray-50/70 px-2.5 py-2 min-h-[72px] flex items-center">
-      <div class="inline-flex min-h-[40px] max-w-full flex-wrap items-center gap-1 rounded-2xl bg-white p-1 shadow-sm ring-1 ring-gray-100">
-        <button type="button"
-                onclick="setIncomingQuickFilter('company','')"
-                class="px-2.5 py-1 rounded-xl text-[10px] font-medium transition {% if not selected_company %}bg-[#14213d] text-white shadow-sm{% else %}text-gray-500 hover:bg-gray-100{% endif %}">
-          Tất cả
-        </button>
-        {% for company in companies %}
-        <button type="button"
-                onclick="setIncomingQuickFilter('company','{{ company.code }}')"
-                class="px-2.5 py-1 rounded-xl text-[10px] font-medium transition {% if selected_company == company.code %}bg-[#14213d] text-white shadow-sm{% else %}text-gray-500 hover:bg-gray-100{% endif %}">
-          {{ company.code }}
-        </button>
-        {% endfor %}
-      </div>
-    </div>
-    <div class="rounded-2xl border border-gray-200 bg-gray-50/70 px-2.5 py-2 min-h-[72px] flex items-center">
-      <div class="inline-flex min-h-[40px] max-w-full flex-wrap items-center gap-1 rounded-2xl bg-white p-1 shadow-sm ring-1 ring-gray-100">
-        <button type="button"
-                onclick="setIncomingQuickFilter('status','')"
-                class="px-2.5 py-1 rounded-xl text-[10px] font-medium transition {% if not selected_status %}bg-[#14213d] text-white shadow-sm{% else %}text-gray-500 hover:bg-gray-100{% endif %}">
-          Tất cả
-        </button>
-        {% for st in status_options %}
-        <button type="button"
-                onclick="setIncomingQuickFilter('status','{{ st.code }}')"
-                class="px-2.5 py-1 rounded-xl text-[10px] font-semibold transition"
-                style="{% if selected_status == st.code %}background-color:{{ st.badge_bg_color|default:'#F3F4F6' }};color:{{ st.badge_text_color|default:'#374151' }};box-shadow:inset 0 0 0 1px {{ st.badge_bg_color|default:'#D1D5DB' }};{% else %}color:#6B7280;{% endif %}">
-          {{ st.name }}
-        </button>
-        {% endfor %}
-      </div>
-    </div>
-    <div class="rounded-2xl border border-gray-200 bg-gray-50/70 px-2.5 py-2 min-h-[72px] flex items-center">
-      <div class="flex min-h-[40px] w-full items-center gap-2 rounded-2xl bg-white px-3 py-2 shadow-sm ring-1 ring-gray-100">
-        <button type="submit"
-                class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
-                aria-label="Tìm kiếm">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-            <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35m1.85-5.15a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
-          </svg>
-        </button>
-        <input type="text" name="q" value="{{ q }}" placeholder="{{ search_placeholder }}"
-               class="w-full border-0 bg-transparent text-[11px] placeholder:text-[10px] focus:outline-none focus:ring-0 focus:border-0" />
-        <button type="button"
-                onclick="clearIncomingQueryFilter()"
-                class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-gray-300 transition hover:bg-gray-100 hover:text-gray-600 {% if not q %}invisible{% endif %}"
-                aria-label="Xóa tìm kiếm">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-    </div>
-    <div class="rounded-2xl border border-gray-200 bg-gray-50/70 px-2.5 py-2 min-h-[72px] flex items-center">
-    <select name="department" class="border border-gray-200 bg-white rounded-2xl px-3 py-2 w-full min-h-[40px] text-[11px]">
-      <option value="">Tất cả phòng ban</option>
-      {% for d in departments %}
-      <option value="{{ d.id }}" {% if selected_department == d.id|stringformat:'s' %}selected{% endif %}>
-        {{ d.name }} ({{ d.company.code }})
-      </option>
-      {% endfor %}
-    </select>
-    </div>
+<div class="adm-list-workspace">
+<form id="incomingDispatchFilterForm" method="get" class="adm-ui-filter">
+  <div class="adm-shared-filter-grid">
+    <div class="adm-field"><label for="incoming-filter-q">Tìm kiếm</label><input id="incoming-filter-q" name="q" value="{{ q }}" placeholder="{{ search_placeholder }}"></div>
+    <div class="adm-field"><label for="incoming-filter-company">Công ty nhận</label><select id="incoming-filter-company" name="company"><option value="">Tất cả công ty</option>{% for company in companies %}<option value="{{ company.code }}" {% if selected_company == company.code %}selected{% endif %}>{{ company.code }} - {{ company.name }}</option>{% endfor %}</select></div>
+    <div class="adm-field"><label for="incoming-filter-status">Tình trạng</label><select id="incoming-filter-status" name="status"><option value="">Tất cả tình trạng</option>{% for st in status_options %}<option value="{{ st.code }}" {% if selected_status == st.code %}selected{% endif %}>{{ st.name }}</option>{% endfor %}</select></div>
+    <div class="adm-field"><label for="incoming-filter-department">Phòng ban</label><select id="incoming-filter-department" name="department"><option value="">Tất cả phòng ban</option>{% for d in departments %}<option value="{{ d.id }}" {% if selected_department == d.id|stringformat:'s' %}selected{% endif %}>{{ d.name }} ({{ d.company.code }})</option>{% endfor %}</select></div>
   </div>
+  <div class="adm-filter-footer adm-filter-footer-with-chips">{% include 'admindocuments/includes/filter_chips.html' %}<div class="adm-actions">{% if can_create %}<button type="button" onclick="openIncomingDispatchModal('', '')" class="ui-btn ui-btn-primary">＋ {{ create_button_label }}</button>{% endif %}<button type="submit" class="ui-btn ui-btn-primary">Áp dụng bộ lọc</button><a href="{% url current_url_name %}" class="ui-btn ui-btn-secondary">Xóa bộ lọc</a></div></div>
 </form>
+<section class="adm-panel">
+  <div class="adm-list-toolbar"><div class="adm-list-summary"><h2>{{ page_title }}</h2><span class="adm-count">{{ paginator.count }} kết quả</span></div>{% include 'admindocuments/includes/pagination.html' with page=page_obj compact=True %}</div>
+  <div class="adm-table-scroll">
 
-<div class="bg-white rounded-lg shadow overflow-hidden">
   <table class="min-w-full text-xs">
     <thead class="bg-gray-100 text-gray-700 uppercase text-[11px] font-semibold">
       <tr>
@@ -189,35 +86,8 @@
     </tbody>
   </table>
 
-  {% if is_paginated %}
-  <div class="p-3 border-t border-gray-200">
-    <nav class="flex justify-end">
-      <ul class="inline-flex items-center -space-x-px text-xs">
-        {% if page_obj.has_previous %}
-        <li><a href="?q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&company={{ selected_company }}&page={{ page_obj.previous_page_number }}" class="px-3 py-2 border border-gray-300 rounded-l-lg bg-white hover:bg-gray-100">‹</a></li>
-        {% else %}
-        <li><span class="px-3 py-2 border border-gray-200 rounded-l-lg bg-white text-gray-400">‹</span></li>
-        {% endif %}
-
-        {% for num in paginator.page_range %}
-          {% if num >= page_obj.number|add:'-2' and num <= page_obj.number|add:'2' %}
-            {% if num == page_obj.number %}
-            <li><span class="px-3 py-2 border border-f88green bg-f88green text-white">{{ num }}</span></li>
-            {% else %}
-            <li><a href="?q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&company={{ selected_company }}&page={{ num }}" class="px-3 py-2 border border-gray-300 bg-white hover:bg-gray-100">{{ num }}</a></li>
-            {% endif %}
-          {% endif %}
-        {% endfor %}
-
-        {% if page_obj.has_next %}
-        <li><a href="?q={{ q }}&status={{ selected_status }}&department={{ selected_department }}&company={{ selected_company }}&page={{ page_obj.next_page_number }}" class="px-3 py-2 border border-gray-300 rounded-r-lg bg-white hover:bg-gray-100">›</a></li>
-        {% else %}
-        <li><span class="px-3 py-2 border border-gray-200 rounded-r-lg bg-white text-gray-400">›</span></li>
-        {% endif %}
-      </ul>
-    </nav>
   </div>
-  {% endif %}
+</section>
 </div>
 
 {% if can_create %}
@@ -231,21 +101,19 @@
                 class="text-gray-400 hover:text-gray-900 rounded-lg text-xs p-2 ml-auto inline-flex items-center">×</button>
       </div>
       <div class="p-5 overflow-y-auto text-[13px]">
-        <div class="mb-4 text-xs rounded-lg border border-blue-100 bg-blue-50 text-blue-700 p-3">
-          {{ auto_status_note }}
-        </div>
         <form method="post" enctype="multipart/form-data" class="grid grid-cols-1 md:grid-cols-2 gap-4">
           {% csrf_token %}
-          <input type="hidden" id="incomingReceivingCompanyCode" name="receiving_company" value="{{ prefill_company.code|default:'' }}">
           {% if incoming_item_type_field %}
           {{ incoming_item_type_field }}
           {% endif %}
           <div>
-            <label class="block text-xs font-medium text-gray-700 mb-1">Công ty nhận</label>
-            <input type="text" id="incomingReceivingCompanyLabel"
-                   value="{% if prefill_company %}{{ prefill_company.code }} - {{ prefill_company.name }}{% endif %}"
-                   readonly
-                   class="block w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-1.5 text-xs text-gray-700" />
+            <label for="incomingReceivingCompanyCode" class="block text-xs font-medium text-gray-700 mb-1">Công ty nhận <span class="text-red-500">*</span></label>
+            <select id="incomingReceivingCompanyCode" name="receiving_company" required
+                    class="block w-full rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700">
+              <option value="">Chọn công ty nhận</option>
+              {% for company in companies %}<option value="{{ company.code }}" {% if prefill_company.code == company.code %}selected{% endif %}>{{ company.code }} - {{ company.name }}</option>{% endfor %}
+            </select>
+            <input type="hidden" id="incomingReceivingCompanyLabel" value="{% if prefill_company %}{{ prefill_company.code }} - {{ prefill_company.name }}{% endif %}" />
             {% if form.receiving_company.errors %}<p class="text-xs text-red-600 mt-1">{{ form.receiving_company.errors.0 }}</p>{% endif %}
           </div>
           <div>
@@ -271,17 +139,17 @@
             {{ form.signer_name }}
             {% if form.signer_name.errors %}<p class="text-xs text-red-600 mt-1">{{ form.signer_name.errors.0 }}</p>{% endif %}
           </div>
-          <div class="md:col-span-2">
-            <label class="block text-xs font-medium text-gray-700 mb-1">{{ form.summary.label }}</label>
-            {{ form.summary }}
-            {% if form.summary.errors %}<p class="text-xs text-red-600 mt-1">{{ form.summary.errors.0 }}</p>{% endif %}
-          </div>
           <div>
             <label class="block text-xs font-medium text-gray-700 mb-1">{{ form.processing_department.label }}</label>
             {{ form.processing_department }}
             {% if form.processing_department.errors %}<p class="text-xs text-red-600 mt-1">{{ form.processing_department.errors.0 }}</p>{% endif %}
           </div>
-          <div>
+          <div class="md:col-span-2">
+            <label class="block text-xs font-medium text-gray-700 mb-1">{{ form.summary.label }}</label>
+            {{ form.summary }}
+            {% if form.summary.errors %}<p class="text-xs text-red-600 mt-1">{{ form.summary.errors.0 }}</p>{% endif %}
+          </div>
+          <div class="md:col-span-2">
             <label class="block text-xs font-medium text-gray-700 mb-1">Tệp đính kèm</label>
             <div class="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/40 p-3">
               <input type="file" id="incomingDispatchFiles" name="images" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" multiple class="hidden">
@@ -321,7 +189,7 @@
     const codeInput = document.getElementById("incomingReceivingCompanyCode");
     const labelInput = document.getElementById("incomingReceivingCompanyLabel");
     const modal = document.getElementById("incomingDispatchModal");
-    if (codeInput) codeInput.value = companyCode || "";
+    if (codeInput) { codeInput.value = companyCode || ""; codeInput.dispatchEvent(new Event("change", {bubbles: true})); }
     if (labelInput) labelInput.value = companyLabel || "";
     if (modal) modal.classList.remove("hidden");
   }
@@ -369,7 +237,7 @@
     form.submit();
   }
 
-  {% if form.errors and can_create %}
+  {% if form.errors or request.GET.create == '1' %}
     window.addEventListener("DOMContentLoaded", function () {
       const currentCode = document.getElementById("incomingReceivingCompanyCode")?.value || "";
       const currentLabel = document.getElementById("incomingReceivingCompanyLabel")?.value || incomingCompanyLabelMap[currentCode] || "";
@@ -622,5 +490,4 @@
   </aside>
 </div>
 {% endif %}
-</div>
 {% endblock %}

@@ -66,9 +66,9 @@
       <div id="raw-report-panel" role="tabpanel" aria-labelledby="{% if kind == 'receiving' %}receiving{% else %}checking{% endif %}-report-tab" class="p-4 space-y-4">
         {% if error %}<div role="alert" class="rounded-xl border border-red-200 bg-red-50 p-3 text-[10px] text-red-700">{{ error }}</div>{% endif %}
       <div class="flex flex-wrap items-center gap-2 text-[10px]">
-        <button class="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700" type="submit" x-ref="scanButton">Quét dữ liệu</button>
+        <button class="ui-btn ui-btn-primary" type="submit" x-ref="scanButton">Quét dữ liệu</button>
         <button class="px-4 py-2 rounded-lg border border-emerald-200 text-emerald-700 font-semibold hover:bg-emerald-50 disabled:opacity-40" type="submit" name="download" value="1" {% if not can_download %}disabled{% endif %}>Xuất Excel</button>
-        <a href="{% url 'document_raw_export' %}?report_kind={{ kind }}" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50">Xóa</a>
+        <a href="{% url 'document_raw_export' %}?report_kind={{ kind }}" class="ui-btn ui-btn-secondary">Xóa</a>
         <span class="text-gray-500">Chọn ít nhất một điều kiện. Tối đa {{ export_limit|intcomma }} dòng dữ liệu/file.</span>
       </div>
   <div class="grid gap-3 md:grid-cols-3">

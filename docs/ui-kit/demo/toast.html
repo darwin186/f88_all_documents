@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI Kit — Toast (demo)</title>
+<!-- Mở trực tiếp bằng trình duyệt. Bấm các nút để bắn thông báo thật ở góc phải trên. -->
+<link rel="stylesheet" href="../../../static/css/ui-kit.css">
+<link rel="stylesheet" href="../../../static/css/ui-toast.css">
+<style>
+  body { margin: 0; padding: 24px; background: linear-gradient(160deg, #dbe7ff 0%, #eef3ff 40%, #f5f6f8 100%); color: #1f2937; font: 400 12px/1.5 "Plus Jakarta Sans", Inter, "SF Pro Text", Arial, sans-serif; min-height: 100vh; }
+  h1 { margin: 0 0 4px; font-size: 16px; } p.lead { margin: 0 0 18px; color: #6b7280; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 24px; align-items: start; }
+  .col { display: grid; gap: 12px; } .col > h2 { margin: 0; font-size: 11px; color: #475569; text-transform: uppercase; letter-spacing: .06em; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<h1>Toast — thông báo</h1>
+<p class="lead">Thẻ trắng bo tròn, ô icon màu bên trái, tiêu đề đậm + thời gian, mô tả, và tuỳ chọn: nút hành động, thanh tiến độ, dòng thông tin, vòng phần trăm.</p>
+
+<div class="cols">
+  <div class="col" id="gallery-a"><h2>Mẫu thẻ</h2></div>
+  <div class="col" id="gallery-b"><h2>Loại thông báo</h2></div>
+  <div class="col"><h2>Thử bắn thật</h2>
+    <div class="buttons">
+      <button class="ui-btn ui-btn-primary" data-fire="success">Thành công</button>
+      <button class="ui-btn ui-btn-danger" data-fire="error">Lỗi</button>
+      <button class="ui-btn ui-btn-warning" data-fire="warning">Cảnh báo</button>
+      <button class="ui-btn ui-btn-info" data-fire="info">Thông tin</button>
+      <button class="ui-btn ui-btn-secondary" data-fire="progress">Tiến độ (cập nhật)</button>
+      <button class="ui-btn ui-btn-secondary" data-fire="many">Bắn 6 cái</button>
+    </div>
+    <p style="color:#6b7280">Tự đóng sau 6 giây (lỗi 9 giây), tạm dừng khi rê chuột. Tiến độ chỉ tự đóng khi xong.</p>
+  </div>
+</div>
+
+<script src="../../../static/js/ui-toast.js"></script>
+<script>
+  const a = document.getElementById('gallery-a'), b = document.getElementById('gallery-b');
+  uiToast({container: a, type: 'success', icon: 'file', title: 'Báo cáo tháng đã sẵn sàng', message: 'Báo cáo bưu kiện đã nhận tháng 10 đã được tạo.', time: '21 phút',
+    action: {label: 'Tải file Excel', icon: 'download', href: '#'}});
+  uiToast({container: a, type: 'info', icon: 'upload', title: 'Đang tải dữ liệu lên', message: 'Đã xử lý 3.150 / 5.000 dòng.', time: '47 phút', progress: 63});
+  uiToast({container: a, type: 'accent', icon: 'calendar', title: 'Lịch hẹn nhận quyển', message: 'Bạn có lịch hẹn nhận quyển chứng từ.', time: '8 ngày',
+    meta: [{icon: 'user', text: 'PGD Cầu Giấy'}, {icon: 'clock', text: 'còn 3 giờ'}]});
+  uiToast({container: a, type: 'neutral', icon: 'package', title: 'Đang gửi email hàng loạt', message: 'Gửi email nhắc tới các phòng giao dịch.', ring: 60});
+  uiToast({container: b, type: 'success', message: 'Đã lưu thay đổi.'});
+  uiToast({container: b, type: 'error', message: 'Số 15 đã được sử dụng (đã dùng tới 20).'});
+  uiToast({container: b, type: 'warning', message: 'Còn 3 phòng giao dịch chưa có email nhận.'});
+  uiToast({container: b, type: 'info', message: 'Hệ thống sẽ bảo trì lúc 22:00 tối nay.'});
+
+  const fire = {
+    success: () => uiToast.success('Đã cập nhật số tiếp theo cho Quyết định – F88.'),
+    error: () => uiToast.error('Không thể lưu: Số 15 đã được sử dụng.'),
+    warning: () => uiToast.warning('Còn 3 phòng giao dịch chưa có email nhận.'),
+    info: () => uiToast.info('Có 5 bưu kiện mới đang chờ xác nhận.', {icon: 'package', time: 'Vừa xong'}),
+    progress: () => {
+      const t = uiToast({type: 'info', icon: 'upload', title: 'Đang xuất Excel', message: 'Đang chuẩn bị dữ liệu…', progress: 0});
+      let p = 0; const step = setInterval(() => {
+        p += 12; if (p >= 100) { clearInterval(step); t.update({type: 'success', icon: 'file', title: 'Xuất xong', message: 'File đã sẵn sàng.', progress: 100, action: {label: 'Tải xuống', icon: 'download', href: '#'}}); }
+        else t.update({progress: p, message: `Đã xử lý ${p}%`});
+      }, 450);
+    },
+    many: () => { for (let i = 1; i <= 6; i++) setTimeout(() => uiToast.success(`Thông báo số ${i}`), i * 120); },
+  };
+  document.querySelectorAll('[data-fire]').forEach(button => button.addEventListener('click', () => fire[button.dataset.fire]()));
+  const query = new URLSearchParams(location.search).get('fire'); if (query && fire[query]) addEventListener('load', fire[query]);
+</script>
+</body>
+</html>

@@ -23,16 +23,9 @@
         <h1 class="text-[12px] font-semibold text-gray-900">Thông tin cá nhân</h1>
         <p class="text-[9px] text-gray-500">Cập nhật ngày sinh và ảnh đại diện.</p>
       </div>
-      <a href="{% url 'home' %}" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-600 text-[9px] hover:bg-gray-50">Về trang chủ</a>
+      <a href="{% url 'home' %}" class="ui-btn ui-btn-secondary">Về trang chủ</a>
     </div>
 
-    {% if messages %}
-    <div class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[9px] text-emerald-700 space-y-1">
-      {% for message in messages %}
-        <div>{{ message }}</div>
-      {% endfor %}
-    </div>
-    {% endif %}
 
     <form method="post" enctype="multipart/form-data" class="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4 text-[9px]">
       {% csrf_token %}
@@ -90,7 +83,7 @@
           <input type="text" value="{{ profile.employee_code }}" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-gray-50" disabled>
         </div>
         <div class="md:col-span-2 flex justify-end pt-2">
-          <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-[9px] font-semibold">Lưu thông tin</button>
+          <button type="submit" class="ui-btn ui-btn-primary">Lưu thông tin</button>
         </div>
       </div>
     </form>
@@ -107,8 +100,8 @@
       <img src="" alt="Crop" class="max-h-[320px] w-full object-contain" data-crop-image>
     </div>
     <div class="mt-4 flex items-center justify-end gap-2">
-      <button type="button" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-[9px]" data-crop-cancel>Hủy</button>
-      <button type="button" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-[9px] font-semibold" data-crop-apply>Cắt ảnh</button>
+      <button type="button" class="ui-btn ui-btn-secondary" data-crop-cancel>Hủy</button>
+      <button type="button" class="ui-btn ui-btn-primary" data-crop-apply>Cắt ảnh</button>
     </div>
   </div>
 </div>

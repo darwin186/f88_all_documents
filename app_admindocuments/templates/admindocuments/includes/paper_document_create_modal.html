@@ -1,0 +1,31 @@
+<div id="paperModal" tabindex="-1" aria-hidden="true" class="fixed inset-0 z-50 hidden bg-black/40 flex justify-center items-center adm-paper-modal" {% if create_modal_open %}data-paper-create-open{% endif %}>
+  <div class="relative p-4 w-full max-w-4xl max-h-[90vh]"><div class="relative bg-white rounded-lg shadow max-h-[90vh] flex flex-col">
+    <header class="adm-edit-header"><h2>{% if legacy_edit_id %}Chỉnh sửa giấy hành chính{% else %}Tạo giấy hành chính{% endif %}</h2><button type="button" data-modal-hide="paperModal" aria-label="Đóng tạo giấy hành chính">✕</button></header>
+    <div class="adm-paper-modal-body">
+      <div class="adm-preview-tabs" role="tablist" aria-label="Cách tạo giấy hành chính">
+        <button type="button" role="tab" id="paper-create-tab" data-paper-tab="create" aria-controls="paper-create-panel" aria-selected="true">Tạo giấy hành chính</button>
+        <button type="button" role="tab" id="paper-import-tab" data-paper-tab="import" aria-controls="paper-import-panel" aria-selected="false" tabindex="-1">Tạo theo file Excel</button>
+      </div>
+      <section id="paper-create-panel" data-paper-panel="create" role="tabpanel" aria-labelledby="paper-create-tab">
+        <form method="post" action="{% url 'admindocuments:paper_document_list' %}?{{ list_query }}" data-paper-create-form>
+          {% csrf_token %}{% if legacy_edit_id %}<input type="hidden" name="edit_id" value="{{ legacy_edit_id }}">{% endif %}
+          {% if form.errors %}<div class="adm-edit-error" role="alert">Vui lòng kiểm tra các trường được đánh dấu bên dưới.{{ form.non_field_errors }}</div>{% endif %}
+          <div class="adm-form-columns">{% for column in create_columns %}<div class="adm-form-column">
+            <h3 class="adm-column-title">{% if forloop.first %}Thông tin giấy hành chính{% else %}Nội dung & vận chuyển{% endif %}</h3>
+            {% for field in column %}<div class="adm-edit-field"><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}<span class="text-red-500"> *</span>{% endif %}</label>
+              {% if field.field.widget.input_type == 'select' %}{% include 'components/ui_select.html' with field=field %}{% else %}{{ field }}{% endif %}
+              {% for error in field.errors %}<p class="adm-edit-field-error">{{ error }}</p>{% endfor %}
+            </div>{% endfor %}
+          </div>{% endfor %}</div>
+          <div class="adm-form-footer"><button type="button" data-modal-hide="paperModal" class="ui-btn ui-btn-secondary">Hủy</button><button type="submit" class="ui-btn ui-btn-primary">{% if legacy_edit_id %}Cập nhật{% else %}Lưu{% endif %}</button></div>
+        </form>
+      </section>
+      <section id="paper-import-panel" data-paper-panel="import" role="tabpanel" aria-labelledby="paper-import-tab" hidden data-paper-import data-process-url="{% url 'admindocuments:paper_document_import_url' %}" data-commit-url="{% url 'admindocuments:paper_document_import_commit' %}">
+        <div class="adm-edit-field"><label for="paper-import-file">Chọn file Excel (.xlsx)</label><div class="ui-file" data-ui-file data-max-mb="10"><input type="file" id="paper-import-file" accept=".xlsx" data-paper-import-file></div></div>
+        <div class="adm-paper-import-actions"><a href="{% url 'admindocuments:paper_document_template' %}" class="ui-btn ui-btn-secondary">Tải file mẫu</a><button type="button" data-paper-process class="ui-btn ui-btn-primary">Kiểm tra dữ liệu</button></div>
+        <p data-paper-import-status role="status" class="adm-paper-import-status">Chọn file và kiểm tra dữ liệu trước khi lưu.</p>
+        <div class="adm-form-footer"><button type="button" data-modal-hide="paperModal" class="ui-btn ui-btn-secondary">Đóng</button><button type="button" data-paper-commit class="ui-btn ui-btn-primary" disabled>Lưu dữ liệu</button></div>
+      </section>
+    </div>
+  </div></div>
+</div>

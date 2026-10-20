@@ -2,6 +2,7 @@ from datetime import datetime
 import uuid
 
 from django import forms
+from django.db.models import Q
 from django.utils import timezone
 
 from app_documents.models import Region, Shop, UserProfile
@@ -160,8 +161,11 @@ class AdmAdministrativeDocumentSplitForm(AdmAdministrativeDocumentForm):
             code=AdmDocumentStatus.CODE_DRAFT).first()
             or self.fields["status"].queryset.first())
         for name in ("issue_date", "effective_date", "expiry_date"):
-            self.fields[name].widget = forms.DateInput(
-                attrs={"type": "date"}, format="%Y-%m-%d")
+            attrs = {"type": "text", "datepicker": "", "datepicker-format": "dd/mm/yyyy",
+                     "data-document-datepicker": "", "placeholder": "dd/mm/yyyy", "autocomplete": "off"}
+            if name != "expiry_date":
+                attrs.update({"datepicker-buttons": "", "datepicker-autoselect-today": ""})
+            self.fields[name].widget = forms.DateInput(attrs=attrs, format="%d/%m/%Y")
         self.fields["issue_date"].required = True
         self.fields["issue_date"].help_text = "Nhập ngày ban hành cần backdate. Ngày tạo hệ thống vẫn là thời điểm hiện tại."
         for field in self.fields.values():
@@ -174,6 +178,7 @@ class AdmAdministrativeDocumentSplitForm(AdmAdministrativeDocumentForm):
                     "block w-full rounded-lg border border-gray-300 px-3.5 py-2.5 bg-white "
                     "focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-f88green"
                     + (" h-11" if not isinstance(field.widget, forms.Textarea) else "")
+                    + (" pl-9" if "data-document-datepicker" in field.widget.attrs else "")
                 )
 
 
@@ -283,6 +288,34 @@ class AdmAdministrativeDocumentUpdateForm(forms.ModelForm):
         return cleaned
 
 
+class AdmAdministrativeDocumentEditPopupForm(AdmAdministrativeDocumentUpdateForm):
+    """The existing update validation with the same controls as the create popup."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("auto_id", "edit_%s")
+        super().__init__(*args, **kwargs)
+        # These were read-only in the former detail screen.
+        self.fields["doc_type"].disabled = True
+        self.fields["issuing_company"].disabled = True
+        self.fields["issuing_department"].queryset = AdmDepartment.objects.filter(
+            company_id=self.instance.issuing_company_id).order_by("name")
+        for name, label in AdmAdministrativeDocumentForm.Meta.labels.items():
+            if name in self.fields:
+                self.fields[name].label = label
+        for name in ("issue_date", "effective_date", "expiry_date"):
+            attrs = {"type": "text", "data-document-datepicker": "",
+                     "placeholder": "dd/mm/yyyy", "autocomplete": "off"}
+            if name != "expiry_date":
+                attrs.update({"datepicker-buttons": "", "datepicker-autoselect-today": ""})
+            self.fields[name].widget = forms.DateInput(attrs=attrs, format="%d/%m/%Y")
+        self.fields["attachment"].widget = forms.FileInput()
+        for field in self.fields.values():
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs["class"] = "h-4 w-4 rounded border-gray-300 text-f88green"
+            else:
+                field.widget.attrs["class"] = "block w-full rounded-lg border border-gray-200 px-3 py-2 bg-white text-sm"
+
+
 class AdmPaperDocumentForm(forms.ModelForm):
     region = forms.ChoiceField(required=False, label="Miền")
     paper_type = forms.ModelChoiceField(
@@ -312,6 +345,15 @@ class AdmPaperDocumentForm(forms.ModelForm):
             (region.region_name, region.region_name)
             for region in Region.objects.exclude(pk=3).order_by("region_name")
         ]
+        if self.instance.pk:
+            self.fields["paper_type"].queryset = AdmPaperType.objects.filter(
+                Q(is_active=True) | Q(pk=self.instance.paper_type_id)
+            ).order_by("name")
+            self.fields["courier_company"].queryset = AdmCourierCompany.objects.filter(
+                Q(is_active=True) | Q(pk=self.instance.courier_company_id)
+            ).order_by("name")
+            if self.instance.region and self.instance.region not in dict(region_choices):
+                region_choices.append((self.instance.region, self.instance.region))
         self.fields["region"].choices = region_choices
         base_classes = "block w-full rounded-lg border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-f88green"
         for name, field in self.fields.items():
@@ -832,8 +874,18 @@ class AdmSignerRoleForm(_MasterBaseForm):
 class AdmDocumentStatusForm(_MasterBaseForm):
     class Meta:
         model = AdmDocumentStatus
-        fields = ["code", "name", "is_active"]
-        labels = {"code": "Mã", "name": "Tên trạng thái", "is_active": "Đang dùng"}
+        fields = ["code", "name", "badge_text_color", "badge_bg_color", "is_active"]
+        labels = {"code": "Mã", "name": "Tên trạng thái", "is_active": "Đang dùng",
+                  "badge_text_color": "Màu chữ", "badge_bg_color": "Màu nền"}
+        widgets = {
+            "badge_text_color": forms.TextInput(attrs={"type": "color"}),
+            "badge_bg_color": forms.TextInput(attrs={"type": "color"}),
+        }
+
+
+class AdmDocumentStatusColorsForm(AdmDocumentStatusForm):
+    class Meta(AdmDocumentStatusForm.Meta):
+        fields = ["badge_text_color", "badge_bg_color"]
 
 
 class AdmCompanyForm(_MasterBaseForm):

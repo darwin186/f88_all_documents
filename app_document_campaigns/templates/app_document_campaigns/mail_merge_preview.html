@@ -1,0 +1,32 @@
+{% extends "app_documents/base_app_documents_v2.html" %}
+{% load static %}
+{% block title %}Mail Merge · Thiết kế chiến dịch{% endblock %}
+{% block top_nav %}{% include 'app_documents/components/top_nav_v2.html' %}{% endblock %}
+{% block main_extra_class %}pt-20{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link rel="stylesheet" href="{% static 'app_document_campaigns/css/datetime_picker.css' %}?v=20261002-2">
+<link rel="stylesheet" href="{% static 'app_document_campaigns/css/mail_merge_preview.css' %}?v=20261019-1">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/vn.js" defer></script>
+<script src="{% static 'app_document_campaigns/js/datetime_picker.js' %}?v=20261002-2" defer></script>
+<script src="{% static 'app_document_campaigns/js/mail_merge_preview.js' %}?v=20261019-1" defer></script>
+{% endblock %}
+{% block content %}
+<div class="mm-page" data-mail-merge-preview>
+  <div class="mm-breadcrumb"><a href="{% url 'document_campaigns:campaign_list' %}">Chiến dịch</a><span>›</span><span>Mail Merge</span>{% if creating %}<a href="{% url 'document_campaigns:campaign_create' %}">Đổi loại chiến dịch</a>{% endif %}<span class="mm-preview-badge">Bản xem thử · Dữ liệu mẫu</span></div>
+  <header class="mm-header">
+    <div><div class="mm-eyebrow">MAIL MERGE <span>{% if creating %}CHIẾN DỊCH MỚI{% else %}MM-202610-001{% endif %}</span></div><h1 data-campaign-title>{% if creating %}Chiến dịch Mail Merge mới{% else %}Đối soát hồ sơ PGD · Tháng 10/2026{% endif %}</h1><p>Thiết kế bảng dữ liệu, phân phối theo PGD và tổng hợp phản hồi trong một chiến dịch.</p></div>
+    <div class="mm-header-actions"><button class="ui-btn ui-btn-secondary" data-action="pgd-preview">Xem giao diện PGD <span aria-hidden="true">↗</span></button><button class="ui-btn ui-btn-primary" data-action="save-draft">Lưu bản nháp</button></div>
+  </header>
+  <nav class="mm-module-tabs" aria-label="Loại chiến dịch"><a href="{% url 'document_campaigns:campaign_list' %}">Book lỗi chứng từ</a><span aria-current="page">Mail Merge</span></nav>
+  <nav class="mm-workflow" aria-label="Tiến trình Mail Merge">
+    {% for label in steps %}<button type="button" data-step="{{ forloop.counter }}"><span class="mm-step-number">{{ forloop.counter }}</span><span><small>BƯỚC {{ forloop.counter }}</small><strong>{{ label }}</strong></span><span class="mm-step-chevron" aria-hidden="true">›</span></button>{% endfor %}
+  </nav>
+  <template data-deadline-template>{% include 'app_document_campaigns/components/datetime_picker.html' with name='mm_deadline' value='2026-10-24T17:00' %}</template>
+  <div data-step-content></div>
+  <footer class="mm-footer"><span><i></i>Đang xem thiết kế tương tác. Thao tác gửi mail và tạo/thu hồi link chỉ mô phỏng.</span><div><button class="ui-btn ui-btn-ghost" data-action="previous">← Bước trước</button><button class="ui-btn ui-btn-primary" data-action="next">Tiếp tục <span data-next-step></span> →</button></div></footer>
+  <dialog class="mm-dialog" data-mm-dialog aria-labelledby="mm-dialog-title"><header><div><span data-dialog-eyebrow></span><h2 id="mm-dialog-title"></h2></div><button type="button" data-action="close-dialog" class="ui-btn ui-btn-ghost ui-btn-icon ui-btn-sm" aria-label="Đóng">×</button></header><div data-dialog-content></div></dialog>
+  <div class="mm-toast" role="status" aria-live="polite" hidden></div>
+</div>
+{% endblock %}

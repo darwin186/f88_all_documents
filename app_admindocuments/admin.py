@@ -69,6 +69,11 @@ class AdmIncomingDispatchStatusAdminForm(forms.ModelForm):
         }
 
 
+class AdmDocumentStatusAdminForm(AdmIncomingDispatchStatusAdminForm):
+    class Meta(AdmIncomingDispatchStatusAdminForm.Meta):
+        model = AdmDocumentStatus
+
+
 @admin.register(AdmDocumentType)
 class AdmDocumentTypeAdmin(admin.ModelAdmin):
     list_display = ("code", "name")
@@ -91,7 +96,8 @@ class AdmSignerRoleAdmin(admin.ModelAdmin):
 
 @admin.register(AdmDocumentStatus)
 class AdmDocumentStatusAdmin(admin.ModelAdmin):
-    list_display = ("code", "name")
+    form = AdmDocumentStatusAdminForm
+    list_display = ("code", "name", "badge_text_color", "badge_bg_color")
 
 
 @admin.register(AdmCompany)

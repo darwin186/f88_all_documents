@@ -1,0 +1,42 @@
+<section class="adm-panel" aria-labelledby="adm-list-title">
+  <div class="adm-list-toolbar">
+    <div class="adm-list-summary"><h2 id="adm-list-title">Danh sách văn bản</h2><span class="adm-count">{{ paginator.count }} kết quả</span></div>
+    {% include 'admindocuments/includes/document_pagination.html' %}
+  </div>
+  <div class="adm-table-scroll">
+    <table class="adm-table">
+      <thead><tr>
+        <th class="adm-index" scope="col">STT</th>
+        {% include 'admindocuments/includes/document_sort_header.html' with key='number' label='Số hiệu' %}
+        {% include 'admindocuments/includes/document_sort_header.html' with key='title' label='Tên văn bản' %}
+        {% include 'admindocuments/includes/document_sort_header.html' with key='type' label='Loại văn bản' %}
+        {% include 'admindocuments/includes/document_sort_header.html' with key='company' label='Công ty' %}
+        {% include 'admindocuments/includes/document_sort_header.html' with key='status' label='Trạng thái' %}
+        <th scope="col">Người tạo</th>
+        {% include 'admindocuments/includes/document_sort_header.html' with key='issue' label='Ngày ban hành' %}
+        {% include 'admindocuments/includes/document_sort_header.html' with key='effective' label='Ngày hiệu lực' %}
+        {% include 'admindocuments/includes/document_sort_header.html' with key='expiry' label='Ngày hết hiệu lực' %}
+        <th scope="col" class="adm-actions-header"><span class="sr-only">Thao tác</span><a href="{% url 'admindocuments:admindocuments_list_export' %}?{{ list_query }}" data-adm-export="{% url 'admindocuments:admindocuments_list_export' %}" class="adm-export-icon" aria-label="Xuất Excel" title="Xuất Excel theo bộ lọc hiện tại"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"/></svg></a></th>
+      </tr></thead>
+      <tbody>
+        {% for doc in documents %}
+        <tr data-document-preview="{% url 'admindocuments:admindocuments_detail' doc.pk %}" tabindex="0" aria-label="Xem nhanh văn bản {{ doc.document_number_full }}" {% if new_doc_id == doc.pk|stringformat:'s' %}class="bg-green-50"{% endif %}>
+          <td class="adm-index">{{ forloop.counter0|add:documents.start_index }}</td>
+          <td><span class="adm-doc-identifier"><a class="adm-doc-number doc-detail-link" href="{% url 'admindocuments:admindocuments_detail' doc.pk %}">{{ doc.document_number_full }}</a>{% include 'admindocuments/includes/document_copy_number.html' %}{% if doc.number_suffix %}{% include 'admindocuments/includes/document_split_icon.html' %}{% endif %}</span></td>
+          <td class="adm-document-title" data-document-cell="title"><a class="doc-detail-link" href="{% url 'admindocuments:admindocuments_detail' doc.pk %}" title="{{ doc.title }}">{{ doc.title }}</a></td>
+          <td>{{ doc.doc_type.name }}</td><td title="{{ doc.issuing_company.name }}">{{ doc.issuing_company.code }}</td>
+          <td data-document-cell="status"><span class="adm-status" style="color:{{ doc.status.badge_text_color }};background-color:{{ doc.status.badge_bg_color }};">{{ doc.status.name }}</span></td>
+          <td>{{ doc.created_by.get_full_name|default:doc.created_by.username|default:'—' }}</td>
+          <td data-document-cell="issue_date">{{ doc.issue_date|date:'d/m/Y'|default:'—' }}</td><td data-document-cell="effective_date">{{ doc.effective_date|date:'d/m/Y'|default:'—' }}</td><td data-document-cell="expiry_date">{{ doc.expiry_date|date:'d/m/Y'|default:'—' }}</td>
+          <td data-document-actions><details class="adm-row-actions"><summary aria-label="Thao tác với {{ doc.document_number_full }}">⋯</summary><div class="adm-row-menu">
+            <a href="{% url 'admindocuments:admindocuments_detail' doc.pk %}" data-document-edit>Chỉnh sửa văn bản</a>
+            {% if doc.split_parent_id %}<a href="{% url 'admindocuments:admindocuments_split' doc.split_parent_id %}" data-document-split>Tạo văn bản tách thửa</a>{% else %}<a href="{% url 'admindocuments:admindocuments_split' doc.pk %}" data-document-split>Tạo văn bản tách thửa</a>{% endif %}
+            <a href="{% url 'admindocuments:admindocuments_list' %}?ref={{ doc.pk }}">Tạo văn bản tham chiếu</a>
+            {% if not doc.is_void %}<form method="post" action="{% url 'admindocuments:admindocuments_delete' doc.pk %}" onsubmit="return confirm('Vô hiệu văn bản này?');">{% csrf_token %}<button type="submit" class="adm-action-danger">Vô hiệu</button></form>{% endif %}
+          </div></details></td>
+        </tr>
+        {% empty %}<tr><td colspan="11" class="adm-empty"><strong>Chưa có văn bản phù hợp</strong>Thử thay đổi điều kiện hoặc xóa bộ lọc để xem lại danh sách.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>

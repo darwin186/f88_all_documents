@@ -13,12 +13,12 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/monthSelect/style.css">
   </head>
   <body>
-    {% include 'app_documents/navbar.html' %}    
     {% block content %}
     <!-- My Projects stay here for long! -->
     {% endblock %}
     <!-- Message will complain everytime you do-->
-    {% include 'app_documents/sys_messages.html' %} 
+    {% include 'components/ui_toast.html' %}
+    {% include 'components/ui_toast_seeds.html' %}
     {% comment %} <div class="footer sticky-bottom" >
       <h6>Documentation Management System DMS - Version 1.2.1</h6>
     </div> {% endcomment %}

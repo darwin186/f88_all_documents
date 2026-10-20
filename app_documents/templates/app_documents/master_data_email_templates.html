@@ -10,7 +10,6 @@
 {% endblock %}
 {% block content %}
 <div class="met-page" data-master-email-templates>
-  {% if messages %}{% for message in messages %}<div class="met-message {% if message.tags == 'error' %}is-error{% endif %}">{{ message }}</div>{% endfor %}{% endif %}
   <header class="met-page-head"><div><p>MASTER DATA</p><h1>Template email</h1><span>Tạo mẫu dùng chung và mapping vào từng bước của Book lỗi.</span></div><a class="met-new-button" href="?new=1">+ Tạo template</a></header>
 
   <div class="met-layout">

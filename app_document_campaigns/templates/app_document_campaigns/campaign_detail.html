@@ -6,7 +6,7 @@
 {% block title %}{{ campaign.code }}{% endblock %}
 {% block top_nav %}{% include "app_documents/components/top_nav_v2.html" %}{% endblock %}
 {% block main_extra_class %}pt-20{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_workflow.css' %}?v=20261008-2"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/datetime_picker.css' %}?v=20261002-2"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/response_guidance_config.css' %}?v=20260930-5"><script src="https://cdn.jsdelivr.net/npm/flatpickr"></script><script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/vn.js"></script><script src="{% static 'app_document_campaigns/js/datetime_picker.js' %}?v=20261002-2" defer></script><script src="{% static 'app_document_campaigns/js/campaign_workflow.js' %}" defer></script><script src="{% static 'app_document_campaigns/js/campaign_settings.js' %}" defer></script><script src="{% static 'app_document_campaigns/js/response_guidance_config.js' %}" defer></script>{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_workflow.css' %}?v=20261019-1"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/datetime_picker.css' %}?v=20261002-2"><link rel="stylesheet" href="{% static 'app_document_campaigns/css/response_guidance_config.css' %}?v=20260930-5"><script src="https://cdn.jsdelivr.net/npm/flatpickr"></script><script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/vn.js"></script><script src="{% static 'app_document_campaigns/js/datetime_picker.js' %}?v=20261002-2" defer></script><script src="{% static 'app_document_campaigns/js/campaign_workflow.js' %}" defer></script><script src="{% static 'app_document_campaigns/js/campaign_settings.js' %}" defer></script><script src="{% static 'app_document_campaigns/js/response_guidance_config.js' %}" defer></script>{% endblock %}
 
 {% block content %}
 {% campaign_workflow 2 %}
@@ -103,8 +103,8 @@
           </div>
         </div>
         <div class="dec-settings-actions">
-          <button type="button" class="dec-btn dec-btn-secondary" data-close-campaign-settings>Hủy</button>
-          <button type="submit" class="dec-btn dec-btn-primary">Lưu thay đổi</button>
+          <button type="button" class="ui-btn ui-btn-secondary" data-close-campaign-settings>Hủy</button>
+          <button type="submit" class="ui-btn ui-btn-primary">Lưu thay đổi</button>
         </div>
       </form>{% endif %}
     </dialog>

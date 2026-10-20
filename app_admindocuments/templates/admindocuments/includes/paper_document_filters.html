@@ -1,0 +1,18 @@
+<form method="get" class="adm-panel adm-filter-panel" data-adm-filters>
+  <div class="adm-filter-grid adm-paper-filter-grid">
+    <div class="adm-field"><label for="adm-search">Tìm kiếm giấy hành chính</label><div class="adm-search-field"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></svg><input id="adm-search" name="q" value="{{ q }}" placeholder="Số hiệu, nội dung hoặc mã vận đơn…"></div></div>
+    {% include 'admindocuments/includes/document_filter_select.html' with filter_id='paper-filter-type' name='paper_type' label='Loại giấy' placeholder='Tất cả loại giấy' options=paper_types selected=paper_type %}
+    {% include 'admindocuments/includes/document_filter_select.html' with filter_id='paper-filter-region' name='region' label='Miền' placeholder='Tất cả miền' options=region_options selected=region %}
+    {% include 'admindocuments/includes/document_filter_select.html' with filter_id='paper-filter-status' name='status' label='Tình trạng' placeholder='Tất cả tình trạng' options=status_options selected=status %}
+    {% include 'admindocuments/includes/document_filter_select.html' with filter_id='paper-filter-shop' name='requested_department' label='Phòng giao dịch' placeholder='Tất cả phòng giao dịch' options=shop_options selected=requested_department %}
+    <div class="adm-field"><label for="adm-created-range">Ngày tạo giấy hành chính</label><div class="adm-filter-calendar"><input id="adm-created-range" data-filter-created-range type="text" autocomplete="off" placeholder="Chọn khoảng ngày" readonly><button type="button" data-filter-calendar="adm-created-range" aria-label="Chọn khoảng ngày tạo">{% include 'admindocuments/includes/calendar_icon.html' %}</button></div><input type="hidden" id="adm-start-date" name="start_date" value="{{ start_date }}"><input type="hidden" id="adm-end-date" name="end_date" value="{{ end_date }}"><input type="hidden" name="created_all" value="{{ created_all }}"></div>
+  </div>
+  <input type="hidden" name="sort" value="{{ sort }}"><input type="hidden" name="dir" value="{{ dir }}">
+  <div class="adm-filter-footer adm-filter-footer-with-chips">
+    {% include 'admindocuments/includes/filter_chips.html' %}
+    <div class="adm-actions">
+    <button type="button" data-modal-target="paperModal" data-modal-toggle="paperModal" class="ui-btn ui-btn-primary"><span aria-hidden="true">＋</span>Tạo giấy hành chính</button>
+    <button type="submit" class="ui-btn ui-btn-primary">Áp dụng bộ lọc</button>
+    <a href="{% url 'admindocuments:paper_document_list' %}?created_all=1" class="ui-btn ui-btn-secondary">Xóa bộ lọc</a>
+  </div></div>
+</form>

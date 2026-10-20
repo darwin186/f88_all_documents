@@ -10,6 +10,7 @@ from django.db import models
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from app_documents.models import GapoScheduledMessage, Shop
 
 
@@ -119,6 +120,14 @@ class AdmDocumentStatus(models.Model):
 
     code = models.CharField(max_length=20, unique=True)
     name = models.CharField(max_length=100)
+    badge_text_color = models.CharField(
+        max_length=7, default="#374151",
+        validators=[RegexValidator(r"^#[0-9a-fA-F]{6}$", "Nhập màu theo định dạng #RRGGBB.")],
+    )
+    badge_bg_color = models.CharField(
+        max_length=7, default="#F3F4F6",
+        validators=[RegexValidator(r"^#[0-9a-fA-F]{6}$", "Nhập màu theo định dạng #RRGGBB.")],
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(

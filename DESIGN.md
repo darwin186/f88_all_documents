@@ -28,6 +28,7 @@ colors:
   success-soft: "#ECFDF5"
   success-border: "#A7F3D0"
   warning: "#F59E0B"
+  warning-strong: "#D97706"
   warning-soft: "#FFFBEB"
   warning-border: "#FDE68A"
   danger: "#EF4444"
@@ -35,6 +36,7 @@ colors:
   danger-soft: "#FEF2F2"
   danger-border: "#FECACA"
   info: "#3B82F6"
+  info-strong: "#1769AA"
   info-soft: "#EFF6FF"
   info-border: "#BFDBFE"
   disabled: "#F3F4F6"
@@ -381,7 +383,7 @@ Buttons are compact. Primary actions are green with white text. Secondary action
 
 Badges are small pills. They may use configured status colors, but they should retain dark readable text and compact padding.
 
-Toasts appear in the top-right below the nav. They are white, bordered, softly shadowed, and include a small colored dot to indicate success, warning, error, or info.
+Toasts appear in the top-right below the nav. Each is a white card with large rounded corners (20px) and a soft shadow: a 44px rounded-square icon tile in the status color (green success, red error, amber warning, sky info, slate neutral, violet accent), a bold title with a muted relative time on the right, and a one-line muted description. Optional parts are an action chip, a progress bar, a meta row, or a progress ring. See docs/ui-kit/components/toast.md.
 
 Drawers are used for detail and action workflows without leaving the table. Drawer forms should keep the same compact inputs, small labels, and subtle section dividers.
 

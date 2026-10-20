@@ -53,9 +53,9 @@
         <span class="text-gray-300">→</span>
         <input type="text" name="date_to" class="dash-field w-[135px]" placeholder="Đến ngày" data-dashboard-date readonly>
       </div>
-      <button type="submit" class="rounded-lg bg-emerald-600 px-4 py-2 text-[10px] font-bold text-white hover:bg-emerald-700">Áp dụng</button>
-      <a href="{% url 'gddb_registration_v2' %}" class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-[10px] font-bold text-gray-600 hover:bg-gray-50">Về hàng đợi</a>
-      <a href="{% url 'admin:app_documents_collateralregistrationholiday_changelist' %}" class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-[10px] font-bold text-gray-600 hover:bg-gray-50">Lịch nghỉ SLA</a>
+      <button type="submit" class="ui-btn ui-btn-primary">Áp dụng</button>
+      <a href="{% url 'gddb_registration_v2' %}" class="ui-btn ui-btn-secondary">Về hàng đợi</a>
+      <a href="{% url 'admin:app_documents_collateralregistrationholiday_changelist' %}" class="ui-btn ui-btn-secondary">Lịch nghỉ SLA</a>
       <span id="dashboard-error" class="hidden text-[9px] font-semibold text-red-600"></span>
     </form>
   </section>
@@ -118,7 +118,7 @@
     </article>
   </section>
   {% else %}
-  <section class="flex justify-end"><a href="{% url 'gddb_registration_v2' %}" class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-[10px] font-bold text-gray-600 hover:bg-gray-50">Về hàng đợi</a></section>
+  <section class="flex justify-end"><a href="{% url 'gddb_registration_v2' %}" class="ui-btn ui-btn-secondary">Về hàng đợi</a></section>
   <span id="dashboard-error" class="hidden text-[9px] font-semibold text-red-600"></span>
   {% endif %}
 

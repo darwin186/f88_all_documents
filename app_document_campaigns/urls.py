@@ -10,6 +10,8 @@ from app_document_campaigns import bulk_email_views
 
 app_name = "document_campaigns"
 
+from . import mail_merge_preview
+
 urlpatterns = [
     path("campaigns/<int:campaign_id>/review/errors/<int:error_id>/receipt/", review_views.refresh_folder_receipt, name="refresh_folder_receipt"),
     path("campaigns/<int:campaign_id>/review/bulk/", review_views.bulk_team_review, name="bulk_team_review"),
@@ -27,6 +29,7 @@ urlpatterns = [
     path("campaigns/<int:campaign_id>/review/errors/<int:error_id>/", review_views.save_team_review, name="save_team_review"),
     path("health/", views.health, name="health"),
     path("", views.campaign_list, name="campaign_list"),
+    path("mail-merge/preview/", mail_merge_preview.preview, name="mail_merge_preview"),
     path("campaigns/new/", views.campaign_create, name="campaign_create"),
     path("campaigns/<int:campaign_id>/", views.campaign_detail, name="campaign_detail"),
     path("campaigns/<int:campaign_id>/deadline/", views.update_campaign_deadline, name="update_campaign_deadline"),

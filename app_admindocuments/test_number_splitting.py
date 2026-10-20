@@ -238,7 +238,9 @@ class NumberSplittingTests(TestCase):
         self.assertContains(response, 'data-document-attachment')
         self.assertContains(response, 'value="text"')
         self.assertContains(response, 'value="file"')
-        self.assertContains(response, 'type="date"', count=3)
+        self.assertContains(response, 'data-document-datepicker', count=3)
+        self.assertContains(response, 'datepicker-format="dd/mm/yyyy"', count=3)
+        self.assertNotContains(response, 'type="date"')
         columns = response.context["split_columns"]
         self.assertEqual(len(columns), 2)
         self.assertEqual([field.name for field in columns[0]][:4],

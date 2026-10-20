@@ -1,0 +1,17 @@
+{% load admin_ui %}{% admin_nav_state as admin_nav %}
+<div class="adm-top-links" role="group" aria-label="Hành chính">
+  {% if admin_nav.can_manage %}
+  <a href="{% url 'admindocuments:admindocuments_list' %}" {% if admin_nav.active == 'document' %}aria-current="page"{% endif %}>Văn bản hành chính</a>
+  <a href="{% url 'admindocuments:paper_document_list' %}" {% if admin_nav.active == 'paper' %}aria-current="page"{% endif %}>Giấy hành chính</a>
+  {% endif %}
+  <a href="{% url 'admindocuments:incoming_document_list' %}" {% if admin_nav.active == 'incoming' %}aria-current="page"{% endif %}>Công văn đến</a>
+  <details class="adm-nav-menu"><summary {% if admin_nav.active == 'parcel' %}aria-current="page"{% endif %}>Bưu phẩm/Bưu kiện <span aria-hidden="true">⌄</span></summary><div class="adm-nav-dropdown">
+    <a href="{% url 'admindocuments:parcel_receipt_list' %}">Danh sách bưu phẩm</a>
+    {% if admin_nav.can_manage %}<a href="{% url 'admindocuments:parcel_receipt_completed_list' %}">Bưu phẩm đã nhận</a><a href="{% url 'admindocuments:parcel_auto_notify_settings' %}">Cấu hình nhắc nhận</a>{% endif %}
+  </div></details>
+  {% if admin_nav.can_manage %}<details class="adm-nav-menu"><summary {% if admin_nav.active == 'management' %}aria-current="page"{% endif %}>Quản trị <span aria-hidden="true">⌄</span></summary><div class="adm-nav-dropdown">
+    <a href="{% url 'admindocuments:master_data' %}">Danh mục</a>
+    <a href="{% url 'admindocuments:admindocuments_counters' %}">Quản lý số hiệu</a>
+    {% if admin_nav.is_superuser %}<a href="/admin/">Admin Portal</a>{% endif %}
+  </div></details>{% endif %}
+</div>

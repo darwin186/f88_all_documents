@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI Kit — Select (demo)</title>
+<!-- Mở file này trực tiếp bằng trình duyệt. ?open=<id> để mở sẵn một droplist (vd. ?open=demo-multi-max). -->
+<link rel="stylesheet" href="../../../static/css/ui-kit.css">
+<style>
+  body { margin: 0; padding: 24px; background: #f5f6f8; color: #1f2937; font: 400 11px/1.5 Inter, "SF Pro Text", Arial, sans-serif; }
+  h1 { margin: 0 0 4px; font-size: 16px; } p.lead { margin: 0 0 20px; color: #6b7280; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; align-items: start; }
+  .card { padding: 14px; border: 1px solid #e5e7eb; border-radius: 12px; background: #fff; min-height: 96px; }
+  .card h2 { margin: 0 0 2px; font-size: 11px; } .card small { display: block; margin-bottom: 8px; color: #6b7280; font-size: 10px; }
+  label { display: block; margin-bottom: 4px; font-size: 10px; font-weight: 500; color: #374151; }
+</style>
+</head>
+<body>
+<h1>Select — droplist có tìm kiếm</h1>
+<p class="lead">Một <code>&lt;select&gt;</code> gốc được bọc trong <code>.ui-select[data-ui-select]</code>; giá trị vẫn được form submit từ select gốc.</p>
+
+<div class="grid">
+  <div class="card"><h2>1. Chọn một (mặc định)</h2><small>Tự bật ô tìm kiếm khi có hơn 7 lựa chọn; "Bỏ chọn" khi không bắt buộc.</small>
+    <label for="demo-single">Phòng giao dịch</label>
+    <div class="ui-select" data-ui-select><select id="demo-single" name="shop"><option value="">Chọn phòng giao dịch</option></select></div></div>
+
+  <div class="card"><h2>2. Chọn một, giá trị có sẵn, bắt buộc</h2><small>Bắt buộc thì ẩn "Bỏ chọn".</small>
+    <label for="demo-required">Loại giấy <span style="color:#dc2626">*</span></label>
+    <div class="ui-select" data-ui-select><select id="demo-required" name="type" required><option value="">Chọn loại giấy</option><option value="1">Giấy giải chấp (GGC)</option><option value="2" selected>Giấy xác nhận</option><option value="3">Giấy ủy quyền</option></select></div></div>
+
+  <div class="card"><h2>3. Danh sách ngắn (không tìm kiếm)</h2><small>Dưới 8 lựa chọn thì không hiện ô tìm; ép bật bằng <code>search="on"</code>.</small>
+    <label for="demo-short">Miền</label>
+    <div class="ui-select" data-ui-select><select id="demo-short" name="region"><option value="">Chọn miền</option><option>Miền Bắc</option><option>Miền Trung</option><option>Miền Nam</option></select></div></div>
+
+  <div class="card"><h2>4. Chọn nhiều (chip)</h2><small>Hiện tối đa 2 chip, phần còn lại là "+N"; trên 3 mục chuyển sang "Đã chọn N".</small>
+    <label for="demo-multi">Phòng giao dịch</label>
+    <div class="ui-select" data-ui-select><select id="demo-multi" name="shops" multiple></select></div></div>
+
+  <div class="card"><h2>5. Chọn nhiều, tối đa 3</h2><small><code>data-max="3"</code> — khóa các lựa chọn còn lại khi đủ.</small>
+    <label for="demo-multi-max">PGD áp dụng</label>
+    <div class="ui-select" data-ui-select data-max="3"><select id="demo-multi-max" name="shops_max" multiple></select></div></div>
+
+  <div class="card"><h2>6. Chọn nhiều, tóm tắt dạng số</h2><small><code>data-summary="count"</code></small>
+    <label for="demo-multi-count">Vùng</label>
+    <div class="ui-select" data-ui-select data-summary="count"><select id="demo-multi-count" name="areas" multiple><option value="1" selected>Hà Nội 1</option><option value="2" selected>Hà Nội 2</option><option value="3">Hải Phòng</option><option value="4">Đà Nẵng</option></select></div></div>
+
+  <div class="card"><h2>7. Nhóm lựa chọn (optgroup)</h2><small>Tiêu đề nhóm không chọn được.</small>
+    <label for="demo-group">Đơn vị CPN</label>
+    <div class="ui-select" data-ui-select data-search="on"><select id="demo-group" name="courier"><option value="">Chọn đơn vị CPN</option><optgroup label="Nội thành"><option>247 Express</option><option>Giao hàng nhanh</option></optgroup><optgroup label="Liên tỉnh"><option>Viettel Post</option><option>VNPost</option></optgroup></select></div></div>
+
+  <div class="card"><h2>8. Cỡ nhỏ</h2><small><code>.ui-select-sm</code> (28px) — dùng trong thanh công cụ.</small>
+    <div class="ui-select ui-select-sm" data-ui-select><select aria-label="Trạng thái" name="st"><option value="">Mọi trạng thái</option><option>Đang xử lý</option><option>Hoàn tất</option></select></div></div>
+
+  <div class="card"><h2>9. Vô hiệu hóa</h2><small>Thuộc tính <code>disabled</code> của select gốc.</small>
+    <label for="demo-disabled">Miền</label>
+    <div class="ui-select" data-ui-select><select id="demo-disabled" disabled><option>Miền Bắc</option></select></div></div>
+
+  <div class="card"><h2>10. Có lỗi</h2><small>Thêm thuộc tính <code>data-invalid</code> (server) hoặc để trình duyệt tự gắn khi <code>required</code> trống.</small>
+    <label for="demo-invalid">Loại giấy <span style="color:#dc2626">*</span></label>
+    <div class="ui-select" data-ui-select data-invalid><select id="demo-invalid" required><option value="">Chọn loại giấy</option><option>Giấy A</option></select></div></div>
+</div>
+
+<script>
+  const shops = ['AGG22016.Ngã 4 Chợ Cái Tàu', 'AGG23017.166 Trần Hưng Đạo', 'AGG23018.1029 Tôn Đức Thắng', 'AGG24019.Tân Châu', 'BDG19001.F88 BDG - 129 Phú Lợi', 'BDG25033.Vòng Xoay Cổng Xanh', 'BDG25040.Tân Uyên', 'HNI20011.Cầu Giấy', 'HNI20012.Thanh Xuân', 'HNI21013.Long Biên', 'HCM18021.Quận 7', 'HCM18022.Bình Thạnh'];
+  const fill = (id, selectedValues = []) => {
+    const select = document.getElementById(id);
+    shops.forEach(name => { const option = new Option(name, name.split('.')[0]); option.selected = selectedValues.includes(option.value); select.add(option); });
+  };
+  fill('demo-single', ['BDG25033']); fill('demo-multi', ['AGG22016', 'BDG25033', 'HNI20011', 'HCM18021']); fill('demo-multi-max', ['HNI20011']);
+</script>
+<script src="../../../static/js/ui-select.js"></script>
+<script>
+  const target = new URLSearchParams(location.search).get('open');
+  if (target) addEventListener('load', () => document.getElementById(target)?.closest('[data-ui-select]').querySelector('.ui-select-toggle').click());
+</script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+{% extends 'app_documents/base_app_documents_v2.html' %}
+{% load static %}
+{% block title %}Văn bản hành chính · F88{% endblock %}
+{% block top_nav %}{% include 'app_documents/components/top_nav_v2.html' with admin_docs_nav=True %}{% endblock %}
+{% block main_extra_class %}adm-main{% endblock %}
+{% block datepicker_assets %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flowbite-datepicker@1.3.0/dist/css/datepicker.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flowbite-datepicker@1.3.0/dist/js/datepicker.min.js"></script>
+{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'admindocuments/vendor/flatpickr/flatpickr.min.css' %}">
+<script src="{% static 'admindocuments/vendor/flatpickr/flatpickr.min.js' %}" defer></script>
+<script src="{% static 'admindocuments/vendor/flatpickr/vn.js' %}" defer></script>
+<script src="{% static 'admindocuments/js/document_form_controls.js' %}?v=20261020-1" defer></script>
+<script src="{% static 'admindocuments/js/admin_ui.js' %}?v=20261020-1" defer></script>
+<script src="{% static 'admindocuments/js/document_filters.js' %}?v=20261017-1" defer></script>
+<link rel="stylesheet" href="{% static 'admindocuments/css/documents_v2.css' %}?v=20261019-2">
+<script src="{% static 'admindocuments/js/documents_v2.js' %}?v=20261019-1" defer></script>
+<script src="{% static 'admindocuments/js/document_create_controls.js' %}?v=20261019-1" defer></script>
+<script src="{% static 'admindocuments/js/document_edit_modal.js' %}?v=20261019-1" defer></script>
+<script src="{% static 'admindocuments/js/document_attachments.js' %}?v=20261016-1" defer></script>
+<link rel="stylesheet" href="{% static 'admindocuments/css/admin_ui.css' %}?v=20261019-1">
+{% endblock %}
+{% block content %}
+<div class="adm-page {% block admin_page_class %}{% endblock %}">
+  {% block admin_content %}{% endblock %}
+  {% include 'admindocuments/includes/notifications.html' %}
+  {% block admin_overlays %}
+    {% include 'admindocuments/includes/document_split_modal.html' %}
+    {% include 'admindocuments/includes/document_edit_modal.html' %}
+    {% include 'admindocuments/includes/document_attachment_modal.html' %}
+  {% endblock %}
+</div>
+{% endblock %}

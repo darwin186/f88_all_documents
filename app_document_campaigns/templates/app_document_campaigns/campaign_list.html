@@ -1,21 +1,23 @@
 {% extends "app_documents/base_app_documents_v2.html" %}
 {% load campaign_workflow %}
 
-{% block title %}Khởi tạo kỳ book lỗi chứng từ{% endblock %}
+{% block title %}Quản lý chiến dịch{% endblock %}
 {% block top_nav %}{% include "app_documents/components/top_nav_v2.html" %}{% endblock %}
 {% block main_extra_class %}pt-20{% endblock %}
 
 {% block content %}
-{% campaign_workflow 1 %}
+
 
 <div class="mx-auto max-w-[1500px] space-y-4 px-3">
-  <section class="flex items-end justify-between gap-4">
-    <div>
-    <h1 class="campaign-heading-1">Khởi tạo kỳ book lỗi chứng từ.</h1>
-    <p class="mt-1 text-[11px] text-gray-500">Tạo kỳ gửi lỗi để chuẩn bị dữ liệu lỗi theo từng tháng.</p>
-    </div>
-    {% if can_manage_campaigns %}<a href="{% url 'document_campaigns:campaign_create' %}" class="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-800">Tạo chiến dịch</a>{% endif %}
-  </section>
+  {% if can_manage_campaigns %}<div class="flex justify-end">
+    <a href="{% url 'document_campaigns:campaign_create' %}" class="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-800">Tạo chiến dịch</a>
+  </div>{% endif %}
+  <nav class="flex items-center gap-1 border-b border-gray-200 text-[11px]" aria-label="Loại chiến dịch">
+    <span class="border-b-2 border-emerald-600 px-4 py-3 font-bold text-emerald-700" aria-current="page">Book lỗi chứng từ</span>
+    {% comment "Temporarily hide the Mail Merge preview entry." %}
+    {% if can_manage_campaigns %}<a href="{% url 'document_campaigns:mail_merge_preview' %}" class="px-4 py-3 text-gray-500 hover:text-emerald-700">Mail Merge <span class="ml-1 rounded bg-amber-50 px-1.5 py-0.5 text-[9px] text-amber-700">Xem thử UI</span></a>{% endif %}
+    {% endcomment %}
+  </nav>
   <section class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
     <table class="w-full text-left text-[11px]">
       <thead class="bg-gray-50 text-[9px] uppercase tracking-wide text-gray-500">

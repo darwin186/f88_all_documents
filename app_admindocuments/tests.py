@@ -1732,7 +1732,7 @@ class AdmIncomingDispatchTests(TestCase):
 
         self.client.force_login(superuser)
         response = self.client.post(
-            reverse("admindocuments:parcel_recipient_directory"),
+            reverse("master_data_gapo_directory"),
             data={
                 "action": "upload",
                 "file": SimpleUploadedFile(
@@ -1785,7 +1785,7 @@ class AdmIncomingDispatchTests(TestCase):
 
     def test_recipient_directory_requires_superuser(self):
         self.client.login(username="viewer", password="secret")
-        response = self.client.get(reverse("admindocuments:parcel_recipient_directory"))
+        response = self.client.get(reverse("master_data_gapo_directory"))
 
         self.assertEqual(response.status_code, 403)
 

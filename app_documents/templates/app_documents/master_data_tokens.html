@@ -13,7 +13,6 @@
 <div class="master-page">
 
 <h1>Quản lý API Token</h1><p>Một nơi quản lý token cho Master Data, intake dữ liệu và giao dịch bảo đảm. Token và endpoint cũ giữ nguyên; không tự cấp thêm quyền.</p>
-{% for message in messages %}<section {% if message.tags == 'error' %}class="error"{% endif %}>{{ message }}</section>{% endfor %}
 {% if new_token %}<section class="secret"><h2>Token mới — chỉ hiển thị một lần</h2><p>Sao chép và lưu ở nơi an toàn. Hệ thống chỉ lưu hash, không thể xem lại token.</p><input id="new-token" readonly value="{{ new_token }}" aria-label="Token mới"><button type="button" id="copy-token">Sao chép</button><span id="copy-status" role="status"></span></section>{% endif %}
 <div class="forms">
 <form method="post" action="{% url 'master_data_token_create' %}">{% csrf_token %}<h2>Master Data · PGD</h2><p>Token gắn với admin tạo token. Mất quyền admin/ngừng hoạt động thì token không còn truy cập được.</p><label class="field">Tên token<input name="name" maxlength="100" required placeholder="master-data-production"></label><label class="scope"><input type="checkbox" name="scopes" value="master_data:shops:read"> Đọc danh mục và orgchart</label><label class="scope"><input type="checkbox" name="scopes" value="master_data:shops:write"> Sửa email, trạng thái, bộ quản lý</label><p>Chọn cả hai nếu cần đọc và ghi. Không có quyền tạo/thu hồi token qua API.</p><button class="primary">Tạo token Master Data</button></form>

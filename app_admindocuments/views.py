@@ -1,12 +1,10 @@
-import csv
-import hashlib
 import logging
 import os
 import uuid
 from datetime import datetime, date, timedelta
 from io import BytesIO
 from functools import wraps
-from urllib.parse import urljoin, urlparse, urlunparse
+from urllib.parse import urlencode, urljoin, urlparse, urlunparse
 import qrcode
 from qrcode.image.svg import SvgPathImage
 
@@ -18,7 +16,7 @@ from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import IntegrityError, transaction, models
 from django.db.models import F
 from django.db.models import Count, Q, Max
-from django.db.models.functions import TruncDay, ExtractYear
+from django.db.models.functions import ExtractYear
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -30,6 +28,9 @@ from django.http import JsonResponse
 
 from openpyxl import Workbook
 from openpyxl import load_workbook
+from openpyxl.cell import WriteOnlyCell
+from openpyxl.styles import Font, PatternFill
+from openpyxl.utils import get_column_letter
 
 from app_documents.models import GapoScheduledMessage, Shop, Region, UserProfile
 from app_documents.tasks import send_gapo_scheduled_message
@@ -38,8 +39,8 @@ from .forms import (
     AdmAdministrativeDocumentForm,
     AdmAdministrativeDocumentSplitForm,
     AdmAdministrativeDocumentUpdateForm,
+    AdmAdministrativeDocumentEditPopupForm,
     AdmIncomingDispatchForm,
-    AdmParcelRecipientImportForm,
     AdmParcelReceiveLocationForm,
     AdmParcelAutoNotifySettingForm,
     AdmParcelReceiptForm,
@@ -48,6 +49,7 @@ from .forms import (
     AdmContentTypeForm,
     AdmSignerRoleForm,
     AdmDocumentStatusForm,
+    AdmDocumentStatusColorsForm,
     AdmCompanyForm,
     AdmDepartmentForm,
     AdmPaperTypeForm,
@@ -1809,286 +1811,37 @@ def _import_parcel_recipient_batch(batch):
     return batch
 
 
-def _parse_filters(request):
-    tz = timezone.get_current_timezone()
-    today = timezone.now().astimezone(tz)
-
-    start_date = request.GET.get("start_date")
-    end_date = request.GET.get("end_date")
-    month = request.GET.get("month")
-    year = request.GET.get("year")
-    company_id = request.GET.get("company")
-    doc_type_id = request.GET.get("doc_type")
-    department_id = request.GET.get("department")
-
-    def parse_date_str(value):
-        for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
-            try:
-                return datetime.strptime(value, fmt).replace(tzinfo=tz)
-            except (TypeError, ValueError):
-                continue
-        raise ValueError
-
-    if month and year:
-        try:
-            m = int(month)
-            y = int(year)
-            start = datetime(y, m, 1, tzinfo=tz)
-            if m == 12:
-                end = datetime(y + 1, 1, 1, tzinfo=tz)
-            else:
-                end = datetime(y, m + 1, 1, tzinfo=tz)
-            period_label = f"{m:02d}/{y}"
-        except ValueError:
-            start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-            if today.month == 12:
-                end = start.replace(year=today.year + 1, month=1)
-            else:
-                end = start.replace(month=today.month + 1)
-            period_label = today.strftime("%m/%Y")
-    elif start_date or end_date:
-        def parse_d(value, default):
-            if not value:
-                return default
-            parsed = parse_date_str(value)
-            return parsed
-
-        default_start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        default_end = default_start.replace(
-            month=today.month + 1 if today.month < 12 else 1,
-            year=today.year + 1 if today.month == 12 else today.year,
-        )
-        start = parse_d(start_date, default_start)
-        end = parse_d(end_date, default_end)
-        period_label = f"{start.strftime('%d/%m/%Y')} - {end.strftime('%d/%m/%Y')}"
-    else:
-        start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        if today.month == 12:
-            end = start.replace(year=today.year + 1, month=1)
-        else:
-            end = start.replace(month=today.month + 1)
-        period_label = today.strftime("%m/%Y")
-
-    selections = {
-        "company": company_id or "",
-        "doc_type": doc_type_id or "",
-        "department": department_id or "",
-        "start_date": start_date or "",
-        "end_date": end_date or "",
-        "month": month or "",
-        "year": year or "",
-        "period_label": period_label,
-    }
-    return start, end, selections
-
-
-def _apply_filters(qs, start, end, selections):
-    qs = qs.filter(created_at__gte=start, created_at__lt=end)
-    if selections["company"]:
-        qs = qs.filter(issuing_company_id=selections["company"])
-    if selections["doc_type"]:
-        qs = qs.filter(doc_type_id=selections["doc_type"])
-    if selections["department"]:
-        qs = qs.filter(issuing_department_id=selections["department"])
-    return qs
-
-
 @login_required
-@admin_staff_required
-def dashboard(request):
-    start, end, sel = _parse_filters(request)
-
-    base_qs = AdmAdministrativeDocument.objects.all()
-    filtered_qs = _apply_filters(base_qs, start, end, sel)
-
-    by_company = (
-        filtered_qs.values("issuing_company__name")
-        .annotate(total=Count("id"))
-        .order_by("issuing_company__name")
-    )
-    company_labels = [row["issuing_company__name"] or "(Unknown)" for row in by_company]
-    company_counts = [row["total"] for row in by_company]
-
-    issued_qs = _apply_filters(
-        AdmAdministrativeDocument.objects.filter(
-            status__code=AdmDocumentStatus.CODE_ISSUED
-        ),
-        start,
-        end,
-        sel,
-    )
-    issued_total = issued_qs.count()
-
-    issued_daily = (
-        issued_qs.annotate(day=TruncDay("created_at"))
-        .values("day")
-        .annotate(total=Count("id"))
-        .order_by("day")
-    )
-    daily_labels = [row["day"].strftime("%d/%m") for row in issued_daily]
-    daily_counts = [row["total"] for row in issued_daily]
-
-    # Ban hành theo tháng / công ty (12 tháng gần nhất)
-    if settings.USE_TZ:
-        today = timezone.localtime(timezone.now()).date()
-    else:
-        today = date.today()
-    months = []
-    for offset in range(11, -1, -1):
-        y = today.year
-        m = today.month - offset
-        while m <= 0:
-            m += 12
-            y -= 1
-        months.append(date(y, m, 1))
-
-    from django.db.models.functions import TruncMonth
-
-    issued_last_year = AdmAdministrativeDocument.objects.filter(
-        status__code=AdmDocumentStatus.CODE_ISSUED,
-        created_at__gte=months[0],
-        created_at__lt=(
-            date(months[-1].year + (1 if months[-1].month == 12 else 0),
-                 1 if months[-1].month == 12 else months[-1].month + 1,
-                 1)
-        ),
-    )
-    monthly_rows = (
-        issued_last_year.annotate(period=TruncMonth("created_at"))
-        .values("period", "issuing_company__name")
-        .annotate(total=Count("id"))
-    )
-    month_index = {dt: idx for idx, dt in enumerate(months)}
-    company_names = sorted(
-        {row["issuing_company__name"] or "(Unknown)" for row in monthly_rows}
-    )
-    monthly_series = {name: [0] * len(months) for name in company_names}
-    for row in monthly_rows:
-        period_date = row["period"].date()
-        idx = month_index.get(period_date)
-        if idx is not None:
-            monthly_series[row["issuing_company__name"] or "(Unknown)"][idx] = row[
-                "total"
-            ]
-
-    monthly_company_series = [
-        {"label": name, "data": monthly_series[name]} for name in company_names
+def workflow_hub(request):
+    can_manage_documents = _has_admin_docs_access(request.user)
+    workflows = [
+        {"key": "document", "title": "Văn bản hành chính",
+         "description": "Tạo văn bản, cấp số hiệu và lưu trữ tệp đính kèm theo phiên bản.",
+         "route": "admindocuments:admindocuments_list", "allowed": can_manage_documents},
+        {"key": "paper", "title": "Giấy tờ hành chính",
+         "description": "Tạo và quản lý các loại giấy tờ hành chính theo danh mục.",
+         "route": "admindocuments:paper_document_list", "allowed": can_manage_documents},
+        {"key": "incoming", "title": "Công văn đến",
+         "description": "Tiếp nhận công văn và theo dõi quá trình chuyển giao, xử lý.",
+         "route": "admindocuments:incoming_document_list", "allowed": True},
+        {"key": "parcel", "title": "Bưu kiện đến",
+         "description": "Tiếp nhận bưu kiện, xác định người nhận và theo dõi bàn giao.",
+         "route": "admindocuments:parcel_receipt_list", "allowed": True},
     ]
-    monthly_company_labels = [f"{m.month:02d}/{m.year}" for m in months]
-
-    companies = AdmCompany.objects.all().order_by("name")
-    doc_types = AdmDocumentType.objects.all().order_by("name")
-    departments = (
-        AdmDepartment.objects.select_related("company").all().order_by("name")
-    )
-
-    paper_department = request.GET.get("paper_department")
-    paper_departments = AdmPaperDocument.objects.select_related("requested_department").values_list(
-        "requested_department__shop_id", "requested_department__shop_name"
-    ).distinct()
-    paper_department_choices = [
-        {"id": dept_id, "name": dept_name}
-        for dept_id, dept_name in paper_departments
-        if dept_id
-    ]
-
-    paper_queryset = AdmPaperDocument.objects.filter(
-        created_at__gte=start, created_at__lt=end, is_deleted=False
-    )
-    if paper_department:
-        paper_queryset = paper_queryset.filter(requested_department_id=paper_department)
-
-    paper_type_counts = (
-        paper_queryset.values("paper_type__name")
-        .annotate(total=Count("id"))
-        .order_by("paper_type__name")
-    )
-    papers_total = paper_queryset.count()
-    paper_labels = [row["paper_type__name"] or "Khác" for row in paper_type_counts]
-    paper_counts = [row["total"] for row in paper_type_counts]
-
-    context = {
-        "company_labels": company_labels,
-        "company_counts": company_counts,
-        "issued_total": issued_total,
-        "daily_labels": daily_labels,
-        "daily_counts": daily_counts,
-        "monthly_company_labels": monthly_company_labels,
-        "monthly_company_series": monthly_company_series,
-        "month_label": sel["period_label"],
-        "companies": companies,
-        "doc_types": doc_types,
-        "departments": departments,
-        "paper_departments": paper_department_choices,
-        "paper_department_selected": paper_department or "",
-        "sel": sel,
-        "start_date_value": sel["start_date"],
-        "end_date_value": sel["end_date"],
-        "months_range": list(range(1, 13)),
-        "has_admin_docs_access": _has_admin_docs_access(request.user),
-        "paper_labels": paper_labels,
-        "paper_counts": paper_counts,
-        "papers_total": papers_total,
-        "STATUS_DRAFT": AdmDocumentStatus.CODE_DRAFT,
-        "STATUS_PENDING": AdmDocumentStatus.CODE_PENDING,
-        "STATUS_ISSUED": AdmDocumentStatus.CODE_ISSUED,
-        "STATUS_EXPIRED": AdmDocumentStatus.CODE_EXPIRED,
-    }
-    return render(request, "admindocuments/dashboard.html", context)
-
-
-@login_required
-@admin_staff_required
-def dashboard_export(request):
-    start, end, sel = _parse_filters(request)
-    qs = _apply_filters(
-        AdmAdministrativeDocument.objects.select_related(
-            "doc_type",
-            "signer_role",
-            "status",
-            "issuing_company",
-            "issuing_department",
-        ),
-        start,
-        end,
-        sel,
-    )
-
-    filename = f"adm_dashboard_export_{start.strftime('%Y%m%d')}_{end.strftime('%Y%m%d')}.csv"
-    response = HttpResponse(content_type="text/csv; charset=utf-8")
-    response["Content-Disposition"] = f'attachment; filename="{filename}"'
-
-    writer = csv.writer(response)
-    writer.writerow(
-        [
-            "Document No",
-            "Title",
-            "Company",
-            "Department",
-            "Doc Type",
-            "Status",
-            "Created At",
-            "Signer Role",
-            "Reference",
-            "Ticket Code",
-        ]
-    )
-    for d in qs.order_by("-created_at"):
-        writer.writerow(
-            [
-                d.document_number_full,
-                d.title,
-                getattr(d.issuing_company, "name", ""),
-                getattr(d.issuing_department, "name", ""),
-                getattr(d.doc_type, "name", ""),
-                getattr(d.status, "name", ""),
-                d.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                getattr(d.signer_role, "title", ""),
-                d.reference_number or "",
-                d.ticket_code or "",
-            ]
-        )
-    return response
+    for workflow in workflows:
+        url = reverse(workflow["route"])
+        workflow["create_url"] = f"{url}?create=1"
+        workflow["list_url"] = reverse("admindocuments:parcel_receipt_completed_list") if workflow["key"] == "parcel" else url
+        workflow["list_allowed"] = workflow["allowed"] and (workflow["key"] != "parcel" or can_manage_documents)
+        if workflow["key"] in {"document", "paper"}:
+            tab = "admin" if workflow["key"] == "document" else "paper"
+            workflow["counter_url"] = f"{reverse('admindocuments:admindocuments_counters')}?tab={tab}"
+            workflow["counter_label"] = "Số hiệu văn bản hành chính" if tab == "admin" else "Số hiệu giấy tờ hành chính"
+    return render(request, "admindocuments/workflow_hub.html", {
+        "workflows": workflows,
+        "has_admin_docs_access": can_manage_documents,
+        "is_super_admin": request.user.is_superuser,
+    })
 
 
 def _incoming_dispatch_list(request, item_type_code):
@@ -2661,22 +2414,26 @@ def parcel_receipt_list(request):
     return render(request, "admindocuments/parcel_receipt_list.html", context)
 
 
-@login_required
-def parcel_receipt_completed_list(request):
-    if not _has_admin_docs_access(request.user):
-        return HttpResponseForbidden("Bạn không có quyền xem dữ liệu bưu kiện đã nhận.")
-
-    query = (request.GET.get("q") or "").strip()
-    recipient_filter = (request.GET.get("recipient") or "").strip()
-    department_filter = (request.GET.get("department") or "").strip()
-    start_date = (request.GET.get("start_date") or "").strip()
-    end_date = (request.GET.get("end_date") or "").strip()
+def _completed_parcel_filters(request):
+    """Áp dụng bộ lọc màn hình "Bưu kiện đã nhận" (dùng chung cho danh sách và xuất Excel)."""
+    values = {
+        "q": (request.GET.get("q") or "").strip(),
+        "recipient": (request.GET.get("recipient") or "").strip(),
+        "employee_code": (request.GET.get("employee_code") or "").strip(),
+        "department": (request.GET.get("department") or "").strip(),
+        "company": (request.GET.get("company") or "").strip(),
+        "parcel_type": (request.GET.get("parcel_type") or "").strip(),
+        "status": (request.GET.get("status") or "").strip(),
+        "start_date": (request.GET.get("start_date") or "").strip(),
+        "end_date": (request.GET.get("end_date") or "").strip(),
+    }
 
     parcels_qs = (
         AdmParcelReceipt.objects.select_related(
             "received_by",
             "receiving_company",
             "status",
+            "receive_location",
             "recipient_directory",
             "recipient_user",
             "recipient_user__userprofile",
@@ -2684,9 +2441,11 @@ def parcel_receipt_completed_list(request):
         .prefetch_related("images")
         .order_by("-completed_at", "-confirmed_at", "-received_at", "-id")
     )
-    parcels_qs = _completed_parcels_queryset(parcels_qs)
+    base_qs = _completed_parcels_queryset(parcels_qs)
+    parcels_qs = base_qs
 
-    if query:
+    if values["q"]:
+        query = values["q"]
         parcels_qs = parcels_qs.filter(
             Q(tracking_code__icontains=query)
             | Q(sender_unit__icontains=query)
@@ -2696,7 +2455,8 @@ def parcel_receipt_completed_list(request):
             | Q(actual_receiver_name__icontains=query)
             | Q(actual_receiver_employee_code__icontains=query)
         )
-    if recipient_filter:
+    if values["recipient"]:
+        recipient_filter = values["recipient"]
         parcels_qs = parcels_qs.filter(
             Q(recipient_name__icontains=recipient_filter)
             | Q(recipient_employee_code__icontains=recipient_filter)
@@ -2705,27 +2465,58 @@ def parcel_receipt_completed_list(request):
             | Q(recipient_directory__full_name__icontains=recipient_filter)
             | Q(recipient_directory__employee_code__icontains=recipient_filter)
         )
-    if department_filter:
+    if values["employee_code"]:
+        code = values["employee_code"]
         parcels_qs = parcels_qs.filter(
-            Q(recipient_department__icontains=department_filter)
-            | Q(recipient_directory__department_name__icontains=department_filter)
+            Q(recipient_employee_code__icontains=code)
+            | Q(actual_receiver_employee_code__icontains=code)
+            | Q(recipient_directory__employee_code__icontains=code)
         )
-    if start_date:
-        for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
-            try:
-                parcels_qs = parcels_qs.filter(received_at__date__gte=datetime.strptime(start_date, fmt).date())
-                break
-            except ValueError:
-                continue
-    if end_date:
-        for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
-            try:
-                parcels_qs = parcels_qs.filter(received_at__date__lte=datetime.strptime(end_date, fmt).date())
-                break
-            except ValueError:
-                continue
+    if values["department"]:
+        parcels_qs = parcels_qs.filter(
+            Q(recipient_department__icontains=values["department"])
+            | Q(recipient_directory__department_name__icontains=values["department"])
+        )
+    if values["company"]:
+        parcels_qs = parcels_qs.filter(receiving_company_id=values["company"])
+    if values["parcel_type"] in AdmParcelReceipt.ParcelType.values:
+        parcels_qs = parcels_qs.filter(parcel_type=values["parcel_type"])
+    if values["status"]:
+        parcels_qs = parcels_qs.filter(status_id=values["status"])
 
-    parcels_qs = parcels_qs.distinct()
+    def parse_date(value):
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(value, fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    start = parse_date(values["start_date"])
+    end = parse_date(values["end_date"])
+    if start and end and start > end:
+        start, end = end, start
+    if start:
+        parcels_qs = parcels_qs.filter(received_at__date__gte=start)
+    if end:
+        parcels_qs = parcels_qs.filter(received_at__date__lte=end)
+    values["start_date"] = start.strftime("%Y-%m-%d") if start else ""
+    values["end_date"] = end.strftime("%Y-%m-%d") if end else ""
+
+    options = {
+        "companies": AdmCompany.objects.filter(code__in=base_qs.values("receiving_company_id")).order_by("name"),
+        "parcel_types": [{"code": code, "name": label} for code, label in AdmParcelReceipt.ParcelType.choices],
+        "statuses": AdmIncomingDispatchStatus.objects.filter(code__in=base_qs.values("status_id")).order_by("name"),
+    }
+    return parcels_qs.distinct(), values, options
+
+
+@login_required
+def parcel_receipt_completed_list(request):
+    if not _has_admin_docs_access(request.user):
+        return HttpResponseForbidden("Bạn không có quyền xem dữ liệu bưu kiện đã nhận.")
+
+    parcels_qs, filters, options = _completed_parcel_filters(request)
     paginator = Paginator(parcels_qs, 25)
     page_number = request.GET.get("page", "1")
     try:
@@ -2740,6 +2531,8 @@ def parcel_receipt_completed_list(request):
         parcel.actual_receiver_display = _parcel_actual_receiver_display(parcel)
         parcel.finished_at = parcel.completed_at or parcel.confirmed_at
 
+    export_params = request.GET.copy()
+    export_params.pop("page", None)
     context = {
         "active": "parcel_receipt_completed_list",
         "screen_key": "parcel_receipt_completed_list",
@@ -2749,108 +2542,104 @@ def parcel_receipt_completed_list(request):
         "page_obj": parcels,
         "paginator": paginator,
         "is_paginated": paginator.num_pages > 1,
-        "q": query,
-        "recipient": recipient_filter,
-        "department": department_filter,
-        "start_date": start_date,
-        "end_date": end_date,
+        "export_query": export_params.urlencode(),
+        "company_options": options["companies"],
+        "type_options": options["parcel_types"],
+        "status_options": options["statuses"],
         "has_admin_docs_access": _has_admin_docs_access(request.user),
+        **filters,
     }
     return render(request, "admindocuments/parcel_receipt_completed_list.html", context)
+
+
+def _excel_text(value):
+    """Chặn công thức Excel (=, +, -, @) trong dữ liệu người dùng nhập."""
+    text = "" if value is None else str(value)
+    return "'" + text if text[:1] in ("=", "+", "-", "@") else text
+
+
+@login_required
+def parcel_receipt_completed_export(request):
+    if not _has_admin_docs_access(request.user):
+        return HttpResponseForbidden("Bạn không có quyền xuất dữ liệu bưu kiện đã nhận.")
+
+    parcels_qs, _filters, _options = _completed_parcel_filters(request)
+    local = timezone.get_current_timezone()
+
+    def when(value):
+        if not value:
+            return ""
+        if timezone.is_aware(value):
+            value = value.astimezone(local)
+        return value.strftime("%d/%m/%Y %H:%M")
+
+    workbook = Workbook(write_only=True)
+    sheet = workbook.create_sheet("Bưu kiện đã nhận")
+    headers = [
+        ("STT", 6), ("Tiếp nhận", 17), ("Hoàn tất", 17), ("Người nhận", 26), ("Mã NV người nhận", 15),
+        ("Phòng ban", 22), ("Người nhận thực tế", 26), ("Mã NV người nhận thực tế", 17), ("Đơn vị gửi", 26),
+        ("Mã vận đơn", 20), ("Nội dung", 30), ("Nơi nhận", 24), ("Địa chỉ nơi nhận", 30), ("Loại", 12),
+        ("Công ty", 16), ("Lễ tân", 20), ("Trạng thái", 14),
+    ]
+    for index, (_title, width) in enumerate(headers, start=1):
+        sheet.column_dimensions[get_column_letter(index)].width = width
+    header_cells = []
+    for title, _width in headers:
+        cell = WriteOnlyCell(sheet, value=title)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", start_color="00844A", end_color="00844A")
+        header_cells.append(cell)
+    sheet.append(header_cells)
+
+    for index, parcel in enumerate(parcels_qs.iterator(chunk_size=500), start=1):
+        directory = parcel.recipient_directory
+        recipient_name = (parcel.recipient_name or "").strip() or (directory.full_name if directory else "")
+        recipient_code = (parcel.recipient_employee_code or "").strip() or (directory.employee_code if directory else "")
+        department = parcel.recipient_department or (directory.department_name if directory else "")
+        location = parcel.receive_location
+        receptionist = ""
+        if parcel.received_by_id:
+            receptionist = parcel.received_by.get_full_name() or parcel.received_by.username
+        sheet.append([
+            index,
+            when(parcel.received_at),
+            when(parcel.completed_at or parcel.confirmed_at),
+            _excel_text(recipient_name or _parcel_recipient_display(parcel)),
+            _excel_text(recipient_code),
+            _excel_text(department),
+            _excel_text(parcel.actual_receiver_name or ""),
+            _excel_text(parcel.actual_receiver_employee_code or ""),
+            _excel_text(parcel.sender_unit),
+            _excel_text(parcel.tracking_code),
+            _excel_text(parcel.content),
+            _excel_text(location.name if location else ""),
+            _excel_text(location.address if location else ""),
+            parcel.get_parcel_type_display(),
+            _excel_text(parcel.receiving_company.name if parcel.receiving_company_id else ""),
+            _excel_text(receptionist),
+            _excel_text(parcel.status.name if parcel.status_id else ""),
+        ])
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="buu-kien-da-nhan-{date.today():%Y%m%d}.xlsx"'
+    return response
 
 
 @login_required
 @superuser_required
 def parcel_recipient_directory(request):
-    form = AdmParcelRecipientImportForm()
-
-    if request.method == "POST":
-        action = (request.POST.get("action") or "upload").strip()
-        if action == "upload":
-            form = AdmParcelRecipientImportForm(request.POST, request.FILES)
-            if form.is_valid():
-                upload = form.cleaned_data["file"]
-                checksum = hashlib.sha256(upload.read()).hexdigest()
-                upload.seek(0)
-                batch = AdmParcelRecipientImportBatch.objects.create(
-                    original_name=upload.name,
-                    file=upload,
-                    checksum=checksum,
-                    imported_by=request.user,
-                )
-                try:
-                    _import_parcel_recipient_batch(batch)
-                except Exception as exc:
-                    batch.has_errors = True
-                    batch.summary = {"error": str(exc)}
-                    batch.save(update_fields=["has_errors", "summary", "updated_at"])
-                    messages.error(request, f"Import file thất bại: {exc}")
-                else:
-                    messages.success(
-                        request,
-                        f"Đã nhập {batch.imported_rows} người nhận từ file {batch.original_name}.",
-                    )
-                    return redirect("admindocuments:parcel_recipient_directory")
-            else:
-                messages.error(request, "File upload không hợp lệ.")
-        elif action == "activate":
-            batch_id = request.POST.get("batch_id")
-            batch = get_object_or_404(AdmParcelRecipientImportBatch, pk=batch_id)
-            _activate_parcel_recipient_batch(batch)
-            messages.success(request, f"Đã kích hoạt dữ liệu từ file {batch.original_name}.")
-            return redirect("admindocuments:parcel_recipient_directory")
-        elif action == "reimport":
-            batch_id = request.POST.get("batch_id")
-            batch = get_object_or_404(AdmParcelRecipientImportBatch, pk=batch_id)
-            try:
-                _import_parcel_recipient_batch(batch)
-            except Exception as exc:
-                batch.has_errors = True
-                batch.summary = {"error": str(exc)}
-                batch.save(update_fields=["has_errors", "summary", "updated_at"])
-                messages.error(request, f"Làm mới dữ liệu thất bại: {exc}")
-            else:
-                messages.success(request, f"Đã làm mới dữ liệu từ file {batch.original_name}.")
-                return redirect("admindocuments:parcel_recipient_directory")
-
-    query = (request.GET.get("q") or "").strip()
-    current_batch = (
-        AdmParcelRecipientImportBatch.objects.filter(is_current=True)
-        .order_by("-created_at")
-        .first()
-    )
-    recipients_qs = AdmParcelRecipientCatalog.objects.none()
-    if current_batch:
-        recipients_qs = current_batch.recipients.all()
-        if query:
-            recipients_qs = recipients_qs.filter(
-                Q(full_name__icontains=query)
-                | Q(employee_code__icontains=query)
-                | Q(gapo_user_id__icontains=query)
-                | Q(department_name__icontains=query)
-            )
-    recipients_qs = recipients_qs.order_by("department_name", "full_name", "employee_code")
-    recipient_preview = recipients_qs[:50]
-    departments = []
-    if current_batch:
-        departments = list(
-            current_batch.recipients.exclude(department_name__exact="")
-            .values_list("department_name", flat=True)
-            .distinct()
-            .order_by("department_name")[:20]
-        )
-
-    context = {
-        "form": form,
-        "current_batch": current_batch,
-        "recipient_preview": recipient_preview,
-        "recipient_total": recipients_qs.count() if current_batch else 0,
-        "query": query,
-        "departments": departments,
-        "recent_batches": AdmParcelRecipientImportBatch.objects.all()[:8],
-        "has_admin_docs_access": _has_admin_docs_access(request.user),
-    }
-    return render(request, "admindocuments/parcel_recipient_directory.html", context)
+    """Keep old upload links working while the directory lives in Master Data."""
+    if request.method == "GET":
+        query = request.GET.urlencode()
+        url = reverse("master_data_gapo_directory")
+        return redirect(f"{url}?{query}" if query else url)
+    from app_documents.master_data import gapo_directory_page
+    return gapo_directory_page(request)
 
 
 @login_required
@@ -3656,6 +3445,38 @@ def parcel_receipt_proxy_claim(request, token: str):
     )
 
 
+def _administrative_document_date_filters(queryset, request, *, include_issue_date=True):
+    def parse(value):
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(value or "", fmt).date()
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    start = parse(request.GET.get("start_date"))
+    end = parse(request.GET.get("end_date"))
+    issue = parse(request.GET.get("issue_date")) if include_issue_date else None
+    all_created = request.GET.get("created_all") == "1" and not start and not end
+    if not start and not end and not all_created:
+        today = timezone.localdate() if settings.USE_TZ else date.today()
+        start, end = date(today.year, 1, 1), date(today.year, 12, 31)
+    if start and end and start > end:
+        start, end = end, start
+    if start:
+        queryset = queryset.filter(created_at__date__gte=start)
+    if end:
+        queryset = queryset.filter(created_at__date__lte=end)
+    if issue:
+        queryset = queryset.filter(issue_date=issue)
+    return queryset, {
+        "start_date": start.strftime("%d/%m/%Y") if start else "",
+        "end_date": end.strftime("%d/%m/%Y") if end else "",
+        "issue_date": issue.strftime("%d/%m/%Y") if issue else "",
+        "created_all": "1" if all_created else "",
+    }
+
+
 @login_required
 @admin_staff_required
 def document_list(request):
@@ -3663,8 +3484,6 @@ def document_list(request):
     company_filter = request.GET.get("company")
     content_type_filter = request.GET.get("ctype")
     doc_type_filter = request.GET.get("dtype")
-    start_date = request.GET.get("start_date")
-    end_date = request.GET.get("end_date")
     sort = request.GET.get("sort", "created")
     direction = request.GET.get("dir", "desc")
     new_doc_id = request.GET.get("new")
@@ -3685,7 +3504,7 @@ def document_list(request):
         order_field = f"-{order_field}"
 
     documents_qs = AdmAdministrativeDocument.objects.select_related(
-        "doc_type", "signer_role", "status", "issuing_company"
+        "doc_type", "signer_role", "status", "issuing_company", "created_by"
     ).filter(is_void=False)
     if query:
         documents_qs = documents_qs.filter(
@@ -3697,25 +3516,7 @@ def document_list(request):
         documents_qs = documents_qs.filter(content_type_id=content_type_filter)
     if doc_type_filter:
         documents_qs = documents_qs.filter(doc_type_id=doc_type_filter)
-    def _parse_dt(value):
-        if not value:
-            return None
-        for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
-            try:
-                return datetime.strptime(value, fmt).date()
-            except (TypeError, ValueError):
-                continue
-        return None
-    sd = _parse_dt(start_date)
-    ed = _parse_dt(end_date)
-    if not sd and not ed:
-        today = timezone.localdate() if settings.USE_TZ else date.today()
-        sd = date(today.year, 1, 1)
-        ed = date(today.year, 12, 31)
-    if sd:
-        documents_qs = documents_qs.filter(created_at__date__gte=sd)
-    if ed:
-        documents_qs = documents_qs.filter(created_at__date__lte=ed)
+    documents_qs, date_values = _administrative_document_date_filters(documents_qs, request)
     documents_qs = documents_qs.order_by(order_field)
 
     page = request.GET.get("page", "1")
@@ -3742,6 +3543,14 @@ def document_list(request):
         code=AdmDocumentStatus.CODE_DRAFT
     ).first()
 
+    filter_values = {
+        "q": query, "company": company_filter or "", "ctype": content_type_filter or "",
+        "dtype": doc_type_filter or "", **date_values,
+    }
+    filter_values = {key: value for key, value in filter_values.items() if value}
+    edit_document_id = request.GET.get("edit", "")
+    edit_document_id = int(edit_document_id) if edit_document_id.isdecimal() and len(edit_document_id) <= 18 else ""
+
     return render(
         request,
         "admindocuments/document_list.html",
@@ -3749,6 +3558,9 @@ def document_list(request):
             "documents": documents,
             "paginator": paginator,
             "page_obj": documents,
+            "page_numbers": paginator.get_elided_page_range(documents.number, on_each_side=1, on_ends=1),
+            "filter_query": urlencode(filter_values),
+            "list_query": urlencode({**filter_values, "sort": sort, "dir": direction}),
             "is_paginated": paginator.num_pages > 1,
             "sort": sort,
             "dir": direction,
@@ -3772,8 +3584,8 @@ def document_list(request):
             "active_doc_type_id": doc_type_filter or "",
             "reference_docs": reference_docs,
             "ref_prefill_id": ref_prefill_id,
-            "start_date": start_date or "",
-            "end_date": end_date or "",
+            "edit_document_id": edit_document_id,
+            **date_values,
         },
     )
 
@@ -3785,8 +3597,6 @@ def document_list_export(request):
     company_filter = request.GET.get("company")
     content_type_filter = request.GET.get("ctype")
     doc_type_filter = request.GET.get("dtype")
-    start_date = request.GET.get("start_date")
-    end_date = request.GET.get("end_date")
     sort = request.GET.get("sort", "created")
     direction = request.GET.get("dir", "desc")
 
@@ -3818,26 +3628,7 @@ def document_list_export(request):
         documents_qs = documents_qs.filter(content_type_id=content_type_filter)
     if doc_type_filter:
         documents_qs = documents_qs.filter(doc_type_id=doc_type_filter)
-    def _parse_date(value):
-        if not value:
-            return None
-        for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
-            try:
-                return datetime.strptime(value, fmt).date()
-            except (TypeError, ValueError):
-                continue
-        return None
-
-    sd = _parse_date(start_date)
-    ed = _parse_date(end_date)
-    if not sd and not ed:
-        today = timezone.localdate() if settings.USE_TZ else date.today()
-        sd = date(today.year, 1, 1)
-        ed = date(today.year, 12, 31)
-    if sd:
-        documents_qs = documents_qs.filter(created_at__date__gte=sd)
-    if ed:
-        documents_qs = documents_qs.filter(created_at__date__lte=ed)
+    documents_qs, _ = _administrative_document_date_filters(documents_qs, request)
     documents_qs = documents_qs.order_by(order_field)
 
     wb = Workbook()
@@ -3907,210 +3698,186 @@ def document_list_export(request):
     return response
 
 
+def _paper_document_queryset(request):
+    values = {key: request.GET.get(key, "").strip() for key in
+              ("q", "paper_type", "region", "status", "requested_department")}
+    qs = AdmPaperDocument.objects.select_related(
+        "paper_type", "requested_department", "department", "courier_company", "created_by", "updated_by"
+    ).filter(is_deleted=False)
+    if values["q"]:
+        qs = qs.filter(Q(document_number_full__icontains=values["q"]) |
+                       Q(courier_tracking_code__icontains=values["q"]) | Q(summary__icontains=values["q"]))
+    for key in ("paper_type", "requested_department"):
+        if values[key].isdecimal() and len(values[key]) <= 18:
+            qs = qs.filter(**{f"{key}_id": values[key]})
+        elif values[key]:
+            values[key] = ""
+    for key in ("region", "status"):
+        if values[key]:
+            qs = qs.filter(**{key: values[key]})
+    qs, date_values = _administrative_document_date_filters(qs, request, include_issue_date=False)
+    values.update({key: value for key, value in date_values.items() if key != "issue_date"})
+    sort_map = {"code": "document_number_full", "running": "running_number", "type": "paper_type__name",
+                "region": "region", "responsible": "responsible_person", "department": "requested_department__shop_name",
+                "ticket": "ticket_code", "status": "status", "created": "created_at"}
+    sort = request.GET.get("sort", "created")
+    if sort not in sort_map:
+        sort = "created"
+    direction = "asc" if request.GET.get("dir") == "asc" else "desc"
+    order = sort_map[sort]
+    return qs.order_by(order if direction == "asc" else f"-{order}", "-pk"), values, sort, direction
+
+
+def _paper_edit_context(doc, form=None):
+    form = form if form is not None else AdmPaperDocumentForm(instance=doc, prefix="paper-edit")
+    names = list(form.fields)
+    return {"doc": doc, "form": form, "edit_columns": [[form[name] for name in names[:5]],
+                                                               [form[name] for name in names[5:]]]}
+
+
 @login_required
 @admin_staff_required
 def paper_document_list(request):
-    selected_type = request.GET.get("paper_type", "")
-    query = request.GET.get("q", "").strip()
-    sort = request.GET.get("sort", "created")
-    direction = request.GET.get("dir", "desc")
-    edit_id = request.GET.get("edit")
-
-    sort_map = {
-        "code": "document_number_full",
-        "running": "running_number",
-        "type": "paper_type__name",
-        "region": "region",
-        "responsible": "responsible_person",
-        "department": "requested_department__shop_name",
-        "ticket": "ticket_code",
-        "status": "status",
-        "created": "created_at",
-    }
-    order_field = sort_map.get(sort, "created_at")
-    if direction == "desc":
-        order_field = f"-{order_field}"
-
-    documents_qs = AdmPaperDocument.objects.select_related(
-        "requested_department", "paper_type", "courier_company"
-    ).filter(is_deleted=False)
-    if query:
-        documents_qs = documents_qs.filter(
-            Q(document_number_full__icontains=query)
-            | Q(courier_tracking_code__icontains=query)
-        )
-    documents_qs = documents_qs.order_by(order_field)
-    paper_types = AdmPaperType.objects.filter(is_active=True).order_by("name")
-    if selected_type:
-        documents_qs = documents_qs.filter(paper_type_id=selected_type)
-
-    edit_instance = None
-    if edit_id:
-        edit_instance = AdmPaperDocument.objects.filter(pk=edit_id).first()
-
+    documents_qs, filters, sort, direction = _paper_document_queryset(request)
+    edit_id = request.GET.get("edit", "")
+    edit_id = int(edit_id) if edit_id.isdecimal() and len(edit_id) <= 18 else ""
+    form = AdmPaperDocumentForm()
+    legacy_edit_id = ""
     if request.method == "POST":
-        edit_target_id = request.POST.get("edit_id")
-        edit_instance = (
-            AdmPaperDocument.objects.filter(pk=edit_target_id).first()
-            if edit_target_id
-            else None
-        )
+        legacy_edit_id = request.POST.get("edit_id", "")
+        edit_instance = get_object_or_404(AdmPaperDocument, pk=legacy_edit_id, is_deleted=False) if legacy_edit_id else None
         form = AdmPaperDocumentForm(request.POST, instance=edit_instance)
         if form.is_valid():
             paper_doc = form.save(commit=False)
             if edit_instance:
                 paper_doc.updated_by = request.user
                 paper_doc.save()
-                messages.success(request, "Cập nhật giấy tờ thành công.")
+                messages.success(request, f"Đã cập nhật giấy hành chính: {paper_doc.document_number_full}")
             else:
                 paper_doc.created_by = request.user
-                full_name = (request.user.get_full_name() or "").strip()
-                paper_doc.responsible_person = full_name if full_name else request.user.username
-                attempts = 0
-                saved = False
-                while attempts < 3 and not saved:
-                    attempts += 1
+                paper_doc.responsible_person = (request.user.get_full_name() or "").strip() or request.user.username
+                for attempt in range(3):
                     try:
                         with transaction.atomic():
-                            year_now = timezone.now().year
-                            running_number, doc_num = allocate_paper_running_number(
-                                paper_doc.paper_type_id, paper_doc.paper_type.code, year_now
-                            )
-                            paper_doc.running_number = running_number
-                            paper_doc.document_number_full = doc_num
+                            paper_doc.running_number, paper_doc.document_number_full = allocate_paper_running_number(
+                                paper_doc.paper_type_id, paper_doc.paper_type.code, timezone.now().year)
                             paper_doc.save()
-                        saved = True
+                        break
                     except IntegrityError:
-                        if attempts >= 3:
-                            messages.error(
-                                request,
-                                "Không thể sinh số hiệu duy nhất, vui lòng thử lại.",
-                            )
+                        if attempt == 2:
+                            messages.error(request, "Không thể sinh số hiệu duy nhất, vui lòng thử lại.")
                             return redirect("admindocuments:paper_document_list")
-                        continue
-                # Spotlight newly created paper
-                new_ids = request.session.get("paper_new_ids", [])
-                new_nums = request.session.get("paper_new_numbers", [])
-                new_ids.append(paper_doc.id)
-                new_nums.append(paper_doc.document_number_full)
-                request.session["paper_new_ids"] = new_ids
-                request.session["paper_new_numbers"] = new_nums
-                request.session.modified = True
-                messages.success(
-                    request,
-                    f"Tạo giấy tờ thành công: {paper_doc.document_number_full}",
-                )
+                request.session["paper_new_ids"] = [*request.session.get("paper_new_ids", []), paper_doc.pk]
+                request.session["paper_new_numbers"] = [*request.session.get("paper_new_numbers", []), paper_doc.document_number_full]
+                messages.success(request, f"Tạo giấy hành chính thành công: {paper_doc.document_number_full}")
             params = request.GET.copy()
-            redirect_url = reverse("admindocuments:paper_document_list")
-            if params:
-                params.pop("edit", None)
-                redirect_url += f"?{params.urlencode()}"
-            return redirect(redirect_url)
-        errors_str = []
-        for field, errs in form.errors.items():
-            label = form.fields.get(field).label if field in form.fields else field
-            errors_str.append(f"{label}: {', '.join(errs)}")
-        if errors_str:
-            messages.error(request, "Dữ liệu không hợp lệ: " + " | ".join(errors_str))
-        else:
-            messages.error(request, "Dữ liệu không hợp lệ, vui lòng kiểm tra lại.")
-    form = AdmPaperDocumentForm(instance=edit_instance)
+            params.pop("edit", None)
+            params.pop("create", None)
+            target = reverse("admindocuments:paper_document_list")
+            return redirect(f"{target}?{params.urlencode()}" if params else target)
+        messages.error(request, "Dữ liệu không hợp lệ:\n" + "\n".join(
+            f"{form.fields[field].label if field in form.fields else field}: {', '.join(errors)}"
+            for field, errors in form.errors.items()))
 
-    total_by_type = {
-        row["paper_type"]: row["total"]
-        for row in AdmPaperDocument.objects.filter(is_deleted=False)
-        .values("paper_type")
-        .annotate(total=Count("id"))
-    }
-    paper_type_tabs = [
-        {"id": p.pk, "name": p.name, "total": total_by_type.get(p.pk, 0)} for p in paper_types
-    ]
     paginator = Paginator(documents_qs, 25)
-    page_number = request.GET.get("page", "1")
-    try:
-        documents = paginator.page(page_number)
-    except PageNotAnInteger:
-        documents = paginator.page(1)
-    except EmptyPage:
-        documents = paginator.page(paginator.num_pages)
-
-    request_departments = form.fields["requested_department"].queryset
-    requested_department_initial = ""
-    if edit_instance and getattr(edit_instance, "requested_department_id", None):
-        requested_department_initial = str(edit_instance.requested_department_id)
-    edit_department_initial = ""
-    if edit_instance and getattr(edit_instance, "department_id", None):
-        edit_department_initial = str(edit_instance.department_id)
-
-    new_ids = request.session.pop("paper_new_ids", [])
-    new_numbers = request.session.pop("paper_new_numbers", [])
-
+    documents = paginator.get_page(request.GET.get("page", "1"))
+    query_values = {key: value for key, value in filters.items() if value}
+    choices_qs = AdmPaperDocument.objects.filter(is_deleted=False).order_by()
     context = {
-        "documents": documents,
-        "form": form,
-        "paper_types": paper_type_tabs,
-        "selected_type": selected_type,
-        "sort": sort,
-        "dir": direction,
-        "paginator": paginator,
-        "edit_id": edit_id or "",
-        "paper_request_departments": request_departments,
-        "edit_requested_department_id": requested_department_initial,
-        "edit_department_id": edit_department_initial,
-        "internal_departments": AdmDepartment.objects.select_related("company").all().order_by("name"),
-        "new_ids": new_ids,
-        "new_numbers": new_numbers,
+        **filters, "documents": documents, "paginator": paginator, "form": form,
+        "paper_types": AdmPaperType.objects.all().order_by("name"),
+        "region_options": [{"pk": value, "name": value} for value in choices_qs.exclude(region__isnull=True).exclude(region="").values_list("region", flat=True).distinct().order_by("region")],
+        "status_options": [{"pk": value, "name": value} for value in choices_qs.exclude(status__isnull=True).exclude(status="").values_list("status", flat=True).distinct().order_by("status")],
+        "shop_options": [{"pk": shop.pk, "name": shop.shop_name} for shop in form.fields["requested_department"].queryset],
+        "sort": sort, "dir": direction, "filter_query": urlencode(query_values),
+        "list_query": urlencode({**query_values, "sort": sort, "dir": direction}),
+        "edit_document_id": edit_id, "legacy_edit_id": legacy_edit_id,
+        "create_modal_open": request.method == "POST", "paper_documents_nav": True,
+        "has_admin_docs_access": _has_admin_docs_access(request.user),
+        "create_columns": [[form[name] for name in list(form.fields)[:5]], [form[name] for name in list(form.fields)[5:]]],
+        "new_ids": request.session.pop("paper_new_ids", []),
+        "new_numbers": request.session.pop("paper_new_numbers", []),
     }
     return render(request, "admindocuments/paper_document_list.html", context)
 
 
 @login_required
 @admin_staff_required
+def paper_document_export(request):
+    documents, _, _, _ = _paper_document_queryset(request)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Giấy hành chính"
+    ws.append(["STT", "Số hiệu", "Loại giấy", "Miền", "Người phụ trách", "Phòng giao dịch", "Phòng ban nội bộ",
+               "Nội dung", "Đơn vị CPN", "Mã vận đơn", "Tình trạng", "Mã ticket", "Ngày tạo", "Ghi chú"])
+    for index, doc in enumerate(documents.iterator(chunk_size=500), 1):
+        row = [index, doc.document_number_full, doc.paper_type.name, doc.region or "", doc.responsible_person,
+                   doc.requested_department.shop_name if doc.requested_department_id else "",
+                   doc.department.name if doc.department_id else "", doc.summary,
+                   doc.courier_company.name if doc.courier_company_id else "", doc.courier_tracking_code or "",
+                   doc.status or "", doc.ticket_code or "", doc.created_at.strftime("%d/%m/%Y %H:%M"), doc.note or ""]
+        ws.append(row)
+        for column, value in enumerate(row, 1):
+            if isinstance(value, str):
+                ws.cell(row=index + 1, column=column).data_type = "s"
+    buffer = BytesIO()
+    wb.save(buffer)
+    response = HttpResponse(buffer.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    response["Content-Disposition"] = f'attachment; filename="giay-hanh-chinh-{date.today():%Y%m%d}.xlsx"'
+    return response
+
+
+@login_required
+@admin_staff_required
 def paper_document_detail(request, doc_id: int):
-    paper_doc = get_object_or_404(
-        AdmPaperDocument.objects.select_related(
-            "paper_type", "requested_department", "courier_company", "department"
-        ),
-        pk=doc_id,
-        is_deleted=False,
-    )
-    as_drawer = request.GET.get("drawer") == "1"
+    doc = get_object_or_404(AdmPaperDocument.objects.select_related(
+        "paper_type", "requested_department", "courier_company", "department", "created_by", "updated_by"),
+        pk=doc_id, is_deleted=False)
     if request.method == "POST":
-        form = AdmPaperDocumentForm(request.POST, instance=paper_doc)
+        form = AdmPaperDocumentForm(request.POST, instance=doc)
         if form.is_valid():
             obj = form.save(commit=False)
             obj.updated_by = request.user
             obj.save()
-            messages.success(request, "Cập nhật giấy tờ thành công.")
-            return redirect("admindocuments:paper_document_detail", doc_id=doc_id)
-        errors_str = []
-        for field, errs in form.errors.items():
-            label = form.fields.get(field).label if field in form.fields else field
-            errors_str.append(f"{label}: {', '.join(errs)}")
-        if errors_str:
-            messages.error(request, "Dữ liệu không hợp lệ: " + " | ".join(errors_str))
-        else:
-            messages.error(request, "Dữ liệu không hợp lệ, vui lòng kiểm tra lại.")
-    else:
-        form = AdmPaperDocumentForm(instance=paper_doc)
+            messages.success(request, f"Đã cập nhật giấy hành chính: {obj.document_number_full}")
+            return redirect(f"{reverse('admindocuments:paper_document_list')}?edit={doc.pk}")
+        return render(request, "admindocuments/includes/paper_document_edit_form.html",
+                      _paper_edit_context(doc, form), status=422)
+    if request.GET.get("edit") == "1":
+        return render(request, "admindocuments/includes/paper_document_edit_form.html", _paper_edit_context(doc))
+    if request.GET.get("drawer") == "1":
+        return render(request, "admindocuments/paper_document_detail_drawer.html", {"doc": doc})
+    return redirect(f"{reverse('admindocuments:paper_document_list')}?edit={doc.pk}")
 
-    template_name = (
-        "admindocuments/paper_document_detail_drawer.html"
-        if as_drawer
-        else "admindocuments/paper_document_detail.html"
-    )
-    return render(
-        request,
-        template_name,
-        {
-            "doc": paper_doc,
-            "form": form,
-            "paper_request_departments": Shop.objects.all().order_by("shop_name"),
-            "internal_departments": AdmDepartment.objects.select_related("company")
-            .all()
-            .order_by("name"),
-        },
-    )
+
+@login_required
+@admin_staff_required
+@transaction.atomic
+def paper_document_update_field(request, doc_id: int):
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "Method not allowed."}, status=405)
+    doc = get_object_or_404(AdmPaperDocument.objects.select_for_update(of=("self",)), pk=doc_id, is_deleted=False)
+    field = request.POST.get("field", "")
+    allowed = AdmPaperDocumentForm.Meta.fields
+    if field not in allowed:
+        return JsonResponse({"ok": False, "error": "Không được chỉnh sửa trường này."}, status=400)
+    data = {name: getattr(doc, f"{name}_id" if doc._meta.get_field(name).is_relation else name) or "" for name in allowed}
+    data[field] = request.POST.get("value", "")
+    form = AdmPaperDocumentForm(data, instance=doc)
+    if not form.is_valid():
+        return JsonResponse({"ok": False, "error": "\n".join(str(error) for errors in form.errors.values() for error in errors)}, status=400)
+    value = form.cleaned_data[field]
+    doc.refresh_from_db()
+    setattr(doc, field, value)
+    doc.updated_by = request.user
+    doc.save(update_fields=[field, "updated_by", "updated_at"])
+    display_names = {"paper_type": "name", "requested_department": "shop_name", "department": "name", "courier_company": "name"}
+    display = getattr(value, display_names[field]) if value and field in display_names else (value or "—")
+    payload = {"ok": True, "field": field, "value": value.pk if hasattr(value, "pk") else value or "",
+               "display": display, "document_id": doc.pk}
+    if field == "status":
+        payload["status"] = {"name": display, "text_color": "#6b7280", "bg_color": "#f3f4f6"}
+    return JsonResponse(payload)
 
 
 @login_required
@@ -4333,7 +4100,30 @@ def paper_document_import_commit(request):
         request.session["paper_new_ids"] = created_ids
         request.session["paper_new_numbers"] = created_numbers
         request.session.modified = True
+    messages.success(request, f"Đã nhập {created_count} giấy hành chính từ file Excel thành công.")
     return JsonResponse({"status": "ok", "created": created_count})
+
+
+def counter_status(next_number, used_max, used_count):
+    """Trạng thái hiển thị của bộ đếm số hiệu.
+
+    Số trống (chưa dùng hoặc đã thu hồi) luôn có thể được cấp lại bằng cách nhập số đó vào
+    "Số tiếp theo", nên đây là thông tin chứ không phải cảnh báo.
+    used_count: số lượng số gốc đang được dùng (không tính số thu hồi).
+    """
+    free_below = max(used_max - used_count, 0)  # số trống nằm dưới số đã dùng cao nhất
+    free_ahead = max(next_number - used_max - 1, 0)  # số bị bỏ qua giữa số đã dùng cao nhất và số tiếp theo
+    free_total = free_below + free_ahead
+    if next_number <= used_max:
+        return {"code": "fill", "label": "Đang cấp số trống", "hint": f"Số tiếp theo ({next_number}) thấp hơn số đã dùng cao nhất ({used_max}): đang cấp lại số còn trống."}
+    if free_total:
+        parts = []
+        if free_below:
+            parts.append(f"{free_below} số trống nằm dưới {used_max}")
+        if free_ahead:
+            parts.append(f"{free_ahead} số bỏ qua từ {used_max + 1} đến {next_number - 1}")
+        return {"code": "free", "label": f"Còn {free_total} số trống", "hint": "; ".join(parts).capitalize() + ". Nhập số đó vào \"Số tiếp theo\" để cấp lại."}
+    return {"code": "ok", "label": "Liên tục", "hint": "Không có số trống."}
 
 
 @login_required
@@ -4343,7 +4133,11 @@ def document_counter_manage(request):
     companies = AdmCompany.objects.all().order_by("name")
     paper_types = AdmPaperType.objects.all().order_by("name")
     year_now = timezone.now().year
-    active_tab = request.GET.get("tab", "admin")
+    active_tab = "paper" if request.GET.get("tab") == "paper" else "admin"
+
+    def counters_url(tab):
+        base = reverse("admindocuments:admindocuments_counters")
+        return f"{base}?tab=paper" if tab == "paper" else base
 
     if request.method == "POST" and request.POST.get("target", "admin") == "admin":
         doc_type_id = request.POST.get("doc_type")
@@ -4356,11 +4150,11 @@ def document_counter_manage(request):
             next_number = int(next_number)
         except (TypeError, ValueError):
             messages.error(request, "Năm và số tiếp theo phải là số.")
-            return redirect("admindocuments:admindocuments_counters")
+            return redirect(counters_url("admin"))
 
         if not doc_type_id or not company_id or next_number < 1 or not 1 <= year <= 9999:
             messages.error(request, "Vui lòng chọn đủ loại văn bản và công ty.")
-            return redirect("admindocuments:admindocuments_counters")
+            return redirect(counters_url("admin"))
 
         with transaction.atomic():
             counter, _ = AdmDocumentCounter.objects.select_for_update().get_or_create(
@@ -4381,7 +4175,7 @@ def document_counter_manage(request):
                     request,
                     f"Số {next_number} đã được sử dụng (đã dùng tới {max_used}).",
                 )
-                return redirect("admindocuments:admindocuments_counters")
+                return redirect(counters_url("admin"))
 
             counter.next_number = next_number
             counter.save(update_fields=["next_number", "updated_at"])
@@ -4390,7 +4184,7 @@ def document_counter_manage(request):
         comp_name = companies.filter(pk=company_id).first()
         comp_code = comp_name.code if comp_name else company_id
         messages.success(request, f"Cập nhật số tiếp theo cho '{dt_name}' - {comp_code} năm {year} -> {next_number}.")
-        return redirect("admindocuments:admindocuments_counters")
+        return redirect(counters_url("admin"))
 
     # prepare tracking
     used_map = {
@@ -4424,6 +4218,7 @@ def document_counter_manage(request):
                 "total": used_info["total"] or 0,
                 "base_total": used_info["base_total"] or 0,
                 "gap_from": gap_from,
+                "status": counter_status(c.next_number, used_info["used_max"] or 0, used_info["base_total"] or 0),
                 }
             )
     # Paper counter update
@@ -4436,10 +4231,10 @@ def document_counter_manage(request):
             next_number = int(next_number)
         except (TypeError, ValueError):
             messages.error(request, "Năm và số tiếp theo phải là số.")
-            return redirect("admindocuments:admindocuments_counters")
+            return redirect(counters_url("paper"))
         if not paper_type_id:
             messages.error(request, "Vui lòng chọn loại giấy.")
-            return redirect("admindocuments:admindocuments_counters")
+            return redirect(counters_url("paper"))
         exists_active = AdmPaperDocument.objects.filter(
             paper_type_id=paper_type_id,
             created_at__year=year,
@@ -4448,7 +4243,7 @@ def document_counter_manage(request):
         ).exists()
         if exists_active:
             messages.error(request, f"Số {next_number} đã được sử dụng cho giấy này.")
-            return redirect("admindocuments:admindocuments_counters")
+            return redirect(counters_url("paper"))
         counter, created = AdmPaperCounter.objects.get_or_create(
             paper_type_id=paper_type_id,
             year=year,
@@ -4460,7 +4255,7 @@ def document_counter_manage(request):
         pt_name = paper_types.filter(pk=paper_type_id).first()
         pt_name = pt_name.name if pt_name else paper_type_id
         messages.success(request, f"Cập nhật số tiếp theo cho giấy '{pt_name}' năm {year} -> {next_number}.")
-        return redirect(f"{reverse('admindocuments:admindocuments_counters')}?tab=paper")
+        return redirect(counters_url("paper"))
 
     # Paper counters display
     paper_rows = []
@@ -4501,9 +4296,12 @@ def document_counter_manage(request):
                     "gap_from": candidate,
                     "total": len(active_numbers_sorted),
                     "void_count": len([n for n in void_numbers if n]),
+                    "status": counter_status(candidate, used_max, len(active_numbers_sorted)),
                     "counter": counter,
                 }
             )
+
+    paper_rows.sort(key=lambda row: (-row["year"], row["paper_type"].name))
 
     return render(
         request,
@@ -4516,6 +4314,8 @@ def document_counter_manage(request):
             "counters": counter_rows,
             "paper_counters": paper_rows,
             "active_tab": active_tab,
+            "counter_years": sorted({row["year"] for row in counter_rows}, reverse=True),
+            "paper_counter_years": sorted({row["year"] for row in paper_rows}, reverse=True),
         },
     )
 
@@ -4663,6 +4463,23 @@ def paper_counter_visual(request):
 @login_required
 @admin_staff_required
 def master_data(request):
+    if request.method == "POST" and request.POST.get("form_name") == "status_colors":
+        if not request.user.has_perm("app_admindocuments.change_admdocumentstatus"):
+            return HttpResponseForbidden("Bạn không có quyền chỉnh màu trạng thái văn bản.")
+        try:
+            status_id = int(request.POST.get("status_id", ""))
+        except (TypeError, ValueError):
+            return HttpResponse("Mã trạng thái không hợp lệ.", status=400)
+        status = get_object_or_404(AdmDocumentStatus, pk=status_id)
+        color_form = AdmDocumentStatusColorsForm(request.POST, instance=status)
+        if color_form.is_valid():
+            status = color_form.save(commit=False)
+            status.updated_by = request.user
+            status.save(update_fields=["badge_text_color", "badge_bg_color", "updated_by", "updated_at"])
+            messages.success(request, "Đã cập nhật màu trạng thái văn bản.")
+        else:
+            messages.error(request, "Màu không hợp lệ. Vui lòng chọn màu chữ và màu nền theo định dạng #RRGGBB.")
+        return redirect(f"{reverse('admindocuments:master_data')}#status")
     form_classes = {
         "doc_type": (AdmDocumentTypeForm, "Loại văn bản"),
         "content_type": (AdmContentTypeForm, "Loại nội dung"),
@@ -4958,81 +4775,33 @@ def document_detail(request, doc_id: int):
             "status",
         ).prefetch_related("attachments__created_by", "attachments__deleted_by").get(pk=doc_id)
     except AdmAdministrativeDocument.DoesNotExist:
+        if request.GET.get("edit") == "1":
+            return HttpResponse("Văn bản không tồn tại.", status=404)
         messages.error(request, "Document not found.")
         return redirect("admindocuments:admindocuments_list")
 
     as_drawer = request.GET.get("drawer") == "1"
-    form = AdmAdministrativeDocumentUpdateForm(instance=doc)
-    doc_types = AdmDocumentType.objects.all().order_by("name")
-    content_types = AdmContentType.objects.all().order_by("name")
-    signer_roles = AdmSignerRole.objects.all().order_by("title")
-    companies = AdmCompany.objects.all().order_by("name")
-    departments = (
-        AdmDepartment.objects.select_related("company").all().order_by("name")
-    )
-    statuses = AdmDocumentStatus.objects.all().order_by("name")
-    reference_docs = AdmAdministrativeDocument.objects.exclude(pk=doc_id).order_by(
-        "-created_at"
-    )
-    status_history = []
-    hist_qs = (
-        doc.history.select_related("changed_by")
-        .filter(
-            models.Q(changes__has_key="status")
-            | models.Q(change_type=AdmAdministrativeDocumentHistory.CHANGE_CREATED)
-        )
-        .order_by("-changed_at")
-    )
-    for h in hist_qs:
-        new_status = None
-        old_status = None
-        if isinstance(h.changes, dict):
-            if "status" in h.changes:
-                old_status = h.changes["status"].get("old")
-                new_status = h.changes["status"].get("new")
-            elif "new_values" in h.changes and isinstance(h.changes["new_values"], dict):
-                new_status = h.changes["new_values"].get("status")
-        status_history.append(
-            {
-                "timestamp": h.changed_at,
-                "user": h.changed_by,
-                "new_status": new_status or "",
-                "old_status": old_status or "",
-                "type": h.change_type,
-            }
-        )
-
-    context = {
-        "doc": doc,
-        "form": form,
-        "doc_types": doc_types,
-        "content_types": content_types,
-        "signer_roles": signer_roles,
-        "companies": companies,
-        "departments": departments,
-        "statuses": statuses,
-        "reference_docs": reference_docs,
-        "status_history": status_history,
-        "has_admin_docs_access": _has_admin_docs_access(request.user),
+    if request.GET.get("edit") == "1":
+        return render(request, "admindocuments/includes/document_edit_form.html", _document_edit_context(doc))
+    if not as_drawer:
+        return redirect(f"{reverse('admindocuments:admindocuments_list')}?edit={doc.pk}")
+    return render(request, "admindocuments/document_detail_drawer.html", {
+        "doc": doc, "document_history": _document_history(doc),
         "STATUS_DRAFT": AdmDocumentStatus.CODE_DRAFT,
-        "STATUS_PENDING": AdmDocumentStatus.CODE_PENDING,
         "STATUS_ISSUED": AdmDocumentStatus.CODE_ISSUED,
         "STATUS_EXPIRED": AdmDocumentStatus.CODE_EXPIRED,
-    }
-    template_name = (
-        "admindocuments/document_detail_drawer.html"
-        if as_drawer
-        else "admindocuments/document_detail.html"
-    )
-    return render(request, template_name, context)
+    })
 
 
 @login_required
 @admin_staff_required
 def document_update(request, doc_id: int):
+    ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
     try:
         doc = AdmAdministrativeDocument.objects.get(pk=doc_id)
     except AdmAdministrativeDocument.DoesNotExist:
+        if ajax:
+            return JsonResponse({"ok": False, "error": "Văn bản không tồn tại."}, status=404)
         messages.error(request, "Document not found.")
         return redirect("admindocuments:admindocuments_list")
 
@@ -5045,8 +4814,12 @@ def document_update(request, doc_id: int):
     if post_data.get("reference_number") in {"None", "none", "null"}:
         post_data["reference_number"] = ""
 
-    form = AdmAdministrativeDocumentUpdateForm(post_data, request.FILES, instance=doc)
+    form_class = AdmAdministrativeDocumentEditPopupForm if ajax else AdmAdministrativeDocumentUpdateForm
+    form = form_class(post_data, request.FILES, instance=doc)
     if not form.is_valid():
+        if ajax:
+            return render(request, "admindocuments/includes/document_edit_form.html",
+                          _document_edit_context(doc, form), status=422)
         messages.error(request, "Invalid data. Please check required fields.")
         return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
 
@@ -5074,11 +4847,41 @@ def document_update(request, doc_id: int):
                 link=attachment_link,
             )
 
+    if ajax:
+        messages.success(request, "Đã cập nhật văn bản.")
+        return JsonResponse({"ok": True, "document_id": doc.pk})
     if uploaded_file or attachment_link:
         messages.success(request, "Document updated successfully!")
     else:
         messages.success(request, "Document updated (không có file/link mới).")
     return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
+
+
+def _document_edit_context(doc, form=None):
+    if form is None:
+        form = AdmAdministrativeDocumentEditPopupForm(instance=doc)
+    columns = [
+        ["doc_type", "issuing_company", "issuing_department", "signer_role", "content_type", "title", "status", "ticket_code"],
+        ["issue_date", "effective_date", "expiry_date", "reference_number", "reference_document", "is_reference_document", "attachment", "attachment_link", "note"],
+    ]
+    return {"doc": doc, "form": form, "edit_columns": [[form[name] for name in column] for column in columns]}
+
+
+def _document_history(doc):
+    labels = {**AdmAdministrativeDocumentForm.Meta.labels, "issue_date": "Ngày ban hành",
+              "document_number_full": "Số hiệu", "is_void": "Vô hiệu", "number_suffix": "Hậu tố tách thửa",
+              "running_number": "Số thứ tự", "number_year": "Năm số hiệu", "split_parent": "Văn bản gốc"}
+    records = []
+    for item in doc.history.select_related("changed_by").order_by("-changed_at", "-pk"):
+        changes = item.changes if isinstance(item.changes, dict) else {}
+        fields = []
+        if item.change_type == AdmAdministrativeDocumentHistory.CHANGE_UPDATED:
+            for name, values in changes.items():
+                if isinstance(values, dict):
+                    fields.append({"label": labels.get(name, name), "old": values.get("old"), "new": values.get("new")})
+        records.append({"timestamp": item.changed_at, "user": item.changed_by,
+                        "type": item.change_type, "fields": fields})
+    return records
 
 
 def _build_update_form_data(doc):
@@ -5106,12 +4909,13 @@ def _build_update_form_data(doc):
 
 @login_required
 @admin_staff_required
+@transaction.atomic
 def document_update_field(request, doc_id: int):
     if request.method != "POST":
         return JsonResponse({"ok": False, "error": "Method not allowed."}, status=405)
 
     try:
-        doc = AdmAdministrativeDocument.objects.select_related(
+        doc = AdmAdministrativeDocument.objects.select_for_update(of=("self",)).select_related(
             "content_type",
             "signer_role",
             "issuing_department",
@@ -5133,6 +4937,9 @@ def document_update_field(request, doc_id: int):
         "status",
         "reference_number",
         "note",
+        "ticket_code",
+        "reference_document",
+        "is_reference_document",
     }
     if field not in allowed_fields:
         return JsonResponse({"ok": False, "error": "Field not allowed."}, status=400)
@@ -5140,7 +4947,10 @@ def document_update_field(request, doc_id: int):
     data = _build_update_form_data(doc)
     data[field] = value
 
-    form = AdmAdministrativeDocumentUpdateForm(data, None, instance=doc)
+    if field == "reference_document" and value:
+        data["reference_number"] = ""
+        data["is_reference_document"] = "true"
+    form = AdmAdministrativeDocumentEditPopupForm(data, None, instance=doc)
     if not form.is_valid():
         first_error = None
         for field_errors in form.errors.values():
@@ -5151,9 +4961,17 @@ def document_update_field(request, doc_id: int):
             {"ok": False, "error": first_error or "Invalid data."}, status=400
         )
 
-    updated_doc = form.save(commit=False)
+    # Validation may normalize other optional fields (None -> ""). A live edit
+    # must persist only the requested value and its explicit reference fields.
+    doc.refresh_from_db()
+    changed_fields = [field]
+    if field == "reference_document" and value:
+        changed_fields.extend(["reference_number", "is_reference_document"])
+    for name in changed_fields:
+        setattr(doc, name, form.cleaned_data[name])
+    updated_doc = doc
     updated_doc.updated_by = request.user
-    updated_doc.save()
+    updated_doc.save(update_fields=[*changed_fields, "updated_by", "updated_at"])
 
     def _fmt_date(value):
         return value.strftime("%d/%m/%Y") if value else "-"
@@ -5174,7 +4992,7 @@ def document_update_field(request, doc_id: int):
         if updated_doc.issue_date:
             display = _fmt_date(updated_doc.issue_date)
         else:
-            display = _fmt_date(updated_doc.created_at.date())
+            display = "—"
     elif field in {"effective_date", "expiry_date"}:
         display = _fmt_date(getattr(updated_doc, field))
     elif field == "status":
@@ -5183,14 +5001,24 @@ def document_update_field(request, doc_id: int):
         display = updated_doc.reference_number or "-"
     elif field == "note":
         display = updated_doc.note or "-"
+    elif field == "reference_document":
+        display = str(updated_doc.reference_document) if updated_doc.reference_document_id else "—"
+    elif field == "is_reference_document":
+        display = "Có" if updated_doc.is_reference_document else "Không"
     else:
-        display = value
+        display = getattr(updated_doc, field) or "—"
 
-    payload = {"ok": True, "field": field, "display": display}
+    values = _build_update_form_data(updated_doc)
+    payload = {"ok": True, "field": field, "display": display, "value": values[field], "document_id": updated_doc.pk}
+    if field == "reference_document":
+        payload["related_values"] = {"reference_number": updated_doc.reference_number or "",
+                                     "is_reference_document": updated_doc.is_reference_document}
     if field == "status" and updated_doc.status_id:
         payload["status"] = {
             "code": updated_doc.status.code,
             "name": updated_doc.status.name,
+            "text_color": updated_doc.status.badge_text_color,
+            "bg_color": updated_doc.status.badge_bg_color,
         }
     return JsonResponse(payload)
 
@@ -5198,29 +5026,41 @@ def document_update_field(request, doc_id: int):
 @login_required
 @admin_staff_required
 def document_attachment_upload(request, doc_id: int):
+    ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
     if request.method != "POST":
         return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
 
     try:
         doc = AdmAdministrativeDocument.objects.get(pk=doc_id)
     except AdmAdministrativeDocument.DoesNotExist:
+        if ajax:
+            return JsonResponse({"ok": False, "error": "Văn bản không tồn tại."}, status=404)
         messages.error(request, "Document not found.")
         return redirect("admindocuments:admindocuments_list")
 
     uploaded_file = request.FILES.get("attachment")
-    if not uploaded_file:
+    link = (request.POST.get("attachment_link") or "").strip() if ajax else ""
+    if not uploaded_file and not link:
+        if ajax:
+            return JsonResponse({"ok": False, "error": "Vui lòng chọn tệp hoặc nhập link đính kèm."}, status=400)
         messages.error(request, "Vui lòng chọn file để tải lên.")
         return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
 
     try:
-        _create_attachment_version(document=doc, user=request.user, uploaded_file=uploaded_file)
+        with transaction.atomic():
+            locked_doc = AdmAdministrativeDocument.objects.select_for_update().get(pk=doc.pk)
+            _create_attachment_version(document=locked_doc, user=request.user, uploaded_file=uploaded_file, link=link)
     except Exception:
+        if ajax:
+            return JsonResponse({"ok": False, "error": "Không thể thêm đính kèm. Vui lòng kiểm tra tệp hoặc đường dẫn và thử lại."}, status=400)
         messages.error(
             request,
             "Tải file thất bại. Vui lòng đổi tên file (không dùng ký tự lạ) và thử lại.",
         )
         return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
 
+    if ajax:
+        return JsonResponse({"ok": True})
     messages.success(request, "Đã tải file lên thành công.")
     return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
 
@@ -5273,11 +5113,14 @@ def document_delete(request, doc_id: int):
 @login_required
 @admin_staff_required
 def document_attachment_delete(request, doc_id: int, att_id: int):
+    ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
     try:
         attachment = AdmDocumentAttachment.objects.select_related("document").get(
             pk=att_id, document_id=doc_id
         )
     except AdmDocumentAttachment.DoesNotExist:
+        if ajax:
+            return JsonResponse({"ok": False, "error": "Tệp không tồn tại."}, status=404)
         messages.error(request, "File không tồn tại.")
         return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)
 
@@ -5302,5 +5145,7 @@ def document_attachment_delete(request, doc_id: int, att_id: int):
             latest.is_latest = True
             latest.save(update_fields=["is_latest"])
 
+    if ajax:
+        return JsonResponse({"ok": True})
     messages.success(request, "Đã đánh dấu xóa file.")
     return redirect("admindocuments:admindocuments_detail", doc_id=doc_id)

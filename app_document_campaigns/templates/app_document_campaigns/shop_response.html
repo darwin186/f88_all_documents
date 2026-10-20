@@ -12,6 +12,8 @@
   <link rel="stylesheet" href="{% static 'app_document_campaigns/css/shop_response.css' %}">
 </head>
 <body class="min-h-screen bg-[#f5f6f8] text-gray-800">
+  {% include 'components/ui_toast.html' %}
+  {% include 'components/ui_toast_seeds.html' %}
   {% include "app_document_campaigns/components/toasts.html" %}
   <header class="sticky top-0 z-30 border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur">
     <div class="mx-auto flex max-w-[1500px] items-center justify-between gap-4 px-4 py-3">

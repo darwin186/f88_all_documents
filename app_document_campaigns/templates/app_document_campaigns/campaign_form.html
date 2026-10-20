@@ -2,13 +2,13 @@
 {% load campaign_workflow %}
 {% load static %}
 
-{% block title %}Tạo chiến dịch lỗi chứng từ{% endblock %}
+{% block title %}Tạo chiến dịch chứng từ bản cứng{% endblock %}
 {% block top_nav %}{% include "app_documents/components/top_nav_v2.html" %}{% endblock %}
 {% block main_extra_class %}pt-20{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/monthSelect/style.css">
-<link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_form.css' %}?v=20261008-2">
+<link rel="stylesheet" href="{% static 'app_document_campaigns/css/campaign_form.css' %}?v=20261019-1">
 <link rel="stylesheet" href="{% static 'app_document_campaigns/css/datetime_picker.css' %}?v=20261002-2">
 <link rel="stylesheet" href="{% static 'app_document_campaigns/css/response_guidance_config.css' %}">
 {% endblock %}
@@ -17,10 +17,15 @@
 {% campaign_workflow 1 %}
 
 <div class="dcf-page">
+  <div class="flex items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 mb-4 text-[11px]">
+    <span>Loại chiến dịch: <strong class="text-emerald-700">Chứng từ bản cứng</strong></span>
+    <a href="{% url 'document_campaigns:campaign_create' %}" class="text-emerald-700 hover:underline">Đổi loại chiến dịch</a>
+  </div>
   
   <div class="dcf-layout">
     <form method="post" class="dcf-form">
       {% csrf_token %}
+      <input type="hidden" name="workflow_type" value="hard_copy">
       <input type="hidden" name="risk_error_codes_present" value="1">
       <div class="dcf-fields">
         {% for field in form %}
@@ -38,8 +43,8 @@
       </div>
       {% for error in form.non_field_errors %}<p class="dcf-error">{{ error }}</p>{% endfor %}
       <div class="dcf-actions">
-        <a href="{% url 'document_campaigns:campaign_list' %}" class="dcf-btn dcf-btn-secondary">Hủy</a>
-        <button class="dcf-btn dcf-btn-primary">Tạo chiến dịch</button>
+        <a href="{% url 'document_campaigns:campaign_list' %}" class="ui-btn ui-btn-lg ui-btn-secondary">Hủy</a>
+        <button class="ui-btn ui-btn-lg ui-btn-primary">Tạo chiến dịch</button>
       </div>
     </form>
     <aside class="dcf-note">

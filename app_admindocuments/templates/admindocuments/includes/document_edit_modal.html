@@ -1,0 +1,5 @@
+<dialog id="document-edit-dialog" class="adm-edit-dialog" aria-labelledby="document-edit-title">
+  <header class="adm-edit-header"><h2 id="document-edit-title">Chỉnh sửa văn bản</h2><button type="button" data-edit-close aria-label="Đóng chỉnh sửa văn bản">✕</button></header>
+  <div data-edit-content class="adm-edit-content"></div>
+</dialog>
+{% if edit_document_id %}<a href="{% url 'admindocuments:admindocuments_detail' edit_document_id %}" data-document-edit data-edit-autoopen hidden>Mở chỉnh sửa văn bản</a>{% endif %}
