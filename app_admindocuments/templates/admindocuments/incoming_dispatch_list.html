@@ -151,19 +151,9 @@
           </div>
           <div class="md:col-span-2">
             <label class="block text-xs font-medium text-gray-700 mb-1">Tệp đính kèm</label>
-            <div class="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/40 p-3">
-              <input type="file" id="incomingDispatchFiles" name="images" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" multiple class="hidden">
-              <div class="flex flex-wrap items-center gap-2">
-                <label for="incomingDispatchFiles"
-                       class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 12l-3.5-3.5M12 16l3.5-3.5M5 20h14" />
-                  </svg>
-                  Chọn tệp
-                </label>
-                <span id="incomingDispatchFilesSummary" class="text-[11px] text-gray-500">Chưa chọn tệp nào</span>
-              </div>
-              <p class="text-[11px] text-gray-500 mt-2">Có thể chọn nhiều tệp một lần, gồm ảnh và PDF.</p>
+            <div class="ui-upload" data-ui-upload data-max-mb="30"
+                 data-hint="Ảnh, PDF, Word, Excel · chọn được nhiều tệp một lần, mỗi tệp không quá 30MB">
+              <input type="file" id="incomingDispatchFiles" name="images" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
             </div>
           </div>
           <div class="md:col-span-2 flex justify-end gap-2 mt-2">
@@ -198,26 +188,6 @@
     const modal = document.getElementById("incomingDispatchModal");
     if (modal) modal.classList.add("hidden");
   }
-
-  function bindIncomingFileSummary(inputId, summaryId) {
-    const input = document.getElementById(inputId);
-    const summary = document.getElementById(summaryId);
-    if (!input || !summary || input.dataset.bound === "1") return;
-    input.dataset.bound = "1";
-    input.addEventListener("change", function () {
-      const count = input.files ? input.files.length : 0;
-      if (!count) {
-        summary.textContent = "Chưa chọn tệp nào";
-        return;
-      }
-      summary.textContent = count === 1 ? input.files[0].name : `${count} tệp đã chọn`;
-    });
-  }
-
-  window.addEventListener("DOMContentLoaded", function () {
-    bindIncomingFileSummary("incomingDispatchFiles", "incomingDispatchFilesSummary");
-    bindIncomingFileSummary("incomingDrawerFiles", "incomingDrawerFilesSummary");
-  });
 
   function setIncomingQuickFilter(fieldName, value) {
     const form = document.getElementById("incomingDispatchFilterForm");
@@ -420,18 +390,11 @@
         <form method="post" action="{% url upload_action_name selected_dispatch.id %}" enctype="multipart/form-data" class="mb-3 rounded-xl border border-dashed border-gray-200 bg-gray-50/70 p-3">
           {% csrf_token %}
           <input type="hidden" name="next" value="{{ request.get_full_path }}">
-          <input type="file" id="incomingDrawerFiles" name="images" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" multiple class="hidden">
-          <div class="flex flex-wrap items-center gap-2">
-            <label for="incomingDrawerFiles"
-                   class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-100">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 12l-3.5-3.5M12 16l3.5-3.5M5 20h14" />
-              </svg>
-              Chọn tệp
-            </label>
-            <span id="incomingDrawerFilesSummary" class="text-[11px] text-gray-500">Chưa chọn tệp nào</span>
-            <button type="submit" class="px-3 py-2 text-xs rounded-lg border border-gray-300 bg-white hover:bg-gray-100 text-gray-700">Tải lên</button>
+          <div class="ui-upload" data-ui-upload data-max-mb="30"
+               data-hint="Ảnh, PDF, Word, Excel · mỗi tệp không quá 30MB">
+            <input type="file" id="incomingDrawerFiles" name="images" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
           </div>
+          <div class="mt-2 flex justify-end"><button type="submit" class="ui-btn ui-btn-primary ui-btn-sm">Tải lên</button></div>
         </form>
         {% if selected_dispatch.images.all %}
         <div class="space-y-2">

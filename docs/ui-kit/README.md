@@ -18,9 +18,14 @@ Bộ quy chuẩn UI dùng chung cho **toàn dự án** (`app_admindocuments`, `a
 | Select (droplist, chọn 1 hoặc nhiều) | 🟡 Mới — đã áp dụng cho modal Tạo giấy hành chính | [components/select.md](components/select.md) · [demo](demo/select.html) |
 | File (ô chọn tệp gọn, nút mũi tên) | 🟡 Đã áp dụng cho các ô tải một tệp | [components/file.md](components/file.md) · [demo](demo/file.html) |
 | Toast (thông báo) | 🟢 Đã áp dụng toàn hệ thống | [components/toast.md](components/toast.md) · [demo](demo/toast.html) |
+| Combobox (tìm kiếm + chọn trong một ô) | 🟡 Mới — đã áp dụng cho ô Người nhận (tiếp nhận bưu phẩm) | [components/combobox.md](components/combobox.md) · [demo](demo/combobox.html) · [thiết kế gợi ý khi nhập](demo/suggestions.html) |
+| Upload (kéo thả + danh sách tệp + chụp ảnh, "Mẫu D") | 🟡 Mới — đã áp dụng cho Ảnh đính kèm/File của bưu kiện | [components/upload.md](components/upload.md) · [demo](demo/file-upload-options.html) |
+| Color pair (chữ + nền, xem trước trực tiếp) | 🟡 Mới — đã áp dụng cho màu Trạng thái văn bản | [components/color-pair.md](components/color-pair.md) |
+| Date (ngày / khoảng ngày / ngày giờ / giờ) | 🟡 Mới — đã áp dụng cho 2 ô khoảng ngày ở thanh lọc Nhận chứng từ | [components/date.md](components/date.md) · [demo](demo/date.html) |
 | Badge status | ⚪ Chưa làm | — |
 | Table | ⚪ Chưa làm | — |
 | Form field | ⚪ Chưa làm | — |
+| Paginator (phân trang, cảm hứng Giấy hành chính) | 🟡 Mới — CSS/template dùng chung, chưa migrate màn cũ | [components/pagination.md](components/pagination.md) · [demo](demo/pagination.html) |
 | Modal / Drawer | ⚪ Chưa làm | — |
 
 Trạng thái: ⚪ chưa làm → 🟡 draft (spec xong, code chưa migrate) → 🟢 stable (CSS dùng chung đã có, template đã migrate).

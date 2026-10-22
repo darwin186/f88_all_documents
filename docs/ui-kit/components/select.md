@@ -100,6 +100,7 @@ Khi ẩn một vùng chứa droplist bằng code (ví dụ thoát chế độ s�
 ## Hành vi với form
 
 - Giá trị lấy từ select gốc nên `FormData`, validate `required`, `form.reset()` đều hoạt động như thường.
+- Gán `select.value` trực tiếp mà không bắn `change`: gọi `window.uiSelect.refresh(select)` để giao diện cập nhật.
 - Mã khác đổi lựa chọn bằng code: gán `select.value` (hoặc `option.selected`) rồi `select.dispatchEvent(new Event('change', {bubbles: true}))` — giao diện tự cập nhật.
 - Thêm / xóa `<option>` hoặc đổi `disabled` trên select gốc: giao diện tự cập nhật (MutationObserver).
 - Component phát sự kiện `change` bình thường trên select gốc, nên code lắng nghe `change` sẵn có không phải sửa.
@@ -123,6 +124,8 @@ Khi ẩn một vùng chứa droplist bằng code (ví dụ thoát chế độ s�
 | Droplist React/Tailwind riêng | `app_package_list_v2.html`, các trang GDĐB | `ui-select` | Chưa migrate |
 
 Đã áp dụng:
+- Màn Nhận chứng từ v2 (`app_document_receiving_v2.html`): bộ lọc (Phòng giao dịch, Trạng thái, Loại quyển, Người nhận), ngăn chi tiết (Trạng thái nhận, Nhận bổ sung), modal Nhận nhiều, modal Tạo thùng (Loại thùng, Mã kho, Đối tác). Chưa migrate: hai ô chọn lỗi quyển nhiều lựa chọn (`drawer-issue-*`, `bulk-issue-*`, có luật riêng).
+- Màn "Danh sách bưu phẩm / tiếp nhận" (`parcel_receipt_list.html`): Nơi nhận, Phòng ban (có tìm kiếm, thay ô tìm phòng ban + nút × cũ), Đơn vị gửi, và bộ lọc nâng cao Nơi nhận.
 - Modal "Tạo giấy hành chính" (`paper_document_create_modal.html`): 5 droplist.
 - Modal "Tạo văn bản hành chính" (`document_create_modal_v2.html`): Công ty, Loại văn bản, Loại nội dung, Tham chiếu tới văn bản, Người ký, Phòng ban (lọc theo công ty), Trạng thái.
 - Form "Cập nhật văn bản hành chính" (`document_edit_form.html`): mọi field dạng select, tự lưu khi chọn.

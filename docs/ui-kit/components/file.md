@@ -12,7 +12,7 @@ Xem trực quan: mở `docs/ui-kit/demo/file.html` bằng trình duyệt. (Các 
 |---|---|
 | Chọn **một** tệp (đính kèm, import Excel, ảnh đại diện) | File mặc định |
 | Chọn vài tệp, không cần xem tiến độ từng tệp | File với `multiple` (hiện "Đã chọn N tệp") |
-| Tải nhiều ảnh, cần danh sách/ tiến độ/ xem trước | Chưa có component (vùng kéo thả riêng) |
+| Tải nhiều ảnh, cần danh sách/ xem trước/ chụp ảnh | [Upload](upload.md) |
 | Chọn giữa tệp hoặc link | Radio "Tải tệp / Nhập link" + File (xem `document_attachment_modal.html`) |
 
 ## Cách dùng
@@ -81,7 +81,7 @@ Nạp sẵn: `static/css/ui-kit.css` và `static/js/ui-file.js` đã được n�
 | Cũ | Nơi dùng | Ghi chú |
 |---|---|---|
 | `label.file-choice` (ô kéo thả riêng) | `master_data.html` (Cập nhật từ Excel) | Có JS riêng đổi chữ tên tệp; cần chuyển cùng lúc |
-| Ô chọn nhiều ảnh (`images`, có `capture`) | bưu kiện (`parcel_receipt_*`), công văn đến (`incoming_dispatch_list`) | Dạng nhiều tệp + camera; chưa có component |
+| Ô chọn nhiều ảnh (`images`, có `capture`) | công văn đến (`incoming_dispatch_list`) | Dùng [Upload](upload.md); bưu kiện đã migrate |
 | Vùng kéo thả `dec-upload-zone` | campaign `dataset_panel.html` | Có luồng tải riêng |
 | Input ẩn kích hoạt bằng nút | `document_detail.html`, `user_profile_v2.html` (ảnh đại diện), `campaign_qtrr_booking.html` | Không có ô hiển thị; không cần component |
 

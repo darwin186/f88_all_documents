@@ -1445,24 +1445,23 @@ def _create_attachment_version(document, user, uploaded_file=None, link=None, no
     return attachment
 
 
+PAPER_IMPORT_HEADERS = (
+    "Số hiệu (để trống nếu muốn hệ thống sinh)",
+    "Loại giấy", "Miền", "Phòng giao dịch", "Phòng ban nội bộ", "Người phụ trách",
+    "Nội dung", "Đơn vị CPN", "Mã vận đơn", "Mã Ticket", "Ghi chú", "Ngày tạo (yyyy-mm-dd)",
+)
+
+
 def _parse_paper_rows(ws, request_user):
-    """Parse worksheet for paper import. Return (errors, rows_data)."""
-    headers = [
-        "số hiệu (để trống nếu muốn hệ thống sinh)",
-        "loại giấy",
-        "miền",
-        "phòng giao dịch",
-        "phòng ban nội bộ",
-        "người phụ trách",
-        "nội dung",
-        "đơn vị cpn",
-        "mã vận đơn",
-        "tình trạng",
-        "ghi chú",
-        "ngày tạo (yyyy-mm-dd)",
-    ]
-    header_row = [str(cell.value).strip().lower() if cell.value else "" for cell in next(ws.iter_rows(max_row=1))]
-    if header_row != headers:
+    """Parse by column name, supporting new templates and optional legacy status."""
+    required_headers = {header.casefold() for header in PAPER_IMPORT_HEADERS} - {"mã ticket"}
+    allowed_headers = required_headers | {"mã ticket", "tình trạng"}
+    header_row = [str(value).strip().casefold() if value is not None else ""
+                  for value in next(ws.iter_rows(max_row=1, values_only=True), ())]
+    while header_row and not header_row[-1]:
+        header_row.pop()
+    if (required_headers - set(header_row) or set(header_row) - allowed_headers
+            or len(header_row) != len(set(header_row))):
         return ["Header không đúng định dạng mẫu, vui lòng tải file mẫu mới nhất."], []
 
     paper_type_map = {p.name.lower(): p for p in AdmPaperType.objects.all()}
@@ -1476,24 +1475,30 @@ def _parse_paper_rows(ws, request_user):
     errors = []
     rows_data = []
 
-    for idx, row in enumerate(ws.iter_rows(min_row=2), start=2):
-        values = [cell.value for cell in row]
-        (
-            number_full,
-            paper_type_name,
-            region,
-            requested_dept_name,
-            internal_dept_name,
-            responsible,
-            summary,
-            courier_name,
-            tracking_code,
-            status_text,
-            note,
-            created_str,
-        ) = values
+    for idx, values in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+        if all(value is None or (isinstance(value, str) and not value.strip()) for value in values):
+            continue
+        columns = dict(zip(header_row, values))
+        number_full = columns.get("số hiệu (để trống nếu muốn hệ thống sinh)")
+        paper_type_name = columns.get("loại giấy")
+        region = columns.get("miền")
+        requested_dept_name = columns.get("phòng giao dịch")
+        internal_dept_name = columns.get("phòng ban nội bộ")
+        responsible = columns.get("người phụ trách")
+        summary = columns.get("nội dung")
+        courier_name = columns.get("đơn vị cpn")
+        tracking_code = columns.get("mã vận đơn")
+        ticket_value = columns.get("mã ticket")
+        ticket_code = str(ticket_value).strip() if ticket_value is not None else ""
+        status_text = columns.get("tình trạng")
+        note = columns.get("ghi chú")
+        created_str = columns.get("ngày tạo (yyyy-mm-dd)")
 
         row_errors = []
+        if any(value is not None and str(value).strip() for value in values[len(header_row):]):
+            row_errors.append("Có dữ liệu ở cột không có tiêu đề.")
+        if len(ticket_code) > AdmPaperDocument._meta.get_field("ticket_code").max_length:
+            row_errors.append("Mã Ticket không được vượt quá 200 ký tự.")
 
         pt_key = str(paper_type_name).strip().lower() if paper_type_name else ""
         paper_type = paper_type_map.get(pt_key)
@@ -1558,6 +1563,7 @@ def _parse_paper_rows(ws, request_user):
                 "summary": summary_text,
                 "courier_id": courier.id if courier else None,
                 "tracking_code": str(tracking_code).strip() if tracking_code else None,
+                "ticket_code": ticket_code,
                 "status": str(status_text).strip() if status_text else "",
                 "note": str(note).strip() if note else "",
                 "created_date": created_date,
@@ -1632,7 +1638,12 @@ def _parcel_department_leaf(department_full):
 
 
 def _parse_parcel_recipient_workbook(file_path):
-    workbook = load_workbook(file_path, data_only=True)
+    # Own the file handle so Windows can release the uploaded snapshot immediately.
+    if hasattr(file_path, "read"):
+        workbook = load_workbook(file_path, data_only=True)
+    else:
+        with open(file_path, "rb") as source:
+            workbook = load_workbook(source, data_only=True)
     worksheet = workbook[workbook.sheetnames[0]]
     merged_lookup = {}
     for cell_range in worksheet.merged_cells.ranges:
@@ -1747,6 +1758,7 @@ def _parse_parcel_recipient_workbook(file_path):
     }
 
 
+@transaction.atomic
 def _activate_parcel_recipient_batch(batch):
     AdmParcelRecipientImportBatch.objects.filter(is_current=True).exclude(
         pk=batch.pk
@@ -1756,6 +1768,7 @@ def _activate_parcel_recipient_batch(batch):
     batch.save(update_fields=["is_current", "activated_at", "updated_at"])
 
 
+@transaction.atomic
 def _import_parcel_recipient_batch(batch):
     parsed = _parse_parcel_recipient_workbook(batch.file.path)
     rows = parsed["rows"]
@@ -3700,21 +3713,21 @@ def document_list_export(request):
 
 def _paper_document_queryset(request):
     values = {key: request.GET.get(key, "").strip() for key in
-              ("q", "paper_type", "region", "status", "requested_department")}
+              ("q", "paper_type", "region", "requested_department")}
     qs = AdmPaperDocument.objects.select_related(
         "paper_type", "requested_department", "department", "courier_company", "created_by", "updated_by"
     ).filter(is_deleted=False)
     if values["q"]:
         qs = qs.filter(Q(document_number_full__icontains=values["q"]) |
-                       Q(courier_tracking_code__icontains=values["q"]) | Q(summary__icontains=values["q"]))
+                       Q(courier_tracking_code__icontains=values["q"]) | Q(summary__icontains=values["q"]) |
+                       Q(ticket_code__icontains=values["q"]))
     for key in ("paper_type", "requested_department"):
         if values[key].isdecimal() and len(values[key]) <= 18:
             qs = qs.filter(**{f"{key}_id": values[key]})
         elif values[key]:
             values[key] = ""
-    for key in ("region", "status"):
-        if values[key]:
-            qs = qs.filter(**{key: values[key]})
+    if values["region"]:
+        qs = qs.filter(region=values["region"])
     qs, date_values = _administrative_document_date_filters(qs, request, include_issue_date=False)
     values.update({key: value for key, value in date_values.items() if key != "issue_date"})
     sort_map = {"code": "document_number_full", "running": "running_number", "type": "paper_type__name",
@@ -3787,7 +3800,6 @@ def paper_document_list(request):
         **filters, "documents": documents, "paginator": paginator, "form": form,
         "paper_types": AdmPaperType.objects.all().order_by("name"),
         "region_options": [{"pk": value, "name": value} for value in choices_qs.exclude(region__isnull=True).exclude(region="").values_list("region", flat=True).distinct().order_by("region")],
-        "status_options": [{"pk": value, "name": value} for value in choices_qs.exclude(status__isnull=True).exclude(status="").values_list("status", flat=True).distinct().order_by("status")],
         "shop_options": [{"pk": shop.pk, "name": shop.shop_name} for shop in form.fields["requested_department"].queryset],
         "sort": sort, "dir": direction, "filter_query": urlencode(query_values),
         "list_query": urlencode({**query_values, "sort": sort, "dir": direction}),
@@ -3932,6 +3944,7 @@ def paper_document_import(request):
                 summary=item["summary"],
                 courier_company_id=item["courier_id"],
                 courier_tracking_code=item["tracking_code"],
+                ticket_code=item.get("ticket_code", ""),
                 status=item["status"],
                 note=item["note"],
                 created_by=request.user,
@@ -3952,20 +3965,7 @@ def paper_document_template(request):
     wb = Workbook()
     ws = wb.active
     ws.title = "Template"
-    headers = [
-        "Số hiệu (để trống nếu muốn hệ thống sinh)",
-        "Loại giấy",
-        "Miền",
-        "Phòng giao dịch",
-        "Phòng ban nội bộ",
-        "Người phụ trách",
-        "Nội dung",
-        "Đơn vị CPN",
-        "Mã vận đơn",
-        "Tình trạng",
-        "Ghi chú",
-        "Ngày tạo (yyyy-mm-dd)",
-    ]
+    headers = PAPER_IMPORT_HEADERS
     ws.append(headers)
 
     sample = AdmPaperDocument.objects.select_related(
@@ -3983,7 +3983,7 @@ def paper_document_template(request):
                 sample.summary or "",
                 sample.courier_company.name if sample.courier_company_id else "",
                 sample.courier_tracking_code or "",
-                sample.status or "",
+                sample.ticket_code or "",
                 sample.note or "",
                 sample.created_at.date().isoformat(),
             ]
@@ -4000,7 +4000,7 @@ def paper_document_template(request):
                 "Nội dung ví dụ",
                 "VNPost",
                 "ABC123456",
-                "Đang chờ",
+                "TICKET-001",
                 "Ghi chú ví dụ",
                 date.today().isoformat(),
             ]
@@ -4080,6 +4080,7 @@ def paper_document_import_commit(request):
                 summary=item["summary"],
                 courier_company_id=item["courier_id"],
                 courier_tracking_code=item["tracking_code"],
+                ticket_code=item.get("ticket_code", ""),
                 status=item["status"],
                 note=item["note"],
                 created_by=request.user,

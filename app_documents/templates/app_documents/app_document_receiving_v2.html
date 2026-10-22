@@ -26,6 +26,13 @@
     box-shadow: inset 0 -1px 0 #e5e7eb;
   }
   .filter-input { height: 34px; }
+  .filter-bar form > div { min-width: 0; } /* các cột 1fr co đều, không bị nội dung ô ngày làm rộng ra */
+  /* Ô ngày và ô nhập chữ trong thanh lọc: cùng kiểu với droplist của bộ kit */
+  .filter-bar .filter-input, .filter-bar label.relative {
+    min-height: 34px; background: var(--ui-surface) !important; border-color: var(--ui-border) !important; border-radius: var(--ui-radius-input) !important;
+  }
+  .filter-bar .filter-input:hover, .filter-bar label.relative:hover { border-color: var(--ui-border-strong) !important; }
+  .filter-bar .filter-input:focus-within, .filter-bar label.relative:focus-within { border-color: var(--ui-primary) !important; outline: 2px solid var(--ui-focus-ring); }
   /* Flatpickr size to match PGD dropdown */
   .flatpickr-calendar { font-size: 10px; }
   .flatpickr-calendar .flatpickr-day { height: 26px; line-height: 26px; width: 32px; }
@@ -67,87 +74,52 @@
 
 <div class="receiving-shell max-w-7xl lg:max-w-8xl xl:max-w-[1400px] 2xl:max-w-[1600px] mx-auto px-2 pt-5 lg:px-3 flex flex-col gap-4">
   <div class="filter-bar rounded-2xl border border-gray-100 bg-white shadow-sm p-3 flex-shrink-0">
-    <form id="filter-form" method="get" action="{% url 'receiving_transaction_v2' %}" x-data="{ showMore: false }" class="grid lg:grid-cols-[2fr,1fr,1fr,1fr,1fr,auto] gap-3 items-center">
+    <form id="filter-form" method="get" action="{% url 'receiving_transaction_v2' %}" x-data="{ showMore: false }" class="grid lg:grid-cols-[1.6fr,1.35fr,1.35fr,1fr,1fr,auto] gap-3 items-center">
       <input type="hidden" name="sort" value="{{ sort_param }}">
       <div class="relative">
         {% with filters.choice_shop|default_if_none:'' as shop_value %}
-        <div class="relative" x-data="{ open: false, searchText: '{{ shop_value|escapejs }}', selected: '{{ shop_value|escapejs }}' }">
-          <input type="hidden" id="choice-shop" name="choice_shop" x-model="selected">
-          <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
-            <span class="text-gray-700 text-[10px]" x-text="selected || 'Phòng giao dịch'"></span>
-            <span class="text-gray-400 text-xs">▾</span>
-          </button>
-          <div x-cloak x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
-            <div class="flex items-center gap-2">
-              <input type="text" x-model="searchText" class="w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Tìm phòng giao dịch">
-              <button type="button" @click="searchText=''; selected=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm2.707-10.707a1 1 0 00-1.414-1.414L10 7.586 8.707 6.293a1 1 0 00-1.414 1.414L8.586 9l-1.293 1.293a1 1 0 101.414 1.414L10 10.414l1.293 1.293a1 1 0 001.414-1.414L11.414 9l1.293-1.293z" clip-rule="evenodd"/>
-                </svg>
-              </button>
-            </div>
-            <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
-              {% for shop in drop_list_shops %}
-              <button type="button" x-show="!searchText || '{{ shop.shop_name|escapejs }}'.toLowerCase().includes(searchText.toLowerCase())" @click="selected='{{ shop.shop_name }}'; searchText='{{ shop.shop_name }}'; open=false" class="w-full text-left px-2 py-2 hover:bg-emerald-50">
-                <div class="font-semibold text-gray-900">{{ shop.shop_name }}</div>
-                <div class="text-gray-500 text-[9px]">Mã: {{ shop.shop_code }}</div>
-              </button>
-              {% endfor %}
-            </div>
-          </div>
+        <div class="ui-select" data-ui-select data-limit="800" data-placeholder="Phòng giao dịch" data-search-placeholder="Tìm tên hoặc mã phòng giao dịch…">
+          <select id="choice-shop" name="choice_shop" aria-label="Phòng giao dịch">
+            <option value="">Phòng giao dịch</option>
+            {% for shop in drop_list_shops %}
+            <option value="{{ shop.shop_name }}" {% if shop_value == shop.shop_name %}selected{% endif %}>{{ shop.shop_name }} · {{ shop.shop_code }}</option>
+            {% endfor %}
+          </select>
         </div>
         {% endwith %}
       </div>
-      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
-        <input id="filter-folder-date" name="filter_folder_date" value="{% if request.GET.filter_folder_date %}{{ request.GET.filter_folder_date }}{% endif %}" placeholder="Chọn ngày phát sinh" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" readonly />
+      <div class="relative">
+        <div class="ui-date" data-ui-date data-mode="range" data-max-days="30" data-shortcuts="today,7,30,month" data-max-days-text="Chỉ cho phép tìm trong tối đa 30 ngày.">
+          <input id="filter-folder-date" name="filter_folder_date" value="{% if request.GET.filter_folder_date %}{{ request.GET.filter_folder_date }}{% endif %}" placeholder="Chọn ngày phát sinh" aria-label="Ngày phát sinh">
+        </div>
       </div>
-      <div class="relative flex items-center rounded-xl border border-gray-200 bg-gray-50 px-2 py-0 focus-within:border-emerald-500 filter-input">
-        <input id="filter-receive-date" name="filter_receive_date" value="{% if request.GET.filter_receive_date %}{{ request.GET.filter_receive_date }}{% endif %}" placeholder="Chọn ngày nhận" class="w-full h-full text-[10px] bg-transparent border-0 ring-0 outline-none" readonly />
+      <div class="relative">
+        <div class="ui-date" data-ui-date data-mode="range" data-max-days="30" data-shortcuts="today,7,30,month" data-max-days-text="Chỉ cho phép tìm trong tối đa 30 ngày.">
+          <input id="filter-receive-date" name="filter_receive_date" value="{% if request.GET.filter_receive_date %}{{ request.GET.filter_receive_date }}{% endif %}" placeholder="Chọn ngày nhận" aria-label="Ngày nhận">
+        </div>
       </div>
       {% with filters.choice_folder_status|default_if_none:'' as status_value %}
       <div class="relative">
-        <div class="relative" x-data="{
-          open: false,
-          selected: '{{ status_value|escapejs }}',
-          statuses: [
+        <div class="ui-select" data-ui-select data-search="off" data-placeholder="Tất cả trạng thái">
+          <select id="choice-folder-status" name="choice_folder_status" aria-label="Trạng thái">
+            <option value="">Tất cả trạng thái</option>
             {% for folderstatus in drop_list_folder_status %}
-            { id: '{{ folderstatus.folder_status_id }}', name: '{{ folderstatus.folder_status_name|escapejs }}' }{% if not forloop.last %},{% endif %}
+            <option value="{{ folderstatus.folder_status_id }}" {% if status_value|stringformat:"s" == folderstatus.folder_status_id|stringformat:"s" %}selected{% endif %}>{{ folderstatus.folder_status_name }}</option>
             {% endfor %}
-          ],
-          label(val) {
-            if (!val) return 'Tìm theo trạng thái';
-            const found = this.statuses.find(s => s.id.toString() === val.toString());
-            return found ? found.name : 'Tìm theo trạng thái';
-          }
-        }">
-          <input type="hidden" id="choice-folder-status" name="choice_folder_status" x-model="selected">
-          <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
-            <span class="text-gray-700 text-[10px]" x-text="label(selected)"></span>
-            <span class="text-gray-400 text-xs">▾</span>
-          </button>
-          <div x-cloak x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-1 text-[10px]">
-            <button type="button" @click="selected=''; open=false" class="w-full text-left px-2 py-2 rounded hover:bg-emerald-50 text-gray-700">Tất cả</button>
-            <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
-              {% for folderstatus in drop_list_folder_status %}
-              <button type="button" @click="selected='{{ folderstatus.folder_status_id }}'; open=false" class="w-full text-left px-2 py-2 hover:bg-emerald-50">
-                {{ folderstatus.folder_status_name }}
-              </button>
-              {% endfor %}
-            </div>
-          </div>
+          </select>
         </div>
       </div>
       {% endwith %}
       {% with filters.choice_folder_type|default_if_none:'' as type_value %}
       <div class="relative">
-        <select name="choice_folder_type" class="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-[10px] text-gray-700 focus:border-emerald-500 focus:outline-none focus:ring-0">
-          <option value="">Tìm loại quyển</option>
-          {% for foldertype in drop_list_folder_type %}
-          <option value="{{ foldertype.folder_type_id }}" {% if type_value|stringformat:"s" == foldertype.folder_type_id|stringformat:"s" %}selected{% endif %}>
-            {{ foldertype.folder_type_name }}
-          </option>
-          {% endfor %}
-        </select>
+        <div class="ui-select" data-ui-select data-search="off" data-placeholder="Tất cả loại quyển">
+          <select name="choice_folder_type" aria-label="Loại quyển">
+            <option value="">Tất cả loại quyển</option>
+            {% for foldertype in drop_list_folder_type %}
+            <option value="{{ foldertype.folder_type_id }}" {% if type_value|stringformat:"s" == foldertype.folder_type_id|stringformat:"s" %}selected{% endif %}>{{ foldertype.folder_type_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
       </div>
       {% endwith %}
       <div class="flex items-center gap-2">
@@ -160,50 +132,24 @@
           <span id="bulk-receive-count" class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-white/20 text-[9px] font-semibold">0</span>
         </button>
       </div>
-      <div x-cloak class="lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" x-show="showMore">
+      <div x-cloak class="lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" x-show="showMore">
         <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
           <input name="choice_folder_code" value="{% if request.GET.choice_folder_code %}{{ request.GET.choice_folder_code }}{% endif %}" placeholder="Tìm theo mã quyển" class="w-full bg-transparent focus:outline-none text-[10px]" />
         </label>
-        <div class="relative" x-data="{ open: false, search: '{{ filters.choice_lastest_receiver|default_if_none:'' }}' }">
-          <input type="hidden" name="choice_lastest_receiver" x-model="search">
-          <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
-            <span class="text-gray-700 text-[10px]" x-text="search || 'Tìm người nhận'"></span>
-            <span class="text-gray-400 text-xs">▾</span>
-          </button>
-          <div x-cloak x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
-            <div class="flex items-center gap-2">
-              <input type="text" x-model="search" class="w-full rounded-lg border border-gray-200 px-2 py-1 focus:border-emerald-500 focus:outline-none" placeholder="Nhập username">
-              <button type="button" @click="search=''" class="text-gray-400 hover:text-emerald-600 text-xs flex items-center justify-center rounded-full w-6 h-6 border border-gray-200 hover:border-emerald-500">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm2.707-10.707a1 1 0 00-1.414-1.414L10 7.586 8.707 6.293a1 1 0 00-1.414 1.414L8.586 9l-1.293 1.293a1 1 0 101.414 1.414L10 10.414l1.293 1.293a1 1 0 001.414-1.414L11.414 9l1.293-1.293z" clip-rule="evenodd"/>
-                </svg>
-              </button>
-            </div>
-            <div class="max-h-56 overflow-y-auto divide-y divide-gray-100">
-              {% for u in drop_list_users %}
-              <button type="button"
-                      x-show="!search || '{{ u.username|escapejs }}'.toLowerCase().includes(search.toLowerCase()) || '{{ u.last_name|default_if_none:''|escapejs }} {{ u.first_name|default_if_none:''|escapejs }}'.toLowerCase().includes(search.toLowerCase())"
-                      @click="search='{{ u.username }}'; open=false"
-                      class="w-full text-left px-2 py-2 hover:bg-emerald-50">
-                <div class="font-semibold text-gray-900">
-                  {% if u.last_name or u.first_name %}
-                    {{ u.last_name }} {{ u.first_name }}
-                  {% else %}
-                    {{ u.username }}
-                  {% endif %}
-                </div>
-                <div class="text-gray-500 text-[9px]">{{ u.username }}</div>
-              </button>
-              {% endfor %}
-            </div>
-          </div>
+        <div class="ui-select" data-ui-select data-limit="800" data-placeholder="Người nhận" data-search-placeholder="Nhập tên hoặc username…">
+          <select name="choice_lastest_receiver" aria-label="Người nhận">
+            <option value="">Người nhận</option>
+            {% for u in drop_list_users %}
+            <option value="{{ u.username }}" {% if filters.choice_lastest_receiver == u.username %}selected{% endif %}>{% if u.last_name or u.first_name %}{{ u.last_name }} {{ u.first_name }} · {{ u.username }}{% else %}{{ u.username }}{% endif %}</option>
+            {% endfor %}
+          </select>
         </div>
-        <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
-          <input name="filter_package" value="{% if request.GET.filter_package %}{{ request.GET.filter_package }}{% endif %}" placeholder="Tìm theo mã thùng F88" class="w-full bg-transparent focus:outline-none text-[10px]" />
-        </label>
-        <label class="relative flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 bg-gray-50 focus-within:border-emerald-500">
-          <input name="filter_partner_package" value="{% if request.GET.filter_partner_package %}{{ request.GET.filter_partner_package }}{% endif %}" placeholder="Tìm theo mã thùng đối tác" class="w-full bg-transparent focus:outline-none text-[10px]" />
-        </label>
+        <div class="ui-combobox" data-ui-combobox data-free data-name="filter_package" data-value="{{ request.GET.filter_package|default:'' }}"
+             data-source="{% url 'package_code_suggest' %}" data-title-key="label" data-label-key="label" data-meta-keys="meta"
+             data-placeholder="Tìm theo mã thùng F88" data-clear-label="Xóa mã thùng" data-delay="200"></div>
+        <div class="ui-combobox" data-ui-combobox data-free data-name="filter_partner_package" data-value="{{ request.GET.filter_partner_package|default:'' }}"
+             data-source="{% url 'partner_package_code_suggest' %}" data-title-key="label" data-label-key="label" data-meta-keys="meta"
+             data-placeholder="Tìm theo mã thùng đối tác" data-clear-label="Xóa mã thùng đối tác" data-delay="200"></div>
       </div>
     </form>
   </div>
@@ -385,7 +331,7 @@
         <div class="relative">
           <button type="button" id="drawer-issue-btn" class="w-full flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px] text-gray-700 focus:border-emerald-500">
             <span>Chọn trạng thái lỗi</span>
-            <span class="text-gray-400 text-[10px]">▾</span>
+            <span class="ui-select-arrow" aria-hidden="true"></span>
           </button>
           <div id="drawer-issue-dropdown" class="hidden absolute z-30 mt-2 w-full rounded-xl border border-gray-200 bg-white shadow-lg p-2">
             <div class="text-[9px] text-gray-500 mb-2">Chọn ít nhất 1 trạng thái</div>
@@ -421,12 +367,14 @@
         </div>
         <div>
           <label class="block text-[9px] text-gray-500 mb-1">Trạng thái nhận</label>
-          <select id="drawer-status-select" class="drawer-input-sm w-full rounded-lg border border-gray-200 px-3 py-1 text-[9px] bg-white focus:border-emerald-500 focus:outline-none">
+          <div class="ui-select ui-select-sm" data-ui-select data-search="off">
+          <select id="drawer-status-select">
             <option value="">Chọn trạng thái</option>
             {% for st in drop_list_folder_status_received %}
             <option value="{{ st.folder_status_id }}">{{ st.folder_status_name }}</option>
             {% endfor %}
           </select>
+          </div>
         </div>
       </div>
       <div>
@@ -479,12 +427,14 @@
           <p class="text-[9px] uppercase text-gray-500">Cập nhật nhận</p>
           <div>
             <label class="block text-[9px] text-gray-500 mb-1">Trạng thái nhận bổ sung</label>
-            <select name="additional_folder_status_submit" id="drawer-additional-status" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-white focus:border-emerald-500 focus:outline-none">
+            <div class="ui-select" data-ui-select data-search="off">
+            <select name="additional_folder_status_submit" id="drawer-additional-status">
               <option value="">Chọn trạng thái</option>
               {% for st in drop_list_folder_status_received %}
               <option value="{{ st.folder_status_id }}">{{ st.folder_status_name }}</option>
               {% endfor %}
             </select>
+            </div>
           </div>
           <div>
             <label class="block text-[9px] text-gray-500 mb-1">Ngày nhận thực tế</label>
@@ -966,6 +916,7 @@
     }
     if (statusSelect) {
       statusSelect.value = tr.dataset.statusId || '';
+      window.uiSelect?.refresh(statusSelect);
     }
     if (additionalShop) {
       additionalShop.value = tr.dataset.shop || '';
@@ -977,7 +928,7 @@
       const tmpl = additionalForm.dataset.actionTemplate || '/receiving_additional_view/0/';
       additionalForm.action = tmpl.replace('/0/', `/${activeFolderId}/`);
     }
-    if (additionalStatus) additionalStatus.value = '';
+    if (additionalStatus) { additionalStatus.value = ''; window.uiSelect?.refresh(additionalStatus); }
     if (additionalPackage) additionalPackage.value = '';
     if (additionalNote) additionalNote.value = '';
     if (drawerAdditionalPicker) {
@@ -1214,7 +1165,7 @@
   filterForm?.addEventListener('submit', (e) => {
     if (!shopHiddenInput || !shopHiddenInput.value.trim()) {
       e.preventDefault();
-      alert('Vui lòng chọn Phòng giao dịch.');
+      window.uiToast ? uiToast.warning('Vui lòng chọn Phòng giao dịch.') : alert('Vui lòng chọn Phòng giao dịch.');
       return;
     }
     const receiveVal = receiveDateInput?.value || '';
@@ -1225,17 +1176,7 @@
     }
   });
 
-  // Date range pickers (Flatpickr) - single input range
-  const initFlatRange = (el) => {
-    if (!el || !window.flatpickr) return;
-    flatpickr(el, {
-      mode: 'range',
-      dateFormat: 'Y-m-d',
-      allowInput: false,
-    });
-  };
-  initFlatRange(folderDateInput);
-  initFlatRange(receiveDateInput);
+  // Hai ô khoảng ngày của thanh lọc dùng component Date (ui-date): giới hạn 30 ngày đã nằm trong data-max-days.
 
   if (receiveInput && window.flatpickr) {
     drawerReceivePicker = flatpickr(receiveInput, {
@@ -1508,12 +1449,14 @@
       </div>
       <div>
         <label class="block text-[10px] font-semibold text-gray-700 mb-1">Trạng thái nhận</label>
-        <select id="bulk-status-select" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0">
+        <div class="ui-select" data-ui-select data-search="off">
+        <select id="bulk-status-select">
           <option value="">Chọn trạng thái nhận</option>
           {% for st in drop_list_folder_status_received %}
           <option value="{{ st.folder_status_id }}">{{ st.folder_status_name }}</option>
           {% endfor %}
         </select>
+        </div>
       </div>
       <div>
         <label class="block text-[10px] font-semibold text-gray-700 mb-1">Ngày nhận thực tế</label>
@@ -1528,7 +1471,7 @@
         <div class="relative">
           <button type="button" id="bulk-issue-btn" class="w-full flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-[9px] text-gray-700 focus:border-emerald-500">
             <span>Chọn trạng thái lỗi</span>
-            <span class="text-gray-400 text-[10px]">▾</span>
+            <span class="ui-select-arrow" aria-hidden="true"></span>
           </button>
           <div id="bulk-issue-dropdown" class="hidden absolute z-30 mt-2 w-full rounded-xl border border-gray-200 bg-white shadow-lg p-2">
             <div class="text-[9px] text-gray-500 mb-2">Chọn ít nhất 1 trạng thái</div>
@@ -1817,19 +1760,23 @@
     <div class="p-4 space-y-4 text-[9px]">
       <div>
         <label class="block text-[10px] font-semibold text-gray-700 mb-1">Loại thùng</label>
-        <select id="create-package-type-v2" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0">
+        <div class="ui-select" data-ui-select>
+        <select id="create-package-type-v2">
           <option value="">Chọn loại thùng</option>
           {% for pt in package_types %}
           <option value="{{ pt.folder_type_id }}" data-package-type="{{ pt.package_type }}">{{ pt.folder_type_name }} ({{ pt.package_type }})</option>
           {% endfor %}
         </select>
+        </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label class="block text-[10px] font-semibold text-gray-700 mb-1">Mã kho (vùng)</label>
-          <select id="create-package-region-v2" class="w-full h-[34px] rounded-lg border border-gray-200 px-3 py-2 text-[9px] leading-[18px] focus:border-emerald-500 focus:ring-0" disabled>
+          <div class="ui-select" data-ui-select>
+          <select id="create-package-region-v2" disabled>
             <option value="">Chọn mã kho</option>
           </select>
+          </div>
         </div>
         <div>
           <label class="block text-[10px] font-semibold text-gray-700 mb-1">Ngày tạo thùng</label>
@@ -1851,12 +1798,14 @@
       </div>
       <div>
         <label class="block text-[10px] font-semibold text-gray-700 mb-1">Đối tác</label>
-        <select id="create-partner-v2" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0">
+        <div class="ui-select" data-ui-select>
+        <select id="create-partner-v2">
           <option value="">Chọn đối tác</option>
           {% for partner in partners_active %}
           <option value="{{ partner.partner_id }}" data-require-code="{{ partner.require_partner_code|yesno:'1,0' }}">{{ partner.partner_name }}</option>
           {% endfor %}
         </select>
+        </div>
       </div>
       <div>
         <label class="block text-[10px] font-semibold text-gray-700 mb-1">Mã thùng đối tác</label>

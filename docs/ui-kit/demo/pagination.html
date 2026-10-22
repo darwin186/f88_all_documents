@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI Kit — Paginator</title>
+<link rel="stylesheet" href="../../../static/css/ui-kit.css">
+<style>
+  body { margin: 0; padding: 24px; background: var(--ui-surface-subtle); color: var(--ui-text); font: 400 11px/1.5 Inter, "SF Pro Text", Arial, sans-serif; }
+  main { max-width: 1050px; margin: auto; }
+  h1 { margin: 0 0 6px; font-size: 18px; font-weight: 600; }
+  .lead { margin: 0 0 20px; max-width: 660px; color: var(--ui-text-muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+  .card { min-width: 0; padding: 16px; border: 1px solid var(--ui-border); border-radius: 16px; background: var(--ui-surface); }
+  .card h2 { margin: 0 0 4px; font-size: 12px; font-weight: 600; }
+  .card > p { margin: 0 0 16px; color: var(--ui-text-muted); }
+  .live { margin-bottom: 16px; }
+  .toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+  .toolbar h2 { margin: 0; } .toolbar label { color: var(--ui-text-muted); }
+  #live-count { font: inherit; color: var(--ui-text); border: 1px solid var(--ui-border-strong); border-radius: 6px; padding: 5px 7px; background: var(--ui-surface); }
+  .table-wrap { overflow: auto; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: left; }
+  th { background: var(--ui-surface-muted); color: var(--ui-text-muted); font-size: 10px; font-weight: 600; }
+  th, td { padding: 10px 12px; border-bottom: 1px solid var(--ui-border); white-space: nowrap; }
+  tbody tr:nth-child(even) { background: var(--ui-surface-muted); }
+  .hint { margin-top: 16px; color: var(--ui-text-muted); font-size: 10px; }
+  code { font-size: 10px; }
+  @media (max-width: 480px) { body { padding: 16px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Paginator — Phân trang</h1>
+  <p class="lead">Nút vuông gọn, viền rõ, trang đang chọn màu xanh F88. Tối đa 5 số trang, giữ cách phân trang của Giấy hành chính. Các ví dụ bên dưới có thể bấm thử.</p>
+  <section class="card live">
+    <div class="toolbar"><h2>Danh sách giấy hành chính · dữ liệu minh họa</h2><label for="live-count">Dữ liệu <select id="live-count"><option value="50">50 kết quả</option><option value="3">3 kết quả</option><option value="0">Không có kết quả</option></select></label></div>
+    <div class="table-wrap"><table><thead><tr><th>STT</th><th>Số hiệu</th><th>Nội dung</th><th>Mã Ticket</th></tr></thead><tbody id="live-rows"></tbody></table></div>
+    <div id="live-pager" data-demo-pager data-total="50" data-per-page="5" data-page="1" data-summary="true" data-label="Phân trang giấy hành chính minh họa"></div>
+    <p class="hint" id="live-status" role="status" aria-live="polite"></p>
+  </section>
+  <div class="grid">
+    <section class="card"><h2>1. Cỡ nhỏ · 28px</h2><p>Dùng trong toolbar bảng, cùng cỡ Giấy hành chính.</p><div data-demo-pager data-total="250" data-per-page="25" data-page="1" data-label="Ví dụ cỡ nhỏ"></div></section>
+    <section class="card"><h2>2. Giữa danh sách</h2><p>Giữ trang đầu, cuối và các trang lân cận.</p><div data-demo-pager data-total="250" data-per-page="25" data-page="5" data-label="Ví dụ giữa danh sách"></div></section>
+    <section class="card"><h2>3. Cuối danh sách</h2><p>Trang sau bị vô hiệu hóa khi đã ở trang cuối.</p><div data-demo-pager data-total="250" data-per-page="25" data-page="10" data-label="Ví dụ cuối danh sách"></div></section>
+    <section class="card"><h2>4. Cỡ vừa · 32px</h2><p>Tăng diện tích thao tác với <code>ui-pagination-md</code>.</p><div data-demo-pager data-total="250" data-per-page="25" data-page="4" data-size="md" data-label="Ví dụ cỡ vừa"></div></section>
+    <section class="card"><h2>5. Một trang</h2><p>Giữ trang 1 và hai mũi tên bị vô hiệu hóa.</p><div data-demo-pager data-total="12" data-per-page="25" data-page="1" data-summary="true" data-label="Ví dụ một trang"></div></section>
+    <section class="card"><h2>6. Chưa có dữ liệu</h2><p>Không tạo liên kết đến trang không tồn tại.</p><div data-demo-pager data-total="0" data-per-page="25" data-page="1" data-summary="true" data-label="Ví dụ dữ liệu rỗng"></div></section>
+  </div>
+  <p class="hint">Tab để di chuyển, Enter để chuyển trang. Bản dùng thật: <code>{% include 'components/ui_pagination.html' with page=documents %}</code>. Demo dùng dữ liệu tại chỗ; không gọi API.</p>
+</main>
+<script>
+  // Chỉ mô phỏng dữ liệu trong demo. Template Django dùng liên kết GET thật, không cần JS.
+  const numbers = (current, total) => total <= 5 ? Array.from({length: total}, (_, i) => i + 1)
+    : current <= 3 ? [1, 2, 3, total - 1, total]
+    : current >= total - 2 ? [1, 2, total - 2, total - 1, total]
+    : [1, current - 1, current, current + 1, total];
+  function render(host, focusNumber = null) {
+    const count = Number(host.dataset.total), perPage = Number(host.dataset.perPage);
+    const total = Math.max(1, Math.ceil(count / perPage));
+    const current = Math.max(1, Math.min(total, Number(host.dataset.page)));
+    host.dataset.page = current;
+    const nav = document.createElement('nav');
+    nav.className = 'ui-pagination' + (host.dataset.size === 'md' ? ' ui-pagination-md' : '');
+    nav.setAttribute('aria-label', host.dataset.label);
+    if (host.dataset.summary === 'true') {
+      const summary = document.createElement('span'); summary.className = 'ui-pagination-summary';
+      summary.textContent = count ? `${(current - 1) * perPage + 1}–${Math.min(current * perPage, count)} / ${count} kết quả` : '0 kết quả';
+      nav.append(summary);
+    }
+    const links = document.createElement('div'); links.className = 'ui-pagination-links';
+    function add(text, target, label, arrow = false, disabled = false, active = false) {
+      const element = document.createElement(disabled || active ? 'span' : 'a');
+      element.className = 'ui-pagination-item' + (arrow ? ' ui-pagination-arrow' : '');
+      element.textContent = text; element.setAttribute('aria-label', label);
+      if (disabled) element.setAttribute('aria-disabled', 'true');
+      else if (active) element.setAttribute('aria-current', 'page');
+      else { element.href = `?page=${target}`; element.dataset.page = target; if (arrow) element.rel = target < current ? 'prev' : 'next'; }
+      links.append(element);
+    }
+    add('‹', current - 1, 'Trang trước', true, current === 1);
+    numbers(current, total).forEach(n => add(n, n, `Trang ${n}`, false, false, n === current));
+    add('›', current + 1, 'Trang sau', true, current === total);
+    nav.append(links); host.replaceChildren(nav);
+    if (focusNumber !== null) {
+      const options = [...links.querySelectorAll('a')];
+      (options.find(link => link.dataset.page === String(focusNumber)) || options[0])?.focus({preventScroll: true});
+    }
+    if (host.id === 'live-pager') {
+      const body = document.getElementById('live-rows'); body.replaceChildren();
+      for (let i = (current - 1) * perPage; i < Math.min(current * perPage, count); i++) {
+        const row = document.createElement('tr');
+        [i + 1, `${i + 1}/2026/GGT`, 'Giấy giới thiệu liên hệ công tác', `TICKET-${String(i + 1).padStart(3, '0')}`].forEach(text => { const cell = document.createElement('td'); cell.textContent = text; row.append(cell); });
+        body.append(row);
+      }
+      if (!count) { const row = document.createElement('tr'), cell = document.createElement('td'); cell.colSpan = 4; cell.textContent = 'Chưa có giấy hành chính.'; row.append(cell); body.append(row); }
+      document.getElementById('live-status').textContent = `Trang ${current} / ${total} · ${count} kết quả`;
+    }
+  }
+  document.querySelectorAll('[data-demo-pager]').forEach(host => {
+    render(host);
+    host.addEventListener('click', event => {
+      const link = event.target.closest('a[data-page]');
+      if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
+      event.preventDefault();
+      const keyboard = event.detail === 0;
+      const old = Number(host.dataset.page), target = Number(link.dataset.page);
+      host.dataset.page = target;
+      render(host, keyboard ? (target >= old ? target + 1 : target - 1) : null);
+    });
+  });
+  document.getElementById('live-count').addEventListener('change', event => {
+    const host = document.getElementById('live-pager'); host.dataset.total = event.target.value; host.dataset.page = '1'; render(host);
+  });
+</script>
+</body>
+</html>

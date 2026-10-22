@@ -70,6 +70,19 @@
 
 .ui-btn-group { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 
+/* ---- Pagination (phân trang, mẫu Giấy hành chính) — docs/ui-kit/components/pagination.md ---- */
+:root { --ui-text-inverse: #ffffff; }
+.ui-pagination { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; max-width: 100%; color: var(--ui-text); font-size: 11px; }
+.ui-pagination-links { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--ui-pagination-gap, 4px); min-width: 0; max-width: 100%; }
+.ui-pagination-item { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: var(--ui-pagination-size, 28px); height: var(--ui-pagination-size, 28px); padding: 0 5px; border: 2px solid var(--ui-border-strong); border-radius: var(--ui-pagination-radius, 6px); background: var(--ui-surface); color: var(--ui-text); font-family: inherit; font-size: var(--ui-pagination-font-size, 11px); font-weight: 600; line-height: 1; text-decoration: none; font-variant-numeric: tabular-nums; }
+a.ui-pagination-item:hover { border-color: var(--ui-primary); background: var(--ui-primary-soft); color: var(--ui-primary); }
+a.ui-pagination-item:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 2px; }
+.ui-pagination-item[aria-current="page"] { border-color: var(--ui-primary); background: var(--ui-primary); color: var(--ui-text-inverse); font-weight: 700; }
+.ui-pagination-item[aria-disabled="true"] { border-color: var(--ui-border); background: var(--ui-surface-muted); color: var(--ui-disabled-text); cursor: default; }
+.ui-pagination-arrow { font-size: var(--ui-pagination-arrow-size, 16px); }
+.ui-pagination-summary { margin-right: auto; color: var(--ui-text-muted); font-size: 10px; }
+.ui-pagination-md { --ui-pagination-size: 32px; --ui-pagination-gap: 6px; --ui-pagination-radius: 7px; --ui-pagination-font-size: 12px; --ui-pagination-arrow-size: 18px; }
+
 /* ---- Select (droplist có tìm kiếm; 1 hoặc nhiều lựa chọn) — xem docs/ui-kit/components/select.md ---- */
 :root {
   --ui-border: #e5e7eb;
@@ -97,8 +110,22 @@
 .ui-select-toggle.is-invalid { border-color: var(--ui-danger-text); }
 .ui-select-value { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .ui-select-value.is-placeholder { color: var(--ui-disabled-text); }
-.ui-select-arrow { flex: none; width: 6px; height: 6px; margin: -3px 2px 0 0; border: solid var(--ui-text-muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); transition: transform .12s; }
-.ui-select.is-open .ui-select-arrow { transform: rotate(-135deg); margin-top: 3px; }
+.ui-select-arrow {
+  flex: none; width: 20px; height: 20px; box-sizing: border-box; border: 1px solid rgba(17, 24, 39, .1); border-radius: 50%;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%236b7280' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 6l4.5 4.5L12.5 6'/%3E%3C/svg%3E") center / 12px 12px no-repeat;
+  transition: transform .15s, border-color .12s, background-color .12s;
+}
+.ui-select-toggle:hover .ui-select-arrow { border-color: rgba(17, 24, 39, .2); background-color: var(--ui-surface-muted); }
+.ui-select.is-open .ui-select-arrow { transform: rotate(180deg); border-color: var(--ui-primary); background-color: var(--ui-primary-soft); }
+.ui-select-sm .ui-select-arrow { width: 18px; height: 18px; background-size: 11px 11px; }
+
+/* <select> gốc chưa chuyển sang component: cùng mũi tên vòng tròn (chỉ đổi mũi tên, giữ nguyên viền/nền/chữ của từng trang) */
+select:not([multiple]):not([size]):not(.ui-select-native):not(.sr-only):not([hidden]):not([data-ui-select] > select) {
+  -webkit-appearance: none; appearance: none; padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Ccircle cx='10' cy='10' r='9.5' stroke='%23111827' stroke-opacity='.1'/%3E%3Cpath d='M6.3 8.3L10 12l3.7-3.7' stroke='%236b7280' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center; background-size: 20px 20px;
+}
+select:not([multiple]):not([size]):not(.ui-select-native):not(.sr-only):disabled { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Ccircle cx='10' cy='10' r='9.5' stroke='%23111827' stroke-opacity='.06'/%3E%3Cpath d='M6.3 8.3L10 12l3.7-3.7' stroke='%239ca3af' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
 .ui-select-chip { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; padding: 2px 7px; border-radius: 6px; background: var(--ui-primary-soft); color: var(--ui-primary-text); font-size: 10px; font-weight: 600; }
 .ui-select-chip.is-more { background: var(--ui-surface-subtle); color: var(--ui-text-muted); }
 
@@ -146,3 +173,121 @@
 .ui-file-pick svg { width: 15px; height: 15px; }
 .ui-file-error { margin: 4px 0 0; color: var(--ui-danger-text); font-size: 10px; }
 .ui-file-sm { min-height: 28px; }
+
+/* ---- Combobox (tìm kiếm + chọn trong một ô) — xem docs/ui-kit/components/combobox.md ---- */
+.ui-combobox { position: relative; width: 100%; min-width: 0; }
+.ui-combobox [hidden] { display: none !important; }
+.ui-combobox-field { box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 3px 6px 3px 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-input); background: var(--ui-surface); }
+.ui-combobox-field:hover { border-color: var(--ui-border-strong); }
+.ui-combobox.is-open .ui-combobox-field, .ui-combobox-field:focus-within { border-color: var(--ui-primary); outline: 2px solid var(--ui-focus-ring); outline-offset: 0; }
+.ui-combobox.is-invalid .ui-combobox-field { border-color: var(--ui-danger-text); }
+.ui-combobox-icon { flex: none; position: relative; width: 11px; height: 11px; border: 1.5px solid var(--ui-disabled-text); border-radius: 50%; margin-right: 2px; }
+.ui-combobox-icon::after { content: ""; position: absolute; right: -5px; bottom: -4px; width: 5px; height: 1.5px; background: var(--ui-disabled-text); transform: rotate(45deg); }
+.ui-combobox-input { flex: 1; min-width: 0; height: 26px; padding: 0; border: 0; background: transparent; color: var(--ui-text); font-size: 11px; box-shadow: none; outline: none; }
+.ui-combobox-input:focus { outline: none; box-shadow: none; }
+.ui-combobox-input::placeholder { color: var(--ui-disabled-text); }
+.ui-combobox.is-filled .ui-combobox-input { font-weight: 600; }
+.ui-combobox.is-special .ui-combobox-input { color: var(--ui-text-muted); font-style: italic; }
+.ui-combobox-clear { flex: none; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ui-text-muted); font-size: 15px; line-height: 1; cursor: pointer; }
+.ui-combobox-clear:hover { background: var(--ui-surface-subtle); color: var(--ui-text); }
+.ui-combobox-menu { position: absolute; z-index: 60; top: calc(100% + 5px); left: 0; width: 100%; min-width: 260px; padding: 6px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-menu); background: var(--ui-surface); box-shadow: 0 12px 32px rgba(17, 24, 39, .13); font-size: 11px; }
+.ui-combobox.is-up .ui-combobox-menu { top: auto; bottom: calc(100% + 5px); }
+.ui-combobox-status { margin: 0; padding: 8px 10px; color: var(--ui-disabled-text); font-size: 10px; }
+.ui-combobox-options { max-height: 260px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.ui-combobox-option { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 7px; color: var(--ui-text); cursor: pointer; }
+.ui-combobox-option:hover, .ui-combobox-option.is-active { background: var(--ui-surface-subtle); }
+.ui-combobox-main { min-width: 0; }
+.ui-combobox-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-combobox-meta { margin-top: 2px; color: var(--ui-text-muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-combobox-aside { flex: none; max-width: 45%; text-align: right; color: var(--ui-disabled-text); font-size: 10px; line-height: 1.5; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-combobox-special { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; border: 0; border-top: 1px solid var(--ui-border); border-radius: 0 0 7px 7px; background: none; color: var(--ui-text-muted); font-size: 10px; font-weight: 600; text-align: left; cursor: pointer; }
+.ui-combobox-special:hover, .ui-combobox-special.is-active { background: var(--ui-surface-subtle); color: var(--ui-text); }
+.ui-combobox-sm .ui-combobox-field { min-height: 28px; }
+.ui-combobox-sm .ui-combobox-input { height: 20px; }
+
+/* ---- Upload (kéo thả + danh sách tệp, tuỳ chọn chụp ảnh) — xem docs/ui-kit/components/upload.md ---- */
+.ui-upload { box-sizing: border-box; position: relative; display: grid; gap: 8px; width: 100%; min-width: 0; }
+.ui-upload [hidden], .ui-upload-error[hidden] { display: none !important; }
+.ui-upload-native { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; overflow: hidden; }
+.ui-upload-drop { box-sizing: border-box; display: grid; justify-items: center; gap: 4px; padding: 16px 12px; border: 1.5px dashed #a7f3d0; border-radius: 12px; background: #f0fdf9; text-align: center; cursor: pointer; font-size: 11px; color: var(--ui-text); }
+.ui-upload-drop:hover { background: #e7faf3; }
+.ui-upload-drop:focus-visible { outline: 2px solid var(--ui-focus-ring); outline-offset: 2px; }
+.ui-upload.is-over .ui-upload-drop { background: #d1fae5; border-color: var(--ui-primary); }
+.ui-upload.is-invalid .ui-upload-drop { border-color: var(--ui-danger-text); background: var(--ui-danger-soft); }
+.ui-upload.is-full .ui-upload-drop, .ui-upload.is-disabled .ui-upload-drop { cursor: not-allowed; opacity: .6; }
+.ui-upload-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: #d1fae5; color: var(--ui-primary-text); }
+.ui-upload-icon svg { width: 16px; height: 16px; }
+.ui-upload-title { font-size: 11px; } .ui-upload-title u { color: var(--ui-primary-text); text-decoration: none; }
+.ui-upload-hint { color: var(--ui-text-muted); font-size: 10px; }
+.ui-upload-camera { margin-top: 6px; }
+.ui-upload-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.ui-upload-item { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--ui-border); border-radius: 10px; background: var(--ui-surface); }
+.ui-upload-thumb { flex: none; display: grid; place-items: center; width: 34px; height: 34px; overflow: hidden; border-radius: 8px; background: var(--ui-primary-soft); color: var(--ui-primary-text); font-size: 9px; font-weight: 700; }
+.ui-upload-thumb.is-pdf { background: #fef2f2; color: #dc2626; }
+.ui-upload-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.ui-upload-meta { flex: 1; min-width: 0; font-size: 10px; color: var(--ui-text-muted); }
+.ui-upload-meta b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ui-text); font-size: 11px; font-weight: 600; }
+.ui-upload-remove { flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--ui-text-muted); cursor: pointer; font-size: 12px; }
+.ui-upload-remove:hover { background: var(--ui-surface-subtle); color: var(--ui-text); }
+.ui-upload-error { margin: 0; color: var(--ui-danger-text); font-size: 10px; }
+
+/* ---- Color pair (màu chữ + màu nền, xem trước trực tiếp) — xem docs/ui-kit/components/color-pair.md ---- */
+.ui-color-pair { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.ui-color-preview { display: inline-flex; align-items: center; justify-content: center; min-width: 76px; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 600; line-height: 1.4; transition: background-color .12s, color .12s; }
+.ui-color { position: relative; display: inline-grid; justify-items: center; gap: 2px; color: var(--ui-text-muted); font-size: 9px; font-weight: 600; cursor: pointer; }
+.ui-color-tile { display: grid; place-items: center; width: 30px; height: 30px; box-sizing: border-box; border: 1px solid var(--ui-border-strong); border-radius: 9px; background: var(--ui-surface); font-size: 14px; font-weight: 700; line-height: 1; }
+.ui-color:hover .ui-color-tile, .ui-color:focus-within .ui-color-tile { border-color: var(--ui-primary); }
+.ui-color:focus-within .ui-color-tile { outline: 2px solid var(--ui-focus-ring); }
+.ui-color-text .ui-color-tile { color: var(--ui-color-value, #1f2937); box-shadow: inset 0 -4px 0 var(--ui-color-value, #1f2937); padding-bottom: 3px; }
+.ui-color-bg .ui-color-tile { background: var(--ui-color-value, #fff); }
+.ui-color input[type=color] { position: absolute; inset: 0 0 12px 0; width: 100%; height: calc(100% - 12px); padding: 0; border: 0; opacity: 0; cursor: pointer; }
+.ui-color-warn { flex-basis: 100%; margin: 0; color: var(--ui-warning-strong); font-size: 10px; }
+.ui-color-warn[hidden] { display: none; }
+
+/* ---- Date (ngày / khoảng ngày / ngày giờ / giờ; dựa trên Flatpickr) — xem docs/ui-kit/components/date.md ---- */
+.ui-date { position: relative; width: 100%; min-width: 0; }
+.ui-date-field { box-sizing: border-box; display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; padding: 3px 6px 3px 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-input); background: var(--ui-surface); cursor: pointer; }
+.ui-date-field:hover { border-color: var(--ui-border-strong); }
+.ui-date.is-open .ui-date-field, .ui-date-field:focus-within { border-color: var(--ui-primary); outline: 2px solid var(--ui-focus-ring); }
+.ui-date.is-invalid .ui-date-field { border-color: var(--ui-danger-text); }
+.ui-date.is-disabled .ui-date-field { background: var(--ui-surface-muted); cursor: not-allowed; }
+.ui-date-icon { flex: none; width: 14px; height: 14px; color: var(--ui-text-muted); }
+.ui-date-icon + .ui-date-icon { margin-left: -4px; }
+.ui-date-input { flex: 1; min-width: 0; height: 26px; padding: 0; border: 0 !important; background: transparent !important; color: var(--ui-text); font-size: 11px; outline: none !important; cursor: pointer; box-shadow: none !important; }
+.ui-date-input::placeholder { color: var(--ui-disabled-text); }
+.ui-date.is-disabled .ui-date-input { cursor: not-allowed; }
+.ui-date-clear { flex: none; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ui-text-muted); font-size: 15px; line-height: 1; cursor: pointer; }
+.ui-date-clear:hover { background: var(--ui-surface-subtle); color: var(--ui-text); }
+.ui-date-clear[hidden], .ui-date-error[hidden] { display: none; }
+.ui-date-error { margin: 4px 0 0; color: var(--ui-danger-text); font-size: 10px; }
+.ui-date-sm .ui-date-field { min-height: 28px; } .ui-date-sm .ui-date-input { height: 20px; }
+
+.flatpickr-calendar.ui-date-cal { width: 288px; padding: 6px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-menu); box-shadow: 0 12px 32px rgba(17,24,39,.13); font-size: 11px; font-family: inherit; }
+.flatpickr-calendar.ui-date-cal::before, .flatpickr-calendar.ui-date-cal::after { display: none; }
+.flatpickr-calendar.ui-date-cal .flatpickr-months .flatpickr-month { height: 34px; color: var(--ui-text); }
+.flatpickr-calendar.ui-date-cal .flatpickr-current-month { font-size: 12px; font-weight: 700; padding-top: 6px; }
+.flatpickr-calendar.ui-date-cal .flatpickr-current-month .flatpickr-monthDropdown-months, .flatpickr-calendar.ui-date-cal .flatpickr-current-month input.cur-year { font-weight: 700; }
+.flatpickr-calendar.ui-date-cal .flatpickr-months .flatpickr-prev-month, .flatpickr-calendar.ui-date-cal .flatpickr-months .flatpickr-next-month { padding: 8px 10px; color: var(--ui-text-muted); fill: var(--ui-text-muted); }
+.flatpickr-calendar.ui-date-cal .flatpickr-months .flatpickr-prev-month:hover svg, .flatpickr-calendar.ui-date-cal .flatpickr-months .flatpickr-next-month:hover svg { fill: var(--ui-primary); }
+.flatpickr-calendar.ui-date-cal span.flatpickr-weekday { color: var(--ui-text-muted); font-size: 10px; font-weight: 600; }
+.flatpickr-calendar.ui-date-cal .flatpickr-days { width: 100%; } .ui-date-cal .dayContainer { width: 100%; min-width: 100%; max-width: 100%; }
+.flatpickr-calendar.ui-date-cal .flatpickr-day { max-width: none; width: 14.2857%; height: 32px; line-height: 32px; border-radius: 8px; border-color: transparent; color: var(--ui-text); font-weight: 500; }
+.flatpickr-calendar.ui-date-cal .flatpickr-day:hover { background: var(--ui-surface-subtle); border-color: transparent; }
+.flatpickr-calendar.ui-date-cal .flatpickr-day.today { border-color: var(--ui-primary); }
+.flatpickr-calendar.ui-date-cal .flatpickr-day.today:hover { background: var(--ui-primary-soft); }
+.flatpickr-calendar.ui-date-cal .flatpickr-day.selected, .flatpickr-calendar.ui-date-cal .flatpickr-day.startRange, .flatpickr-calendar.ui-date-cal .flatpickr-day.endRange, .flatpickr-calendar.ui-date-cal .flatpickr-day.selected:hover, .flatpickr-calendar.ui-date-cal .flatpickr-day.startRange:hover, .flatpickr-calendar.ui-date-cal .flatpickr-day.endRange:hover { background: var(--ui-primary); border-color: var(--ui-primary); color: #fff; }
+.flatpickr-calendar.ui-date-cal .flatpickr-day.inRange, .flatpickr-calendar.ui-date-cal .flatpickr-day.selected.inRange { background: var(--ui-primary-soft); border-color: transparent; box-shadow: -5px 0 0 var(--ui-primary-soft), 5px 0 0 var(--ui-primary-soft); color: var(--ui-primary-text); }
+.flatpickr-calendar.ui-date-cal .flatpickr-day.startRange { border-radius: 8px 0 0 8px; } .ui-date-cal .flatpickr-day.endRange { border-radius: 0 8px 8px 0; }
+.flatpickr-calendar.ui-date-cal .flatpickr-day.startRange.endRange { border-radius: 8px; }
+.flatpickr-calendar.ui-date-cal .flatpickr-day.flatpickr-disabled, .flatpickr-calendar.ui-date-cal .flatpickr-day.flatpickr-disabled:hover, .flatpickr-calendar.ui-date-cal .flatpickr-day.prevMonthDay, .flatpickr-calendar.ui-date-cal .flatpickr-day.nextMonthDay { color: var(--ui-disabled-text); }
+.flatpickr-calendar.ui-date-cal .flatpickr-day.flatpickr-disabled { cursor: not-allowed; background: transparent; }
+.flatpickr-calendar.ui-date-cal .flatpickr-time { height: 40px; max-height: 40px; margin-top: 4px; border-top: 1px solid var(--ui-border); }
+.flatpickr-calendar.ui-date-cal .flatpickr-time input { height: 36px; border-radius: 8px; color: var(--ui-text); font-size: 13px; font-weight: 600; font-family: inherit; }
+.flatpickr-calendar.ui-date-cal .flatpickr-time input:hover, .flatpickr-calendar.ui-date-cal .flatpickr-time input:focus, .flatpickr-calendar.ui-date-cal .flatpickr-time .flatpickr-am-pm:hover { background: var(--ui-primary-soft); }
+.flatpickr-calendar.ui-date-cal .flatpickr-time .flatpickr-time-separator { color: var(--ui-text-muted); line-height: 36px; font-weight: 700; }
+.flatpickr-calendar.ui-date-cal .flatpickr-time .numInputWrapper span.arrowUp:after { border-bottom-color: var(--ui-text-muted); } .ui-date-cal .flatpickr-time .numInputWrapper span.arrowDown:after { border-top-color: var(--ui-text-muted); }
+.flatpickr-calendar.ui-date-cal.noCalendar { width: 200px; }
+.flatpickr-calendar.ui-date-cal.noCalendar .flatpickr-time { margin-top: 0; border-top: 0; }
+.ui-date-shortcuts { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 4px 4px; border-top: 1px solid var(--ui-border); margin-top: 6px; }
+.ui-date-chip { padding: 4px 10px; border: 1px solid var(--ui-border); border-radius: 999px; background: var(--ui-surface); color: var(--ui-text-muted); font-size: 10px; font-weight: 600; cursor: pointer; }
+.ui-date-chip:hover { border-color: var(--ui-primary); color: var(--ui-primary-text); background: var(--ui-primary-soft); }

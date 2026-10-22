@@ -214,7 +214,7 @@
                 <a href="{% url 'admindocuments:master_data' %}#receive_location" class="text-[10px] font-semibold text-emerald-600 transition hover:text-emerald-700">Tạo nơi nhận</a>
                 {% endif %}
               </div>
-              {{ form.receive_location }}
+              {% include 'components/ui_select.html' with field=form.receive_location %}
               {% if form.receive_location.errors %}<p class="mt-2 text-xs text-red-600">{{ form.receive_location.errors.0 }}</p>{% endif %}
             </div>
 
@@ -243,56 +243,36 @@
               <label class="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Người nhận</label>
               {{ form.recipient_directory.as_hidden }}
               {{ form.recipient_unknown.as_hidden }}
-              <input type="text" id="recipientSearchInput" placeholder="Tìm theo tên, mã nhân viên, email hoặc số điện thoại đầy đủ"
-                     class="mb-3 block w-full rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 placeholder:text-[11px] placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
-              <div id="recipientSelectedLabel" class="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-red-300 bg-white px-4 py-3 text-[11px] text-slate-500 transition-colors">
-                <span id="recipientSelectedText">Chưa chọn người nhận</span>
-                <button type="button"
-                        id="recipientClearButton"
-                        onclick="clearSelectedRecipient()"
-                        class="hidden h-5 w-5 shrink-0 rounded-full border border-slate-200 bg-slate-50 text-[10px] font-bold leading-none text-slate-400 transition hover:border-slate-300 hover:text-slate-600"
-                        aria-label="Bỏ chọn người nhận">
-                  ×
-                </button>
-              </div>
-              <div id="recipientSearchResults" class="max-h-56 space-y-2 overflow-y-auto"></div>
-              <button type="button"
-                      onclick="selectUnknownRecipient()"
-                      class="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-semibold text-slate-600 transition hover:border-emerald-300 hover:text-emerald-700">
-                Người nhận chưa xác định
-              </button>
+              <div class="ui-combobox" data-ui-combobox id="recipientCombobox"
+                   data-source="{% url 'admindocuments:parcel_recipient_search' %}"
+                   data-value-input="#id_recipient_directory" data-special-input="#id_recipient_unknown"
+                   data-filter="department:#id_recipient_department" data-filter-ignore="__unknown__"
+                   data-title-key="full_name" data-meta-keys="employee_code,department_name" data-meta-empty="Không có mã NV|Chưa có phòng ban"
+                   data-aside-keys="phone_number,email" data-label-key="label"
+                   data-placeholder="Tìm theo tên, mã nhân viên, email hoặc số điện thoại đầy đủ"
+                   data-hint="Nhập tên, mã nhân viên, email hoặc số điện thoại đầy đủ."
+                   data-special-label="Người nhận chưa xác định" data-clear-label="Bỏ chọn người nhận"></div>
               <p class="mt-2 text-[10px] text-slate-400">Tìm theo tên, mã nhân viên, email. Nếu tìm bằng số điện thoại, cần nhập đủ toàn bộ số.</p>
               {% if form.recipient_directory.errors %}<p class="mt-2 text-xs text-red-600">{{ form.recipient_directory.errors.0 }}</p>{% endif %}
             </div>
 
             <div>
               <label class="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{{ form.recipient_department.label }}</label>
-              <input type="text" id="departmentSearchInput" placeholder="Tìm phòng ban nếu chưa chọn được người nhận"
-                     class="mb-3 block w-full rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 placeholder:text-[11px] placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
-              <div class="relative">
-                {{ form.recipient_department }}
-                <button type="button"
-                        id="departmentClearButton"
-                        onclick="clearSelectedDepartment()"
-                        class="hidden absolute right-10 top-1/2 -translate-y-1/2 h-5 w-5 rounded-full border border-slate-200 bg-slate-50 text-[10px] font-bold leading-none text-slate-400 transition hover:border-slate-300 hover:text-slate-600"
-                        aria-label="Bỏ chọn phòng ban">
-                  ×
-                </button>
-              </div>
+              {% include 'components/ui_select.html' with field=form.recipient_department search='on' %}
               {% if form.recipient_department.errors %}<p class="mt-2 text-xs text-red-600">{{ form.recipient_department.errors.0 }}</p>{% endif %}
             </div>
 
             <div>
               <label class="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{{ form.sender_unit.label }}</label>
-              <select id="parcelSenderPreset"
-                      class="block w-full rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100"
-                      onchange="toggleSenderUnitMode()">
-                <option value="">Chọn đơn vị gửi</option>
-                {% for item in sender_suggestions %}
-                <option value="{{ item }}">{{ item }}</option>
-                {% endfor %}
-                <option value="__new__">+ Thêm đơn vị gửi mới</option>
-              </select>
+              <div class="ui-select" data-ui-select data-placeholder="Chọn đơn vị gửi">
+                <select id="parcelSenderPreset" onchange="toggleSenderUnitMode()">
+                  <option value="">Chọn đơn vị gửi</option>
+                  {% for item in sender_suggestions %}
+                  <option value="{{ item }}">{{ item }}</option>
+                  {% endfor %}
+                  <option value="__new__">+ Thêm đơn vị gửi mới</option>
+                </select>
+              </div>
               <input type="text"
                      id="parcelSenderCustom"
                      value=""
@@ -320,31 +300,10 @@
 
             <div>
               <label class="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Ảnh đính kèm / File</label>
-              <div class="grid gap-3 sm:grid-cols-2">
-                <label class="flex cursor-pointer items-center justify-between rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/70 px-4 py-3 text-[11px] text-emerald-700 transition hover:bg-emerald-50">
-                  <span class="inline-flex items-center gap-3">
-                    <span class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-emerald-600 shadow-sm">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M9.75 7.5h4.5m-7.5 9h10.5A1.5 1.5 0 0 0 18.75 15V9A1.5 1.5 0 0 0 17.25 7.5h-1.129a1.5 1.5 0 0 1-1.06-.44l-.621-.62a1.5 1.5 0 0 0-1.06-.44h-2.76a1.5 1.5 0 0 0-1.06.44l-.62.62a1.5 1.5 0 0 1-1.061.44H6.75A1.5 1.5 0 0 0 5.25 9v6A1.5 1.5 0 0 0 6.75 16.5Z"/>
-                      </svg>
-                    </span>
-                    <span class="text-[11px] font-medium">Chụp ảnh</span>
-                  </span>
-                  <input type="file" name="images" accept="image/*" capture="environment" multiple class="hidden">
-                </label>
-                <label class="flex cursor-pointer items-center justify-between rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-[11px] text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50/40">
-                  <span class="inline-flex items-center gap-3">
-                    <span class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-600 shadow-sm">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="m18.375 12.739-5.69 5.69a3 3 0 1 1-4.243-4.243l6.396-6.397a2 2 0 1 1 2.829 2.829l-6.364 6.364a1 1 0 0 1-1.415-1.414l5.657-5.657"/>
-                      </svg>
-                    </span>
-                    <span class="text-[11px] font-medium">Tải tệp</span>
-                  </span>
-                  <input type="file" name="images" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" multiple class="hidden">
-                </label>
+              <div class="ui-upload" data-ui-upload data-camera data-max-files="5" data-max-mb="30"
+                   data-hint="Ảnh, PDF, Word, Excel · tối đa 5 tệp, mỗi tệp không quá 30MB">
+                <input type="file" id="parcelIntakeImages" name="images" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
               </div>
-              <div class="mt-2 text-[10px] text-slate-400">Tối đa 5 tệp, mỗi ảnh hoặc file không quá 30MB.</div>
             </div>
 
             <button type="submit" class="flex w-full items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#0f8a53_0%,#19b35b_100%)] px-4 py-3.5 text-[12px] font-bold text-white shadow-[0_18px_34px_rgba(15,138,83,0.28)] transition hover:translate-y-[-1px]">
@@ -430,13 +389,14 @@
                          class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 placeholder:text-[10px] placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
                   <input type="text" name="department" value="{{ selected_department }}" placeholder="Tìm theo phòng ban..."
                          class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 placeholder:text-[10px] placeholder:text-slate-400 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
-                  <select name="receive_location"
-                          class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
-                    <option value="all" {% if selected_receive_location == 'all' %}selected{% endif %}>Tất cả nơi nhận</option>
-                    {% for location in receive_locations %}
-                    <option value="{{ location.id }}" {% if selected_receive_location == location.id|stringformat:'s' %}selected{% endif %}>{{ location.name }}</option>
-                    {% endfor %}
-                  </select>
+                  <div class="ui-select" data-ui-select data-clear="off">
+                    <select name="receive_location" aria-label="Nơi nhận">
+                      <option value="all" {% if selected_receive_location == 'all' %}selected{% endif %}>Tất cả nơi nhận</option>
+                      {% for location in receive_locations %}
+                      <option value="{{ location.id }}" {% if selected_receive_location == location.id|stringformat:'s' %}selected{% endif %}>{{ location.name }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
                   <input type="date" name="start_date" value="{{ selected_start_date }}" class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
                   <input type="date" name="end_date" value="{{ selected_end_date }}" class="rounded-2xl border border-[#e6ebf2] bg-[#f7f9fc] px-4 py-3 text-[11px] text-slate-700 focus:border-emerald-300 focus:outline-none focus:ring-4 focus:ring-emerald-100">
                   <div class="md:col-span-2 xl:col-span-4 flex flex-wrap gap-2">
@@ -739,6 +699,12 @@
 
   function toggleValidationClasses(element, isFilled) {
     if (!element) return;
+    const kitToggle = element.closest("[data-ui-select]")?.querySelector(".ui-select-toggle")
+      || element.closest("[data-ui-combobox]")?.querySelector(".ui-combobox-field");
+    if (kitToggle) {
+      kitToggle.style.borderColor = isFilled ? "#6ee7b7" : "#fca5a5";
+      return;
+    }
     element.classList.toggle("border-red-300", !isFilled);
     element.classList.toggle("bg-red-50/30", !isFilled);
     element.classList.toggle("border-emerald-300", !!isFilled);
@@ -769,7 +735,7 @@
       !!(parcelTypeInput?.value || "").trim()
     );
     toggleValidationClasses(
-      document.getElementById("recipientSelectedLabel"),
+      document.getElementById("recipientCombobox"),
       !!(recipientInput?.value || "").trim() || !!(recipientUnknownInput?.value || "").trim()
     );
     toggleValidationClasses(
@@ -790,124 +756,6 @@
       contentInput,
       !!(contentInput?.value || "").trim()
     );
-  }
-
-  function renderRecipientResults(results) {
-    const container = document.getElementById("recipientSearchResults");
-    if (!container) return;
-    if (!results.length) {
-      container.innerHTML = '<div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-[10px] text-slate-400">Không có kết quả phù hợp.</div>';
-      return;
-    }
-    container.innerHTML = results.map((item) => `
-      <button type="button"
-              class="flex w-full items-start justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-emerald-300 hover:bg-emerald-50/40"
-              data-recipient-id="${item.id}"
-              data-recipient-department="${(item.department_name || '').replace(/"/g, '&quot;')}"
-              data-recipient-label="${item.label.replace(/"/g, '&quot;')}"
-              onclick="selectRecipientDirectory(this)">
-        <div class="min-w-0">
-          <div class="text-[11px] font-semibold text-slate-800">${item.full_name || '-'}</div>
-          <div class="mt-1 text-[10px] text-slate-500">${item.employee_code || 'Không có mã NV'} · ${item.department_name || 'Chưa có phòng ban'}</div>
-        </div>
-        <div class="text-right text-[10px] text-slate-400">
-          <div>${item.phone_number || ''}</div>
-          <div class="mt-1">${item.email || ''}</div>
-        </div>
-      </button>
-    `).join("");
-  }
-
-  function selectRecipientDirectory(button) {
-    const hiddenInput = document.getElementById("id_recipient_directory");
-    const unknownInput = document.getElementById("id_recipient_unknown");
-    const selectedLabel = document.getElementById("recipientSelectedLabel");
-    const selectedText = document.getElementById("recipientSelectedText");
-    const clearButton = document.getElementById("recipientClearButton");
-    const departmentSelect = document.getElementById("id_recipient_department");
-    if (!hiddenInput || !button) return;
-    hiddenInput.value = button.dataset.recipientId || "";
-    if (unknownInput) unknownInput.value = "";
-    if (departmentSelect && button.dataset.recipientDepartment) {
-      departmentSelect.value = button.dataset.recipientDepartment;
-    }
-    if (selectedLabel && selectedText) {
-      selectedText.textContent = button.dataset.recipientLabel || "Chưa chọn người nhận";
-      selectedLabel.classList.remove("text-slate-500");
-      selectedLabel.classList.add("text-slate-800", "font-medium");
-    }
-    if (clearButton) clearButton.classList.remove("hidden");
-    document.querySelectorAll("[data-recipient-id]").forEach((item) => {
-      item.classList.remove("border-emerald-400", "bg-emerald-50");
-    });
-    button.classList.add("border-emerald-400", "bg-emerald-50");
-    filterDepartmentOptions();
-    updateDepartmentClearButton();
-    refreshParcelIntakeValidation();
-  }
-
-  function selectUnknownRecipient() {
-    const hiddenInput = document.getElementById("id_recipient_directory");
-    const unknownInput = document.getElementById("id_recipient_unknown");
-    const selectedLabel = document.getElementById("recipientSelectedLabel");
-    const selectedText = document.getElementById("recipientSelectedText");
-    const clearButton = document.getElementById("recipientClearButton");
-    const departmentSelect = document.getElementById("id_recipient_department");
-    if (hiddenInput) hiddenInput.value = "";
-    if (unknownInput) unknownInput.value = "1";
-    if (selectedLabel && selectedText) {
-      selectedText.textContent = "Người nhận chưa xác định";
-      selectedLabel.classList.remove("text-slate-500");
-      selectedLabel.classList.add("text-slate-800", "font-medium");
-    }
-    if (clearButton) clearButton.classList.remove("hidden");
-    if (departmentSelect && !departmentSelect.value) {
-      departmentSelect.value = "__unknown__";
-    }
-    document.querySelectorAll("[data-recipient-id]").forEach((item) => {
-      item.classList.remove("border-emerald-400", "bg-emerald-50");
-    });
-    updateDepartmentClearButton();
-    refreshParcelIntakeValidation();
-  }
-
-  function clearSelectedRecipient() {
-    const hiddenInput = document.getElementById("id_recipient_directory");
-    const unknownInput = document.getElementById("id_recipient_unknown");
-    const selectedLabel = document.getElementById("recipientSelectedLabel");
-    const selectedText = document.getElementById("recipientSelectedText");
-    const clearButton = document.getElementById("recipientClearButton");
-    if (hiddenInput) hiddenInput.value = "";
-    if (unknownInput) unknownInput.value = "";
-    if (selectedLabel && selectedText) {
-      selectedText.textContent = "Chưa chọn người nhận";
-      selectedLabel.classList.remove("text-slate-800", "font-medium");
-      selectedLabel.classList.add("text-slate-500");
-    }
-    if (clearButton) clearButton.classList.add("hidden");
-    document.querySelectorAll("[data-recipient-id]").forEach((item) => {
-      item.classList.remove("border-emerald-400", "bg-emerald-50");
-    });
-    refreshParcelIntakeValidation();
-  }
-
-  function updateDepartmentClearButton() {
-    const departmentSelect = document.getElementById("id_recipient_department");
-    const departmentSearchInput = document.getElementById("departmentSearchInput");
-    const clearButton = document.getElementById("departmentClearButton");
-    if (!clearButton) return;
-    const hasValue = !!((departmentSelect?.value || "").trim() || (departmentSearchInput?.value || "").trim());
-    clearButton.classList.toggle("hidden", !hasValue);
-  }
-
-  function clearSelectedDepartment() {
-    const departmentSelect = document.getElementById("id_recipient_department");
-    const departmentSearchInput = document.getElementById("departmentSearchInput");
-    if (departmentSelect) departmentSelect.value = "";
-    if (departmentSearchInput) departmentSearchInput.value = "";
-    filterDepartmentOptions();
-    updateDepartmentClearButton();
-    refreshParcelIntakeValidation();
   }
 
   const proxyRecipientSearchTimers = {};
@@ -1053,60 +901,6 @@
     renderProxyRecipientResults(dispatchId, payload.results || []);
   }
 
-  function filterDepartmentOptions() {
-    const keyword = (document.getElementById("departmentSearchInput")?.value || "").toLowerCase().trim();
-    const select = document.getElementById("id_recipient_department");
-    if (!select) return;
-    [...select.options].forEach((option, index) => {
-      if (index === 0) {
-        option.hidden = false;
-        return;
-      }
-      option.hidden = !!keyword && !option.text.toLowerCase().includes(keyword);
-    });
-    updateDepartmentClearButton();
-    refreshParcelIntakeValidation();
-  }
-
-  async function searchRecipientDirectory(options = {}) {
-    const keyword = (options.keyword ?? document.getElementById("recipientSearchInput")?.value ?? "").trim();
-    const departmentValue = (document.getElementById("id_recipient_department")?.value || "").trim();
-    const department = departmentValue === "__unknown__" ? "" : departmentValue;
-    const unknownInput = document.getElementById("id_recipient_unknown");
-    const selectedId = options.selectedId || "";
-    const params = new URLSearchParams();
-    if (department) params.set("department", department);
-    if (selectedId) {
-      params.set("selected_id", selectedId);
-    } else {
-      if (!keyword) {
-        document.getElementById("recipientSearchResults").innerHTML = "";
-        return;
-      }
-      if (unknownInput) unknownInput.value = "";
-      params.set("q", keyword);
-    }
-
-    const response = await fetch("{% url 'admindocuments:parcel_recipient_search' %}?" + params.toString(), {
-      headers: {"X-Requested-With": "XMLHttpRequest"},
-    });
-    const payload = await response.json();
-    const results = payload.results || [];
-    renderRecipientResults(results);
-
-    if (selectedId && results.length) {
-      const selectedLabel = document.getElementById("recipientSelectedLabel");
-      const selectedText = document.getElementById("recipientSelectedText");
-      const clearButton = document.getElementById("recipientClearButton");
-      if (selectedLabel && selectedText) {
-        selectedText.textContent = results[0].label || "Chưa chọn người nhận";
-        selectedLabel.classList.remove("text-slate-500");
-        selectedLabel.classList.add("text-slate-800", "font-medium");
-      }
-      if (clearButton) clearButton.classList.remove("hidden");
-    }
-  }
-
   document.addEventListener("DOMContentLoaded", function () {
     const highlightedDispatchId = "{{ highlight_dispatch_id|default:''|escapejs }}";
     if (highlightedDispatchId) {
@@ -1141,6 +935,7 @@
         senderPreset.value = "__new__";
         senderCustom.value = hiddenValue;
       }
+      window.uiSelect?.refresh(senderPreset);
       toggleSenderUnitMode();
     }
 
@@ -1151,28 +946,28 @@
     document.getElementById("id_tracking_code")?.addEventListener("input", refreshParcelIntakeValidation);
     document.getElementById("id_content")?.addEventListener("input", refreshParcelIntakeValidation);
 
-    let recipientSearchTimer = null;
-    document.getElementById("id_recipient_department")?.addEventListener("change", () => {
-      updateDepartmentClearButton();
-      searchRecipientDirectory();
+    const recipientBox = document.getElementById("recipientCombobox");
+    recipientBox?.addEventListener("ui-combobox:select", (event) => {
+      const department = event.detail.item.department_name;
+      const departmentSelect = document.getElementById("id_recipient_department");
+      if (departmentSelect && department) {
+        departmentSelect.value = department;
+        window.uiSelect?.refresh(departmentSelect);
+      }
+      refreshParcelIntakeValidation();
     });
-    document.getElementById("departmentSearchInput")?.addEventListener("input", filterDepartmentOptions);
-    document.getElementById("recipientSearchInput")?.addEventListener("input", (event) => {
-      window.clearTimeout(recipientSearchTimer);
-      recipientSearchTimer = window.setTimeout(() => {
-        searchRecipientDirectory({keyword: event.target.value});
-      }, 220);
+    recipientBox?.addEventListener("ui-combobox:special", () => {
+      const departmentSelect = document.getElementById("id_recipient_department");
+      if (departmentSelect && !departmentSelect.value) {
+        departmentSelect.value = "__unknown__";
+        window.uiSelect?.refresh(departmentSelect);
+      }
+      refreshParcelIntakeValidation();
     });
+    recipientBox?.addEventListener("ui-combobox:clear", refreshParcelIntakeValidation);
+    document.getElementById("id_recipient_directory")?.addEventListener("change", refreshParcelIntakeValidation);
+    document.getElementById("id_recipient_unknown")?.addEventListener("change", refreshParcelIntakeValidation);
 
-    const selectedRecipientId = document.getElementById("id_recipient_directory")?.value || "";
-    const recipientUnknownValue = document.getElementById("id_recipient_unknown")?.value || "";
-    if (recipientUnknownValue) {
-      selectUnknownRecipient();
-    } else if (selectedRecipientId) {
-      searchRecipientDirectory({selectedId: selectedRecipientId});
-    }
-    filterDepartmentOptions();
-    updateDepartmentClearButton();
     refreshParcelIntakeValidation();
   });
 </script>

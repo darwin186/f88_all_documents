@@ -44,3 +44,6 @@ chatbot_docs.pdf
 # Local temporary outputs
 tmp/
 .tmp/
+
+# Private source files for soft-copy inspections
+private_uploads/

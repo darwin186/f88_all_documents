@@ -26,7 +26,7 @@ class GapoDirectoryTests(TestCase):
             self.client.force_login(user)
             with self.subTest(user=user.username):
                 self.assertEqual(self.client.get(url).status_code, 403)
-                for action in ['upload', 'activate', 'reimport']:
+                for action in ['upload', 'activate', 'reimport', 'apply_shop_managers']:
                     self.assertEqual(self.client.post(url, {'action': action, 'batch_id': 1}).status_code, 403)
                 self.assertEqual(self.client.get(reverse('admindocuments:parcel_recipient_directory')).status_code, 403)
         self.assertEqual(AdmParcelRecipientImportBatch.objects.count(), 0)

@@ -103,6 +103,7 @@ class Campaign(models.Model):
         on_delete=models.PROTECT,
     )
     report_month = models.DateField(help_text="Ngày đầu tiên của tháng chiến dịch")
+    period_key = models.CharField(max_length=12, blank=True, default="", help_text="Rỗng cho kỳ tháng; YYYY-Www cho kỳ bản mềm.")
     carryover_source = models.ForeignKey(
         "self", null=True, blank=True, on_delete=models.PROTECT,
         related_name="carryover_campaigns", verbose_name="Nguồn lỗi treo",
@@ -161,8 +162,8 @@ class Campaign(models.Model):
         ordering = ["-report_month"]
         constraints = [
             models.UniqueConstraint(
-                fields=["campaign_type", "report_month"],
-                name="dec_uq_campaign_type_month",
+                fields=["campaign_type", "report_month", "period_key"],
+                name="dec_uq_campaign_period",
             )
         ]
 

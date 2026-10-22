@@ -189,6 +189,174 @@
                 {% for item in statuses %}
                 <tr>
                   <td class="px-3 py-2 font-mono text-xs">{{ item.code }}</td>
+                  <td class="px-3 py-2 text-xs text-gray-700">{{ item.name }}</td>
+                  <td class="px-3 py-2">
+                    {% if perms.app_admindocuments.change_admdocumentstatus %}
+                    <form method="post" class="ui-color-pair" data-ui-color-pair>
+                      {% csrf_token %}<input type="hidden" name="form_name" value="status_colors"><input type="hidden" name="status_id" value="{{ item.pk }}">
+                      <span class="ui-color-preview" data-color-preview style="color:{{ item.badge_text_color }};background-color:{{ item.badge_bg_color }};">{{ item.name }}</span>
+                      <label class="ui-color ui-color-text" title="Màu chữ"><span class="ui-color-tile" style="--ui-color-value:{{ item.badge_text_color }}">A</span>Chữ<input type="color" name="badge_text_color" value="{{ item.badge_text_color }}" data-color-text aria-label="Màu chữ {{ item.name }}"></label>
+                      <label class="ui-color ui-color-bg" title="Màu nền"><span class="ui-color-tile" style="--ui-color-value:{{ item.badge_bg_color }}"></span>Nền<input type="color" name="badge_bg_color" value="{{ item.badge_bg_color }}" data-color-bg aria-label="Màu nền {{ item.name }}"></label>
+                      <button type="submit" class="ui-btn ui-btn-primary ui-btn-sm" data-color-save disabled>Lưu màu</button>
+                      <p class="ui-color-warn" data-color-warn hidden>Chữ và nền khó phân biệt, nên chọn màu tương phản hơn.</p>
+                    </form>
+                    {% else %}<span class="ui-color-preview" style="color:{{ item.badge_text_color }};background-color:{{ item.badge_bg_color }};">{{ item.name }}</span>{% endif %}
+                  </td>
+                  <td class="px-3 py-2">
+                    <span class="px-2 py-1 text-xs rounded {% if item.is_active %}bg-emerald-50 text-emerald-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                      {% if item.is_active %}Đang dùng{% else %}Tạm ngưng{% endif %}
+                    </span>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="px-3 py-3 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+        <form method="post" class="space-y-3">
+          {% csrf_token %}
+          <input type="hidden" name="form_name" value="doc_type" />
+          {% for field in forms.doc_type %}
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<p class="text-xs text-red-600 mt-1">{{ field.errors.0 }}</p>{% endif %}
+          </div>
+          {% endfor %}
+          <button type="submit" class="w-full px-3 py-2 bg-f88green text-white rounded hover:bg-f88dark text-sm">Thêm loại văn bản</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="content_type" class="bg-white shadow-sm rounded-lg p-4">
+    <div class="flex items-start justify-between gap-3 mb-3">
+      <div>
+        <h2 class="text-lg font-semibold text-gray-800">Loại nội dung</h2>
+        <p class="text-sm text-gray-500">Mới / Sửa đổi / Thay thế...</p>
+      </div>
+      <span class="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">Tổng {{ content_types|length }}</span>
+    </div>
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="md:col-span-2">
+        <div class="border rounded-lg overflow-hidden">
+          <div class="max-h-64 overflow-y-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
+                <tr><th class="px-3 py-2 text-left">Mã</th><th class="px-3 py-2 text-left">Tên</th><th class="px-3 py-2 text-left">Trạng thái</th></tr>
+              </thead>
+              <tbody class="divide-y">
+                {% for item in content_types %}
+                <tr>
+                  <td class="px-3 py-2 font-mono text-xs">{{ item.code }}</td>
+                  <td class="px-3 py-2">{{ item.name }}</td>
+                  <td class="px-3 py-2">
+                    <span class="px-2 py-1 text-xs rounded {% if item.is_active %}bg-emerald-50 text-emerald-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                      {% if item.is_active %}Đang dùng{% else %}Tạm ngưng{% endif %}
+                    </span>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="px-3 py-3 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+        <form method="post" class="space-y-3">
+          {% csrf_token %}
+          <input type="hidden" name="form_name" value="content_type" />
+          {% for field in forms.content_type %}
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<p class="text-xs text-red-600 mt-1">{{ field.errors.0 }}</p>{% endif %}
+          </div>
+          {% endfor %}
+          <button type="submit" class="w-full px-3 py-2 bg-f88green text-white rounded hover:bg-f88dark text-sm">Thêm loại nội dung</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="signer_role" class="bg-white shadow-sm rounded-lg p-4">
+    <div class="flex items-start justify-between gap-3 mb-3">
+      <div>
+        <h2 class="text-lg font-semibold text-gray-800">Chức danh người ký</h2>
+        <p class="text-sm text-gray-500">Quản lý vai trò ký văn bản.</p>
+      </div>
+      <span class="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">Tổng {{ signer_roles|length }}</span>
+    </div>
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="md:col-span-2">
+        <div class="border rounded-lg overflow-hidden">
+          <div class="max-h-64 overflow-y-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
+                <tr><th class="px-3 py-2 text-left">Mã</th><th class="px-3 py-2 text-left">Người ký</th><th class="px-3 py-2 text-left">Trạng thái</th></tr>
+              </thead>
+              <tbody class="divide-y">
+                {% for item in signer_roles %}
+                <tr>
+                  <td class="px-3 py-2 font-mono text-xs">{{ item.code }}</td>
+                  <td class="px-3 py-2">{{ item.title }}</td>
+                  <td class="px-3 py-2">
+                    <span class="px-2 py-1 text-xs rounded {% if item.is_active %}bg-emerald-50 text-emerald-700{% else %}bg-gray-100 text-gray-600{% endif %}">
+                      {% if item.is_active %}Đang dùng{% else %}Tạm ngưng{% endif %}
+                    </span>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="px-3 py-3 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+        <form method="post" class="space-y-3">
+          {% csrf_token %}
+          <input type="hidden" name="form_name" value="signer_role" />
+          {% for field in forms.signer_role %}
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}<p class="text-xs text-red-600 mt-1">{{ field.errors.0 }}</p>{% endif %}
+          </div>
+          {% endfor %}
+          <button type="submit" class="w-full px-3 py-2 bg-f88green text-white rounded hover:bg-f88dark text-sm">Thêm chức danh</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div id="status" class="bg-white shadow-sm rounded-lg p-4">
+    <div class="flex items-start justify-between gap-3 mb-2">
+      <div>
+        <h2 class="text-lg font-semibold text-gray-800">Trạng thái văn bản</h2>
+        <p class="text-sm text-gray-500">Mã trạng thái (ví dụ 100/101/102/103) cần duy trì nhất quán.</p>
+      </div>
+      <span class="text-xs px-2 py-1 bg-gray-100 rounded-full text-gray-600">Tổng {{ statuses|length }}</span>
+    </div>
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="md:col-span-2">
+        <div class="border rounded-lg overflow-hidden">
+          <div class="max-h-64 overflow-y-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 text-gray-600 uppercase text-xs font-semibold">
+                <tr><th class="px-3 py-2 text-left">Mã</th><th class="px-3 py-2 text-left">Tên</th><th class="px-3 py-2 text-left">Màu hiển thị</th><th class="px-3 py-2 text-left">Trạng thái</th></tr>
+              </thead>
+              <tbody class="divide-y">
+                {% for item in statuses %}
+                <tr>
+                  <td class="px-3 py-2 font-mono text-xs">{{ item.code }}</td>
                   <td class="px-3 py-2"><span class="inline-flex rounded px-2 py-1 text-xs" style="color:{{ item.badge_text_color }};background-color:{{ item.badge_bg_color }};">{{ item.name }}</span></td>
                   <td class="px-3 py-2">
                     {% if perms.app_admindocuments.change_admdocumentstatus %}

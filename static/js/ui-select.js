@@ -213,6 +213,8 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
   window.uiSelect = {
     init: initAll,
+    // Gọi sau khi code gán select.value / select.disabled trực tiếp (không bắn change).
+    refresh: source => { const wrapper = source?.closest?.('[data-ui-select]'); if (wrapper) { initAll(wrapper); instances.get(wrapper)?.refresh(); } },
     closeAll: root => (root || document).querySelectorAll('[data-ui-select].is-open').forEach(wrapper => instances.get(wrapper)?.close()),
   };
 })();

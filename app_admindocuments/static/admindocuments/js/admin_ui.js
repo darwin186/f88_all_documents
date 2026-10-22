@@ -118,7 +118,7 @@
       }
     });
     root.querySelectorAll('button, a').forEach(button=>{
-      if(button.closest('[data-document-select], [data-filter-select], [data-ui-select], [data-ui-file], .adm-pagination, [data-filter-chips]') || button.matches('[role=tab],[data-preview-tab],[data-paper-tab]'))return;
+      if(button.closest('[data-document-select], [data-filter-select], [data-ui-select], [data-ui-file], [data-ui-upload], [data-ui-combobox], .adm-pagination, [data-filter-chips]') || button.matches('[role=tab],[data-preview-tab],[data-paper-tab]'))return;
       if(button.tagName==='A'&&!/(?:px-|py-)/.test(button.className))return;
       if(button.closest('ul')&&!button.matches('[type=submit]'))return;
       button.classList.add('ui-btn');

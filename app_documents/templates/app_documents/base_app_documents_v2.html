@@ -33,9 +33,14 @@
   <!-- Alpine -->
   <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 
-  <link rel="stylesheet" href="{% static 'css/ui-kit.css' %}?v=20261020-3">
-  <script src="{% static 'js/ui-select.js' %}?v=20261019-3" defer></script>
+  <link rel="stylesheet" href="{% static 'css/ui-kit.css' %}?v=20261022-3">
+  <script src="{% static 'js/ui-select.js' %}?v=20261020-1" defer></script>
+  <script src="{% static 'js/ui-combobox.js' %}?v=20261021-3" defer></script>
   <script src="{% static 'js/ui-file.js' %}?v=20261020-1" defer></script>
+  <script src="{% static 'js/ui-upload.js' %}?v=20261021-1" defer></script>
+  <script src="{% static 'js/ui-color.js' %}?v=20261021-1" defer></script>
+  {% include 'components/ui_date_assets.html' %}
+  <script src="{% static 'js/ui-date.js' %}?v=20261021-2" defer></script>
   {% include 'components/ui_toast.html' %}
 
   {% block extra_head %}{% endblock %}

@@ -111,25 +111,9 @@
     <form method="post" action="{% url upload_action_name selected_dispatch.id %}" enctype="multipart/form-data" class="mt-3 space-y-3">
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ request.get_full_path }}">
-      <div class="grid gap-3 sm:grid-cols-2">
-        <label class="flex cursor-pointer items-center justify-between rounded-2xl border border-dashed border-emerald-300 bg-emerald-50/70 px-4 py-2.5 text-[12px] text-emerald-700 transition hover:bg-emerald-50">
-          <span class="inline-flex items-center gap-3">
-            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-emerald-600 shadow-sm">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M9.75 7.5h4.5m-7.5 9h10.5A1.5 1.5 0 0 0 18.75 15V9A1.5 1.5 0 0 0 17.25 7.5h-1.129a1.5 1.5 0 0 1-1.06-.44l-.621-.62a1.5 1.5 0 0 0-1.06-.44h-2.76a1.5 1.5 0 0 0-1.06.44l-.62.62a1.5 1.5 0 0 1-1.061.44H6.75A1.5 1.5 0 0 0 5.25 9v6A1.5 1.5 0 0 0 6.75 16.5Z"/></svg>
-            </span>
-            <span>Chụp ảnh</span>
-          </span>
-          <input type="file" name="images" accept="image/*" capture="environment" multiple class="hidden">
-        </label>
-        <label class="flex cursor-pointer items-center justify-between rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-2.5 text-[12px] text-slate-600 transition hover:border-emerald-300 hover:bg-emerald-50/40">
-          <span class="inline-flex items-center gap-3">
-            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-600 shadow-sm">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="m18.375 12.739-5.69 5.69a3 3 0 1 1-4.243-4.243l6.396-6.397a2 2 0 1 1 2.829 2.829l-6.364 6.364a1 1 0 0 1-1.415-1.414l5.657-5.657"/></svg>
-            </span>
-            <span>Tải tệp</span>
-          </span>
-          <input type="file" name="images" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" multiple class="hidden">
-        </label>
+      <div class="ui-upload" data-ui-upload data-camera data-max-files="5" data-max-mb="30"
+           data-hint="Ảnh, PDF, Word, Excel · tối đa 5 tệp, mỗi tệp không quá 30MB">
+        <input type="file" id="parcelDetailImages-{{ selected_dispatch.id }}" name="images" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
       </div>
       <button type="submit" class="rounded-2xl bg-emerald-600 px-4 py-2.5 text-[11px] font-semibold text-white">Tải lên</button>
     </form>

@@ -102,7 +102,7 @@
             <input type="hidden" name="borrower_id" x-model="selected" data-borrower-id>
             <button type="button" @click="open = !open" class="request-input w-full flex items-center justify-between px-3 py-2 text-left focus:outline-none">
               <span class="text-gray-700 text-[10px]" data-borrower-label x-text="selected ? (searchText || 'Đã chọn phòng ban') : 'Chọn phòng ban mượn'"></span>
-              <span class="text-gray-400 text-xs">▾</span>
+              <span class="ui-select-arrow" aria-hidden="true"></span>
             </button>
             <div x-cloak x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-xl border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
               <div class="flex items-center gap-2">
@@ -213,7 +213,7 @@
         <input type="hidden" name="borrower" x-model="selected">
         <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
           <span class="text-gray-700 text-[10px]" x-text="label(selected)"></span>
-          <span class="text-gray-400 text-xs">▾</span>
+          <span class="ui-select-arrow" aria-hidden="true"></span>
         </button>
         <div x-cloak x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-2 text-[10px]">
           <div class="flex items-center gap-2">
@@ -253,7 +253,7 @@
         <input type="hidden" name="status" x-model="selected">
         <button type="button" @click="open = !open" class="w-full flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left focus:outline-none focus:border-emerald-500">
           <span class="text-gray-700 text-[10px]" x-text="label(selected)"></span>
-          <span class="text-gray-400 text-xs">▾</span>
+          <span class="ui-select-arrow" aria-hidden="true"></span>
         </button>
         <div x-cloak x-show="open" @click.outside="open=false" class="absolute mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg z-20 p-2 space-y-1 text-[10px]">
           <button type="button" @click="selected=''; open=false" class="w-full text-left px-2 py-2 rounded hover:bg-emerald-50 text-gray-700">Tất cả</button>

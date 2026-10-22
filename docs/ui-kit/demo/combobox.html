@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI Kit — Combobox</title>
+<link rel="stylesheet" href="../../../static/css/ui-kit.css">
+<style>
+  body { font-family: system-ui, sans-serif; background: #f3f4f6; margin: 0; padding: 24px 16px 160px; color: #1f2937; }
+  main { max-width: 560px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; } p.lead { margin: 0 0 20px; color: #6b7280; font-size: 13px; }
+  .card { background: #fff; border-radius: 16px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .card h2 { font-size: 13px; margin: 0 0 10px; } label { display: block; margin-bottom: 6px; font-size: 11px; font-weight: 600; color: #6b7280; }
+  pre { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px; background: #f9fafb; font-size: 11px; white-space: pre-wrap; }
+  select { width: 100%; height: 34px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Combobox</h1>
+  <p class="lead">Tìm kiếm và chọn trong cùng một ô. Dữ liệu ở đây là giả lập (không gọi server).</p>
+
+  <section class="card">
+    <h2>Người nhận (tìm theo server, lọc theo phòng ban, có mục "chưa xác định")</h2>
+    <label for="demo-dept">Phòng ban (lọc kết quả)</label>
+    <select id="demo-dept"><option value="">Tất cả</option><option>Vận hành</option><option>Pháp chế</option></select>
+    <input type="hidden" id="demo-id" name="recipient"><input type="hidden" id="demo-unknown" name="unknown">
+    <label>Người nhận</label>
+    <div class="ui-combobox" data-ui-combobox id="demo-recipient" data-source="/api/recipients/"
+         data-value-input="#demo-id" data-special-input="#demo-unknown"
+         data-filter="department:#demo-dept" data-title-key="full_name"
+         data-meta-keys="employee_code,department_name" data-meta-empty="Không có mã NV|Chưa có phòng ban"
+         data-aside-keys="phone_number,email" data-label-key="label"
+         data-placeholder="Tìm theo tên, mã nhân viên, email…" data-hint="Nhập tên, mã nhân viên hoặc email."
+         data-special-label="Người nhận chưa xác định"></div>
+    <pre id="demo-out">recipient= · unknown=</pre>
+  </section>
+
+  <section class="card">
+    <h2>Không có mục đặc biệt, cỡ nhỏ</h2>
+    <div class="ui-combobox ui-combobox-sm" data-ui-combobox data-source="/api/recipients/" data-value-input="#demo-id2"
+         data-title-key="full_name" data-meta-keys="employee_code" data-label-key="full_name" data-placeholder="Tìm nhân viên…"></div>
+    <input type="hidden" id="demo-id2">
+  </section>
+  <section class="card">
+    <h2>Gõ tự do + gợi ý (tìm theo mã, ô nhập chính là field gửi đi)</h2>
+    <form id="free-form" onsubmit="event.preventDefault(); document.getElementById('free-out').textContent = 'submit: ' + new FormData(this).get('filter_package')">
+      <div class="ui-combobox" data-ui-combobox data-free data-name="filter_package" data-value=""
+           data-source="/api/codes/" data-title-key="label" data-label-key="label" data-meta-keys="meta"
+           data-placeholder="Tìm theo mã thùng F88"></div>
+      <pre id="free-out">submit: </pre>
+    </form>
+  </section>
+</main>
+
+<script>
+  // Giả lập API: /api/recipients/?q=…&department=…  |  ?selected_id=…
+  const DATA = [
+    {id: 1, full_name: 'Nguyễn Văn An', employee_code: 'NV001', department_name: 'Vận hành', phone_number: '09****123', email: 'an***@f88.vn'},
+    {id: 2, full_name: 'Trần Thị Bình', employee_code: 'NV002', department_name: 'Pháp chế', phone_number: '09****456', email: 'bi***@f88.vn'},
+    {id: 3, full_name: 'Lê Hoàng Cường', employee_code: 'NV003', department_name: 'Vận hành', phone_number: '', email: 'cu***@f88.vn'},
+    {id: 4, full_name: 'Phạm Minh Anh', employee_code: '', department_name: '', phone_number: '', email: ''},
+  ].map(item => ({...item, label: [item.full_name, item.employee_code, item.phone_number, item.email].filter(Boolean).join(' - ')}));
+  window.fetch = async url => {
+    const query = new URL(url, location.href).searchParams;
+    await new Promise(resolve => setTimeout(resolve, 80));
+    let results = DATA;
+    if (query.get('selected_id')) results = DATA.filter(item => String(item.id) === query.get('selected_id'));
+    else {
+      const fold = text => text.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').toLowerCase();
+      const term = fold(query.get('q') || '');
+      results = DATA.filter(item => !query.get('department') || item.department_name === query.get('department'))
+        .filter(item => fold([item.full_name, item.employee_code].join(' ')).includes(term));
+    }
+    return {ok: true, json: async () => ({results})};
+  };
+  const CODES = ['VH-261020-01', 'VH-261020-02', 'HN-261019-01', 'HN-261018-07'].map(code => ({id: code, label: code, meta: 'Thùng hồ sơ · 20/10/2026'}));
+  const baseFetch = window.fetch;
+  window.fetch = async (url, options) => {
+    if (String(url).startsWith('/api/codes/')) {
+      const term = (new URL(url, location.href).searchParams.get('q') || '').toLowerCase();
+      await new Promise(resolve => setTimeout(resolve, 60));
+      return {ok: true, json: async () => ({results: CODES.filter(item => item.label.toLowerCase().includes(term))})};
+    }
+    return baseFetch(url, options);
+  };
+  const out = document.getElementById('demo-out');
+  const show = () => { out.textContent = `recipient=${document.getElementById('demo-id').value} · unknown=${document.getElementById('demo-unknown').value}`; };
+  ['demo-id', 'demo-unknown'].forEach(id => document.getElementById(id).addEventListener('change', show));
+</script>
+<script src="../../../static/js/ui-combobox.js"></script>
+</body>
+</html>

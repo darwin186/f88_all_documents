@@ -84,12 +84,21 @@ def gapo_directory_page(request):
     from app_admindocuments.forms import AdmParcelRecipientImportForm
     from app_admindocuments.models import AdmParcelRecipientCatalog, AdmParcelRecipientImportBatch
     from app_admindocuments.views import _activate_parcel_recipient_batch, _import_parcel_recipient_batch
+    from .gapo_shop_managers import apply_manager_preview, manager_preview, sign_manager_preview
 
     form = AdmParcelRecipientImportForm()
 
     if request.method == "POST":
         action = (request.POST.get("action") or "upload").strip()
-        if action == "upload":
+        if action == "apply_shop_managers":
+            try:
+                changed = apply_manager_preview(request.POST.get("preview_token", ""), request.user)
+            except ValueError as exc:
+                messages.error(request, str(exc))
+            else:
+                messages.success(request, f"Đã cập nhật Trưởng PGD cho {changed} Shop và lưu lịch sử thay đổi.")
+            return redirect("master_data_gapo_directory")
+        elif action == "upload":
             form = AdmParcelRecipientImportForm(request.POST, request.FILES)
             if form.is_valid():
                 upload = form.cleaned_data["file"]
@@ -163,6 +172,23 @@ def gapo_directory_page(request):
             .order_by("department_name")[:20]
         )
 
+    manager_report = None
+    manager_page = None
+    manager_token = ""
+    manager_query = (request.GET.get("manager_q") or "").strip()
+    if current_batch and not current_batch.has_errors:
+        manager_report = manager_preview(current_batch)
+        manager_token = sign_manager_preview(manager_report, request.user)
+        rows = manager_report["rows"]
+        if manager_query:
+            search = manager_query.casefold()
+            rows = [row for row in rows if any(search in str(value).casefold() for value in (
+                row["prefix"], row["shop_name"], row["reason"], *row["before"].values(),
+                *(person[field] for person in row["candidates"]
+                  for field in ("full_name", "employee_code", "email", "department_name")),
+            ))]
+        manager_page = Paginator(rows, 25).get_page(request.GET.get("manager_page"))
+
     context = {
         "form": form,
         "current_batch": current_batch,
@@ -172,6 +198,13 @@ def gapo_directory_page(request):
         "departments": departments,
         "recent_batches": AdmParcelRecipientImportBatch.objects.all()[:8],
         "is_super_admin": True,
+        "manager_report": manager_report,
+        "manager_page": manager_page,
+        "manager_token": manager_token,
+        "manager_query": manager_query,
+        "manager_historical_batch": bool(current_batch and AdmParcelRecipientImportBatch.objects.filter(
+            has_errors=False, created_at__gt=current_batch.created_at,
+        ).exists()),
     }
     return render(request, "app_documents/master_data_gapo_directory.html", context)
 

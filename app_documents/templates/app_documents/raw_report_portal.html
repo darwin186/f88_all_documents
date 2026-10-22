@@ -27,7 +27,7 @@
           {% if field.multiple %}
           <div x-data="{ open: false, search: '', count: {{ selected_shop_count }}, popupStyle: '' }" @keydown.escape="open=false">
             <button id="report-{{ field.name }}" type="button" @click="const rect=$el.getBoundingClientRect(); popupStyle='top:' + (rect.bottom+4) + 'px;left:' + rect.left + 'px;width:' + rect.width + 'px'; open=!open" :aria-expanded="open" class="filter-input w-full flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 text-left">
-              <span x-text="count ? 'Đã chọn ' + count + ' PGD' : 'Tất cả phòng giao dịch'"></span><span class="text-gray-400">▾</span>
+              <span x-text="count ? 'Đã chọn ' + count + ' PGD' : 'Tất cả phòng giao dịch'"></span><span class="ui-select-arrow" aria-hidden="true"></span>
             </button>
             <div x-cloak x-show="open" @click.outside="open=false" :style="popupStyle" @scroll.window="open=false" @resize.window="open=false" class="fixed z-50 rounded-xl border border-gray-200 bg-white shadow-lg p-2 space-y-2">
               <input type="search" x-model="search" aria-label="Tìm phòng giao dịch" placeholder="Tìm phòng giao dịch" class="w-full rounded-lg border-gray-200 px-2 py-1">

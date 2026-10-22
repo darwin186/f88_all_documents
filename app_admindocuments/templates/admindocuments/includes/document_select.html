@@ -1,7 +1,7 @@
 <div class="relative" data-document-select>
   {{ field }}
   <button type="button" data-select-toggle hidden aria-expanded="false" aria-controls="{{ field.id_for_label }}-menu" class="w-full flex items-center justify-between rounded-lg border border-gray-300 px-3.5 py-2.5 h-11 text-left focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-f88green bg-white">
-    <span data-select-label class="truncate"></span><span class="ml-2 text-gray-500" aria-hidden="true">▾</span>
+    <span data-select-label class="truncate"></span><span class="ui-select-arrow" aria-hidden="true"></span>
   </button>
   <div id="{{ field.id_for_label }}-menu" data-select-menu hidden class="absolute z-30 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
     <div class="px-3 pt-2 pb-1 flex justify-end"><button type="button" data-select-clear class="text-xs text-blue-600 hover:underline">Bỏ chọn</button></div>

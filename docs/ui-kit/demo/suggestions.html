@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI Kit — Gợi ý khi nhập liệu</title>
+<link rel="stylesheet" href="../../../static/css/ui-kit.css">
+<style>
+  :root { --demo-background: #f5f6f8; --demo-radius: 16px; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--demo-background); color: var(--ui-text); font: 400 11px/1.5 Inter, "SF Pro Text", Arial, sans-serif; }
+  main { max-width: 1000px; margin: auto; padding: 32px 24px 100px; }
+  .eyebrow { margin: 0 0 8px; color: var(--ui-primary-text); font-size: 10px; font-weight: 600; letter-spacing: .06em; }
+  h1 { margin: 0 0 8px; font-size: 24px; line-height: 1.3; letter-spacing: -.5px; }
+  .lead { max-width: 570px; margin: 0; color: var(--ui-text-muted); font-size: 12px; }
+  .workspace { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 20px; margin-top: 24px; align-items: start; }
+  .panel { min-width: 0; padding: 20px; border: 1px solid var(--ui-border); border-radius: var(--demo-radius); background: var(--ui-surface); }
+  h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+  .muted { margin: 0; color: var(--ui-text-muted); }
+  .section-label { margin: 24px 0 10px; font-size: 11px; font-weight: 600; }
+  .field-label { display: block; margin: 20px 0 6px; font-size: 10px; font-weight: 600; }
+  .hint { margin: 6px 0 0; font-size: 10px; color: var(--ui-text-muted); }
+  .try { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 16px 0 0; color: var(--ui-text-muted); font-size: 10px; }
+  .selection { margin: 20px 0 0; padding: 12px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-input); background: var(--ui-surface-muted); }
+  .selection strong { display: block; margin-bottom: 4px; font-size: 10px; }
+  #selected { overflow-wrap: anywhere; }
+  .rules { margin: 16px 0 0; padding-left: 16px; color: var(--ui-text-muted); }
+  .rules li + li { margin-top: 10px; }
+  kbd { display: inline-block; min-width: 20px; padding: 1px 5px; border: 1px solid var(--ui-border); border-radius: 4px; background: var(--ui-surface-muted); color: var(--ui-text); font: inherit; text-align: center; }
+  .keys { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; color: var(--ui-text-muted); font-size: 10px; }
+  .states { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .state { padding: 14px; }
+  .state h3 { margin: 0 0 10px; font-size: 11px; font-weight: 600; }
+  .state .ui-combobox-status { padding: 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-input); background: var(--ui-surface-muted); }
+  .state p + p { margin-top: 8px; }
+  .footnote { margin-top: 16px; color: var(--ui-text-muted); font-size: 10px; }
+  a { color: var(--ui-primary-text); }
+  /* Menu vẫn dùng nguyên CSS của Combobox; bố cục demo không giới hạn chiều cao. */
+  @media (max-width: 680px) { main { padding: 20px 16px 80px; } .workspace, .states { grid-template-columns: minmax(0, 1fr); } h1 { font-size: 20px; } }
+</style>
+</head>
+<body>
+<main>
+  <p class="eyebrow">F88 DOCUMENTS / UI KIT</p>
+  <h1>Gợi ý ngay khi nhập</h1>
+  <p class="lead">Một ô nhập, một danh sách kết quả. Hiển thị tên và thông tin phân biệt để người dùng chọn đúng ngay trong luồng làm việc.</p>
+
+  <div class="workspace">
+    <section class="panel" aria-labelledby="live-title">
+      <h2 id="live-title">Chọn người nhận</h2>
+      <p class="muted">Bản tương tác · dữ liệu minh họa</p>
+      <form onsubmit="return false">
+        <label class="field-label" id="recipient-label">Người nhận bưu phẩm</label>
+        <input type="hidden" id="recipient-value" name="recipient">
+        <div id="recipient" class="ui-combobox" data-ui-combobox
+             data-source="/demo-suggestions/recipients" data-value-input="#recipient-value"
+             data-label="Người nhận bưu phẩm" data-title-key="full_name" data-label-key="label"
+             data-meta-keys="employee_code,department_name" data-aside-keys="location"
+             data-placeholder="Nhập tên hoặc mã nhân viên…"
+             data-hint="Nhập ít nhất 1 ký tự để tìm người nhận."
+             data-empty-text="Không tìm thấy người nhận. Thử tên hoặc mã khác."
+             data-error-text="Chưa tải được gợi ý. Nhập lại để thử."
+             data-delay="220"></div>
+        <p class="hint" id="recipient-hint">Chọn một kết quả để xác nhận người nhận.</p>
+        <div class="try"><span>Gõ thử:</span>
+          <button class="ui-btn ui-btn-secondary ui-btn-sm" type="button" data-query="nguyen">nguyen</button>
+          <button class="ui-btn ui-btn-secondary ui-btn-sm" type="button" data-query="NV003">NV003</button>
+          <button class="ui-btn ui-btn-ghost ui-btn-sm" type="button" data-query="zzz">Không có kết quả</button>
+          <button class="ui-btn ui-btn-ghost ui-btn-sm" type="button" data-query="loi">Lỗi tải</button>
+        </div>
+        <div class="selection" role="status" aria-live="polite">
+          <strong>Người nhận đã chọn</strong>
+          <span id="selected">Chưa chọn người nhận.</span>
+        </div>
+      </form>
+      <div class="keys"><span><kbd>↑</kbd> <kbd>↓</kbd> Di chuyển</span><span><kbd>Enter</kbd> Chọn</span><span><kbd>Esc</kbd> Đóng</span></div>
+    </section>
+
+    <aside class="panel" aria-labelledby="anatomy-title">
+      <h2 id="anatomy-title">Cấu trúc danh sách gợi ý</h2>
+      <p class="muted">Dùng component <code>ui-combobox</code> của kit.</p>
+      <ol class="rules">
+        <li><strong>Ô nhập cao 34px.</strong> Icon tìm kiếm bên trái, nút bỏ chọn bên phải.</li>
+        <li><strong>Tên nổi bật ở dòng đầu.</strong> Mã nhân viên và phòng ban nằm ở dòng phụ; địa điểm nằm bên phải.</li>
+        <li><strong>Kết quả đang trỏ có nền xám.</strong> Dùng chuột hoặc bàn phím để chọn; menu đóng sau khi chọn.</li>
+        <li><strong>Menu cùng chiều rộng ô nhập.</strong> Tối đa 260px cho vùng kết quả, cuộn khi dài và tự mở lên trên khi thiếu chỗ.</li>
+      </ol>
+    </aside>
+  </div>
+
+  <h2 class="section-label">Trạng thái trong menu</h2>
+  <div class="states">
+    <section class="panel state"><h3>01 · Chờ nhập</h3><p class="ui-combobox-status">Nhập ít nhất 1 ký tự để tìm người nhận.</p><p class="muted">Chỉ dẫn rõ cách bắt đầu.</p></section>
+    <section class="panel state"><h3>02 · Đang tìm</h3><p class="ui-combobox-status">Đang tìm…</p><p class="muted">Chờ 220ms sau khi ngừng gõ rồi tìm kiếm.</p></section>
+    <section class="panel state"><h3>03 · Không có kết quả</h3><p class="ui-combobox-status">Không tìm thấy người nhận. Thử tên hoặc mã khác.</p><p class="muted">Giữ từ khóa để người dùng sửa tiếp.</p></section>
+  </div>
+  <p class="footnote">Bản thiết kế dành cho trường chọn một giá trị có sẵn. <a href="../components/combobox.md">Đọc đặc tả Combobox</a> · <a href="combobox.html">Xem biến thể có lọc phòng ban</a>.</p>
+</main>
+<script>
+  // API chỉ được giả lập trong trang demo, không thay đổi dữ liệu ứng dụng.
+  const people = [
+    {id: 1, full_name: 'Nguyễn Văn An', employee_code: 'NV001', department_name: 'Vận hành', location: 'Hà Nội'},
+    {id: 2, full_name: 'Nguyễn Minh Anh', employee_code: 'NV002', department_name: 'Pháp chế', location: 'Hà Nội'},
+    {id: 3, full_name: 'Trần Thị Bình', employee_code: 'NV003', department_name: 'Hành chính', location: 'TP. HCM'},
+    {id: 4, full_name: 'Nguyễn Hoàng Nam', employee_code: 'NV004', department_name: 'Vận hành', location: 'Đà Nẵng'},
+  ].map(item => ({...item, label: `${item.full_name} · ${item.employee_code}`}));
+  const fold = value => value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
+  const realFetch = window.fetch.bind(window);
+  window.fetch = async (resource, options = {}) => {
+    const url = new URL(resource, location.href);
+    if (!url.pathname.endsWith('/demo-suggestions/recipients')) return realFetch(resource, options);
+    await new Promise((resolve, reject) => {
+      if (options.signal?.aborted) { reject(new DOMException('Aborted', 'AbortError')); return; }
+      const abort = () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); };
+      const timer = setTimeout(() => { options.signal?.removeEventListener('abort', abort); resolve(); }, 350);
+      options.signal?.addEventListener('abort', abort, {once: true});
+    });
+    const term = fold(url.searchParams.get('q') || '');
+    if (term === 'loi') return {ok: false, status: 503};
+    const results = people.filter(item => url.searchParams.has('selected_id')
+      ? String(item.id) === url.searchParams.get('selected_id')
+      : fold(`${item.full_name} ${item.employee_code}`).includes(term));
+    return {ok: true, json: async () => ({results})};
+  };
+  document.addEventListener('DOMContentLoaded', () => {
+    const box = document.getElementById('recipient');
+    window.uiCombobox.init(box);
+    const input = box.querySelector('input');
+    input.setAttribute('aria-labelledby', 'recipient-label');
+    input.setAttribute('aria-describedby', 'recipient-hint');
+    document.querySelector('.field-label').htmlFor = input.id = 'recipient-search';
+    const output = document.getElementById('selected');
+    box.addEventListener('ui-combobox:select', event => {
+      const item = event.detail.item;
+      output.textContent = `${item.full_name} · ${item.employee_code} · ${item.department_name}`;
+    });
+    box.addEventListener('ui-combobox:clear', () => { output.textContent = 'Chưa chọn người nhận.'; });
+    document.querySelectorAll('[data-query]').forEach(button => button.addEventListener('click', () => {
+      input.focus(); input.value = button.dataset.query;
+      input.dispatchEvent(new Event('input', {bubbles: true}));
+    }));
+  });
+</script>
+<script src="../../../static/js/ui-combobox.js"></script>
+</body>
+</html>

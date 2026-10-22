@@ -4,10 +4,11 @@ from urllib.parse import parse_qs
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.utils import timezone
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 from app_documents.models import Manager, Region, Shop
 from .models import AdmCompany, AdmCourierCompany, AdmDepartment, AdmPaperDocument, AdmPaperType
@@ -72,11 +73,116 @@ class PaperDocumentRedesignTests(TestCase):
         workbook.close()
 
     def test_clear_creation_range_includes_older_years(self):
-        response = self.client.get(self.url, {'created_all': '1'})
+        response = self.client.get(self.url, {'created_all': '1', 'status': 'Chờ gửi'})
         self.assertEqual(response.context['paginator'].count, 3)
         self.assertEqual(response.context['start_date'], '')
+        self.assertNotIn('status', parse_qs(response.context['list_query']))
+        self.assertNotContains(response, 'id="paper-filter-status"')
         default = self.client.get(self.url)
         self.assertEqual(default.context['paginator'].count, 2)
+
+    def test_search_matches_ticket_and_existing_criteria_and_export(self):
+        AdmPaperDocument.objects.filter(pk=self.docs[0].pk).update(ticket_code='F88-REQ-001')
+        for query, expected in [('req-001', self.docs[0]), ('TRACK-2', self.docs[1]),
+                                ('hành chính 3', self.docs[2]), (self.docs[0].document_number_full, self.docs[0])]:
+            with self.subTest(query=query):
+                response = self.client.get(self.url, {'created_all': '1', 'q': query})
+                self.assertEqual([doc.pk for doc in response.context['documents']], [expected.pk])
+        response = self.client.get(self.url, {'created_all': '1', 'q': 'req-001'})
+        self.assertContains(response, 'Mã Ticket')
+        self.assertContains(response, 'data-document-cell="ticket_code">F88-REQ-001</td>')
+        self.assertNotContains(response, 'data-document-cell="status"')
+        table_header = response.content.decode().split('adm-paper-table', 1)[1].split('</thead>', 1)[0]
+        self.assertNotIn('Tình trạng', table_header)
+        exported = self.client.get(self.export, {'created_all': '1', 'q': 'req-001'})
+        workbook = load_workbook(BytesIO(exported.content), read_only=True)
+        rows = list(workbook.active.iter_rows(min_row=2, values_only=True))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0][1], self.docs[0].document_number_full)
+        self.assertEqual(rows[0][11], 'F88-REQ-001')
+        workbook.close()
+
+    def paper_import_file(self, rows, headers=None):
+        from .views import PAPER_IMPORT_HEADERS
+        workbook = Workbook()
+        sheet = workbook.active
+        headers = headers if headers is not None else PAPER_IMPORT_HEADERS
+        sheet.append(list(headers))
+        defaults = {'Loại giấy': self.kind.name, 'Miền': self.region.region_name,
+                    'Phòng ban nội bộ': self.department.name, 'Nội dung': 'Giấy nhập từ Excel',
+                    'Ngày tạo (yyyy-mm-dd)': f'{self.year}-01-10'}
+        for row in rows:
+            values = {**defaults, **row}
+            sheet.append([values.get(header) for header in headers])
+        output = BytesIO()
+        workbook.save(output)
+        workbook.close()
+        return SimpleUploadedFile('paper-import.xlsx', output.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+    def test_excel_template_has_ticket_instead_of_status(self):
+        AdmPaperDocument.objects.filter(pk=self.docs[1].pk).update(ticket_code='TICKET-SAMPLE')
+        response = self.client.get(reverse('admindocuments:paper_document_template'))
+        workbook = load_workbook(BytesIO(response.content), read_only=True)
+        rows = list(workbook.active.values)
+        headers = list(rows[0])
+        self.assertIn('Mã Ticket', headers)
+        self.assertNotIn('Tình trạng', headers)
+        self.assertEqual(rows[1][headers.index('Mã Ticket')], 'TICKET-SAMPLE')
+        workbook.close()
+
+    def test_excel_check_and_commit_preserves_ticket_for_each_paper(self):
+        upload = self.paper_import_file([
+            {'Nội dung': 'Giấy ticket thứ nhất', 'Mã Ticket': '  TICKET-001  '},
+            {'Nội dung': 'Giấy ticket thứ hai', 'Mã Ticket': 'TICKET-002'},
+        ])
+        response = self.client.post(reverse('admindocuments:paper_document_import_url'), {'file': upload})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()['rows'], 2)
+        self.assertEqual(AdmPaperDocument.objects.count(), 3)
+        committed = self.client.post(reverse('admindocuments:paper_document_import_commit'), {'token': response.json()['token']})
+        self.assertEqual(committed.status_code, 200, committed.content)
+        first = AdmPaperDocument.objects.get(summary='Giấy ticket thứ nhất')
+        second = AdmPaperDocument.objects.get(summary='Giấy ticket thứ hai')
+        self.assertEqual((first.ticket_code, second.ticket_code), ('TICKET-001', 'TICKET-002'))
+        self.assertEqual(first.status, '')
+        listing = self.client.get(self.url, {'created_all': '1', 'q': 'TICKET-001'})
+        self.assertEqual([doc.pk for doc in listing.context['documents']], [first.pk])
+        self.assertContains(listing, 'data-document-cell="ticket_code">TICKET-001</td>')
+
+    def test_direct_excel_import_saves_ticket_without_status(self):
+        upload = self.paper_import_file([{'Nội dung': 'Nhập trực tiếp', 'Mã Ticket': 'TICKET-DIRECT'}])
+        response = self.client.post(reverse('admindocuments:paper_document_import'), {'file': upload})
+        self.assertEqual(response.status_code, 302)
+        doc = AdmPaperDocument.objects.get(summary='Nhập trực tiếp')
+        self.assertEqual(doc.ticket_code, 'TICKET-DIRECT')
+        self.assertEqual(doc.status, '')
+
+    def test_import_accepts_legacy_and_optional_blank_columns(self):
+        from .views import PAPER_IMPORT_HEADERS
+        for label, headers, values, expected_ticket, expected_status in [
+            ('legacy-blank', ['Tình trạng' if h == 'Mã Ticket' else h for h in PAPER_IMPORT_HEADERS], {}, '', ''),
+            ('legacy-filled', ['Tình trạng' if h == 'Mã Ticket' else h for h in PAPER_IMPORT_HEADERS], {'Tình trạng': 'Đã gửi'}, '', 'Đã gửi'),
+            ('both', [*PAPER_IMPORT_HEADERS, 'Tình trạng'], {'Mã Ticket': 'TICKET-BOTH'}, 'TICKET-BOTH', ''),
+            ('blank-ticket', PAPER_IMPORT_HEADERS, {}, '', ''),
+            ('neither', [h for h in PAPER_IMPORT_HEADERS if h != 'Mã Ticket'], {}, '', ''),
+        ]:
+            with self.subTest(template=label):
+                summary = f'Excel {label}'
+                upload = self.paper_import_file([{'Nội dung': summary, **values}], headers)
+                response = self.client.post(reverse('admindocuments:paper_document_import_url'), {'file': upload})
+                self.assertEqual(response.status_code, 200, response.content)
+                committed = self.client.post(reverse('admindocuments:paper_document_import_commit'), {'token': response.json()['token']})
+                self.assertEqual(committed.status_code, 200)
+                doc = AdmPaperDocument.objects.get(summary=summary)
+                self.assertEqual((doc.ticket_code, doc.status), (expected_ticket, expected_status))
+
+    def test_import_rejects_overlong_ticket_before_creating_records(self):
+        upload = self.paper_import_file([{'Mã Ticket': 'T' * 201}])
+        response = self.client.post(reverse('admindocuments:paper_document_import_url'), {'file': upload})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Mã Ticket', response.json()['details'][0])
+        self.assertEqual(AdmPaperDocument.objects.count(), 3)
 
     def test_pagination_counts_continuously_and_keeps_escaped_filters(self):
         AdmPaperDocument.objects.bulk_create([AdmPaperDocument(paper_type=self.kind, running_number=100+i,

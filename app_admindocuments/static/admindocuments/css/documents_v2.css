@@ -338,12 +338,18 @@ main.adm-workspace-main { flex: none; height: 100dvh; min-height: 0; overflow: h
 @media (max-width: 700px) { .adm-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 400px) { .adm-filter-grid { grid-template-columns: 1fr; } }
 
-.adm-paper-table { min-width: 1750px; }
-.adm-paper-table td { max-width: 250px; overflow-wrap: anywhere; }
+.adm-paper-table { min-width: 1500px; }
+.adm-paper-table td { max-width: 250px; overflow-wrap: anywhere; font-weight: 500; }
+.adm-paper-table tbody tr { --ui-paper-row-bg: var(--ui-surface); background: var(--ui-paper-row-bg); }
+.adm-paper-table tbody tr:nth-child(even) { --ui-paper-row-bg: var(--ui-surface-muted); }
+.adm-paper-table tbody tr:hover { --ui-paper-row-bg: var(--ui-surface-subtle); background: var(--ui-paper-row-bg); }
+.adm-paper-table tbody tr.bg-green-50 { --ui-paper-row-bg: var(--ui-primary-soft); }
+.adm-paper-table td > [data-document-cell] { display: block; }
+.adm-paper-table [data-document-cell="courier_tracking_code"], .adm-paper-table [data-document-cell="responsible_person"] { margin-top: 4px; color: var(--ui-text-muted); font-size: 10px; }
 .adm-paper-table td.adm-document-title { min-width: 220px; }
 .adm-paper-table th:last-child, .adm-paper-table td[data-document-actions] { position: sticky; right: 0; z-index: 2; background: #fff; box-shadow: -3px 0 6px #11182708; }
 .adm-paper-table th:last-child { background: #f9fafb; }
-.adm-paper-table tr:hover td[data-document-actions] { background: #fafcfb; }
+.adm-paper-table td[data-document-actions] { background: var(--ui-paper-row-bg); }
 .adm-paper-modal > div { max-width: 900px; }
 .adm-paper-modal > div > div { border-radius: 12px; overflow: hidden; }
 .adm-paper-modal-body { padding: 20px; overflow-y: auto; }
@@ -353,5 +359,5 @@ main.adm-workspace-main { flex: none; height: 100dvh; min-height: 0; overflow: h
 .adm-paper-import-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 16px; }
 .adm-paper-import-status { padding: 14px 0; color: #6b7280; white-space: pre-line; }
 .adm-paper-modal button:disabled { opacity: .5; cursor: not-allowed; }
-@media (min-width: 1151px) { .adm-paper-filter-grid { grid-template-columns: 1.4fr 1fr .8fr 1fr 1.3fr 1.7fr; } }
+@media (min-width: 1151px) { .adm-paper-filter-grid { grid-template-columns: 1.6fr 1fr .8fr 1.3fr 1.7fr; } }
 @media (max-width: 640px) { .adm-paper-modal-body { padding: 14px; } .adm-paper-modal .adm-form-footer { bottom: -14px; } }

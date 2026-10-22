@@ -53,7 +53,7 @@
 </style>
 </head>
 <body>
-<h1>Form tải tệp — 3 phương án</h1>
+<h1>Form tải tệp — 4 phương án</h1>
 <p class="lead">Tương tác được (chọn tệp, kéo thả, đổi chế độ). Cho biết bạn thích kiểu nào để làm thành component <code>ui-file</code> dùng chung.</p>
 
 <div class="grid">
@@ -130,6 +130,19 @@
     <div class="foot"><button class="ui-btn ui-btn-secondary">Hủy</button><button class="ui-btn ui-btn-primary">Lưu</button></div>
     <div class="pros"><b>Hợp khi:</b> nhiều tệp một lần, cần xem trạng thái từng tệp. Phức tạp hơn, tốn công hơn.</div>
   </section>
+
+  <!-- D -->
+  <section class="opt">
+    <header><b>D. Kéo thả + danh sách tệp + chụp ảnh</b><span>Mẫu C có thêm nút chụp ảnh — đã thành component <code>ui-upload</code> (bưu kiện)</span></header>
+    <div class="body">
+      <div class="ui-upload" data-ui-upload data-camera data-max-files="5" data-max-mb="30"
+           data-hint="Ảnh, PDF, Word, Excel · tối đa 5 tệp, mỗi tệp không quá 30MB">
+        <input type="file" id="d-files" name="images" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
+      </div>
+    </div>
+    <div class="foot"><button class="ui-btn ui-btn-secondary">Hủy</button><button class="ui-btn ui-btn-primary">Lưu tiếp nhận</button></div>
+    <div class="pros"><b>Hợp khi:</b> cần cả chụp ảnh tại chỗ (điện thoại) lẫn chọn tệp từ máy; nhiều tệp một lần, có ảnh xem trước, giới hạn số tệp. Chi tiết: <code>components/upload.md</code>.</div>
+  </section>
 </div>
 
 <script>
@@ -148,5 +161,6 @@
   drop.addEventListener('drop', ev => add(ev.dataTransfer.files));
   list.addEventListener('click', ev => ev.target.closest('.rm')?.closest('li').remove());
 </script>
+<script src="../../../static/js/ui-upload.js"></script>
 </body>
 </html>

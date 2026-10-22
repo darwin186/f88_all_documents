@@ -38,6 +38,7 @@
         <div>
           <h2 class="text-lg font-semibold text-gray-800">Batch hiện hành</h2>
           <p class="mt-1 text-sm text-gray-500">Batch này đang được form tiếp nhận bưu phẩm sử dụng.</p>
+          <a href="#shop-manager-enrichment" class="mt-2 inline-block text-sm font-medium text-emerald-700 hover:underline">Đối chiếu Trưởng PGD ↓</a>
         </div>
         {% if current_batch %}
         <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Đang dùng</span>
@@ -101,7 +102,7 @@
             {% endif %}
           </div>
           <div class="mt-3 flex flex-wrap gap-2">
-            <a href="{{ batch.file.url }}" class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">Tải file</a>
+            {% if batch.file %}<a href="{{ batch.file.url }}" class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">Tải file</a>{% endif %}
             {% if not batch.is_current %}
             <form method="post">
               {% csrf_token %}
@@ -199,4 +200,55 @@
     </section>
   </div>
 </div>
+<section id="shop-manager-enrichment" class="mt-5 scroll-mt-20 rounded-xl border border-gray-200 bg-white p-5 shadow-sm" aria-labelledby="shop-manager-title">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <h2 id="shop-manager-title" class="text-lg font-semibold text-gray-800">Đối chiếu Trưởng phòng giao dịch</h2>
+      <p class="mt-1 text-sm text-gray-500">Ghép mã 8 ký tự ở đầu phòng ban với tên Shop, ví dụ AGG24019. Chỉ đề xuất Trưởng phòng giao dịch đang hoạt động và đủ tên, mã nhân viên, email.</p>
+      <p class="mt-1 text-sm text-gray-500">Upload hoặc kích hoạt file chỉ tạo bản đối chiếu. Các dòng cần rà soát giữ nguyên thông tin hiện tại của Shop.</p>
+    </div>
+    {% if manager_report %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="apply_shop_managers">
+      <input type="hidden" name="preview_token" value="{{ manager_token }}">
+      <button type="submit" class="ui-btn ui-btn-primary" {% if not manager_report.counts.ready %}disabled{% endif %}>Áp dụng {{ manager_report.counts.ready|default:0 }} dòng khớp duy nhất</button>
+    </form>
+    {% endif %}
+  </div>
+  {% if manager_report %}
+  <p class="mt-3 text-sm text-gray-600">File nguồn: <strong>{{ current_batch.original_name }}</strong> · {{ manager_report.counts.ready|default:0 }} cần cập nhật · {{ manager_report.counts.unchanged|default:0 }} đã khớp · {{ manager_report.counts.review|default:0 }} cần rà soát.</p>
+  {% if manager_historical_batch %}<p class="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800" role="status">Bạn đang dùng file cũ hơn một bản đã nhập. Kiểm tra kỹ thông tin đề xuất trước khi áp dụng để tránh cập nhật lại nhân sự cũ.</p>{% endif %}
+  <form method="get" action="#shop-manager-enrichment" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+    {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+    <label for="manager-query" class="text-sm font-medium text-gray-700">Tìm trong đối chiếu</label>
+    <input id="manager-query" type="search" name="manager_q" value="{{ manager_query }}" placeholder="Mã PGD, tên, mã nhân viên, email" class="min-w-0 w-full flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm">
+    <button type="submit" class="ui-btn ui-btn-secondary">Tìm</button>
+  </form>
+  <p class="mt-2 text-xs text-gray-500">Nút Áp dụng cập nhật toàn bộ {{ manager_report.counts.ready|default:0 }} dòng khớp duy nhất của file nguồn, bao gồm các trang khác và dòng ngoài kết quả tìm kiếm. Mỗi thay đổi được lưu lịch sử cùng người thực hiện và file nguồn.</p>
+  <div class="mt-4 overflow-x-auto rounded-lg border border-gray-200">
+    <table class="w-full min-w-[760px] text-sm">
+      <caption class="sr-only">Thông tin Trưởng PGD hiện tại và đề xuất từ danh bạ Gapo</caption>
+      <thead class="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+        <tr><th scope="col" class="px-3 py-3">Phòng giao dịch</th><th scope="col" class="px-3 py-3">Hiện tại trong Shop</th><th scope="col" class="px-3 py-3">Đề xuất từ Gapo</th><th scope="col" class="px-3 py-3">Kết quả đối chiếu</th></tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for row in manager_page %}
+        <tr class="odd:bg-white even:bg-gray-50">
+          <td class="px-3 py-3 align-top"><div class="font-medium text-gray-800">{{ row.prefix|default:"Chưa có mã" }}</div><div class="mt-1 text-xs text-gray-500">{{ row.shop_name }}</div></td>
+          <td class="px-3 py-3 align-top"><div class="font-medium text-gray-800">{{ row.before.shop_manager_name|default:"—" }}</div><div class="mt-1 text-xs text-gray-500">{{ row.before.shop_manager_employee_code|default:"—" }}</div><div class="mt-1 break-all text-xs text-gray-500">{{ row.before.shop_manager_email|default:"—" }}</div></td>
+          <td class="px-3 py-3 align-top">
+            {% for person in row.candidates %}<div class="mb-2"><div class="font-medium text-gray-800">{{ person.full_name|default:"Thiếu tên" }}</div><div class="mt-1 text-xs text-gray-500">{{ person.employee_code|default:"Thiếu mã nhân viên" }} · Dòng {{ person.row_number }}</div><div class="mt-1 break-all text-xs text-gray-500">{{ person.email|default:"Thiếu email" }}</div></div>{% empty %}<span class="text-gray-400">—</span>{% endfor %}
+          </td>
+          <td class="px-3 py-3 align-top"><span class="inline-block rounded-full px-2 py-1 text-xs font-semibold {% if row.status == 'ready' %}bg-emerald-50 text-emerald-700{% elif row.status == 'unchanged' %}bg-gray-100 text-gray-600{% else %}bg-amber-50 text-amber-800{% endif %}">{% if row.status == 'ready' %}Sẵn sàng cập nhật{% elif row.status == 'unchanged' %}Đã khớp{% else %}Cần rà soát{% endif %}</span><div class="mt-2 text-xs text-gray-500">{{ row.reason }}</div></td>
+        </tr>
+        {% empty %}<tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Không có dòng đối chiếu phù hợp.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include 'components/ui_pagination.html' with page=manager_page query=request.GET page_param='manager_page' show_summary=True label='Phân trang đối chiếu Trưởng PGD' %}
+  {% else %}
+  <p class="mt-4 rounded-lg bg-gray-50 p-4 text-sm text-gray-500">{% if current_batch.has_errors %}File hiện hành có lỗi. Nhập lại file thành công để đối chiếu Trưởng PGD.{% else %}Upload danh bạ Gapo để xem các thông tin Trưởng PGD có thể bổ sung cho Shop.{% endif %}</p>
+  {% endif %}
+</section>
 {% endblock %}

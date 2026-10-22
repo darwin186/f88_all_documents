@@ -1,0 +1,14 @@
+{# UI Kit — Paginator. Xem docs/ui-kit/components/pagination.md. #}
+{% load ui_pagination %}{% ui_pagination_data page query page_param as pagination %}
+{% if pagination %}
+<nav class="ui-pagination{% if size == 'md' %} ui-pagination-md{% endif %}" aria-label="{{ label|default:'Phân trang' }}">
+  {% if show_summary %}<span class="ui-pagination-summary">{% if pagination.total %}{{ pagination.start }}–{{ pagination.end }} / {{ pagination.total }} kết quả{% else %}0 kết quả{% endif %}</span>{% endif %}
+  <div class="ui-pagination-links">
+    {% if pagination.previous %}<a class="ui-pagination-item ui-pagination-arrow" href="{{ pagination.previous }}" rel="prev" aria-label="Trang trước">‹</a>{% else %}<span class="ui-pagination-item ui-pagination-arrow" aria-disabled="true" aria-label="Trang trước">‹</span>{% endif %}
+    {% for item in pagination.items %}
+      {% if item.number == pagination.current %}<span class="ui-pagination-item" aria-current="page" aria-label="Trang {{ item.number }}">{{ item.number }}</span>{% else %}<a class="ui-pagination-item" href="{{ item.url }}" aria-label="Trang {{ item.number }}">{{ item.number }}</a>{% endif %}
+    {% endfor %}
+    {% if pagination.next %}<a class="ui-pagination-item ui-pagination-arrow" href="{{ pagination.next }}" rel="next" aria-label="Trang sau">›</a>{% else %}<span class="ui-pagination-item ui-pagination-arrow" aria-disabled="true" aria-label="Trang sau">›</span>{% endif %}
+  </div>
+</nav>
+{% endif %}

@@ -5185,6 +5185,46 @@ def validate_package_code_v2(value, selected_region_code=None):
 
 # View GEN số thứ tự tiếp theo cho thùng mới
 @login_required
+def package_code_suggest(request):
+    """Gợi ý mã thùng F88 theo từ khóa (ô tìm kiếm ở Nhận chứng từ)."""
+    query = (request.GET.get('q') or '').strip()
+    if not query:
+        return JsonResponse({'results': []})
+    packages = (
+        Package.objects.filter(package_code__icontains=query)
+        .select_related('package_type')
+        .order_by('-created_date')[:15]
+    )
+    results = []
+    for package in packages:
+        meta = [getattr(package.package_type, 'folder_type_name', '') or '']
+        if package.created_date:
+            meta.append(package.created_date.strftime('%d/%m/%Y'))
+        results.append({'id': package.package_code, 'label': package.package_code, 'meta': ' · '.join(part for part in meta if part)})
+    return JsonResponse({'results': results})
+
+
+@login_required
+def partner_package_code_suggest(request):
+    """Gợi ý mã thùng đối tác theo từ khóa (ô tìm kiếm ở Nhận chứng từ)."""
+    query = (request.GET.get('q') or '').strip()
+    if not query:
+        return JsonResponse({'results': []})
+    partner_packages = (
+        PartnerPackage.objects.filter(partner_package_code__icontains=query)
+        .select_related('partner', 'package_id')
+        .order_by('-created_date')[:15]
+    )
+    results = []
+    for item in partner_packages:
+        f88_code = getattr(item.package_id, 'package_code', '') or ''
+        partner_name = item.partner_name or getattr(item.partner, 'partner_name', '') or ''
+        meta = [part for part in (partner_name, f'Thùng F88: {f88_code}' if f88_code else '') if part]
+        results.append({'id': item.partner_package_code, 'label': item.partner_package_code, 'meta': ' · '.join(meta)})
+    return JsonResponse({'results': results})
+
+
+@login_required
 def get_next_package_sequence(request):
     base_code = request.GET.get('baseCode')
     if not base_code:
