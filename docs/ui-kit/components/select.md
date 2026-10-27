@@ -37,6 +37,8 @@ Component bọc một `<select>` gốc. Select gốc **vẫn là field được 
 
 Nạp sẵn: `static/css/ui-kit.css` và `static/js/ui-select.js` đều được nạp trong `base_app_documents_v2.html`. Trang không extend base này phải tự thêm hai file đó. JS tự khởi tạo mọi `[data-ui-select]`, kể cả phần tử thêm vào trang sau đó.
 
+Trong lúc JavaScript chưa tải xong (hoặc bị tắt), select gốc có sẵn nền trắng, viền bo tròn và kích thước tương ứng với component. Người dùng vẫn chọn được giá trị; sau khi khởi tạo, select gốc được ẩn dưới giao diện tùy chỉnh.
+
 Với field Django `ModelMultipleChoiceField` / `SelectMultiple`, dùng đúng include trên; component nhận ra `multiple` từ select.
 
 ## Biến thể
