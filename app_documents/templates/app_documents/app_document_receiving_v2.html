@@ -126,8 +126,8 @@
         <button type="button" @click="showMore = !showMore" class="ui-btn ui-btn-secondary" x-text="showMore ? 'Thu gọn' : 'Mở rộng'"></button>
         <button type="submit" class="ui-btn ui-btn-primary">Lọc</button>
         <a href="{% url 'receiving_transaction_v2' %}" class="ui-btn ui-btn-secondary">Xóa</a>
-        <button type="button" data-modal-toggle="createPackageModal" class="px-4 py-2 rounded-lg bg-gray-700 text-white font-semibold hover:bg-gray-800">Tạo thùng</button>
-        <button type="button" id="bulk-receive-btn" data-modal-toggle="bulkReceiveModal" class="ui-btn ui-btn-primary hidden">
+        <button type="button" data-receiving-modal-open="createPackageModal" class="px-4 py-2 rounded-lg bg-gray-700 text-white font-semibold hover:bg-gray-800">Tạo thùng</button>
+        <button type="button" id="bulk-receive-btn" data-receiving-modal-open="bulkReceiveModal" class="ui-btn ui-btn-primary hidden">
           Nhận nhiều
           <span id="bulk-receive-count" class="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-white/20 text-[9px] font-semibold">0</span>
         </button>
@@ -212,7 +212,7 @@
         <tbody id="folder-table-body" class="divide-y divide-gray-100">
           {% for folder_dtl in folder_detail %}
           {% with st=folder_dtl.folder_status_id %}
-          <tr class="cursor-pointer hover:bg-gray-50" data-folder-id="{{ folder_dtl.folder_id }}" data-code="{{ folder_dtl.folder_code }}" data-shop="{{ folder_dtl.shop_id.shop_name }}" data-type="{{ folder_dtl.folder_type_id.folder_type_name }}" data-created="{{ folder_dtl.folder_created_date|date:'Y-m-d' }}" data-received="{{ folder_dtl.lastest_received_date|date:'Y-m-d H:i' }}" data-status="{{ st.folder_status_name }}" data-status-id="{{ st.folder_status_id }}" data-status-color="{{ st.badge_color|default:'' }}" data-status-received="{{ st.is_received|yesno:'true,false' }}" data-is-original="{{ folder_dtl.is_original|yesno:'true,false' }}" data-is-issue="{% if folder_dtl.is_issue %}true{% else %}false{% endif %}" data-note="{{ folder_dtl.note|default:'' }}" data-user="{{ folder_dtl.lastest_received_by|default:'' }}" data-package-code="{{ folder_dtl.package_id.package_code|default:'' }}" data-package-id="{{ folder_dtl.package_id.package_id|default:'' }}" data-partner-released="{% if folder_dtl.package_id and folder_dtl.package_id.partnerpackage and folder_dtl.package_id.partnerpackage.status_id and folder_dtl.package_id.partnerpackage.status_id.is_released %}true{% else %}false{% endif %}" data-clear-url="{% url 'clear_package' folder_dtl.folder_id %}">
+          <tr class="cursor-pointer hover:bg-gray-50" data-folder-id="{{ folder_dtl.folder_id }}" data-code="{{ folder_dtl.folder_code }}" data-shop="{{ folder_dtl.shop_id.shop_name }}" data-type="{{ folder_dtl.folder_type_id.folder_type_name }}" data-created="{{ folder_dtl.folder_created_date|date:'Y-m-d' }}" data-received="{{ folder_dtl.lastest_received_date|date:'Y-m-d H:i' }}" data-status="{{ st.folder_status_name }}" data-status-id="{{ st.folder_status_id }}" data-status-color="{{ st.badge_color|default:'' }}" data-status-received="{{ st.is_received|yesno:'true,false' }}" data-is-original="{{ folder_dtl.is_original|yesno:'true,false' }}" data-is-issue="{% if folder_dtl.is_issue %}true{% else %}false{% endif %}" data-note="{{ folder_dtl.note|default:'' }}" data-user="{{ folder_dtl.lastest_received_by|default:'' }}" data-package-code="{{ folder_dtl.package_id.package_code|default:'' }}" data-folder-package-type="{{ folder_dtl.folder_type_id.package_type|default:'' }}" data-package-id="{{ folder_dtl.package_id.package_id|default:'' }}" data-partner-released="{% if folder_dtl.package_id and folder_dtl.package_id.partnerpackage and folder_dtl.package_id.partnerpackage.status_id and folder_dtl.package_id.partnerpackage.status_id.is_released %}true{% else %}false{% endif %}" data-clear-url="{% url 'clear_package' folder_dtl.folder_id %}">
             <td class="px-3 py-2 text-center">
               <input type="checkbox" class="row-checkbox h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" value="checkingitem{{ folder_dtl.folder_id }}" data-folder-code="{{ folder_dtl.folder_code }}" data-folder-created-date="{{ folder_dtl.folder_created_date|date:'Y-m-d' }}" data-package-type="{{ folder_dtl.folder_type_id.package_type|default:'' }}" data-disabled-received="{{ st.is_received|yesno:'true,false' }}" {% if st.is_received %}disabled{% endif %}>
             </td>
@@ -379,7 +379,11 @@
       </div>
       <div>
         <label class="block text-[9px] text-gray-500 mb-1">Mã thùng nhận</label>
-        <input id="drawer-package-code" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] focus:border-emerald-500 focus:ring-0" placeholder="Nhập mã thùng">
+        <input type="hidden" id="drawer-package-type" value="">
+        <div class="ui-combobox" id="drawer-package-combobox" data-ui-combobox data-free data-min="0" data-input-id="drawer-package-code"
+             data-filter="package_type:#drawer-package-type" data-validate-source="{% url 'package_code_suggest' %}"
+             data-source="{% url 'package_code_suggest' %}?recent=1" data-title-key="label" data-label-key="label" data-meta-keys="meta"
+             data-placeholder="Nhập hoặc chọn mã thùng" data-clear-label="Xóa mã thùng" data-delay="200"></div>
       </div>
       <div id="drawer-update-msg" class="text-[9px] text-red-600 hidden"></div>
       <div class="flex justify-end gap-2">
@@ -472,7 +476,11 @@
   const statusSelect = document.getElementById('drawer-status-select');
   const statusBadge = document.getElementById('drawer-status-badge');
   const receiveInput = document.getElementById('drawer-receive-date');
-  const packageInput = document.getElementById('drawer-package-code');
+  // Ô mã thùng là ui-combobox (input được dựng sau khi ui-combobox.js khởi tạo) nên tra cứu khi cần
+  const getPackageInput = () => document.getElementById('drawer-package-code');
+  const packageComboWrap = document.getElementById('drawer-package-combobox');
+  // Kiểm tra mã thùng (tồn tại + đúng loại quyển) do ui-combobox đảm nhiệm qua data-validate-source
+  const validatePackageCode = () => window.uiCombobox.validate(packageComboWrap);
   const updateMsg = document.getElementById('drawer-update-msg');
   const clearBtn = document.getElementById('drawer-clear-package-btn');
   const saveBtn = document.getElementById('drawer-save-btn');
@@ -952,9 +960,10 @@
         setDrawerTab('info');
       }
     }
-    if (packageInput) {
-      packageInput.value = tr.dataset.packageCode || '';
-    }
+    const packageInput = getPackageInput();
+    const packageTypeFilter = document.getElementById('drawer-package-type');
+    if (packageTypeFilter) packageTypeFilter.value = tr.dataset.folderPackageType || '';
+    if (packageInput) window.uiCombobox.setValue(packageComboWrap, tr.dataset.packageCode || '');
     if (clearBtn) {
       const hasPackage = !!(tr.dataset.packageId || '').trim();
       const isReleased = (tr.dataset.partnerReleased || '').toLowerCase() === 'true';
@@ -1203,8 +1212,10 @@
   document.addEventListener('click', (e) => {
     if (!drawer) return;
     const target = e.target;
-    const clickedInsideDrawer = drawer.contains(target);
-    const clickedRow = tbody?.contains(target);
+    // ui-select vẽ lại danh sách ngay khi chọn => target đã bị gỡ khỏi DOM, dùng composedPath để vẫn xác định đúng vị trí bấm
+    const path = e.composedPath();
+    const clickedInsideDrawer = path.includes(drawer);
+    const clickedRow = tbody ? path.includes(tbody) : false;
     if (!clickedInsideDrawer && !clickedRow) {
       drawer.classList.add('translate-x-full');
       activeFolderId = null;
@@ -1314,7 +1325,7 @@
   saveBtn?.addEventListener('click', async () => {
     if (!activeFolderId) return;
     const statusVal = statusSelect?.value || '';
-    const pkgVal = packageInput?.value?.trim() || '';
+    const pkgVal = getPackageInput()?.value?.trim() || '';
     const issueIds = drawerIssuePicker?.getSelectedIds?.() || [];
     if (!drawerIssuePicker?.hasOptions) {
       drawerIssuePicker?.setError('Chưa có cấu hình lỗi để nhận.');
@@ -1331,6 +1342,10 @@
     }
     if (!pkgVal) {
       setUpdateMsg('Vui lòng nhập mã thùng nhận.');
+      return;
+    }
+    if (!(await validatePackageCode())) {
+      setUpdateMsg('Mã thùng nhận không hợp lệ.');
       return;
     }
     setUpdateMsg('');
@@ -1434,7 +1449,7 @@
   <div class="bg-white rounded-2xl shadow-xl w-full max-w-xl text-[9px]">
     <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
       <h3 class="text-[10px] font-semibold text-gray-900">Nhận nhiều quyển chứng từ</h3>
-      <button type="button" class="text-gray-500 hover:text-gray-700" data-modal-hide="bulkReceiveModal">
+      <button type="button" class="text-gray-500 hover:text-gray-700" data-receiving-modal-close="bulkReceiveModal">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
       </button>
     </div>
@@ -1500,8 +1515,8 @@
       <div id="bulk-receive-msg" class="text-[9px] text-red-600 hidden"></div>
     </div>
     <div class="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200">
-      <button type="button" class="ui-btn ui-btn-secondary" data-modal-hide="bulkReceiveModal">Hủy</button>
-      <button type="button" data-modal-toggle="createPackageModal" data-return-target="bulk" class="px-3 py-2 rounded-lg border border-emerald-200 text-emerald-700 text-[9px] font-semibold hover:bg-emerald-50">Tạo thùng</button>
+      <button type="button" class="ui-btn ui-btn-secondary" data-receiving-modal-close="bulkReceiveModal">Hủy</button>
+      <button type="button" data-receiving-modal-open="createPackageModal" data-return-target="bulk" class="px-3 py-2 rounded-lg border border-emerald-200 text-emerald-700 text-[9px] font-semibold hover:bg-emerald-50">Tạo thùng</button>
       <button type="button" id="bulk-receive-submit" class="ui-btn ui-btn-primary">Nhận quyển</button>
     </div>
   </div>
@@ -1636,8 +1651,8 @@
     }
 
     document.addEventListener('click', (e) => {
-      const openBtn = e.target.closest('[data-modal-toggle="bulkReceiveModal"]');
-      const closeBtn = e.target.closest('[data-modal-hide="bulkReceiveModal"]');
+      const openBtn = e.target.closest('[data-receiving-modal-open="bulkReceiveModal"]');
+      const closeBtn = e.target.closest('[data-receiving-modal-close="bulkReceiveModal"]');
       if (openBtn) {
         e.preventDefault();
         refreshSelectedList();
@@ -1753,7 +1768,7 @@
   <div class="bg-white rounded-2xl shadow-xl w-full max-w-xl text-[9px]">
     <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
       <h3 class="text-[10px] font-semibold text-gray-900">Tạo thùng mới</h3>
-      <button type="button" class="text-gray-500 hover:text-gray-700" data-modal-hide="createPackageModal">
+      <button type="button" class="text-gray-500 hover:text-gray-700" data-receiving-modal-close="createPackageModal">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
       </button>
     </div>
@@ -1814,7 +1829,7 @@
       <div id="create-package-message-v2" class="text-[9px] text-red-600 hidden"></div>
     </div>
     <div class="flex items-center justify-end gap-2 px-4 py-3 border-t border-gray-200">
-      <button type="button" class="ui-btn ui-btn-secondary" data-modal-hide="createPackageModal">Hủy</button>
+      <button type="button" class="ui-btn ui-btn-secondary" data-receiving-modal-close="createPackageModal">Hủy</button>
       <button type="button" id="create-package-submit-v2" class="ui-btn ui-btn-primary">Tạo thùng</button>
     </div>
   </div>
@@ -1832,8 +1847,8 @@
     let returnTarget = 'page';
 
     document.addEventListener('click', (e) => {
-      const openBtn = e.target.closest('[data-modal-toggle="createPackageModal"]');
-      const closeBtn = e.target.closest('[data-modal-hide="createPackageModal"]');
+      const openBtn = e.target.closest('[data-receiving-modal-open="createPackageModal"]');
+      const closeBtn = e.target.closest('[data-receiving-modal-close="createPackageModal"]');
       if (openBtn) {
         e.preventDefault();
         returnTarget = openBtn.dataset.returnTarget || 'page';

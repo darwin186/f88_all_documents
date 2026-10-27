@@ -2681,6 +2681,13 @@ def handle_400(request, exception):
 def handle_500(request):
     return render(request, '500.html', status=500)
 
+def _package_is_with_partner(package):
+    """Thùng đã giao cho đối tác (PartnerPackage có trạng thái is_released) => không thêm/đổi chứng từ."""
+    partner_package = getattr(package, 'partnerpackage', None) if package else None
+    status = getattr(partner_package, 'status_id', None)
+    return bool(status and status.is_released)
+
+
 @login_required
 def checking_transaction_view_v2(request):
     user = request.user
@@ -2919,17 +2926,46 @@ def checking_transaction_view_v2(request):
                     messages.add_message(request, messages.ERROR, error_msg)
                     return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
                 try:
-                    if Package.objects.filter(package_code=package_code_submit, replaced_by__isnull=True).exists():
-                        package_id = Package.objects.get(package_code=package_code_submit, replaced_by__isnull=True)
-                        documents_detail_instance.update(package_id=package_id)
-                        message_success_content += f"Gán thùng thành công cho chứng từ {documents_detail_instance_log.documents_code}\n"
-                        PackageDocumentHistory.objects.create(
-                            document_id=documents_detail_instance_log,
-                            package_id=package_id,
-                            trans_created_date=timezone.now(),
-                            trans_created_by=user,
-                            action=PackageHistoryAction.ASSIGNED,
-                        )
+                    package_id = Package.objects.select_related('package_type').filter(package_code=package_code_submit, replaced_by__isnull=True).first()
+                    if package_id:
+                        old_package = documents_detail_instance_log.package_id
+                        change_error = None
+                        if old_package and old_package.pk == package_id.pk:
+                            pass   # cùng thùng: không có gì xảy ra
+                        else:
+                            folder_pkg_type = (documents_detail_instance_log.folder_id.folder_type_id.package_type
+                                               if documents_detail_instance_log.folder_id and documents_detail_instance_log.folder_id.folder_type_id else None)
+                            package_pkg_type = package_id.package_type.package_type if package_id.package_type else None
+                            if not folder_pkg_type or not package_pkg_type or str(folder_pkg_type).strip().upper() != str(package_pkg_type).strip().upper():
+                                change_error = 'Mã thùng không khớp loại quyển.'
+                            elif old_package and _package_is_with_partner(old_package):
+                                change_error = f"Thùng hiện tại {old_package.package_code} đang nằm ở đối tác, không thể đổi thùng."
+                            elif _package_is_with_partner(package_id):
+                                change_error = f"Thùng {package_id.package_code} đang nằm ở đối tác, không thể thêm chứng từ vào."
+                        if change_error:
+                            if is_ajax:
+                                return JsonResponse({'success': False, 'error': change_error}, status=400)
+                            messages.add_message(request, messages.ERROR, change_error)
+                            return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
+                        if not (old_package and old_package.pk == package_id.pk):
+                            change_time = timezone.now()
+                            documents_detail_instance.update(package_id=package_id)
+                            message_success_content += f"Gán thùng thành công cho chứng từ {documents_detail_instance_log.documents_code}\n"
+                            if old_package:
+                                PackageDocumentHistory.objects.create(
+                                    document_id=documents_detail_instance_log,
+                                    package_id=old_package,
+                                    trans_created_date=change_time,
+                                    trans_created_by=user,
+                                    action=PackageHistoryAction.UNASSIGNED,
+                                )
+                            PackageDocumentHistory.objects.create(
+                                document_id=documents_detail_instance_log,
+                                package_id=package_id,
+                                trans_created_date=change_time,
+                                trans_created_by=user,
+                                action=PackageHistoryAction.ASSIGNED,
+                            )
                     else:
                         noti_error = f"Thùng {package_code_submit} không tồn tại. Vui lòng chọn một mã thùng đã tồn tại"
                         if is_ajax:
@@ -5186,20 +5222,43 @@ def validate_package_code_v2(value, selected_region_code=None):
 # View GEN số thứ tự tiếp theo cho thùng mới
 @login_required
 def package_code_suggest(request):
-    """Gợi ý mã thùng F88 theo từ khóa (ô tìm kiếm ở Nhận chứng từ)."""
+    """Gợi ý mã thùng F88 theo từ khóa (ô tìm kiếm ở Nhận chứng từ).
+
+    Không có từ khóa: chỉ trả kết quả khi có `recent=1` (ô mã thùng nhận trong drawer) —
+    admin thấy thùng mới tạo nhất toàn hệ thống, người khác chỉ thấy thùng do chính họ tạo.
+    `package_type` thu hẹp gợi ý theo loại thùng; `check=<mã>` trả trạng thái ok / not_found / wrong_type.
+    """
     query = (request.GET.get('q') or '').strip()
-    if not query:
+    package_type = (request.GET.get('package_type') or '').strip()
+    check_code = (request.GET.get('check') or '').strip()
+    if check_code:
+        # Kiểm tra mã thùng nhập tay: có tồn tại và đúng loại quyển (package_type) không
+        package = Package.objects.select_related('package_type').filter(package_code__iexact=check_code, replaced_by__isnull=True).first()
+        if not package:
+            return JsonResponse({'status': 'not_found', 'valid': False, 'message': 'Mã thùng không tồn tại.'})
+        actual = (package.package_type.package_type if package.package_type else '') or ''
+        if package_type and actual.strip().upper() != package_type.upper():
+            return JsonResponse({'status': 'wrong_type', 'valid': False, 'message': f'Mã thùng không đúng loại quyển (cần thùng {package_type}).'})
+        return JsonResponse({'status': 'ok', 'valid': True, 'message': ''})
+    is_admin = _is_gddb_admin(request.user)
+    packages = Package.objects.select_related('package_type', 'created_by')
+    if package_type:
+        packages = packages.filter(package_type__package_type__iexact=package_type, replaced_by__isnull=True)
+    if query:
+        packages = packages.filter(package_code__icontains=query)
+    elif request.GET.get('recent') == '1':
+        if not is_admin:
+            packages = packages.filter(created_by=request.user)
+    else:
         return JsonResponse({'results': []})
-    packages = (
-        Package.objects.filter(package_code__icontains=query)
-        .select_related('package_type')
-        .order_by('-created_date')[:15]
-    )
+    packages = packages.order_by('-created_date')[:15]
     results = []
     for package in packages:
         meta = [getattr(package.package_type, 'folder_type_name', '') or '']
         if package.created_date:
             meta.append(package.created_date.strftime('%d/%m/%Y'))
+        if not query and package.created_by_id and is_admin:
+            meta.append(package.created_by.username)
         results.append({'id': package.package_code, 'label': package.package_code, 'meta': ' · '.join(part for part in meta if part)})
     return JsonResponse({'results': results})
 

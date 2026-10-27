@@ -12,7 +12,7 @@ Bản thiết kế **danh sách gợi ý khi nhập liệu**: [demo/suggestions.
 
 `[icon tìm kiếm] [từ khóa / nhãn đã chọn] [bỏ chọn ×]`
 
-- Ô nhập cao 34px (cỡ nhỏ 28px), viền và vòng focus theo token chung.
+- Ô nhập cao 34px (cỡ nhỏ 28px); khi focus hoặc mở menu chỉ dùng viền xám đậm, không có khung xanh hay vòng sáng. Input bên trong không có viền, outline hoặc ring riêng.
 - Menu nổi cách ô nhập 5px, rộng bằng ô nhập; vùng kết quả cao tối đa 260px, cuộn khi dài, tự lật lên trên khi thiếu chỗ.
 - Mỗi dòng: **tên** ở trên, mã định danh và thông tin phân biệt ở dưới; thông tin bổ sung ngắn ở bên phải. Không dùng màu làm dấu hiệu phân biệt duy nhất.
 - Kết quả đang trỏ dùng nền `surface-subtle`. Chọn bằng chuột hoặc Enter thì đóng menu, lưu ID và hiển thị nhãn; nút × bỏ lựa chọn.
@@ -65,6 +65,20 @@ Thêm `data-free` khi ô tìm kiếm là **văn bản tự do** (ví dụ "Tìm 
 - Chọn một gợi ý thì điền chữ đó vào ô (bắn `change`); không có gợi ý nào được tô sáng sẵn nên Enter gửi form với chữ đang gõ. ↓ rồi Enter mới chọn gợi ý.
 - Không có kết quả thì menu tự ẩn (đặt `data-empty-text` nếu muốn hiện dòng "Không có gợi ý").
 - API trả `{"results": [{"label": "...", "meta": "..."}]}` như bình thường; `selected_id` không dùng.
+
+Gợi ý ngay khi focus ô rỗng (không cần gõ): thêm `data-min="0"`. Mỗi lần focus vào ô rỗng component gọi `data-source?q=` (rỗng), nên server phải tự quyết định trả gì cho từ khóa rỗng (ví dụ nối `?recent=1` vào `data-source`). Dùng `data-input-id="..."` để đặt `id` cho ô nhập (code ngoài gán `input.value` thì bắn `change` để nút × cập nhật). Ví dụ: ô "Mã thùng nhận" trong drawer Nhận chứng từ — admin thấy thùng mới tạo nhất toàn hệ thống, user khác thấy thùng do chính họ tạo.
+
+## Kiểm tra giá trị nhập tay (chế độ gõ tự do)
+
+Thêm `data-validate-source="<url>"` khi giá trị gõ tay phải được server xác nhận (ví dụ mã thùng phải tồn tại và đúng loại quyển). Khi người dùng gõ (chờ `data-validate-delay`, mặc định 400ms), chọn gợi ý hoặc rời ô, component gọi `GET data-validate-source?check=<giá trị>` kèm giá trị của `data-filter` (nếu có) và nhận `{"valid": false, "message": "..."}`.
+
+- `valid: false` → `.ui-combobox` có `is-invalid` (viền đỏ) và hiện dòng lỗi `.ui-combobox-error` với `message` (không có thì dùng `data-invalid-text`). `valid: true`, ô rỗng, hoặc lỗi mạng → bỏ lỗi (server vẫn phải kiểm tra lại khi lưu).
+- Đổi giá trị ô `data-filter` cũng kiểm tra lại.
+- Trước khi gửi form: `await window.uiCombobox.validate(wrapper)` trả `true/false`.
+- Gán giá trị từ code (vd. mở drawer) dùng `window.uiCombobox.setValue(wrapper, value)`: không bắn `change`, không kiểm tra, xoá lỗi cũ. (Gán `input.value` rồi bắn `change` thì sẽ bị kiểm tra.)
+- Tham số/thuộc tính: `data-validate-param` (tên tham số, mặc định `check`), `data-invalid-text`.
+
+Ví dụ: ô "Mã thùng nhận" trong drawer Nhận chứng từ (`data-filter="package_type:#drawer-package-type"`, `data-validate-source` trỏ `package_code_suggest`).
 
 ## API server
 
@@ -124,11 +138,11 @@ box.addEventListener('ui-combobox:select', e => {
 
 | Trạng thái | Quy tắc |
 |---|---|
-| mở | viền xanh + vòng sáng; menu tự lật lên nếu thiếu chỗ phía dưới |
+| mở / focus | viền xám đậm, không có khung xanh hoặc vòng sáng; menu tự lật lên nếu thiếu chỗ phía dưới |
 | đang chọn | chữ đậm; mục đặc biệt: chữ nghiêng xám |
 | chưa gõ | menu hiện gợi ý (`data-hint`) |
 | đang tải / không có kết quả / lỗi | dòng trạng thái trong menu |
-| lỗi nhập | thêm class `is-invalid` lên `.ui-combobox` (viền đỏ) |
+| lỗi nhập | thêm class `is-invalid` lên `.ui-combobox` (viền đỏ), hoặc dùng `data-validate-source` để component tự bật kèm dòng lỗi |
 
 | Phím | Tác dụng |
 |---|---|

@@ -24,8 +24,10 @@
     const metaKeys = csv(cfg.metaKeys);
     const metaEmpty = (cfg.metaEmpty || '').split('|');
     const asideKeys = csv(cfg.asideKeys);
-    const minChars = Number(cfg.min) || 1;
+    const minChars = cfg.min === undefined ? 1 : Math.max(0, Number(cfg.min) || 0);   // data-min="0": gợi ý ngay khi focus ô rỗng
     const delay = Number(cfg.delay) || 220;
+    const validateUrl = cfg.validateSource || '';   // kiểm tra giá trị nhập tay với server (xem combobox.md)
+    const validateDelay = Number(cfg.validateDelay) || 400;
     const id = `ui-combobox-${++uid}`;
     const placeholder = cfg.placeholder || 'Tìm kiếm...';
 
@@ -43,7 +45,7 @@
     });
     const clearBtn = el('button', 'ui-combobox-clear', {type: 'button', 'aria-label': cfg.clearLabel || 'Bỏ chọn'});
     clearBtn.textContent = '×'; clearBtn.hidden = true;
-    if (free) { if (cfg.name) input.name = cfg.name; input.value = cfg.value || ''; input.removeAttribute('aria-autocomplete'); input.setAttribute('aria-autocomplete', 'list'); }
+    if (free) { if (cfg.name) input.name = cfg.name; if (cfg.inputId) input.id = cfg.inputId; input.value = cfg.value || ''; input.removeAttribute('aria-autocomplete'); input.setAttribute('aria-autocomplete', 'list'); }
     field.append(icon, input, clearBtn);
     const menu = el('div', 'ui-combobox-menu'); menu.hidden = true;
     const status = el('p', 'ui-combobox-status');
@@ -51,7 +53,8 @@
     const footer = el('button', 'ui-combobox-special', {type: 'button', role: 'option'});
     footer.hidden = !cfg.specialLabel; footer.textContent = cfg.specialLabel || '';
     menu.append(status, list, footer);
-    wrapper.append(field, menu);
+    const errorEl = el('p', 'ui-combobox-error', {role: 'alert'}); errorEl.hidden = true;
+    wrapper.append(field, menu, errorEl);
 
     let selected = null;      // {id, label, item} | {special: true, label}
     let results = [];
@@ -148,6 +151,27 @@
       }
     };
 
+    let validSeq = 0;
+    let validTimer = null;
+    const setInvalid = text => {
+      wrapper.classList.toggle('is-invalid', Boolean(text));
+      errorEl.textContent = text || ''; errorEl.hidden = !text;
+    };
+    // true = hợp lệ (hoặc không cấu hình kiểm tra / lỗi mạng: để server chặn khi lưu)
+    const validate = async () => {
+      window.clearTimeout(validTimer);
+      const seq = ++validSeq;
+      const term = input.value.trim();
+      if (!validateUrl || !term) { setInvalid(''); return true; }
+      try {
+        const response = await fetch(`${validateUrl}${validateUrl.includes('?') ? '&' : '?'}${params({[cfg.validateParam || 'check']: term})}`, {headers: {'X-Requested-With': 'XMLHttpRequest'}});
+        const data = await response.json();
+        if (seq !== validSeq) return true;   // đã có lần kiểm tra mới hơn
+        if (data.valid === false) { setInvalid(data.message || cfg.invalidText || 'Giá trị không hợp lệ.'); return false; }
+        setInvalid(''); return true;
+      } catch (error) { return true; }
+    };
+
     const showSelected = () => { input.value = selected ? selected.label : ''; paint(); };
     const pick = item => {
       if (free) {
@@ -166,17 +190,23 @@
     const clear = (focus = true) => {
       const had = Boolean(selected);
       selected = null; results = []; render();
-      writeValue(''); writeSpecial(''); input.value = ''; paint();
+      writeValue(''); writeSpecial(''); input.value = ''; paint(); validSeq += 1; setInvalid('');
       if (had) emit('clear', {});
       if (focus) { input.focus(); setStatus(cfg.hint || ''); if (!free) open(); }
     };
 
-    input.addEventListener('focus', () => { open(); if (!selected && !input.value) setStatus(cfg.hint || ''); });
+    input.addEventListener('focus', () => {
+      open();
+      if (free && minChars === 0 && !input.value) { search(); return; }
+      if (!selected && !input.value) setStatus(cfg.hint || '');
+    });
+    input.addEventListener('change', () => { paint(); if (validateUrl) validate(); });   // chọn gợi ý / rời ô => kiểm tra ngay
     input.addEventListener('click', open);
     input.addEventListener('input', () => {
       if (selected) { selected = null; writeValue(''); writeSpecial(''); emit('clear', {}); }
       paint(); if (!free) open();
       window.clearTimeout(timer); timer = window.setTimeout(search, delay);
+      if (validateUrl) { validSeq += 1; setInvalid(''); window.clearTimeout(validTimer); validTimer = window.setTimeout(validate, validateDelay); }
     });
     input.addEventListener('keydown', event => {
       if (event.key === 'ArrowDown') { event.preventDefault(); open(); setActive(active + 1); }
@@ -194,7 +224,7 @@
     footer.addEventListener('mousedown', event => event.preventDefault());
     footer.addEventListener('click', pickSpecial);
     clearBtn.addEventListener('click', () => clear());
-    filterEl?.addEventListener('change', () => { if (!selected && input.value.trim()) search(); });
+    filterEl?.addEventListener('change', () => { if (!selected && input.value.trim()) search(); if (validateUrl) validate(); });
 
     footer.id = `${id}-special`;
     // Khôi phục lựa chọn có sẵn từ server (form dựng lại sau lỗi validate)
@@ -213,7 +243,10 @@
       close,
       setSpecial: pickSpecial,
       clear,
-      reset: () => { selected = null; results = []; render(); input.value = ''; paint(); },
+      reset: () => { selected = null; results = []; render(); input.value = ''; paint(); validSeq += 1; setInvalid(''); },
+      validate,
+      // Gán giá trị từ code (vd. mở drawer): không bắn change, không kiểm tra, xoá lỗi cũ.
+      setValue: value => { input.value = value || ''; paint(); validSeq += 1; setInvalid(''); },
       hasValue: () => Boolean(selected),
     });
     paint();
@@ -236,5 +269,7 @@
     clear: wrapper => instances.get(wrapper)?.clear(false),
     setSpecial: wrapper => instances.get(wrapper)?.setSpecial(),
     reset: wrapper => instances.get(wrapper)?.reset(),
+    validate: wrapper => instances.get(wrapper)?.validate() ?? Promise.resolve(true),
+    setValue: (wrapper, value) => instances.get(wrapper)?.setValue(value),
   };
 })();

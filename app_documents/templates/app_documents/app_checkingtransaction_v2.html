@@ -615,14 +615,17 @@
       const isSelectable = activeRow?.dataset?.documentsSelectable === 'true';
       const isChecked = activeRow?.dataset?.documentsIsChecked === 'true';
       const isReceived = activeRow?.dataset?.folderReceived === 'true';
-      const allowChange = (isSelectable || isChecked) && isReceived;
+      const isReleased = activeRow?.dataset?.packageReleased === 'true';
+      const allowChange = (isSelectable || isChecked) && isReceived && !isReleased;
       packageInput.disabled = !allowChange;
       packageSubmit.disabled = !allowChange;
       packageSubmit.classList.toggle('opacity-50', !allowChange);
       packageSubmit.classList.toggle('cursor-not-allowed', !allowChange);
       if (packageMsg) {
         if (!allowChange) {
-          packageMsg.textContent = 'Chỉ đổi thùng khi chứng từ đã nhận và trạng thái cho phép.';
+          packageMsg.textContent = isReleased
+            ? 'Thùng đang nằm ở đối tác, không thể đổi thùng.'
+            : 'Chỉ đổi thùng khi chứng từ đã nhận và trạng thái cho phép.';
           packageMsg.className = 'text-[9px] text-gray-500';
         } else {
           packageMsg.textContent = '';
@@ -1332,9 +1335,11 @@
 
     document.addEventListener('click', (event) => {
       if (!drawer) return;
-      if (bulkButton && bulkButton.contains(event.target)) return;
-      const clickedInsideDrawer = drawer.contains(event.target);
-      const clickedRow = event.target.closest('tr[data-document-id]');
+      // ui-select vẽ lại danh sách ngay khi chọn => target đã bị gỡ khỏi DOM, dùng composedPath
+      const path = event.composedPath();
+      if (bulkButton && path.includes(bulkButton)) return;
+      const clickedInsideDrawer = path.includes(drawer);
+      const clickedRow = path.some(node => node.matches?.('tr[data-document-id]'));
       if (!clickedInsideDrawer && !clickedRow) {
         drawer.classList.add('translate-x-full');
         activeRow = null;
