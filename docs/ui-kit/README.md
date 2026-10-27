@@ -22,9 +22,11 @@ Bộ quy chuẩn UI dùng chung cho **toàn dự án** (`app_admindocuments`, `a
 | Upload (kéo thả + danh sách tệp + chụp ảnh, "Mẫu D") | 🟡 Mới — đã áp dụng cho Ảnh đính kèm/File của bưu kiện | [components/upload.md](components/upload.md) · [demo](demo/file-upload-options.html) |
 | Color pair (chữ + nền, xem trước trực tiếp) | 🟡 Mới — đã áp dụng cho màu Trạng thái văn bản | [components/color-pair.md](components/color-pair.md) |
 | Date (ngày / khoảng ngày / ngày giờ / giờ) | 🟡 Mới — đã áp dụng cho 2 ô khoảng ngày ở thanh lọc Nhận chứng từ | [components/date.md](components/date.md) · [demo](demo/date.html) |
-| Badge status | ⚪ Chưa làm | — |
-| Table | ⚪ Chưa làm | — |
-| Form field | ⚪ Chưa làm | — |
+| Hint (icon thông tin giải thích điều kiện) | 🟡 Mới — đã áp dụng cho ô Mã thùng ở drawer Duyệt chứng từ | [components/hint.md](components/hint.md) |
+| Operations workspace (panel, tab, bộ lọc, thống kê) | 🟡 Mới — áp dụng cho Kiểm bản mềm | [components/workspace.md](components/workspace.md) |
+| Badge status | 🟡 Mới — áp dụng cho Kiểm bản mềm | [components/workspace.md](components/workspace.md) |
+| Table | 🟡 Mới — áp dụng cho Kiểm bản mềm | [components/workspace.md](components/workspace.md) |
+| Form field | 🟡 Mới — áp dụng cho Kiểm bản mềm | [components/workspace.md](components/workspace.md) |
 | Paginator (phân trang, cảm hứng Giấy hành chính) | 🟡 Mới — CSS/template dùng chung, chưa migrate màn cũ | [components/pagination.md](components/pagination.md) · [demo](demo/pagination.html) |
 | Modal / Drawer | ⚪ Chưa làm | — |
 
