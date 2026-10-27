@@ -212,6 +212,7 @@
             data-document-date="{{ document_dtl.documents_created_date|date:'Y-m-d' }}"
             data-contract-loan="{% if document_dtl.loan_id %}GNN: {{ document_dtl.loan_id.loan_code|default_if_none:'' }}{% elif document_dtl.contract_id %}HĐCC: {{ document_dtl.contract_id.contract_code|default_if_none:'' }}{% endif %}"
             data-folder-type="{% if document_dtl.folder_id and document_dtl.folder_id.folder_type_id %}{{ document_dtl.folder_id.folder_type_id.folder_type_name|default_if_none:'' }}{% endif %}"
+            data-folder-package-type="{% if document_dtl.folder_id and document_dtl.folder_id.folder_type_id %}{{ document_dtl.folder_id.folder_type_id.package_type|default_if_none:'' }}{% endif %}"
             data-employee="{% if document_dtl.loan_id %}{% if document_dtl.loan_id.employee_name %}{{ document_dtl.loan_id.employee_name|escapejs }}{% elif document_dtl.loan_id.employee_id %}{{ document_dtl.loan_id.employee_id.employee_name|default_if_none:''|escapejs }}{% endif %}{% elif document_dtl.contract_id and document_dtl.contract_id.employee_id %}{{ document_dtl.contract_id.employee_id.employee_name|default_if_none:''|escapejs }}{% endif %}"
             data-customer="{% if document_dtl.loan_id %}{{ document_dtl.loan_id.customer_name|default_if_none:''|escapejs }}{% elif document_dtl.contract_id %}{{ document_dtl.contract_id.customer_id.customer_name|default_if_none:''|escapejs }}{% endif %}"
             data-document-type="{{ document_dtl.document_type_id.document_type_name|default_if_none:'' }}"
@@ -452,7 +453,22 @@
         </form>
       </div>
       <div class="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-2">
-        <p class="text-[9px] uppercase text-gray-500">Mã thùng</p>
+        <div class="flex items-center gap-1 text-[9px] uppercase text-gray-500">
+          <span>Mã thùng</span>
+          <span class="ui-hint" tabindex="0" role="button" aria-label="Điều kiện đổi mã thùng">
+            <span class="ui-hint-icon" aria-hidden="true">i</span>
+            <span class="ui-hint-pop" role="tooltip">
+              <strong>Chỉ đổi được thùng khi:</strong>
+              <ul>
+                <li>Chứng từ đã được nhận.</li>
+                <li>Trạng thái chứng từ cho phép đổi (hoặc đã duyệt).</li>
+                <li>Thùng hiện tại không nằm ở đối tác.</li>
+                <li>Thùng mới cùng loại quyển và không nằm ở đối tác.</li>
+                <li>Nhập trùng thùng hiện tại thì không có gì thay đổi.</li>
+              </ul>
+            </span>
+          </span>
+        </div>
         <form id="drawer-package-form" method="post" class="space-y-2">
           {% csrf_token %}
           <input type="hidden" name="documents_id_submit" id="drawer-doc-id-package">
@@ -469,8 +485,11 @@
           <input type="hidden" name="filter_page" value="{{ documents_detail.number }}">
           <input type="hidden" name="filter_sort" value="{{ sort_param }}">
           <div>
-            <label class="block text-[9px] text-gray-500 mb-1">Mã thùng</label>
-            <input id="drawer-package-input" name="package_code_submit" type="text" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-[9px] bg-white focus:border-emerald-500 focus:outline-none" placeholder="Nhập mã thùng">
+            <input type="hidden" id="drawer-package-type" value="">
+            <div class="ui-combobox" id="drawer-package-combobox" data-ui-combobox data-free data-min="0" data-name="package_code_submit" data-input-id="drawer-package-input"
+                 data-filter="package_type:#drawer-package-type" data-validate-source="{% url 'package_code_suggest' %}"
+                 data-source="{% url 'package_code_suggest' %}?recent=1" data-title-key="label" data-label-key="label" data-meta-keys="meta"
+                 data-placeholder="Nhập hoặc chọn mã thùng" data-clear-label="Xóa mã thùng" data-delay="200"></div>
           </div>
           <p id="drawer-package-msg" class="text-[9px] text-gray-500"></p>
           <div class="flex justify-end">
@@ -525,7 +544,8 @@
     const statusForm = document.getElementById('drawer-status-form');
     const checkingMsg = document.getElementById('drawer-checking-msg');
     const packageForm = document.getElementById('drawer-package-form');
-    const packageInput = document.getElementById('drawer-package-input');
+    const packageCombo = document.getElementById('drawer-package-combobox');
+    const packageTypeFilter = document.getElementById('drawer-package-type');
     const packageSubmit = document.getElementById('drawer-package-submit');
     const packageMsg = document.getElementById('drawer-package-msg');
     const supplementFields = document.getElementById('drawer-supplement-fields');
@@ -611,13 +631,13 @@
     };
 
     const updatePackageState = () => {
-      if (!packageInput || !packageSubmit) return;
+      if (!packageCombo || !packageSubmit) return;
       const isSelectable = activeRow?.dataset?.documentsSelectable === 'true';
       const isChecked = activeRow?.dataset?.documentsIsChecked === 'true';
       const isReceived = activeRow?.dataset?.folderReceived === 'true';
       const isReleased = activeRow?.dataset?.packageReleased === 'true';
       const allowChange = (isSelectable || isChecked) && isReceived && !isReleased;
-      packageInput.disabled = !allowChange;
+      window.uiCombobox?.setDisabled(packageCombo, !allowChange);
       packageSubmit.disabled = !allowChange;
       packageSubmit.classList.toggle('opacity-50', !allowChange);
       packageSubmit.classList.toggle('cursor-not-allowed', !allowChange);
@@ -633,6 +653,22 @@
         }
       }
     };
+
+    // Chặn gửi khi mã thùng chưa hợp lệ (tồn tại + đúng loại quyển); hợp lệ mới gửi form như cũ
+    packageForm?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (packageSubmit.disabled) return;
+      const code = packageCombo?.querySelector('input')?.value.trim() || '';
+      if (!code) {
+        packageMsg.textContent = 'Nhập mã thùng cần đổi.';
+        packageMsg.className = 'text-[9px] text-red-600';
+        return;
+      }
+      packageMsg.textContent = '';
+      packageMsg.className = 'text-[9px] text-gray-500';
+      if (!(await window.uiCombobox.validate(packageCombo))) return;
+      packageForm.submit();
+    });
 
     const fillDrawer = (row) => {
       const setText = (id, value) => {
@@ -674,7 +710,8 @@
       setValue('drawer-checking-status-prev', row.dataset.checkingStatusId || '');
       setValue('drawer-doc-id', row.dataset.documentId || '');
       setValue('drawer-doc-id-package', row.dataset.documentId || '');
-      setValue('drawer-package-input', row.dataset.packageCode || '');
+      if (packageTypeFilter) packageTypeFilter.value = row.dataset.folderPackageType || '';
+      window.uiCombobox?.setValue(packageCombo, row.dataset.packageCode || '');
       setValue('drawer-note', row.dataset.note || '');
       if (noteStatus) {
         noteStatus.textContent = '';

@@ -3008,11 +3008,13 @@ def checking_transaction_view_v2(request):
                 'choicedocumentstatus': request.POST.get('filter_choicedocumentstatus'),
                 'choicecheckstatus': request.POST.get('filter_choicecheckstatus'),
                 'choicebusinesstype': request.POST.get('filter_choicebusinesstype'),
-                'filter_package': request.POST.get('filter_package'),
-                'filter_partner_package': request.POST.get('filter_partner_package'),
+                'filter_package': request.POST.get('filter_filter_package'),
+                'filter_partner_package': request.POST.get('filter_filter_partner_package'),
                 'page': request.POST.get('filter_page'),
                 'sort': request.POST.get('filter_sort'),
             }
+            # Trường không gửi lên (None) sẽ bị urlencode thành chuỗi "None" làm hỏng bộ lọc
+            filter_params = {key: value for key, value in filter_params.items() if value is not None}
             redirect_url = f"{reverse('checking_transaction_v2')}?{urlencode(filter_params)}"
             return HttpResponseRedirect(redirect_url)
 

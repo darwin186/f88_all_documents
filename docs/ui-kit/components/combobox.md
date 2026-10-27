@@ -80,6 +80,13 @@ Thêm `data-validate-source="<url>"` khi giá trị gõ tay phải được serv
 
 Ví dụ: ô "Mã thùng nhận" trong drawer Nhận chứng từ (`data-filter="package_type:#drawer-package-type"`, `data-validate-source` trỏ `package_code_suggest`).
 
+## Khoá ô (disabled)
+
+- Khoá ngay từ đầu: thêm `data-disabled` lên `.ui-combobox`.
+- Khoá/mở từ code: `window.uiCombobox.setDisabled(wrapper, true|false)`.
+- Ô khoá không gõ, không mở gợi ý, không hiện nút ×, xoá lỗi đang hiện nhưng vẫn giữ giá trị; có class `is-disabled` (nền xám, con trỏ cấm). Ô khoá không được gửi theo form.
+- Nên đi kèm `.ui-hint` (xem `hint.md`) để người dùng biết khi nào ô được mở.
+
 ## API server
 
 `GET data-source?q=<từ khóa>[&<tên lọc>=<giá trị>]` → `{"results": [ {...}, ... ]}`.

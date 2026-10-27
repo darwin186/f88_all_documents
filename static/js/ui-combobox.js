@@ -89,6 +89,7 @@
       menu.hidden = true; wrapper.classList.remove('is-open', 'is-up'); input.setAttribute('aria-expanded', 'false'); setActive(-1);
     };
     const open = () => {
+      if (input.disabled) return;
       closeOthers(wrapper);
       if (!menu.hidden) return;
       if (free && !results.length && !status.textContent) return;
@@ -172,6 +173,13 @@
       } catch (error) { return true; }
     };
 
+    // Khoá/mở ô: ô khoá không gõ, không mở gợi ý, không hiện nút ×; vẫn giữ giá trị hiện tại
+    const setDisabled = flag => {
+      input.disabled = Boolean(flag); clearBtn.disabled = Boolean(flag);
+      wrapper.classList.toggle('is-disabled', Boolean(flag));
+      if (flag) { window.clearTimeout(timer); window.clearTimeout(validTimer); controller?.abort(); close(); setInvalid(''); validSeq += 1; }
+    };
+
     const showSelected = () => { input.value = selected ? selected.label : ''; paint(); };
     const pick = item => {
       if (free) {
@@ -245,11 +253,13 @@
       clear,
       reset: () => { selected = null; results = []; render(); input.value = ''; paint(); validSeq += 1; setInvalid(''); },
       validate,
+      setDisabled,
       // Gán giá trị từ code (vd. mở drawer): không bắn change, không kiểm tra, xoá lỗi cũ.
       setValue: value => { input.value = value || ''; paint(); validSeq += 1; setInvalid(''); },
       hasValue: () => Boolean(selected),
     });
     paint();
+    if ('disabled' in cfg) setDisabled(true);   // data-disabled: khoá ngay từ đầu
     restore();
   };
 
@@ -271,5 +281,6 @@
     reset: wrapper => instances.get(wrapper)?.reset(),
     validate: wrapper => instances.get(wrapper)?.validate() ?? Promise.resolve(true),
     setValue: (wrapper, value) => instances.get(wrapper)?.setValue(value),
+    setDisabled: (wrapper, flag) => instances.get(wrapper)?.setDisabled(flag),
   };
 })();

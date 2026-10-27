@@ -216,6 +216,16 @@ select:not([multiple]):not([size]):not(.ui-select-native):not(.sr-only):disabled
 .ui-combobox-clear:hover { background: var(--ui-surface-subtle); color: var(--ui-text); }
 .ui-combobox-menu { position: absolute; z-index: 60; top: calc(100% + 5px); left: 0; width: 100%; min-width: 260px; padding: 6px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-menu); background: var(--ui-surface); box-shadow: 0 12px 32px rgba(17, 24, 39, .13); font-size: var(--ui-fs-md); }
 .ui-combobox.is-up .ui-combobox-menu { top: auto; bottom: calc(100% + 5px); }
+.ui-combobox.is-disabled .ui-combobox-field { background: var(--ui-surface-muted); cursor: not-allowed; }
+.ui-combobox.is-disabled .ui-combobox-field:hover { border-color: var(--ui-border); }
+.ui-combobox.is-disabled .ui-combobox-input { color: var(--ui-text-muted); cursor: not-allowed; }
+.ui-combobox.is-disabled .ui-combobox-clear { display: none; }
+.ui-hint { position: relative; display: inline-flex; vertical-align: middle; outline: none; }
+.ui-hint-icon { display: grid; place-items: center; width: 14px; height: 14px; border: 1.5px solid var(--ui-info-strong); border-radius: 50%; color: var(--ui-info-strong); font-size: 9px; font-weight: 700; font-style: normal; line-height: 1; cursor: help; user-select: none; }
+.ui-hint:focus-visible .ui-hint-icon { box-shadow: 0 0 0 2px var(--ui-surface), 0 0 0 4px var(--ui-info-strong); }
+.ui-hint-pop { position: absolute; z-index: 30; top: calc(100% + 6px); left: -4px; width: 240px; padding: 8px 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-input); background: var(--ui-surface); box-shadow: 0 6px 20px rgb(17 24 39 / .14); color: var(--ui-text); font-size: var(--ui-fs-sm); font-weight: 400; line-height: 1.5; text-align: left; text-transform: none; visibility: hidden; opacity: 0; pointer-events: none; transition: opacity .12s; }
+.ui-hint-pop ul { margin: 4px 0 0; padding-left: 16px; list-style: disc; }
+.ui-hint:hover .ui-hint-pop, .ui-hint:focus .ui-hint-pop, .ui-hint:focus-within .ui-hint-pop { visibility: visible; opacity: 1; }
 .ui-combobox-error { margin: 4px 0 0; color: var(--ui-danger-text); font-size: var(--ui-fs-sm); }
 .ui-combobox-status { margin: 0; padding: 8px 10px; color: var(--ui-disabled-text); font-size: var(--ui-fs-sm); }
 .ui-combobox-options { max-height: 260px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }

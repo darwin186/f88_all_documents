@@ -251,3 +251,13 @@ class CheckingChangePackageRulesTests(TestCase):
         self.assertEqual(self.post('C-VH-OLD').status_code, 200)
         self.assertEqual(self.current(), self.old)
         self.assertFalse(self.PackageDocumentHistory.objects.filter(document_id=self.doc).exists())
+
+    def test_redirect_keeps_package_filters_and_never_writes_none(self):
+        self.client.force_login(self.user)
+        response = self.client.post(self.url, {
+            'documents_id_submit': self.doc.documents_id, 'package_code_submit': 'C-VH-NEW',
+            'filter_filter_package': 'ABC', 'filter_page': '2',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('filter_package=ABC', response.url)
+        self.assertNotIn('None', response.url)
